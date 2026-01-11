@@ -4,6 +4,7 @@
 
 # --- Personal/Development ---
 todo/
+.agent/
 
 # --- Rust / Cargo ---
 /target/
