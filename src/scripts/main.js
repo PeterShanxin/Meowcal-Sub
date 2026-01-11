@@ -54,6 +54,9 @@ async function initializeApp() {
         // Set up listener for region selection events
         await setupRegionSelectedListener();
 
+        // Set up listener for translation results
+        await setupTranslationUpdateListener();
+
         // Update status to ready
         updateStatus('ready', 'Ready');
 
@@ -335,6 +338,31 @@ function handleClearRegion() {
     document.getElementById('region-preview').style.display = 'none';
     document.getElementById('btn-start').disabled = true;
     showToast('Region cleared', 'success');
+}
+
+/**
+ * Set up listener for translation updates from the Rust backend
+ */
+async function setupTranslationUpdateListener() {
+    try {
+        await window.__TAURI__.event.listen('translation-update', (event) => {
+            const { original, translated, timestamp } = event.payload;
+            console.log('🌐 Translation update:', {
+                original,
+                translated,
+                timestamp: new Date(timestamp).toLocaleTimeString(),
+            });
+
+            // Update the app state with latest translation
+            appState.lastTranslation = event.payload;
+
+            // TODO: Display in overlay window
+            // For now, just show in console
+        });
+        console.log('Translation update listener set up');
+    } catch (error) {
+        console.error('Failed to set up translation listener:', error);
+    }
 }
 
 // =============================================================================

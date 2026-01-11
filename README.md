@@ -118,9 +118,11 @@ cargo fmt
 - [x] Basic Tauri app structure
 - [x] Screen capture (Win32 GDI)
 - [x] Windows OCR integration
-- [ ] Full area selection UI
-- [ ] Phi Silica translation (when APIs are stable)
-- [ ] Overlay window
+- [x] Area selection UI
+- [x] Translation loop (capture → OCR → translate → emit events)
+- [ ] ⏳ Windows.Graphics.Capture for video support (GDI can't capture HW-accelerated content)
+- [ ] Overlay window for displaying translations
+- [ ] Phi Silica translation (when Windows AI APIs are stable)
 - [ ] Settings persistence
 - [ ] Auto-start with Windows
 - [ ] Multiple monitor support

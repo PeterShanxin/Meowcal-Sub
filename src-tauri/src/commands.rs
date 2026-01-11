@@ -14,10 +14,15 @@
 // =============================================================================
 
 use crate::config::{AppConfig, CaptureRegion};
+use crate::capture;
+use crate::ocr::WindowsOcr;
+use crate::llm::{PhiSilica, TranslationProvider};
 use serde::Serialize;
-use tauri::{AppHandle, Manager, State};
-use std::sync::Mutex;
-use tracing::info;
+use std::sync::{Arc, Mutex};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use tauri::{AppHandle, Emitter, Manager, State};
+use tokio::sync::watch;
+use tracing::{info, warn, debug};
 
 // =============================================================================
 // APP STATE
@@ -33,6 +38,9 @@ pub struct AppState {
     pub is_running: Mutex<bool>,
     /// The current capture region (if set)
     pub capture_region: Mutex<Option<CaptureRegion>>,
+    /// Stop signal sender for the translation loop
+    /// When we send `true` through this, the loop stops
+    pub stop_signal: Mutex<Option<watch::Sender<bool>>>,
 }
 
 impl Default for AppState {
@@ -41,6 +49,7 @@ impl Default for AppState {
             config: Mutex::new(AppConfig::default()),
             is_running: Mutex::new(false),
             capture_region: Mutex::new(None),
+            stop_signal: Mutex::new(None),
         }
     }
 }
@@ -212,25 +221,71 @@ pub async fn close_area_selector(app: AppHandle) -> Result<(), String> {
 // TRANSLATION COMMANDS
 // =============================================================================
 
+/// Payload sent to the frontend with translation results
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TranslationPayload {
+    /// The original text from OCR
+    pub original: String,
+    /// The translated text
+    pub translated: String,
+    /// Unix timestamp in milliseconds
+    pub timestamp: u64,
+}
+
 /// Start the translation process
 /// 
 /// This will:
 /// 1. Capture the screen region periodically
 /// 2. Run OCR on each capture
 /// 3. Translate the recognized text
-/// 4. Send results back to the overlay UI
+/// 4. Send results back to the overlay UI via events
 /// 
 /// Called from JavaScript: `await invoke('start_translation');`
 #[tauri::command]
-pub async fn start_translation(state: State<'_, AppState>) -> Result<(), String> {
+pub async fn start_translation(
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
     info!("Starting translation...");
     
-    // Check if we have a capture region set
+    // Check if already running
     {
-        let region = state.capture_region.lock().unwrap();
-        if region.is_none() {
-            return Err("No capture region set. Please select an area first.".to_string());
+        let is_running = state.is_running.lock().unwrap();
+        if *is_running {
+            return Err("Translation is already running".to_string());
         }
+    }
+    
+    // Get the capture region
+    let region = {
+        let region_guard = state.capture_region.lock().unwrap();
+        match region_guard.clone() {
+            Some(r) => r,
+            None => return Err("No capture region set. Please select an area first.".to_string()),
+        }
+    };
+    
+    // Get the capture interval from config
+    let interval_ms = {
+        let config = state.config.lock().unwrap();
+        config.capture_interval_ms
+    };
+    
+    // Get target language from config
+    let target_language = {
+        let config = state.config.lock().unwrap();
+        config.target_language.clone()
+    };
+    
+    // Create a stop signal channel
+    // The sender stays here, the receiver goes to the spawned task
+    let (stop_tx, mut stop_rx) = watch::channel(false);
+    
+    // Store the sender so stop_translation can use it
+    {
+        let mut stop_signal = state.stop_signal.lock().unwrap();
+        *stop_signal = Some(stop_tx);
     }
     
     // Mark as running
@@ -239,10 +294,119 @@ pub async fn start_translation(state: State<'_, AppState>) -> Result<(), String>
         *is_running = true;
     }
     
-    // TODO: Start the capture -> OCR -> translate loop
-    // This will be implemented in the capture and ocr modules
+    info!("✅ Translation started! Interval: {}ms, Target: {}", interval_ms, target_language);
     
-    info!("✅ Translation started!");
+    // Spawn the background translation loop
+    tokio::spawn(async move {
+        // Initialize OCR engine
+        let ocr = match WindowsOcr::new() {
+            Ok(o) => o,
+            Err(e) => {
+                warn!("❌ Failed to initialize OCR: {}", e);
+                return;
+            }
+        };
+        
+        // Initialize translator
+        let translator = PhiSilica::new();
+        info!("Using translator: {}", translator.name());
+        
+        // Keep track of last OCR text to avoid duplicate processing
+        let mut last_text = String::new();
+        
+        loop {
+            // Check if we should stop
+            if *stop_rx.borrow() {
+                info!("🛑 Stop signal received, exiting loop");
+                break;
+            }
+            
+            // Also check for channel changes (non-blocking)
+            if stop_rx.has_changed().unwrap_or(false) {
+                let _ = stop_rx.borrow_and_update();
+                if *stop_rx.borrow() {
+                    info!("🛑 Stop signal received, exiting loop");
+                    break;
+                }
+            }
+            
+            debug!("📸 Capturing region: {:?}", region);
+            
+            // Step 1: Capture screen region
+            let capture_result = match capture::capture_region(&region) {
+                Ok(result) => result,
+                Err(e) => {
+                    warn!("⚠️ Capture failed: {}", e);
+                    tokio::time::sleep(Duration::from_millis(interval_ms as u64)).await;
+                    continue;
+                }
+            };
+            
+            // Step 2: Run OCR
+            let ocr_result = match ocr.recognize(
+                &capture_result.data,
+                capture_result.width,
+                capture_result.height,
+            ).await {
+                Ok(result) => result,
+                Err(e) => {
+                    warn!("⚠️ OCR failed: {}", e);
+                    tokio::time::sleep(Duration::from_millis(interval_ms as u64)).await;
+                    continue;
+                }
+            };
+            
+            // Skip if empty or same as last frame
+            if ocr_result.is_empty() {
+                debug!("No text detected, skipping");
+                tokio::time::sleep(Duration::from_millis(interval_ms as u64)).await;
+                continue;
+            }
+            
+            let current_text = ocr_result.text.trim().to_string();
+            if current_text == last_text {
+                debug!("Same text as last frame, skipping");
+                tokio::time::sleep(Duration::from_millis(interval_ms as u64)).await;
+                continue;
+            }
+            
+            last_text = current_text.clone();
+            info!("📝 OCR detected: {}", current_text);
+            
+            // Step 3: Translate
+            let translated = match translator.translate(&current_text, &target_language).await {
+                Ok(t) => t,
+                Err(e) => {
+                    warn!("⚠️ Translation failed: {}", e);
+                    format!("[Translation error] {}", current_text)
+                }
+            };
+            
+            info!("🌐 Translated: {}", translated);
+            
+            // Step 4: Emit event to frontend
+            let timestamp = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_millis() as u64;
+            
+            let payload = TranslationPayload {
+                original: current_text,
+                translated,
+                timestamp,
+            };
+            
+            if let Err(e) = app.emit("translation-update", payload) {
+                warn!("⚠️ Failed to emit event: {}", e);
+            }
+            
+            // Wait for next iteration
+            tokio::time::sleep(Duration::from_millis(interval_ms as u64)).await;
+        }
+        
+        info!("Translation loop ended");
+    });
+    
     Ok(())
 }
 
@@ -253,9 +417,28 @@ pub async fn start_translation(state: State<'_, AppState>) -> Result<(), String>
 pub fn stop_translation(state: State<'_, AppState>) -> Result<(), String> {
     info!("Stopping translation...");
     
-    let mut is_running = state.is_running.lock().unwrap();
-    *is_running = false;
+    // Send the stop signal
+    {
+        let stop_signal = state.stop_signal.lock().unwrap();
+        if let Some(ref sender) = *stop_signal {
+            let _ = sender.send(true);
+            info!("Stop signal sent");
+        }
+    }
+    
+    // Clear the stop signal sender
+    {
+        let mut stop_signal = state.stop_signal.lock().unwrap();
+        *stop_signal = None;
+    }
+    
+    // Mark as not running
+    {
+        let mut is_running = state.is_running.lock().unwrap();
+        *is_running = false;
+    }
     
     info!("✅ Translation stopped!");
     Ok(())
 }
+
