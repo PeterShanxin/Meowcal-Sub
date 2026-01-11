@@ -1,7 +1,0 @@
-PyQt6
-winsdk; sys_platform == 'win32'
-onnxruntime-genai-directml; sys_platform == 'win32'
-huggingface_hub
-mss
-numpy
-pywin32; sys_platform == 'win32'

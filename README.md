@@ -1,57 +1,144 @@
-# Windows ARM Native Translation App
+# 🐱 Meowcal Sub
 
-This application provides real-time translation of a selected screen area using the native Neural Processing Unit (NPU) on Windows on Arm devices (e.g., Surface Laptop 7, Surface Pro 11).
+A local, NPU-accelerated subtitle translation app for **Copilot+ PCs** (Windows on ARM).
 
-## Features
-- **Native Performance:** Uses `onnxruntime-genai-directml` to run local LLMs (Phi-3) on the NPU/GPU.
-- **Privacy First:** All OCR and translation happens locally on your device. No data is sent to the cloud.
-- **Floating Subtitles:** Translated text appears in a transparent overlay below the original text.
-- **Efficient:** Optimized to minimize battery usage by leveraging hardware acceleration.
+![Platform](https://img.shields.io/badge/Platform-Windows%20ARM64-blue)
+![Rust](https://img.shields.io/badge/Built%20with-Rust%20%2B%20Tauri-orange)
+![License](https://img.shields.io/badge/License-MIT-green)
 
-## Requirements
+## ✨ Features
 
-- **Device:** Windows on Arm PC (Copilot+ PC recommended for NPU support).
-- **OS:** Windows 11.
-- **Python:** Python 3.10 or newer (ARM64 native version recommended).
+- **🔒 Privacy First** - All OCR and translation happens locally on your device
+- **⚡ NPU Accelerated** - Uses Windows Copilot Runtime for efficient AI processing
+- **🖼️ Floating Subtitles** - Translated text appears in a sleek overlay
+- **🔋 Battery Efficient** - Optimized to minimize CPU/GPU usage
+- **🌐 Multi-language** - Supports many language pairs
 
-## Installation
+## 📋 Requirements
 
-1.  **Install Python for Windows ARM64**
-    *   Download from [Python.org](https://www.python.org/downloads/windows/). Look for "Windows embeddable package (64-bit ARM)" or the installer.
+| Requirement | Details |
+|-------------|---------|
+| **Device** | Copilot+ PC (Qualcomm Snapdragon X, Intel Core Ultra, AMD Ryzen AI) |
+| **OS** | Windows 11 24H2 (Build 26100+) |
+| **RAM** | 8GB minimum, 16GB recommended |
 
-2.  **Clone or Download this Repository**
+## 🚀 Quick Start
 
-3.  **Install Dependencies**
-    Open PowerShell or Command Prompt in the project folder and run:
-    ```powershell
-    pip install -r requirements.txt
-    ```
-    *Note: `winsdk` and `onnxruntime-genai-directml` are Windows-specific.*
+### Prerequisites
 
-## Running the App
+1. **Install Rust** (if not already installed):
+   ```powershell
+   winget install Rustlang.Rustup
+   ```
 
-1.  **Run the script:**
-    ```powershell
-    python main.py
-    ```
+2. **Install Node.js** (v18+):
+   ```powershell
+   winget install OpenJS.NodeJS
+   ```
 
-2.  **First Run:**
-    *   The application will automatically download the **Phi-3 Mini ONNX (DirectML)** model from Hugging Face. This is approx 2-3 GB. Please wait for the download to complete in the console.
+### Build & Run
 
-3.  **Usage:**
-    *   Click the **System Tray Icon** (or wait for the app to launch).
-    *   Select **"Select Area"** from the menu (or it may launch automatically).
-    *   Draw a box around the text you want to translate (e.g., a game dialog, a video subtitle, a document).
-    *   The translation will appear floating below the box.
+```powershell
+# Clone the repo
+git clone https://github.com/PeterShanxin/Meowcal-Sub.git
+cd Meowcal-Sub
 
-## Troubleshooting
+# Run in development mode
+npx tauri dev
+```
 
-*   **"Model not found":** Ensure you have internet access on the first run. Check the `models/` folder.
-*   **Performance:** Ensure your device is plugged in or set to "Best Performance" if translation is slow. The NPU usually handles this efficiently.
-*   **OCR Issues:** The app uses the system language for OCR. Ensure you have the necessary language packs installed in Windows Settings > Time & Language > Language & Region.
+### Build for Release
 
-## Configuration
+```powershell
+npx tauri build
+```
 
-Edit `config.py` to change:
-*   `TARGET_LANGUAGE`: The language to translate into (default: Spanish).
-*   `OCR_LANGUAGE`: The language code for text recognition (default: en-US).
+The built app will be in `src-tauri/target/release/`.
+
+## 🎮 Usage
+
+1. **Launch the app** - A cat icon appears in your system tray
+2. **Click "Select Area"** - Draw a box around the text you want to translate
+3. **Click "Start Translation"** - Watch the magic happen!
+4. **Translated subtitles** appear in a floating overlay below your selection
+
+## ⚙️ Configuration
+
+Edit settings in the app or modify `config.json`:
+
+| Setting | Description | Default |
+|---------|-------------|---------|
+| `sourceLanguage` | OCR language (e.g., "en-US", "ja-JP") | `en-US` |
+| `targetLanguage` | Translation target (e.g., "zh-CN") | `zh-CN` |
+| `captureIntervalMs` | How often to capture (lower = smoother) | `500` |
+
+## 🏗️ Project Structure
+
+```
+meowcal-sub/
+├── src-tauri/              # Rust backend
+│   ├── src/
+│   │   ├── main.rs         # App entry point
+│   │   ├── commands.rs     # Tauri IPC commands
+│   │   ├── capture/        # Screen capture
+│   │   ├── ocr/            # Windows OCR
+│   │   ├── llm/            # Phi Silica AI
+│   │   └── overlay/        # Overlay management
+│   └── Cargo.toml          # Rust dependencies
+├── src/                    # Frontend (HTML/CSS/JS)
+│   ├── index.html          # Main UI
+│   ├── styles/             # CSS
+│   └── scripts/            # JavaScript
+└── README.md
+```
+
+## 🔧 Development
+
+### Run Tests
+
+```powershell
+cd src-tauri
+cargo test
+```
+
+### Check Linting
+
+```powershell
+cargo clippy
+```
+
+### Format Code
+
+```powershell
+cargo fmt
+```
+
+## 🛣️ Roadmap
+
+- [x] Basic Tauri app structure
+- [x] Screen capture (Win32 GDI)
+- [x] Windows OCR integration
+- [ ] Full area selection UI
+- [ ] Phi Silica translation (when APIs are stable)
+- [ ] Overlay window
+- [ ] Settings persistence
+- [ ] Auto-start with Windows
+- [ ] Multiple monitor support
+
+## 🤝 Contributing
+
+Contributions are welcome! Please feel free to submit a Pull Request.
+
+## 📄 License
+
+MIT License - see [LICENSE](LICENSE) for details.
+
+## 🙏 Acknowledgments
+
+- Built with [Tauri](https://tauri.app/) 
+- Uses [Windows.Media.Ocr](https://docs.microsoft.com/en-us/uwp/api/windows.media.ocr) for text recognition
+- Powered by [Windows Copilot Runtime](https://learn.microsoft.com/en-us/windows/ai/)
+
+---
+
+Made with 🐱 for Copilot+ PCs

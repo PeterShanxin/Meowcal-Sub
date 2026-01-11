@@ -1,0 +1,104 @@
+# =============================================================================
+# MEOWCAL-SUB: Cargo.toml - Rust Dependencies
+# =============================================================================
+# This file tells Rust what external libraries (called "crates") we need.
+# Think of it like package.json for JavaScript or requirements.txt for Python.
+# =============================================================================
+
+[package]
+# Basic info about our app
+name = "meowcal-sub"        # The app name (used in binary and imports)
+version = "0.1.0"           # Version number (semantic versioning: major.minor.patch)
+edition = "2021"            # Rust edition (like ES6 vs ES2020 in JavaScript)
+description = "NPU-accelerated subtitle translation for Copilot+ PCs"
+authors = ["PeterShanxin"]
+license = "MIT"
+
+# =============================================================================
+# DEPENDENCIES
+# =============================================================================
+# These are the libraries we use. Each one has a purpose:
+
+[dependencies]
+# --- Tauri Framework ---
+# This is the core of our app - it creates the window and connects Rust to the web UI
+tauri = { version = "2", features = [
+    "tray-icon",          # System tray support (the icon in the taskbar)
+] }
+tauri-plugin-shell = "2"   # Allows running shell commands if needed
+
+# --- Serialization ---
+# Converts Rust structs to/from JSON (for sending data between Rust and JavaScript)
+serde = { version = "1", features = ["derive"] }  # "derive" lets us use #[derive(Serialize)]
+serde_json = "1"           # JSON parsing and generation
+
+# --- Async Runtime ---
+# Rust's way of handling async operations (like JavaScript's async/await)
+tokio = { version = "1", features = ["full"] }
+
+# --- Windows APIs ---
+# This gives us access to Windows-specific features like OCR and screen capture
+# The "features" list specifies which Windows APIs we want to use
+windows = { version = "0.61", features = [
+    # OCR (Optical Character Recognition) - reads text from images
+    "Media_Ocr",
+    
+    # Image handling - creating bitmaps from screen captures
+    "Graphics_Imaging",
+    
+    # Memory streams - for passing image data around
+    "Storage_Streams",
+    
+    # Screen capture APIs
+    "Win32_Graphics_Gdi",
+    "Win32_UI_WindowsAndMessaging",
+    "Win32_Foundation",
+    
+    # Globalization for language support
+    "Globalization",
+    
+    # Security APIs for buffer handling
+    "Security_Cryptography",
+] }
+windows-core = "0.61"      # Core Windows types
+
+# --- Error Handling ---
+# Makes it easy to create custom error types with nice error messages
+thiserror = "2"
+
+# --- Logging ---
+# For debugging - prints helpful messages to the console
+tracing = "0.1"
+tracing-subscriber = "0.3"
+
+# --- Async Trait ---
+# Allows us to use async functions in traits (Rust-specific thing)
+async-trait = "0.1"
+
+# =============================================================================
+# BUILD DEPENDENCIES
+# =============================================================================
+# These are only used when compiling the app, not at runtime
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+# =============================================================================
+# TEST DEPENDENCIES
+# =============================================================================
+# These are only used when running tests (cargo test)
+
+[dev-dependencies]
+tokio-test = "0.4"         # Testing utilities for async code
+
+# =============================================================================
+# PROFILE SETTINGS
+# =============================================================================
+# These control how the app is compiled
+
+[profile.release]
+# When building for release, we want a small and fast binary
+lto = true                 # Link-Time Optimization (slower build, faster app)
+codegen-units = 1          # Better optimization (slower build)
+panic = "abort"            # Smaller binary (no unwinding on crash)
+strip = true               # Remove debug symbols (smaller binary)
