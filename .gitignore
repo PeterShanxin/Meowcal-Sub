@@ -2,6 +2,9 @@
 # Meowcal-Sub .gitignore
 # =============================================================================
 
+# --- Personal/Development ---
+todo/
+
 # --- Rust / Cargo ---
 /target/
 src-tauri/target/
