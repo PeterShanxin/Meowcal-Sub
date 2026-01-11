@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Select Area</title>
+    <link rel="stylesheet" href="styles/selector.css">
+
+    <!-- Google Font to match main app -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+</head>
+
+<body>
+    <!-- Semi-transparent overlay covering the entire screen -->
+    <div class="overlay" id="overlay"></div>
+
+    <!-- Instruction banner at the top -->
+    <div class="instructions" id="instructions">
+        <span class="icon">📐</span>
+        <span class="text">Click and drag to select the subtitle area</span>
+        <button class="cancel-btn" id="cancel-btn" title="Cancel (ESC)">✕ Cancel</button>
+    </div>
+
+    <!-- Selection rectangle (shown during drag) -->
+    <div class="selection-box" id="selection-box">
+        <div class="dimensions" id="dimensions">0 × 0</div>
+        <div class="corner-tr"></div>
+        <div class="corner-bl"></div>
+    </div>
+
+    <!-- Action buttons (shown after selection) -->
+    <div class="action-buttons" id="action-buttons">
+        <button class="btn confirm-btn" id="confirm-btn">
+            <span class="btn-icon">✓</span>
+            <span class="btn-text">Confirm Selection</span>
+        </button>
+        <button class="btn retry-btn" id="retry-btn">
+            <span class="btn-icon">↺</span>
+            <span class="btn-text">Redraw</span>
+        </button>
+    </div>
+
+    <!-- Scripts -->
+    <script src="scripts/selector.js"></script>
+</body>
+
+</html>

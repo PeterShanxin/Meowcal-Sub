@@ -51,6 +51,9 @@ async function initializeApp() {
         // Set up event listeners for buttons
         setupEventListeners();
 
+        // Set up listener for region selection events
+        await setupRegionSelectedListener();
+
         // Update status to ready
         updateStatus('ready', 'Ready');
 
@@ -226,34 +229,101 @@ function setupEventListeners() {
 async function handleSelectArea() {
     console.log('Select area clicked');
 
-    // TODO: Open a transparent fullscreen overlay for area selection
-    // For now, we'll use a placeholder region
-    showToast('Area selection coming soon! Using demo region...', 'warning');
-
-    // Demo: Set a sample region (this would normally come from user selection)
-    const region = {
-        x: 100,
-        y: 500,
-        width: 800,
-        height: 100,
-    };
-
     try {
-        await window.__TAURI__.core.invoke('set_capture_region', region);
-        appState.captureRegion = region;
+        // Open the fullscreen selector overlay
+        await window.__TAURI__.core.invoke('open_area_selector');
+        console.log('Selector window opened');
 
-        // Update UI
-        document.getElementById('region-preview').style.display = 'block';
-        document.getElementById('region-coords').textContent = `Position: (${region.x}, ${region.y})`;
-        document.getElementById('region-size').textContent = `Size: ${region.width} × ${region.height}`;
-
-        // Enable start button
-        document.getElementById('btn-start').disabled = false;
-
-        showToast('Region selected!', 'success');
+        // Start polling for region changes (fallback in case events don't work)
+        startRegionPolling();
     } catch (error) {
-        console.error('Failed to set region:', error);
-        showToast('Failed to set region: ' + error, 'error');
+        console.error('Failed to open area selector:', error);
+        showToast('Failed to open selector: ' + error, 'error');
+    }
+}
+
+/**
+ * Poll for region updates as a fallback mechanism
+ */
+let pollingInterval = null;
+
+function startRegionPolling() {
+    // Stop any existing polling
+    if (pollingInterval) {
+        clearInterval(pollingInterval);
+    }
+
+    const previousRegion = appState.captureRegion;
+    let attempts = 0;
+    const maxAttempts = 100; // 10 seconds max
+
+    pollingInterval = setInterval(async () => {
+        attempts++;
+
+        try {
+            const region = await window.__TAURI__.core.invoke('get_capture_region');
+
+            // Check if we got a new region
+            if (region && (!previousRegion ||
+                region.x !== previousRegion.x ||
+                region.y !== previousRegion.y ||
+                region.width !== previousRegion.width ||
+                region.height !== previousRegion.height)) {
+
+                console.log('Region detected via polling:', region);
+                clearInterval(pollingInterval);
+                pollingInterval = null;
+
+                // Update state and UI
+                appState.captureRegion = region;
+                document.getElementById('region-preview').style.display = 'block';
+                document.getElementById('region-coords').textContent = `Position: (${region.x}, ${region.y})`;
+                document.getElementById('region-size').textContent = `Size: ${region.width} × ${region.height}`;
+                document.getElementById('btn-start').disabled = false;
+                showToast('Region selected!', 'success');
+            }
+        } catch (e) {
+            // Ignore errors during polling
+        }
+
+        // Stop polling after max attempts
+        if (attempts >= maxAttempts) {
+            clearInterval(pollingInterval);
+            pollingInterval = null;
+        }
+    }, 100);
+}
+
+/**
+ * Set up listener for region selection from the selector window
+ */
+async function setupRegionSelectedListener() {
+    try {
+        const unlisten = await window.__TAURI__.event.listen('region-selected', (event) => {
+            const region = event.payload;
+            console.log('Region selected via event:', region);
+
+            // Stop polling since we got the event
+            if (pollingInterval) {
+                clearInterval(pollingInterval);
+                pollingInterval = null;
+            }
+
+            appState.captureRegion = region;
+
+            // Update UI
+            document.getElementById('region-preview').style.display = 'block';
+            document.getElementById('region-coords').textContent = `Position: (${region.x}, ${region.y})`;
+            document.getElementById('region-size').textContent = `Size: ${region.width} × ${region.height}`;
+
+            // Enable start button
+            document.getElementById('btn-start').disabled = false;
+
+            showToast('Region selected!', 'success');
+        });
+        console.log('Region selected listener set up');
+    } catch (error) {
+        console.error('Failed to set up region listener:', error);
     }
 }
 

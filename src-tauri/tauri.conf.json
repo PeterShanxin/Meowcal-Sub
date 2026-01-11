@@ -26,6 +26,18 @@
         "decorations": true,
         "transparent": false,
         "visible": true
+      },
+      {
+        "title": "Select Area",
+        "label": "selector",
+        "url": "selector.html",
+        "fullscreen": true,
+        "transparent": true,
+        "decorations": false,
+        "alwaysOnTop": true,
+        "visible": false,
+        "skipTaskbar": true,
+        "resizable": false
       }
     ],
     "security": {

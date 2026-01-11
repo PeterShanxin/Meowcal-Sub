@@ -15,7 +15,7 @@
 
 use crate::config::{AppConfig, CaptureRegion};
 use serde::Serialize;
-use tauri::State;
+use tauri::{AppHandle, Manager, State};
 use std::sync::Mutex;
 use tracing::info;
 
@@ -160,6 +160,50 @@ pub fn set_capture_region(
     
     let mut capture_region = state.capture_region.lock().unwrap();
     *capture_region = Some(region);
+    
+    Ok(())
+}
+
+/// Get the current capture region (if set)
+/// 
+/// Called from JavaScript: `const region = await invoke('get_capture_region');`
+#[tauri::command]
+pub fn get_capture_region(state: State<'_, AppState>) -> Option<CaptureRegion> {
+    let region = state.capture_region.lock().unwrap();
+    region.clone()
+}
+
+/// Open the area selector overlay window
+/// 
+/// Called from JavaScript: `await invoke('open_area_selector');`
+#[tauri::command]
+pub async fn open_area_selector(app: AppHandle) -> Result<(), String> {
+    info!("Opening area selector...");
+    
+    if let Some(window) = app.get_webview_window("selector") {
+        window.show().map_err(|e| e.to_string())?;
+        window.set_focus().map_err(|e| e.to_string())?;
+        info!("✅ Area selector opened!");
+    } else {
+        return Err("Selector window not found".to_string());
+    }
+    
+    Ok(())
+}
+
+/// Close the area selector overlay window
+/// 
+/// Called from JavaScript: `await invoke('close_area_selector');`
+#[tauri::command]
+pub async fn close_area_selector(app: AppHandle) -> Result<(), String> {
+    info!("Closing area selector...");
+    
+    if let Some(window) = app.get_webview_window("selector") {
+        window.hide().map_err(|e| e.to_string())?;
+        info!("✅ Area selector closed!");
+    } else {
+        return Err("Selector window not found".to_string());
+    }
     
     Ok(())
 }
