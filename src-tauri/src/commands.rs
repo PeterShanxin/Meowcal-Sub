@@ -301,16 +301,14 @@ pub async fn start_translation(
         scale_factor, region, capture_region
     );
     
-    // Get the capture interval from config
-    let interval_ms = {
+    // Get settings from config
+    let (interval_ms, source_language, target_language) = {
         let config = state.config.lock().unwrap();
-        config.capture_interval_ms
-    };
-    
-    // Get target language from config
-    let target_language = {
-        let config = state.config.lock().unwrap();
-        config.target_language.clone()
+        (
+            config.capture_interval_ms,
+            config.source_language.clone(),
+            config.target_language.clone(),
+        )
     };
     
     // Create a stop signal channel
@@ -341,12 +339,24 @@ pub async fn start_translation(
     
     // Spawn the background translation loop
     tokio::spawn(async move {
-        // Initialize OCR engine
-        let ocr = match WindowsOcr::new() {
-            Ok(o) => o,
+        // Initialize OCR engine using the configured source language
+        let ocr = match WindowsOcr::with_language(&source_language) {
+            Ok(o) => {
+                info!("OCR initialized with language: {}", source_language);
+                o
+            }
             Err(e) => {
-                warn!("❌ Failed to initialize OCR: {}", e);
-                return;
+                warn!(
+                    "⚠️ OCR language '{}' not available: {}. Falling back to user profile languages.",
+                    source_language, e
+                );
+                match WindowsOcr::new() {
+                    Ok(o) => o,
+                    Err(e) => {
+                        warn!("❌ Failed to initialize OCR: {}", e);
+                        return;
+                    }
+                }
             }
         };
         
