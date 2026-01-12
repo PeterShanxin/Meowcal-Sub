@@ -130,6 +130,25 @@ impl CaptureRegion {
     pub fn area(&self) -> i32 {
         self.width * self.height
     }
+
+    /// Scale the region by a DPI scale factor (logical -> physical pixels)
+    pub fn scaled(&self, scale: f64) -> Self {
+        if (scale - 1.0).abs() < f64::EPSILON {
+            return *self;
+        }
+
+        let scaled_x = (self.x as f64 * scale).round() as i32;
+        let scaled_y = (self.y as f64 * scale).round() as i32;
+        let scaled_width = (self.width as f64 * scale).round().max(1.0) as i32;
+        let scaled_height = (self.height as f64 * scale).round().max(1.0) as i32;
+
+        Self {
+            x: scaled_x,
+            y: scaled_y,
+            width: scaled_width,
+            height: scaled_height,
+        }
+    }
 }
 
 // =============================================================================

@@ -278,11 +278,20 @@ async function confirmSelection() {
         return;
     }
 
+    let scaleFactor = 1;
+    try {
+        const currentWindow = window.__TAURI__.window.getCurrentWindow();
+        scaleFactor = await currentWindow.scaleFactor();
+    } catch (e) {
+        console.warn('Failed to read scale factor, defaulting to 1:', e);
+    }
+
     const regionData = {
         x: Math.round(state.region.x),
         y: Math.round(state.region.y),
         width: Math.round(state.region.width),
         height: Math.round(state.region.height),
+        scaleFactor: scaleFactor,
     };
 
     console.log('Confirming region:', regionData);

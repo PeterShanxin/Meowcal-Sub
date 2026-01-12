@@ -39,6 +39,8 @@ pub struct AppState {
     pub is_running: Mutex<bool>,
     /// The current capture region (if set)
     pub capture_region: Mutex<Option<CaptureRegion>>,
+    /// DPI scale factor for the capture region (logical -> physical)
+    pub capture_scale_factor: Mutex<f64>,
     /// Stop signal sender for the translation loop
     /// When we send `true` through this, the loop stops
     pub stop_signal: Mutex<Option<watch::Sender<bool>>>,
@@ -50,6 +52,7 @@ impl Default for AppState {
             config: Mutex::new(AppConfig::default()),
             is_running: Mutex::new(false),
             capture_region: Mutex::new(None),
+            capture_scale_factor: Mutex::new(1.0),
             stop_signal: Mutex::new(None),
         }
     }
@@ -150,13 +153,14 @@ pub fn save_settings(settings: AppConfig, state: State<'_, AppState>) -> Result<
 /// Set the screen region to capture
 /// 
 /// Called from JavaScript: 
-/// `await invoke('set_capture_region', { x: 100, y: 100, width: 800, height: 100 });`
+/// `await invoke('set_capture_region', { x: 100, y: 100, width: 800, height: 100, scaleFactor: 1.0 });`
 #[tauri::command]
 pub fn set_capture_region(
     x: i32,
     y: i32,
     width: i32,
     height: i32,
+    scale_factor: f64,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
     info!("Setting capture region: ({}, {}) {}x{}", x, y, width, height);
@@ -165,11 +169,17 @@ pub fn set_capture_region(
     if width <= 0 || height <= 0 {
         return Err("Width and height must be positive".to_string());
     }
+    if scale_factor <= 0.0 {
+        return Err("Scale factor must be positive".to_string());
+    }
     
     let region = CaptureRegion { x, y, width, height };
     
     let mut capture_region = state.capture_region.lock().unwrap();
     *capture_region = Some(region);
+
+    let mut capture_scale_factor = state.capture_scale_factor.lock().unwrap();
+    *capture_scale_factor = scale_factor;
     
     Ok(())
 }
@@ -279,6 +289,17 @@ pub async fn start_translation(
             None => return Err("No capture region set. Please select an area first.".to_string()),
         }
     };
+
+    // Get the capture scale factor (logical -> physical pixels)
+    let scale_factor = {
+        let scale_guard = state.capture_scale_factor.lock().unwrap();
+        *scale_guard
+    };
+    let capture_region = region.scaled(scale_factor);
+    debug!(
+        "Capture scale factor: {}, logical: {:?}, physical: {:?}",
+        scale_factor, region, capture_region
+    );
     
     // Get the capture interval from config
     let interval_ms = {
@@ -371,13 +392,13 @@ pub async fn start_translation(
                 }
             }
             
-            debug!("📸 Capturing region: {:?}", region);
+            debug!("📸 Capturing region: {:?}", capture_region);
             
             // Step 1: Capture screen region
             // If persistent session is available, use it (no border flashing)
             // Otherwise fall back to smart_capture which creates new session each time
             let capture_result = if session_initialized {
-                match capture::capture_with_session(&region) {
+                match capture::capture_with_session(&capture_region) {
                     Ok(result) => result,
                     Err(e) => {
                         warn!("⚠️ Session capture failed: {}", e);
@@ -393,7 +414,7 @@ pub async fn start_translation(
                 }
             } else {
                 // Fallback to smart_capture (creates new session each time)
-                match capture::smart_capture(&region) {
+                match capture::smart_capture(&capture_region) {
                     Ok((result, fallback)) => {
                         if fallback && !fallback_notified {
                             fallback_notified = true;
