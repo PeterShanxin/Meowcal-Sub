@@ -38,6 +38,18 @@
         "visible": false,
         "skipTaskbar": true,
         "resizable": false
+      },
+      {
+        "title": "Overlay",
+        "label": "overlay",
+        "url": "overlay.html",
+        "fullscreen": true,
+        "transparent": true,
+        "decorations": false,
+        "alwaysOnTop": true,
+        "visible": false,
+        "skipTaskbar": true,
+        "resizable": false
       }
     ],
     "security": {

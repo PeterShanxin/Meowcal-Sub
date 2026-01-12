@@ -4,7 +4,8 @@
     "description": "Default capabilities for Meowcal-Sub",
     "windows": [
         "main",
-        "selector"
+        "selector",
+        "overlay"
     ],
     "permissions": [
         "core:default",

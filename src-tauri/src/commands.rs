@@ -17,6 +17,7 @@ use crate::config::{AppConfig, CaptureRegion};
 use crate::capture;
 use crate::ocr::WindowsOcr;
 use crate::llm::{PhiSilica, TranslationProvider};
+use crate::overlay;
 use serde::Serialize;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
@@ -233,6 +234,18 @@ pub struct TranslationPayload {
     pub timestamp: u64,
 }
 
+/// Payload sent to the frontend to report capture status
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CaptureStatusPayload {
+    /// Whether the capture is using the fallback method (GDI)
+    pub using_fallback: bool,
+    /// Human-readable message about capture status
+    pub message: String,
+    /// Is this an error state?
+    pub is_error: bool,
+}
+
 /// Start the translation process
 /// 
 /// This will:
@@ -247,6 +260,7 @@ pub async fn start_translation(
     app: AppHandle,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
+    info!(">>> START_TRANSLATION COMMAND CALLED <<<");
     info!("Starting translation...");
     
     // Check if already running
@@ -296,6 +310,14 @@ pub async fn start_translation(
     
     info!("✅ Translation started! Interval: {}ms, Target: {}", interval_ms, target_language);
     
+    // Show the overlay and send the capture region to it
+    if let Err(e) = overlay::show_overlay(&app) {
+        warn!("⚠️ Failed to show overlay: {}", e);
+    }
+    if let Err(e) = overlay::update_overlay_region(&app, &region) {
+        warn!("⚠️ Failed to update overlay region: {}", e);
+    }
+    
     // Spawn the background translation loop
     tokio::spawn(async move {
         // Initialize OCR engine
@@ -309,10 +331,29 @@ pub async fn start_translation(
         
         // Initialize translator
         let translator = PhiSilica::new();
+        let translator_available = translator.is_available();
         info!("Using translator: {}", translator.name());
+        if !translator_available {
+            info!("Translation provider not available; using OCR text for overlay output");
+        }
         
         // Keep track of last OCR text to avoid duplicate processing
         let mut last_text = String::new();
+        
+        // Track if we've already notified about fallback
+        let mut fallback_notified = false;
+        
+        // Initialize persistent capture session (no border flashing)
+        let session_initialized = match capture::init_capture_session() {
+            Ok(_) => {
+                info!("✅ Persistent capture session initialized");
+                true
+            }
+            Err(e) => {
+                warn!("⚠️ Failed to init persistent session, will use per-frame capture: {}", e);
+                false
+            }
+        };
         
         loop {
             // Check if we should stop
@@ -333,12 +374,49 @@ pub async fn start_translation(
             debug!("📸 Capturing region: {:?}", region);
             
             // Step 1: Capture screen region
-            let capture_result = match capture::capture_region(&region) {
-                Ok(result) => result,
-                Err(e) => {
-                    warn!("⚠️ Capture failed: {}", e);
-                    tokio::time::sleep(Duration::from_millis(interval_ms as u64)).await;
-                    continue;
+            // If persistent session is available, use it (no border flashing)
+            // Otherwise fall back to smart_capture which creates new session each time
+            let capture_result = if session_initialized {
+                match capture::capture_with_session(&region) {
+                    Ok(result) => result,
+                    Err(e) => {
+                        warn!("⚠️ Session capture failed: {}", e);
+                        let status = CaptureStatusPayload {
+                            using_fallback: false,
+                            message: format!("Capture failed: {}", e),
+                            is_error: true,
+                        };
+                        let _ = app.emit("capture-status", status);
+                        tokio::time::sleep(Duration::from_millis(interval_ms as u64)).await;
+                        continue;
+                    }
+                }
+            } else {
+                // Fallback to smart_capture (creates new session each time)
+                match capture::smart_capture(&region) {
+                    Ok((result, fallback)) => {
+                        if fallback && !fallback_notified {
+                            fallback_notified = true;
+                            let status = CaptureStatusPayload {
+                                using_fallback: true,
+                                message: "Using GDI fallback - video content may not capture correctly".to_string(),
+                                is_error: false,
+                            };
+                            let _ = app.emit("capture-status", status);
+                        }
+                        result
+                    }
+                    Err(e) => {
+                        warn!("⚠️ Capture failed: {}", e);
+                        let status = CaptureStatusPayload {
+                            using_fallback: false,
+                            message: format!("Capture failed: {}", e),
+                            is_error: true,
+                        };
+                        let _ = app.emit("capture-status", status);
+                        tokio::time::sleep(Duration::from_millis(interval_ms as u64)).await;
+                        continue;
+                    }
                 }
             };
             
@@ -373,13 +451,17 @@ pub async fn start_translation(
             last_text = current_text.clone();
             info!("📝 OCR detected: {}", current_text);
             
-            // Step 3: Translate
-            let translated = match translator.translate(&current_text, &target_language).await {
-                Ok(t) => t,
-                Err(e) => {
-                    warn!("⚠️ Translation failed: {}", e);
-                    format!("[Translation error] {}", current_text)
+            // Step 3: Translate (or fall back to OCR text if translator isn't available)
+            let translated = if translator_available {
+                match translator.translate(&current_text, &target_language).await {
+                    Ok(t) => t,
+                    Err(e) => {
+                        warn!("⚠️ Translation failed: {}", e);
+                        current_text.clone()
+                    }
                 }
+            } else {
+                current_text.clone()
             };
             
             info!("🌐 Translated: {}", translated);
@@ -404,6 +486,8 @@ pub async fn start_translation(
             tokio::time::sleep(Duration::from_millis(interval_ms as u64)).await;
         }
         
+        // Close the capture session when loop ends
+        capture::close_capture_session();
         info!("Translation loop ended");
     });
     
@@ -414,7 +498,7 @@ pub async fn start_translation(
 /// 
 /// Called from JavaScript: `await invoke('stop_translation');`
 #[tauri::command]
-pub fn stop_translation(state: State<'_, AppState>) -> Result<(), String> {
+pub fn stop_translation(state: State<'_, AppState>, app: AppHandle) -> Result<(), String> {
     info!("Stopping translation...");
     
     // Send the stop signal
@@ -436,6 +520,14 @@ pub fn stop_translation(state: State<'_, AppState>) -> Result<(), String> {
     {
         let mut is_running = state.is_running.lock().unwrap();
         *is_running = false;
+    }
+    
+    // Close the capture session
+    capture::close_capture_session();
+    
+    // Hide the overlay
+    if let Err(e) = overlay::hide_overlay(&app) {
+        warn!("⚠️ Failed to hide overlay: {}", e);
     }
     
     info!("✅ Translation stopped!");

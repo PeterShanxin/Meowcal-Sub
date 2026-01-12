@@ -36,6 +36,10 @@ serde_json = "1"           # JSON parsing and generation
 # Rust's way of handling async operations (like JavaScript's async/await)
 tokio = { version = "1", features = ["full"] }
 
+# --- Global State ---
+# For managing persistent capture session
+lazy_static = "1.4"
+
 # --- Windows APIs ---
 # This gives us access to Windows-specific features like OCR and screen capture
 # The "features" list specifies which Windows APIs we want to use
@@ -49,10 +53,29 @@ windows = { version = "0.61", features = [
     # Memory streams - for passing image data around
     "Storage_Streams",
     
-    # Screen capture APIs
+    # Screen capture APIs (GDI fallback)
     "Win32_Graphics_Gdi",
     "Win32_UI_WindowsAndMessaging",
     "Win32_Foundation",
+    
+    # =========================================================================
+    # Windows.Graphics.Capture API (for hardware-accelerated content)
+    # This is the modern way to capture screens, works with videos/games
+    # =========================================================================
+    "Graphics_Capture",
+    "Graphics_DirectX",
+    "Graphics_DirectX_Direct3D11",
+    
+    # Direct3D11 for GPU-based capture
+    "Win32_Graphics_Direct3D",
+    "Win32_Graphics_Direct3D11",
+    "Win32_Graphics_Dxgi",
+    "Win32_Graphics_Dxgi_Common",
+    
+    # WinRT interop for Graphics Capture (bridges Win32 and WinRT)
+    "Win32_System_WinRT",
+    "Win32_System_WinRT_Direct3D11",
+    "Win32_System_WinRT_Graphics_Capture",
     
     # Globalization for language support
     "Globalization",
@@ -70,6 +93,7 @@ thiserror = "2"
 # For debugging - prints helpful messages to the console
 tracing = "0.1"
 tracing-subscriber = "0.3"
+tracing-appender = "0.2"
 
 # --- Async Trait ---
 # Allows us to use async functions in traits (Rust-specific thing)

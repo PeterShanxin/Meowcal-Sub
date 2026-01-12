@@ -1,61 +1,162 @@
 // =============================================================================
 // OVERLAY MODULE - Floating Subtitle Window
 // =============================================================================
-// This module manages the floating overlay window that displays translations.
-// 
-// The overlay is a separate transparent window that:
-// - Floats above other windows (always on top)
-// - Is click-through (doesn't interfere with clicking)
-// - Positioned relative to the capture region
+// This module manages the floating overlay window that displays:
+// 1. A border around the capture region
+// 2. Translated subtitles below the capture region
+//
+// The overlay is a fullscreen transparent window that is click-through.
 // =============================================================================
 
+use serde::Serialize;
+use tauri::{AppHandle, Emitter, Manager, WebviewWindow};
 use tracing::{debug, info};
 
-/// Configuration for the overlay window
-#[derive(Debug, Clone)]
-pub struct OverlayPosition {
-    /// X coordinate on screen
+use crate::config::CaptureRegion;
+
+// =============================================================================
+// OVERLAY PAYLOADS (sent to frontend)
+// =============================================================================
+
+/// Payload for updating the overlay region
+#[derive(Clone, Serialize)]
+pub struct OverlayRegionPayload {
     pub x: i32,
-    /// Y coordinate on screen
     pub y: i32,
-    /// Width of the overlay
     pub width: i32,
-    /// Height of the overlay (auto if 0)
     pub height: i32,
 }
 
-impl OverlayPosition {
-    /// Create a new overlay position
-    pub fn new(x: i32, y: i32, width: i32, height: i32) -> Self {
-        Self { x, y, width, height }
-    }
-    
-    /// Calculate overlay position based on capture region
-    /// 
-    /// Places the overlay just below the capture region
-    pub fn from_capture_region(x: i32, y: i32, width: i32, capture_height: i32, offset_y: i32) -> Self {
+impl From<&CaptureRegion> for OverlayRegionPayload {
+    fn from(region: &CaptureRegion) -> Self {
         Self {
-            x,
-            y: y + capture_height + offset_y,  // Below the capture region
-            width,
-            height: 0,  // Auto-height based on content
+            x: region.x,
+            y: region.y,
+            width: region.width,
+            height: region.height,
         }
     }
 }
 
-/// The overlay manager
+// =============================================================================
+// OVERLAY FUNCTIONS
+// =============================================================================
+
+/// Get the overlay window handle
+fn get_overlay_window(app: &AppHandle) -> Option<WebviewWindow> {
+    let window = app.get_webview_window("overlay");
+    if window.is_none() {
+        info!("⚠️ Overlay window 'overlay' not found in app windows");
+    }
+    window
+}
+
+/// Show the overlay window
 /// 
-/// Handles creation and management of the floating subtitle overlay.
-/// In Tauri, we use a separate WebView window for the overlay.
+/// This also makes the window click-through (ignore cursor events)
+pub fn show_overlay(app: &AppHandle) -> Result<(), String> {
+    info!("🔍 Looking for overlay window...");
+    
+    let window = match get_overlay_window(app) {
+        Some(w) => {
+            info!("✅ Found overlay window");
+            w
+        }
+        None => {
+            let err = "Overlay window not found - check tauri.conf.json";
+            info!("❌ {}", err);
+            return Err(err.to_string());
+        }
+    };
+    
+    // Make the window click-through
+    if let Err(e) = window.set_ignore_cursor_events(true) {
+        info!("⚠️ Failed to set click-through: {}", e);
+    }
+    
+    // Show the window
+    window.show()
+        .map_err(|e| format!("Failed to show overlay: {}", e))?;
+    
+    // Emit visibility event
+    app.emit("overlay-visibility", true)
+        .map_err(|e| format!("Failed to emit visibility event: {}", e))?;
+    
+    info!("✅ Overlay shown and set to click-through");
+    Ok(())
+}
+
+/// Hide the overlay window
+pub fn hide_overlay(app: &AppHandle) -> Result<(), String> {
+    let window = get_overlay_window(app)
+        .ok_or("Overlay window not found")?;
+    
+    // Emit visibility event first
+    let _ = app.emit("overlay-visibility", false);
+    
+    // Hide the window
+    window.hide()
+        .map_err(|e| format!("Failed to hide overlay: {}", e))?;
+    
+    info!("✅ Overlay hidden");
+    Ok(())
+}
+
+/// Update the overlay with the current capture region
+/// 
+/// This tells the overlay where to draw the border and position subtitles
+pub fn update_overlay_region(app: &AppHandle, region: &CaptureRegion) -> Result<(), String> {
+    let payload = OverlayRegionPayload::from(region);
+    
+    app.emit("overlay-update-region", payload)
+        .map_err(|e| format!("Failed to emit region update: {}", e))?;
+    
+    debug!("📍 Overlay region updated: ({}, {}) {}x{}", 
+           region.x, region.y, region.width, region.height);
+    Ok(())
+}
+
+/// Check if overlay is currently visible
+pub fn is_overlay_visible(app: &AppHandle) -> bool {
+    get_overlay_window(app)
+        .map(|w| w.is_visible().unwrap_or(false))
+        .unwrap_or(false)
+}
+
+// =============================================================================
+// LEGACY OVERLAY MANAGER (kept for compatibility)
+// =============================================================================
+
+/// Configuration for the overlay window
+#[derive(Debug, Clone)]
+pub struct OverlayPosition {
+    pub x: i32,
+    pub y: i32,
+    pub width: i32,
+    pub height: i32,
+}
+
+impl OverlayPosition {
+    pub fn new(x: i32, y: i32, width: i32, height: i32) -> Self {
+        Self { x, y, width, height }
+    }
+    
+    pub fn from_capture_region(x: i32, y: i32, width: i32, capture_height: i32, offset_y: i32) -> Self {
+        Self {
+            x,
+            y: y + capture_height + offset_y,
+            width,
+            height: 0,
+        }
+    }
+}
+
 pub struct OverlayManager {
-    /// Current position
     position: Option<OverlayPosition>,
-    /// Whether the overlay is visible
     is_visible: bool,
 }
 
 impl OverlayManager {
-    /// Create a new overlay manager
     pub fn new() -> Self {
         Self {
             position: None,
@@ -63,33 +164,25 @@ impl OverlayManager {
         }
     }
     
-    /// Set the overlay position
     pub fn set_position(&mut self, position: OverlayPosition) {
         debug!("Setting overlay position: {:?}", position);
         self.position = Some(position);
     }
     
-    /// Show the overlay
     pub fn show(&mut self) {
         info!("Showing overlay");
         self.is_visible = true;
-        // TODO: Tell the overlay window to show via Tauri events
     }
     
-    /// Hide the overlay
     pub fn hide(&mut self) {
         info!("Hiding overlay");
         self.is_visible = false;
-        // TODO: Tell the overlay window to hide via Tauri events
     }
     
-    /// Update the overlay text
     pub fn set_text(&self, text: &str) {
         debug!("Updating overlay text: {}", text);
-        // TODO: Send text to overlay window via Tauri events
     }
     
-    /// Check if overlay is currently visible
     pub fn is_visible(&self) -> bool {
         self.is_visible
     }
@@ -114,7 +207,7 @@ mod tests {
         let pos = OverlayPosition::from_capture_region(100, 200, 800, 50, 10);
         
         assert_eq!(pos.x, 100);
-        assert_eq!(pos.y, 260);  // 200 + 50 + 10
+        assert_eq!(pos.y, 260);
         assert_eq!(pos.width, 800);
     }
     

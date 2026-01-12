@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Meowcal Sub - Overlay</title>
+    <link rel="stylesheet" href="styles/overlay.css">
+</head>
+<body>
+    <!-- 
+        This overlay window is fullscreen and transparent.
+        It displays:
+        1. A border around the capture region
+        2. Translated subtitles near the capture region
+    -->
+    
+    <!-- Capture region border indicator -->
+    <div id="capture-frame" class="capture-frame hidden">
+        <!-- Corner decorations for premium look -->
+        <div class="corner top-left"></div>
+        <div class="corner top-right"></div>
+        <div class="corner bottom-left"></div>
+        <div class="corner bottom-right"></div>
+    </div>
+    
+    <!-- Subtitle display area -->
+    <div id="subtitle-container" class="subtitle-container hidden">
+        <div id="subtitle-text" class="subtitle-text"></div>
+    </div>
+    
+    <!-- DEBUG: Visible indicator that overlay loaded (remove in production) -->
+    <div id="debug-info" class="debug-info" style="display: block !important; opacity: 1 !important;">
+        <span>🎬 OVERLAY LOADED</span>
+        <span id="debug-region">Region: waiting...</span>
+        <span id="debug-status">Status: initializing...</span>
+    </div>
+    
+    <script src="scripts/overlay.js"></script>
+</body>
+</html>

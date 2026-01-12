@@ -57,6 +57,9 @@ async function initializeApp() {
         // Set up listener for translation results
         await setupTranslationUpdateListener();
 
+        // Set up listener for capture status (fallback/error notifications)
+        await setupCaptureStatusListener();
+
         // Update status to ready
         updateStatus('ready', 'Ready');
 
@@ -362,6 +365,37 @@ async function setupTranslationUpdateListener() {
         console.log('Translation update listener set up');
     } catch (error) {
         console.error('Failed to set up translation listener:', error);
+    }
+}
+
+/**
+ * Set up listener for capture status events from the Rust backend
+ * This notifies us if:
+ * - We're using GDI fallback (video may not capture correctly)
+ * - There's a capture error
+ */
+async function setupCaptureStatusListener() {
+    try {
+        let hasShownFallbackWarning = false;  // Only show once per session
+
+        await window.__TAURI__.event.listen('capture-status', (event) => {
+            const { usingFallback, message, isError } = event.payload;
+            console.log('📸 Capture status:', event.payload);
+
+            if (isError) {
+                // Show error toast and update status
+                showToast(message, 'error');
+                updateStatus('error', 'Capture failed');
+            } else if (usingFallback && !hasShownFallbackWarning) {
+                // Show fallback warning once
+                hasShownFallbackWarning = true;
+                showToast('⚠️ Using GDI fallback - video content may not capture correctly', 'warning');
+                console.warn('Graphics Capture not available, using GDI fallback');
+            }
+        });
+        console.log('Capture status listener set up');
+    } catch (error) {
+        console.error('Failed to set up capture status listener:', error);
     }
 }
 

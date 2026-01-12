@@ -33,12 +33,26 @@ use meowcal_sub::commands::{self, AppState};
 
 fn main() {
     // --- Step 1: Set up logging ---
-    // This lets us use info!(), debug!(), error!() macros to print messages
-    let subscriber = FmtSubscriber::builder()
-        .with_max_level(Level::DEBUG)  // Show all messages up to DEBUG level
-        .pretty()                       // Make the output look nice
-        .init();
+    // Log to a file in the logs directory
+    let file_appender = tracing_appender::rolling::daily("logs", "meowcal-sub.log");
+    let (non_blocking, guard) = tracing_appender::non_blocking(file_appender);
 
+    let subscriber = FmtSubscriber::builder()
+        .with_max_level(Level::DEBUG)
+        .with_writer(non_blocking)
+        .with_ansi(false) // File logs shouldn't have color codes
+        .pretty()
+        .finish();
+
+    tracing::subscriber::set_global_default(subscriber)
+        .expect("setting default subscriber failed");
+    
+    // INFO: We must keep the guard alive!
+    // We'll leak it since main() runs for the whole app duration
+    Box::leak(Box::new(guard));
+    
+    info!("🐱 Meowcal Sub starting up...");
+    
     info!("🐱 Meowcal Sub starting up...");
 
     // --- Step 2: Build and run the Tauri app ---
