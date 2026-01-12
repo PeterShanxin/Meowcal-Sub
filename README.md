@@ -120,8 +120,8 @@ cargo fmt
 - [x] Windows OCR integration
 - [x] Area selection UI
 - [x] Translation loop (capture → OCR → translate → emit events)
-- [ ] ⏳ Windows.Graphics.Capture for video support (GDI can't capture HW-accelerated content)
-- [ ] Overlay window for displaying translations
+- [x] Windows.Graphics.Capture for video support (GDI can't capture HW-accelerated content)
+- [x] Overlay window for displaying translations
 - [ ] Phi Silica translation (when Windows AI APIs are stable)
 - [ ] Settings persistence
 - [ ] Auto-start with Windows
