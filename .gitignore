@@ -41,7 +41,10 @@ build/
 
 # --- Logs ---
 *.log
+*.log.*
+src-tauri/logs/
 build_log.txt
+build_error.txt
 
 # --- OS files ---
 Thumbs.db
