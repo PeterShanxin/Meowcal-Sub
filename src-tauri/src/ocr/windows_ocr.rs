@@ -8,7 +8,7 @@
 // =============================================================================
 
 use super::{OcrError, OcrResult};
-use tracing::{debug, info, warn};
+use tracing::{debug, info};
 
 // Windows Runtime APIs for OCR
 use windows::Graphics::Imaging::{BitmapPixelFormat, SoftwareBitmap};

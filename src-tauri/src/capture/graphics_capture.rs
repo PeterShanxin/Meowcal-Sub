@@ -16,8 +16,8 @@
 use super::d3d;
 use super::{CaptureError, CaptureResult};
 use crate::config::CaptureRegion;
-use std::sync::mpsc::{channel, Receiver, Sender};
-use std::sync::{Arc, Mutex};
+use std::sync::mpsc::{channel, Receiver};
+use std::sync::Mutex;
 use tracing::{debug, info, warn};
 
 use windows::core::{IInspectable, Interface};

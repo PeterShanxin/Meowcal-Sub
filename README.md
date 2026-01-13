@@ -64,7 +64,7 @@ The built app will be in `src-tauri/target/release/`.
 
 ## ⚙️ Configuration
 
-Edit settings in the app or modify `config.json`:
+Edit settings in the app or modify `%APPDATA%\\com.meowcal.sub\\config.json`:
 
 | Setting | Description | Default |
 |---------|-------------|---------|
@@ -165,10 +165,11 @@ cargo fmt
 - [x] Windows OCR integration
 - [x] Area selection UI
 - [x] Translation loop (capture → OCR → translate → emit events)
+- [x] Multi-backend translation manager + fallbacks
 - [x] Windows.Graphics.Capture for video support (GDI can't capture HW-accelerated content)
 - [x] Overlay window for displaying translations
 - [ ] Phi Silica translation (when Windows AI APIs are stable)
-- [ ] Settings persistence
+- [x] Settings persistence
 - [ ] Auto-start with Windows
 - [ ] Multiple monitor support
 

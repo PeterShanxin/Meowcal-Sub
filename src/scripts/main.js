@@ -178,6 +178,17 @@ async function loadSettings() {
         document.getElementById('capture-interval').value = settings.captureIntervalMs;
         document.getElementById('interval-value').textContent = settings.captureIntervalMs;
 
+        if (settings.lastCaptureRegion) {
+            const region = settings.lastCaptureRegion;
+            appState.captureRegion = region;
+            document.getElementById('region-preview').style.display = 'block';
+            document.getElementById('region-coords').textContent =
+                `Position: (${region.x}, ${region.y})`;
+            document.getElementById('region-size').textContent =
+                `Size: ${region.width} × ${region.height}`;
+            document.getElementById('btn-start').disabled = false;
+        }
+
         console.log('Settings loaded:', settings);
     } catch (error) {
         console.error('Failed to load settings:', error);

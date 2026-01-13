@@ -6,6 +6,9 @@
 // =============================================================================
 
 use serde::{Deserialize, Serialize};
+use std::fs;
+use std::path::PathBuf;
+use tauri::Manager;
 
 // =============================================================================
 // APP CONFIG
@@ -36,6 +39,14 @@ pub struct AppConfig {
     /// Translation backend settings
     #[serde(default)]
     pub translation: TranslationConfig,
+
+    /// Last selected capture region
+    #[serde(default)]
+    pub last_capture_region: Option<CaptureRegion>,
+
+    /// Window size/position preferences
+    #[serde(default)]
+    pub window_preferences: WindowPreferences,
     
     /// Whether to start translation automatically when app opens
     pub auto_start: bool,
@@ -68,6 +79,17 @@ pub struct OverlayConfig {
     
     /// Maximum width of the overlay (in pixels, 0 = match capture region)
     pub max_width: u32,
+}
+
+/// Window size/position preferences
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct WindowPreferences {
+    pub width: Option<u32>,
+    pub height: Option<u32>,
+    pub x: Option<i32>,
+    pub y: Option<i32>,
+    pub is_maximized: bool,
 }
 
 /// Configuration for translation backends and fallback behavior
@@ -134,6 +156,8 @@ impl Default for AppConfig {
             capture_interval_ms: 500,               // Capture every 500ms
             overlay: OverlayConfig::default(),
             translation: TranslationConfig::default(),
+            last_capture_region: None,
+            window_preferences: WindowPreferences::default(),
             auto_start: false,
             minimize_to_tray: true,
             start_with_windows: false,
@@ -194,6 +218,18 @@ impl CaptureRegion {
     }
 }
 
+impl Default for WindowPreferences {
+    fn default() -> Self {
+        Self {
+            width: None,
+            height: None,
+            x: None,
+            y: None,
+            is_maximized: false,
+        }
+    }
+}
+
 impl Default for TranslationConfig {
     fn default() -> Self {
         Self {
@@ -215,6 +251,45 @@ impl Default for OfflineMtConfig {
             max_chunk_chars: 500,
         }
     }
+}
+
+// =============================================================================
+// PERSISTENCE
+// =============================================================================
+
+/// Get the config.json path in the app data directory.
+pub fn get_config_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+    let app_dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|e| format!("Failed to resolve app data dir: {}", e))?;
+    fs::create_dir_all(&app_dir)
+        .map_err(|e| format!("Failed to create app data dir: {}", e))?;
+    Ok(app_dir.join("config.json"))
+}
+
+/// Load config from disk (fall back to defaults on error).
+pub fn load_config(app: &tauri::AppHandle) -> AppConfig {
+    let path = match get_config_path(app) {
+        Ok(path) => path,
+        Err(_) => return AppConfig::default(),
+    };
+
+    if let Ok(content) = fs::read_to_string(&path) {
+        if let Ok(config) = serde_json::from_str::<AppConfig>(&content) {
+            return config;
+        }
+    }
+
+    AppConfig::default()
+}
+
+/// Save config to disk.
+pub fn save_config(app: &tauri::AppHandle, config: &AppConfig) -> Result<(), String> {
+    let path = get_config_path(app)?;
+    let json = serde_json::to_string_pretty(config).map_err(|e| e.to_string())?;
+    fs::write(path, json).map_err(|e| e.to_string())?;
+    Ok(())
 }
 
 // =============================================================================

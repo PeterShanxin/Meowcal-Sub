@@ -13,7 +13,7 @@
 //   await invoke('save_settings', { settings: { ... } });
 // =============================================================================
 
-use crate::config::{AppConfig, CaptureRegion};
+use crate::config::{save_config, AppConfig, CaptureRegion};
 use crate::capture;
 use crate::ocr::WindowsOcr;
 use crate::llm::{
@@ -139,16 +139,41 @@ pub fn get_settings(state: State<'_, AppState>) -> AppConfig {
 /// 
 /// Called from JavaScript: `await invoke('save_settings', { settings: { ... } });`
 #[tauri::command]
-pub fn save_settings(settings: AppConfig, state: State<'_, AppState>) -> Result<(), String> {
-    info!("Saving settings: {:?}", settings);
-    
+pub fn save_settings(
+    settings: AppConfig,
+    state: State<'_, AppState>,
+    app: AppHandle,
+) -> Result<(), String> {
+    info!("Saving settings...");
+
+    let mut updated = settings.clone();
+
+    // Persist the last capture region into the config
+    let last_region = state.capture_region.lock().unwrap().clone();
+    updated.last_capture_region = last_region;
+
+    // Capture window preferences if possible
+    if let Some(window) = app.get_webview_window("main") {
+        if let Ok(size) = window.inner_size() {
+            updated.window_preferences.width = Some(size.width);
+            updated.window_preferences.height = Some(size.height);
+        }
+        if let Ok(position) = window.outer_position() {
+            updated.window_preferences.x = Some(position.x);
+            updated.window_preferences.y = Some(position.y);
+        }
+        if let Ok(is_maximized) = window.is_maximized() {
+            updated.window_preferences.is_maximized = is_maximized;
+        }
+    }
+
     // Update the in-memory config
     let mut config = state.config.lock().unwrap();
-    *config = settings.clone();
-    
-    // TODO: Persist to disk
-    // For now, settings are only stored in memory
-    
+    *config = updated.clone();
+
+    // Persist to disk
+    save_config(&app, &updated)?;
+
     Ok(())
 }
 

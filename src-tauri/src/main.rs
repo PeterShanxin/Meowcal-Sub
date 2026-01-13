@@ -19,13 +19,14 @@
 use tauri::{
     menu::{Menu, MenuItem},
     tray::{TrayIconBuilder, TrayIconEvent, MouseButton, MouseButtonState},
-    Manager, WindowEvent,
+    Manager, PhysicalPosition, PhysicalSize,
 };
 use tracing::{info, Level};
 use tracing_subscriber::FmtSubscriber;
 
 // Import our custom modules
 use meowcal_sub::commands::{self, AppState};
+use meowcal_sub::config::load_config;
 
 // =============================================================================
 // MAIN FUNCTION
@@ -52,8 +53,6 @@ fn main() {
     Box::leak(Box::new(guard));
     
     info!("🐱 Meowcal Sub starting up...");
-    
-    info!("🐱 Meowcal Sub starting up...");
 
     // --- Step 2: Build and run the Tauri app ---
     tauri::Builder::default()
@@ -77,6 +76,30 @@ fn main() {
         // Set up the system tray icon
         .setup(|app| {
             info!("Setting up system tray...");
+
+            // Load persisted config
+            let loaded_config = load_config(&app.handle());
+            {
+                let state = app.state::<AppState>();
+                *state.config.lock().unwrap() = loaded_config.clone();
+                if let Some(region) = loaded_config.last_capture_region {
+                    *state.capture_region.lock().unwrap() = Some(region);
+                }
+            }
+
+            // Apply window preferences if available
+            if let Some(window) = app.get_webview_window("main") {
+                let prefs = &loaded_config.window_preferences;
+                if let (Some(width), Some(height)) = (prefs.width, prefs.height) {
+                    let _ = window.set_size(PhysicalSize::new(width, height));
+                }
+                if let (Some(x), Some(y)) = (prefs.x, prefs.y) {
+                    let _ = window.set_position(PhysicalPosition::new(x, y));
+                }
+                if prefs.is_maximized {
+                    let _ = window.maximize();
+                }
+            }
             
             // Create menu items for the tray
             let show_item = MenuItem::with_id(app, "show", "Show Window", true, None::<&str>)?;

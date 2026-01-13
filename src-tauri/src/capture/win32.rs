@@ -21,7 +21,6 @@ use windows::Win32::Graphics::Gdi::{
     GetDC, GetDIBits, ReleaseDC, SelectObject, BITMAPINFO, BITMAPINFOHEADER,
     BI_RGB, DIB_RGB_COLORS, SRCCOPY, HGDIOBJ,
 };
-use windows::Win32::Foundation::HWND;
 
 /// Capture a region of the screen
 /// 
