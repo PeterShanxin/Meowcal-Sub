@@ -63,6 +63,9 @@ async function initializeApp() {
         // Register Edge Translator bridge (experimental)
         await registerEdgeTranslatorBridge();
 
+        // Load backend diagnostics
+        await refreshTranslationDiagnostics();
+
         // Update status to ready
         updateStatus('ready', 'Ready');
 
@@ -178,6 +181,8 @@ async function loadSettings() {
         document.getElementById('capture-interval').value = settings.captureIntervalMs;
         document.getElementById('interval-value').textContent = settings.captureIntervalMs;
 
+        applyTranslationSettings(settings.translation);
+
         if (settings.lastCaptureRegion) {
             const region = settings.lastCaptureRegion;
             appState.captureRegion = region;
@@ -196,10 +201,63 @@ async function loadSettings() {
     }
 }
 
+function applyTranslationSettings(translation) {
+    const config = normalizeTranslationConfig(translation);
+
+    document.getElementById('backend-preference').value = config.preferredBackend;
+    document.getElementById('toggle-windows-ai').checked = config.enableWindowsAi;
+    document.getElementById('toggle-offline-mt').checked = config.enableOfflineMt;
+    document.getElementById('toggle-edge-translator').checked = config.enableEdgeTranslator;
+    document.getElementById('toggle-mock-fallback').checked = config.allowMockFallback;
+    document.getElementById('offline-mt-path').value = config.offlineMt.binaryPath || '';
+}
+
+function normalizeTranslationConfig(translation) {
+    const defaultConfig = {
+        preferredBackend: 'auto',
+        enableWindowsAi: true,
+        enableOfflineMt: true,
+        enableEdgeTranslator: false,
+        allowMockFallback: true,
+        offlineMt: {
+            binaryPath: null,
+            timeoutMs: 3000,
+            maxChunkChars: 500,
+        },
+    };
+
+    if (!translation) {
+        return defaultConfig;
+    }
+
+    return {
+        preferredBackend: translation.preferredBackend || defaultConfig.preferredBackend,
+        enableWindowsAi: translation.enableWindowsAi ?? defaultConfig.enableWindowsAi,
+        enableOfflineMt: translation.enableOfflineMt ?? defaultConfig.enableOfflineMt,
+        enableEdgeTranslator: translation.enableEdgeTranslator ?? defaultConfig.enableEdgeTranslator,
+        allowMockFallback: translation.allowMockFallback ?? defaultConfig.allowMockFallback,
+        offlineMt: {
+            binaryPath: translation.offlineMt?.binaryPath ?? defaultConfig.offlineMt.binaryPath,
+            timeoutMs: translation.offlineMt?.timeoutMs ?? defaultConfig.offlineMt.timeoutMs,
+            maxChunkChars: translation.offlineMt?.maxChunkChars ?? defaultConfig.offlineMt.maxChunkChars,
+        },
+    };
+}
+
 /**
  * Save settings to Rust backend
  */
 async function saveSettings() {
+    const translationConfig = normalizeTranslationConfig(appState.settings?.translation);
+    const offlineMtPath = document.getElementById('offline-mt-path').value.trim();
+
+    translationConfig.preferredBackend = document.getElementById('backend-preference').value;
+    translationConfig.enableWindowsAi = document.getElementById('toggle-windows-ai').checked;
+    translationConfig.enableOfflineMt = document.getElementById('toggle-offline-mt').checked;
+    translationConfig.enableEdgeTranslator = document.getElementById('toggle-edge-translator').checked;
+    translationConfig.allowMockFallback = document.getElementById('toggle-mock-fallback').checked;
+    translationConfig.offlineMt.binaryPath = offlineMtPath.length > 0 ? offlineMtPath : null;
+
     const settings = {
         sourceLanguage: document.getElementById('source-language').value,
         targetLanguage: document.getElementById('target-language').value,
@@ -215,16 +273,15 @@ async function saveSettings() {
         autoStart: false,
         minimizeToTray: true,
         startWithWindows: false,
+        translation: translationConfig,
     };
-    if (appState.settings?.translation) {
-        settings.translation = appState.settings.translation;
-    }
 
     try {
         await window.__TAURI__.core.invoke('save_settings', { settings });
         appState.settings = settings;
         showToast('Settings saved!', 'success');
         console.log('Settings saved:', settings);
+        await refreshTranslationDiagnostics();
     } catch (error) {
         console.error('Failed to save settings:', error);
         showToast('Failed to save settings', 'error');
@@ -256,6 +313,14 @@ function setupEventListeners() {
     document.getElementById('capture-interval').addEventListener('input', (e) => {
         document.getElementById('interval-value').textContent = e.target.value;
     });
+
+    // Backend diagnostics refresh
+    document.getElementById('btn-refresh-backends')
+        .addEventListener('click', refreshTranslationDiagnostics);
+
+    // Edge model preparation
+    document.getElementById('btn-edge-model-download')
+        .addEventListener('click', handleEdgeModelDownload);
 }
 
 // =============================================================================
@@ -398,6 +463,139 @@ async function setupTranslationUpdateListener() {
         console.log('Translation update listener set up');
     } catch (error) {
         console.error('Failed to set up translation listener:', error);
+    }
+}
+
+/**
+ * Refresh backend diagnostics and update UI
+ */
+async function refreshTranslationDiagnostics() {
+    const container = document.getElementById('backend-status');
+    if (!container) {
+        return;
+    }
+
+    try {
+        const diagnostics = await window.__TAURI__.core.invoke('get_translation_diagnostics');
+        updateBackendStatusUI(diagnostics);
+    } catch (error) {
+        console.error('Failed to load backend diagnostics:', error);
+        container.innerHTML = '<div class="backend-status-empty">Failed to load backend status.</div>';
+    }
+}
+
+function backendIdKey(id) {
+    switch (id) {
+        case 'windowsAi':
+            return 'windows_ai';
+        case 'offlineMt':
+            return 'offline_mt';
+        case 'edgeTranslator':
+            return 'edge_translator';
+        case 'mock':
+            return 'mock';
+        default:
+            return id;
+    }
+}
+
+function formatReadyState(readyState) {
+    switch (readyState) {
+        case 'ready':
+            return { label: 'Ready', className: 'ready' };
+        case 'notReady':
+            return { label: 'Not Ready', className: 'not-ready' };
+        case 'notSupported':
+            return { label: 'Not Supported', className: 'not-supported' };
+        case 'error':
+            return { label: 'Error', className: 'error' };
+        default:
+            return { label: 'Unknown', className: 'error' };
+    }
+}
+
+function updateBackendStatusUI(diagnostics) {
+    const container = document.getElementById('backend-status');
+    if (!container) {
+        return;
+    }
+
+    container.innerHTML = '';
+
+    if (!diagnostics || !diagnostics.backends || diagnostics.backends.length === 0) {
+        container.innerHTML = '<div class="backend-status-empty">No backend data.</div>';
+        return;
+    }
+
+    diagnostics.backends.forEach((backend) => {
+        const row = document.createElement('div');
+        row.className = 'backend-status-row';
+
+        const header = document.createElement('div');
+        header.className = 'backend-status-header';
+
+        const name = document.createElement('span');
+        name.className = 'backend-status-name';
+        name.textContent = backend.name;
+
+        const statusInfo = formatReadyState(backend.readyState);
+        const status = document.createElement('span');
+        status.className = `status-pill ${statusInfo.className}`;
+        status.textContent = statusInfo.label;
+
+        header.appendChild(name);
+        header.appendChild(status);
+
+        const notes = document.createElement('div');
+        notes.className = 'backend-status-notes';
+
+        const backendKey = backendIdKey(backend.id);
+        const errorCode = diagnostics.lastErrorByBackend?.[backendKey];
+        const latency = diagnostics.lastLatencyByBackend?.[backendKey];
+
+        let extra = '';
+        if (typeof latency === 'number') {
+            extra = `Last latency: ${latency}ms.`;
+        }
+        if (errorCode) {
+            extra = extra ? `${extra} Last error: ${errorCode}.` : `Last error: ${errorCode}.`;
+        }
+
+        notes.textContent = backend.notes || extra || 'No notes available.';
+
+        row.appendChild(header);
+        row.appendChild(notes);
+        container.appendChild(row);
+    });
+}
+
+async function handleEdgeModelDownload() {
+    if (!window.MeowcalEdgeTranslator ||
+        typeof window.MeowcalEdgeTranslator.prepareEdgeTranslator !== 'function') {
+        showToast('Edge Translator API not available', 'error');
+        return;
+    }
+
+    const sourceLanguage = document.getElementById('source-language').value;
+    const targetLanguage = document.getElementById('target-language').value;
+
+    try {
+        const result = await window.MeowcalEdgeTranslator.prepareEdgeTranslator(
+            sourceLanguage,
+            targetLanguage
+        );
+
+        if (result.readyState === 'ready') {
+            showToast('Edge model already available', 'success');
+        } else if (result.readyState === 'notReady') {
+            showToast(result.notes || 'Edge model download started', 'success');
+        } else {
+            showToast(result.notes || 'Edge model not available', 'error');
+        }
+        await refreshTranslationDiagnostics();
+    } catch (error) {
+        console.error('Edge model prepare failed:', error);
+        showToast('Failed to prepare Edge model', 'error');
     }
 }
 

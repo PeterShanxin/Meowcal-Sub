@@ -146,6 +146,51 @@
         }
     }
 
+    async function prepareEdgeTranslator(sourceLanguage, targetLanguage) {
+        const api = getTranslationApi();
+        if (!api) {
+            return {
+                readyState: 'notSupported',
+                notes: 'Translation API not available in this WebView2 runtime.',
+            };
+        }
+
+        if (typeof api.canTranslate !== 'function') {
+            return {
+                readyState: 'notSupported',
+                notes: 'Translation API missing canTranslate; refusing to trigger auto-download.',
+            };
+        }
+
+        try {
+            const status = await api.canTranslate({ sourceLanguage, targetLanguage });
+            if (status === 'no') {
+                return {
+                    readyState: 'notSupported',
+                    notes: 'Language pair not supported by the Translator API.',
+                };
+            }
+
+            if (status === 'after-download') {
+                await api.createTranslator({ sourceLanguage, targetLanguage });
+                return {
+                    readyState: 'notReady',
+                    notes: 'Model download started. Check status again in a bit.',
+                };
+            }
+
+            return {
+                readyState: 'ready',
+                notes: 'Model already available.',
+            };
+        } catch (error) {
+            return {
+                readyState: 'error',
+                notes: `Prepare failed: ${String(error)}`,
+            };
+        }
+    }
+
     async function handleRequest(payload) {
         if (!payload || !payload.requestId) {
             return {
@@ -197,6 +242,7 @@
 
     window.MeowcalEdgeTranslator = {
         probeEdgeTranslator,
+        prepareEdgeTranslator,
         registerEdgeTranslatorBridge,
     };
 })();

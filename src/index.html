@@ -139,6 +139,79 @@
                     <span>Battery Saver (2s)</span>
                 </div>
             </div>
+
+            <h3 class="settings-subtitle">Translation Backend</h3>
+
+            <div class="settings-group">
+                <label class="setting-label" for="backend-preference">
+                    Backend Preference
+                </label>
+                <select id="backend-preference" class="select">
+                    <option value="auto">Auto (Windows AI -> Offline MT -> Edge)</option>
+                    <option value="windows_ai">Windows AI (Phi Silica)</option>
+                    <option value="offline_mt">Offline MT (translateLocally)</option>
+                    <option value="edge_translator">Edge Translator (Experimental)</option>
+                </select>
+                <p class="setting-hint">
+                    Auto selects the first ready backend based on the default order.
+                </p>
+            </div>
+
+            <div class="settings-group backend-toggles">
+                <div class="toggle-wrapper">
+                    <span class="toggle-label">Enable Windows AI</span>
+                    <label class="toggle">
+                        <input type="checkbox" id="toggle-windows-ai">
+                        <span class="toggle-slider"></span>
+                    </label>
+                </div>
+                <div class="toggle-wrapper">
+                    <span class="toggle-label">Enable Offline MT</span>
+                    <label class="toggle">
+                        <input type="checkbox" id="toggle-offline-mt">
+                        <span class="toggle-slider"></span>
+                    </label>
+                </div>
+                <div class="toggle-wrapper">
+                    <span class="toggle-label">Enable Edge Translator</span>
+                    <label class="toggle">
+                        <input type="checkbox" id="toggle-edge-translator">
+                        <span class="toggle-slider"></span>
+                    </label>
+                </div>
+                <div class="toggle-wrapper">
+                    <span class="toggle-label">Allow Passthrough Fallback</span>
+                    <label class="toggle">
+                        <input type="checkbox" id="toggle-mock-fallback">
+                        <span class="toggle-slider"></span>
+                    </label>
+                </div>
+            </div>
+
+            <div class="settings-group">
+                <label class="setting-label" for="offline-mt-path">
+                    translateLocally Path (Offline MT)
+                </label>
+                <input
+                    type="text"
+                    id="offline-mt-path"
+                    class="text-input"
+                    placeholder="C:\\tools\\translateLocally\\translateLocally.exe"
+                >
+            </div>
+
+            <div class="settings-group settings-inline-actions">
+                <button class="btn btn-outline btn-small" id="btn-refresh-backends">
+                    Refresh Backend Status
+                </button>
+                <button class="btn btn-outline btn-small" id="btn-edge-model-download">
+                    Prepare Edge Model
+                </button>
+            </div>
+
+            <div class="backend-status" id="backend-status">
+                <div class="backend-status-empty">Backend status not loaded yet.</div>
+            </div>
             
             <button class="btn btn-outline" id="btn-save-settings">
                 Save Settings
