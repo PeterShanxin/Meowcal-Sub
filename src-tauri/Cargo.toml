@@ -15,6 +15,15 @@ authors = ["PeterShanxin"]
 license = "MIT"
 
 # =============================================================================
+# FEATURES
+# =============================================================================
+# These are optional compile-time switches for advanced capabilities.
+
+[features]
+# Enable Windows AI (Phi Silica) bindings when available.
+windows_ai = []
+
+# =============================================================================
 # DEPENDENCIES
 # =============================================================================
 # These are the libraries we use. Each one has a purpose:
