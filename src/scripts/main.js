@@ -60,6 +60,9 @@ async function initializeApp() {
         // Set up listener for capture status (fallback/error notifications)
         await setupCaptureStatusListener();
 
+        // Register Edge Translator bridge (experimental)
+        await registerEdgeTranslatorBridge();
+
         // Update status to ready
         updateStatus('ready', 'Ready');
 
@@ -68,6 +71,22 @@ async function initializeApp() {
         console.error('❌ Failed to initialize app:', error);
         updateStatus('error', 'Initialization failed');
         showToast('Failed to initialize: ' + error.message, 'error');
+    }
+}
+
+/**
+ * Register the Edge Translator bridge (if available)
+ */
+async function registerEdgeTranslatorBridge() {
+    if (!window.MeowcalEdgeTranslator ||
+        typeof window.MeowcalEdgeTranslator.registerEdgeTranslatorBridge !== 'function') {
+        return;
+    }
+
+    try {
+        await window.MeowcalEdgeTranslator.registerEdgeTranslatorBridge();
+    } catch (error) {
+        console.warn('Edge Translator bridge registration failed:', error);
     }
 }
 
