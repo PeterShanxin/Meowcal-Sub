@@ -21,10 +21,11 @@ pub use mock::*;
 
 use async_trait::async_trait;
 use serde::Serialize;
+use std::collections::HashMap;
 use thiserror::Error;
 
 /// Errors that can occur during translation
-#[derive(Error, Debug)]
+#[derive(Error, Debug, Clone)]
 pub enum LlmError {
     #[error("Translation failed: {0}")]
     TranslationError(String),
@@ -34,6 +35,17 @@ pub enum LlmError {
 
     #[error("API error: {0}")]
     ApiError(String),
+}
+
+impl LlmError {
+    /// Short, non-PII error code for diagnostics/logging.
+    pub fn code(&self) -> &'static str {
+        match self {
+            LlmError::TranslationError(_) => "translation_error",
+            LlmError::ModelNotAvailable(_) => "model_not_available",
+            LlmError::ApiError(_) => "api_error",
+        }
+    }
 }
 
 /// Known translation backend identifiers
@@ -97,6 +109,53 @@ pub struct TranslationOutcome {
     pub translated: String,
     pub backend_used: BackendId,
     pub warnings: Vec<String>,
+}
+
+/// Diagnostics snapshot returned to the frontend.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TranslationDiagnostics {
+    pub backends: Vec<BackendInfo>,
+    pub last_error_by_backend: HashMap<String, String>,
+    pub last_latency_by_backend: HashMap<String, u128>,
+}
+
+/// Internal diagnostics state (stored in AppState).
+#[derive(Debug, Default)]
+pub struct TranslationDiagnosticsState {
+    last_error_by_backend: HashMap<String, String>,
+    last_latency_by_backend: HashMap<String, u128>,
+}
+
+impl TranslationDiagnosticsState {
+    pub fn record_success(&mut self, backend_id: BackendId, latency_ms: u128) {
+        let key = backend_id.as_str().to_string();
+        self.last_latency_by_backend.insert(key.clone(), latency_ms);
+        self.last_error_by_backend.remove(&key);
+    }
+
+    pub fn record_error(
+        &mut self,
+        backend_id: BackendId,
+        error_code: &str,
+        latency_ms: Option<u128>,
+    ) {
+        let key = backend_id.as_str().to_string();
+        if !error_code.is_empty() {
+            self.last_error_by_backend
+                .insert(key.clone(), error_code.to_string());
+        }
+        if let Some(latency) = latency_ms {
+            self.last_latency_by_backend.insert(key, latency);
+        }
+    }
+
+    pub fn snapshot(&self) -> (HashMap<String, String>, HashMap<String, u128>) {
+        (
+            self.last_error_by_backend.clone(),
+            self.last_latency_by_backend.clone(),
+        )
+    }
 }
 
 /// Translation backend interface

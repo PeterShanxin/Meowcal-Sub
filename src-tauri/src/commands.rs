@@ -16,7 +16,10 @@
 use crate::config::{AppConfig, CaptureRegion};
 use crate::capture;
 use crate::ocr::WindowsOcr;
-use crate::llm::{BackendInfo, TranslationManager, TranslationOutcome};
+use crate::llm::{
+    BackendInfo, TranslationDiagnostics, TranslationDiagnosticsState, TranslationManager,
+    TranslationOutcome,
+};
 use crate::overlay;
 use serde::Serialize;
 use std::sync::{Arc, Mutex};
@@ -44,6 +47,8 @@ pub struct AppState {
     /// Stop signal sender for the translation loop
     /// When we send `true` through this, the loop stops
     pub stop_signal: Mutex<Option<watch::Sender<bool>>>,
+    /// Diagnostics for translation backends
+    pub translation_diagnostics: Arc<Mutex<TranslationDiagnosticsState>>,
 }
 
 impl Default for AppState {
@@ -54,6 +59,7 @@ impl Default for AppState {
             capture_region: Mutex::new(None),
             capture_scale_factor: Mutex::new(1.0),
             stop_signal: Mutex::new(None),
+            translation_diagnostics: Arc::new(Mutex::new(TranslationDiagnosticsState::default())),
         }
     }
 }
@@ -268,7 +274,8 @@ pub fn list_translation_backends(state: State<'_, AppState>, app: AppHandle) -> 
         guard.translation.clone()
     };
 
-    let manager = TranslationManager::new(config, app);
+    let diagnostics = state.translation_diagnostics.clone();
+    let manager = TranslationManager::new(config, app, diagnostics);
     manager.list_backends()
 }
 
@@ -286,10 +293,27 @@ pub async fn translate_once(
         guard.translation.clone()
     };
 
-    let manager = TranslationManager::new(config, app);
+    let diagnostics = state.translation_diagnostics.clone();
+    let manager = TranslationManager::new(config, app, diagnostics);
     Ok(manager
         .translate_with_fallback(&text, &source_language, &target_language)
         .await)
+}
+
+/// Get diagnostics for translation backends
+#[tauri::command]
+pub fn get_translation_diagnostics(
+    state: State<'_, AppState>,
+    app: AppHandle,
+) -> TranslationDiagnostics {
+    let config = {
+        let guard = state.config.lock().unwrap();
+        guard.translation.clone()
+    };
+
+    let diagnostics = state.translation_diagnostics.clone();
+    let manager = TranslationManager::new(config, app, diagnostics);
+    manager.diagnostics_snapshot()
 }
 
 /// Start the translation process
@@ -375,7 +399,8 @@ pub async fn start_translation(
     }
 
     // Initialize translation backend manager
-    let translation_manager = TranslationManager::new(translation_config, app.clone());
+    let diagnostics = state.translation_diagnostics.clone();
+    let translation_manager = TranslationManager::new(translation_config, app.clone(), diagnostics);
     
     // Spawn the background translation loop
     tokio::spawn(async move {

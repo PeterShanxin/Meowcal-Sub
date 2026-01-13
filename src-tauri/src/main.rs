@@ -69,6 +69,7 @@ fn main() {
             commands::stop_translation,
             commands::get_system_info,
             commands::list_translation_backends,
+            commands::get_translation_diagnostics,
             commands::translate_once,
         ])
         // Register our app state (shared across all commands)

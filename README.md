@@ -103,6 +103,20 @@ Example config snippet:
 }
 ```
 
+### Troubleshooting
+
+Common backend status/warning codes:
+- `not_supported`: API/runtime not available (Windows AI or Edge Translator missing).
+- `not_ready`: model needs first-time download or bindings not wired yet.
+- `not_available`: offline MT binary not found.
+- `timeout`: backend hung or took too long; fallback used.
+- `backend_not_registered`: misconfigured backend id.
+
+If translation falls back to passthrough (OCR text), check:
+- Windows AI: ensure Copilot+ PC + Windows 11 24H2, WinAppSDK bindings, and required capabilities.
+- Offline MT: set `translation.offlineMt.binaryPath` or add `translateLocally` to PATH.
+- Edge Translator: WebView2 runtime must support `navigator.translation`; it’s experimental and opt-in.
+
 ## 🏗️ Project Structure
 
 ```
