@@ -32,6 +32,10 @@ pub struct AppConfig {
     
     /// Overlay settings
     pub overlay: OverlayConfig,
+
+    /// Translation backend settings
+    #[serde(default)]
+    pub translation: TranslationConfig,
     
     /// Whether to start translation automatically when app opens
     pub auto_start: bool,
@@ -66,6 +70,44 @@ pub struct OverlayConfig {
     pub max_width: u32,
 }
 
+/// Configuration for translation backends and fallback behavior
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct TranslationConfig {
+    /// Preferred backend id (use "auto" for fallback selection)
+    pub preferred_backend: String,
+
+    /// Enable Windows AI backend (Phi Silica / LanguageModel)
+    pub enable_windows_ai: bool,
+
+    /// Enable offline MT backend (translateLocally/ORT)
+    pub enable_offline_mt: bool,
+
+    /// Enable experimental Edge Translator backend
+    pub enable_edge_translator: bool,
+
+    /// Allow passthrough/mock fallback if all backends fail
+    pub allow_mock_fallback: bool,
+
+    /// Offline MT backend configuration
+    #[serde(default)]
+    pub offline_mt: OfflineMtConfig,
+}
+
+/// Configuration for offline MT backend
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct OfflineMtConfig {
+    /// Optional path to translateLocally binary
+    pub binary_path: Option<String>,
+
+    /// Translation timeout in milliseconds
+    pub timeout_ms: u32,
+
+    /// Maximum characters per chunk
+    pub max_chunk_chars: usize,
+}
+
 /// A rectangular region on the screen
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub struct CaptureRegion {
@@ -91,6 +133,7 @@ impl Default for AppConfig {
             target_language: "zh-CN".to_string(),  // Chinese as default target
             capture_interval_ms: 500,               // Capture every 500ms
             overlay: OverlayConfig::default(),
+            translation: TranslationConfig::default(),
             auto_start: false,
             minimize_to_tray: true,
             start_with_windows: false,
@@ -147,6 +190,29 @@ impl CaptureRegion {
             y: scaled_y,
             width: scaled_width,
             height: scaled_height,
+        }
+    }
+}
+
+impl Default for TranslationConfig {
+    fn default() -> Self {
+        Self {
+            preferred_backend: "auto".to_string(),
+            enable_windows_ai: cfg!(target_os = "windows"),
+            enable_offline_mt: true,
+            enable_edge_translator: false,
+            allow_mock_fallback: true,
+            offline_mt: OfflineMtConfig::default(),
+        }
+    }
+}
+
+impl Default for OfflineMtConfig {
+    fn default() -> Self {
+        Self {
+            binary_path: None,
+            timeout_ms: 3000,
+            max_chunk_chars: 500,
         }
     }
 }

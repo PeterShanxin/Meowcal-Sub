@@ -29,8 +29,13 @@ impl WindowsOcr {
     /// This will use whatever languages you have installed in Windows Settings.
     /// 
     /// # Example
-    /// ```rust
-    /// let ocr = WindowsOcr::new()?;
+    /// ```rust,no_run
+    /// use meowcal_sub::ocr::WindowsOcr;
+    ///
+    /// fn main() -> Result<(), Box<dyn std::error::Error>> {
+    ///     let ocr = WindowsOcr::new()?;
+    ///     Ok(())
+    /// }
     /// ```
     pub fn new() -> Result<Self, OcrError> {
         info!("Initializing Windows OCR with user profile languages...");
@@ -54,8 +59,13 @@ impl WindowsOcr {
     /// * `language_tag` - BCP-47 language tag like "en-US", "ja-JP", "zh-CN"
     /// 
     /// # Example
-    /// ```rust
-    /// let ocr = WindowsOcr::with_language("ja-JP")?;
+    /// ```rust,no_run
+    /// use meowcal_sub::ocr::WindowsOcr;
+    ///
+    /// fn main() -> Result<(), Box<dyn std::error::Error>> {
+    ///     let ocr = WindowsOcr::with_language("ja-JP")?;
+    ///     Ok(())
+    /// }
     /// ```
     pub fn with_language(language_tag: &str) -> Result<Self, OcrError> {
         info!("Initializing Windows OCR with language: {}", language_tag);
@@ -94,10 +104,24 @@ impl WindowsOcr {
     /// The recognized text
     /// 
     /// # Example
-    /// ```rust
-    /// let capture = capture_region(&region)?;
-    /// let result = ocr.recognize(&capture.data, capture.width, capture.height).await?;
-    /// println!("Found text: {}", result.text);
+    /// ```rust,no_run
+    /// use meowcal_sub::capture::capture_region;
+    /// use meowcal_sub::config::CaptureRegion;
+    /// use meowcal_sub::ocr::WindowsOcr;
+    ///
+    /// fn main() -> Result<(), Box<dyn std::error::Error>> {
+    ///     let ocr = WindowsOcr::new()?;
+    ///     let region = CaptureRegion::new(0, 0, 800, 100);
+    ///     let capture = capture_region(&region)?;
+    ///
+    ///     let runtime = tokio::runtime::Runtime::new()?;
+    ///     let result = runtime.block_on(async {
+    ///         ocr.recognize(&capture.data, capture.width, capture.height).await
+    ///     })?;
+    ///
+    ///     println!("Found text: {}", result.text);
+    ///     Ok(())
+    /// }
     /// ```
     pub async fn recognize(
         &self,
@@ -153,7 +177,11 @@ impl WindowsOcr {
         }
         
         let result = OcrResult::new(lines);
-        debug!("OCR found {} lines: {:?}", result.lines.len(), result.text);
+        debug!(
+            "OCR found {} lines ({} chars)",
+            result.lines.len(),
+            result.text.chars().count()
+        );
         
         Ok(result)
     }

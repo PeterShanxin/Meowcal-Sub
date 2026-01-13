@@ -16,7 +16,7 @@
 use crate::config::{AppConfig, CaptureRegion};
 use crate::capture;
 use crate::ocr::WindowsOcr;
-use crate::llm::{PhiSilica, TranslationProvider};
+use crate::llm::{BackendInfo, TranslationManager, TranslationOutcome};
 use crate::overlay;
 use serde::Serialize;
 use std::sync::{Arc, Mutex};
@@ -240,6 +240,10 @@ pub struct TranslationPayload {
     pub original: String,
     /// The translated text
     pub translated: String,
+    /// Which backend produced the translation
+    pub backend_used: String,
+    /// Warnings from backend selection/fallback
+    pub warnings: Vec<String>,
     /// Unix timestamp in milliseconds
     pub timestamp: u64,
 }
@@ -254,6 +258,38 @@ pub struct CaptureStatusPayload {
     pub message: String,
     /// Is this an error state?
     pub is_error: bool,
+}
+
+/// List translation backends and their readiness
+#[tauri::command]
+pub fn list_translation_backends(state: State<'_, AppState>, app: AppHandle) -> Vec<BackendInfo> {
+    let config = {
+        let guard = state.config.lock().unwrap();
+        guard.translation.clone()
+    };
+
+    let manager = TranslationManager::new(config, app);
+    manager.list_backends()
+}
+
+/// Translate a single text input (for debugging/UI testing)
+#[tauri::command]
+pub async fn translate_once(
+    text: String,
+    source_language: String,
+    target_language: String,
+    state: State<'_, AppState>,
+    app: AppHandle,
+) -> Result<TranslationOutcome, String> {
+    let config = {
+        let guard = state.config.lock().unwrap();
+        guard.translation.clone()
+    };
+
+    let manager = TranslationManager::new(config, app);
+    Ok(manager
+        .translate_with_fallback(&text, &source_language, &target_language)
+        .await)
 }
 
 /// Start the translation process
@@ -302,12 +338,13 @@ pub async fn start_translation(
     );
     
     // Get settings from config
-    let (interval_ms, source_language, target_language) = {
+    let (interval_ms, source_language, target_language, translation_config) = {
         let config = state.config.lock().unwrap();
         (
             config.capture_interval_ms,
             config.source_language.clone(),
             config.target_language.clone(),
+            config.translation.clone(),
         )
     };
     
@@ -336,6 +373,9 @@ pub async fn start_translation(
     if let Err(e) = overlay::update_overlay_region(&app, &region) {
         warn!("⚠️ Failed to update overlay region: {}", e);
     }
+
+    // Initialize translation backend manager
+    let translation_manager = TranslationManager::new(translation_config, app.clone());
     
     // Spawn the background translation loop
     tokio::spawn(async move {
@@ -359,14 +399,6 @@ pub async fn start_translation(
                 }
             }
         };
-        
-        // Initialize translator
-        let translator = PhiSilica::new();
-        let translator_available = translator.is_available();
-        info!("Using translator: {}", translator.name());
-        if !translator_available {
-            info!("Translation provider not available; using OCR text for overlay output");
-        }
         
         // Keep track of last OCR text to avoid duplicate processing
         let mut last_text = String::new();
@@ -480,22 +512,19 @@ pub async fn start_translation(
             }
             
             last_text = current_text.clone();
-            info!("📝 OCR detected: {}", current_text);
+            info!("📝 OCR detected ({} chars)", current_text.chars().count());
             
-            // Step 3: Translate (or fall back to OCR text if translator isn't available)
-            let translated = if translator_available {
-                match translator.translate(&current_text, &target_language).await {
-                    Ok(t) => t,
-                    Err(e) => {
-                        warn!("⚠️ Translation failed: {}", e);
-                        current_text.clone()
-                    }
-                }
-            } else {
-                current_text.clone()
-            };
+            // Step 3: Translate via backend manager with fallback
+            let outcome = translation_manager
+                .translate_with_fallback(&current_text, &source_language, &target_language)
+                .await;
+            let TranslationOutcome {
+                translated,
+                backend_used,
+                warnings,
+            } = outcome;
             
-            info!("🌐 Translated: {}", translated);
+            info!("🌐 Translation produced ({} chars)", translated.chars().count());
             
             // Step 4: Emit event to frontend
             let timestamp = SystemTime::now()
@@ -506,6 +535,8 @@ pub async fn start_translation(
             let payload = TranslationPayload {
                 original: current_text,
                 translated,
+                backend_used: backend_used.as_str().to_string(),
+                warnings,
                 timestamp,
             };
             

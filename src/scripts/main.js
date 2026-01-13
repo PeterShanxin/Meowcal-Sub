@@ -186,6 +186,9 @@ async function saveSettings() {
         minimizeToTray: true,
         startWithWindows: false,
     };
+    if (appState.settings?.translation) {
+        settings.translation = appState.settings.translation;
+    }
 
     try {
         await window.__TAURI__.core.invoke('save_settings', { settings });

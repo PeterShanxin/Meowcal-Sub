@@ -72,6 +72,37 @@ Edit settings in the app or modify `config.json`:
 | `targetLanguage` | Translation target (e.g., "zh-CN") | `zh-CN` |
 | `captureIntervalMs` | How often to capture (lower = smoother) | `500` |
 
+### Translation Backends (Auto Fallback)
+
+Default order:
+1) Windows AI (Phi Silica / LanguageModel)
+2) Offline MT (translateLocally / ORT model)
+3) Edge Translator (experimental)
+4) Passthrough (OCR text)
+
+You can configure backend preferences and feature flags under `translation` in config.
+
+#### Offline MT (translateLocally) Setup
+
+1) Install `translateLocally` on your machine (no auto-download in the app).
+2) Either:
+   - Add the binary to your `PATH`, or
+   - Set `translation.offlineMt.binaryPath` to the full path of the binary.
+
+Example config snippet:
+```json
+{
+  "translation": {
+    "preferredBackend": "offline_mt",
+    "offlineMt": {
+      "binaryPath": "C:\\\\tools\\\\translateLocally\\\\translateLocally.exe",
+      "timeoutMs": 3000,
+      "maxChunkChars": 500
+    }
+  }
+}
+```
+
 ## 🏗️ Project Structure
 
 ```

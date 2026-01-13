@@ -33,10 +33,16 @@ use windows::Win32::Foundation::HWND;
 /// * `Err(CaptureError)` - If capture failed
 /// 
 /// # Example
-/// ```rust
-/// let region = CaptureRegion::new(0, 0, 800, 100);
-/// let result = capture_region(&region)?;
-/// println!("Captured {}x{} image", result.width, result.height);
+/// ```rust,no_run
+/// use meowcal_sub::capture::capture_region;
+/// use meowcal_sub::config::CaptureRegion;
+///
+/// fn main() -> Result<(), Box<dyn std::error::Error>> {
+///     let region = CaptureRegion::new(0, 0, 800, 100);
+///     let result = capture_region(&region)?;
+///     println!("Captured {}x{} image", result.width, result.height);
+///     Ok(())
+/// }
 /// ```
 pub fn capture_region(region: &CaptureRegion) -> Result<CaptureResult, CaptureError> {
     // Validate the region

@@ -68,6 +68,8 @@ fn main() {
             commands::start_translation,
             commands::stop_translation,
             commands::get_system_info,
+            commands::list_translation_backends,
+            commands::translate_once,
         ])
         // Register our app state (shared across all commands)
         .manage(AppState::default())
