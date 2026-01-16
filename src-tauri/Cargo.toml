@@ -34,7 +34,7 @@ windows_ai = []
 tauri = { version = "2", features = [
     "tray-icon",          # System tray support (the icon in the taskbar)
 ] }
-tauri-plugin-shell = "2"   # Allows running shell commands if needed
+tauri-plugin-opener = "2"  # Opens URLs/files with system defaults
 
 # --- Serialization ---
 # Converts Rust structs to/from JSON (for sending data between Rust and JavaScript)

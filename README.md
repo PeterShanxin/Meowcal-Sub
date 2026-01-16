@@ -36,6 +36,11 @@ A local, NPU-accelerated subtitle translation app for **Copilot+ PCs** (Windows 
    winget install OpenJS.NodeJS
    ```
 
+3. **Install Visual Studio Build Tools** (Windows C/C++ toolchain):
+   ```powershell
+   winget install Microsoft.VisualStudio.2022.BuildTools
+   ```
+
 ### Build & Run
 
 ```powershell
@@ -45,6 +50,11 @@ cd Meowcal-Sub
 
 # Run in development mode
 npx tauri dev
+```
+
+On Windows ARM64 (or if you hit toolchain errors), use the helper script:
+```powershell
+.\dev-tauri.cmd
 ```
 
 ### Build for Release
@@ -104,6 +114,10 @@ Example config snippet:
 ```
 
 ### Troubleshooting
+
+Build issues:
+- `clang` not found / `cc-rs` errors: install VS Build Tools and run from a VS Developer shell, or use `dev-tauri.cmd`.
+- `failed to remove file ... meowcal-sub.exe`: close the running app (tray icon) and retry.
 
 Common backend status/warning codes:
 - `not_supported`: API/runtime not available (Windows AI or Edge Translator missing).

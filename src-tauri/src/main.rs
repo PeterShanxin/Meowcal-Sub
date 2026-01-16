@@ -71,6 +71,7 @@ fn main() {
             commands::get_translation_diagnostics,
             commands::translate_once,
         ])
+        .plugin(tauri_plugin_opener::init())
         // Register our app state (shared across all commands)
         .manage(AppState::default())
         // Set up the system tray icon
