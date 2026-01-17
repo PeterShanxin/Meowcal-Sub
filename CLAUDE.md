@@ -66,6 +66,21 @@ Uses vanilla JS with `invoke()` for Tauri IPC. No framework.
 - **Async**: `tokio` runtime for async operations
 - **Frontend IPC**: `window.__TAURI__` API, no npm dependencies
 
+## Claude Code Skills
+
+Custom slash commands available in `.claude/commands/`:
+
+| Command | Purpose |
+|---------|---------|
+| `/dev` | Unified orchestrator - auto-routes to PM, UI, Tech, Fix, or Review workflow based on request |
+| `/pm` | PRD & requirements clarification |
+| `/ui` | UI spec & image generation prompts |
+| `/tech` | Architecture & implementation planning |
+| `/fix` | Bug diagnosis, fixes, tests, refactoring |
+| `/review` | Release gate review (P0/P1/P2 findings) |
+
+The `/dev` command supports chaining workflows (e.g., PM → UI → Tech) with HANDOFF.v1 structured output.
+
 ## Debugging
 
 - **Backend logs**: `src-tauri/logs/meowcal-sub.log` (rolling daily, DEBUG level)
