@@ -1,0 +1,97 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## Project Overview
+
+Meowcal-Sub is a local subtitle translation app for Windows ARM64 Copilot+ PCs, built with Tauri 2.0 (Rust backend + vanilla HTML/CSS/JS frontend). All OCR and translation runs locally for privacy.
+
+## Build & Development Commands
+
+```powershell
+# IMPORTANT: Set custom target dir to avoid OneDrive file locking issues
+$env:CARGO_TARGET_DIR = "D:\cargo-build"
+npx tauri dev
+
+# OR use the helper script (recommended - handles env + ARM64 toolchain)
+.\dev-tauri.cmd
+
+# Production build
+npx tauri build
+```
+
+**Rust commands** (run from `src-tauri/`):
+```powershell
+cargo test      # Run tests
+cargo clippy    # Lint
+cargo fmt       # Format
+```
+
+## Architecture
+
+### Backend (src-tauri/src/)
+
+| Module | Purpose |
+|--------|---------|
+| `main.rs` | Entry point, tray icon setup, logging config |
+| `commands.rs` | Tauri IPC commands (JS ↔ Rust bridge) |
+| `config.rs` | Settings structs & JSON persistence to APPDATA |
+| `capture/` | Screen capture: `graphics_capture.rs` (primary, HW-accelerated) + `win32.rs` (GDI fallback) |
+| `ocr/` | Windows.Media.Ocr WinRT bindings |
+| `llm/` | Translation backends with auto-fallback chain |
+| `overlay/` | Floating subtitle window management |
+
+### Translation Backend Fallback Chain
+
+1. **Foundry Local** (primary) - OpenAI-compatible local endpoint
+2. **Windows AI / Phi Silica** - Copilot Runtime (placeholder until APIs stable)
+3. **Offline MT** - translateLocally binary wrapper
+4. **Edge Translator** - WebView2-based (experimental)
+5. **Passthrough** - Returns OCR text if all else fails
+
+### Frontend (src/)
+
+Three-window model:
+- `index.html` - Main settings window
+- `selector.html` - Full-screen transparent area selection
+- `overlay.html` - Floating subtitle display
+
+Uses vanilla JS with `invoke()` for Tauri IPC. No framework.
+
+## Coding Conventions
+
+- **Logging**: Use `tracing` crate (`info!`, `debug!`, `warn!`) - logs to `src-tauri/logs/meowcal-sub.log`
+- **Comments**: Heavy inline comments for beginner-friendliness
+- **Errors**: Use `thiserror` for custom error types
+- **Async**: `tokio` runtime for async operations
+- **Frontend IPC**: `window.__TAURI__` API, no npm dependencies
+
+## Debugging
+
+- **Backend logs**: `src-tauri/logs/meowcal-sub.log` (rolling daily, DEBUG level)
+- **Frontend logs**: Browser DevTools (Ctrl+Shift+I in dev mode)
+- **Translation diagnostics**: `get_translation_diagnostics` command shows backend availability
+
+Common error codes: `not_supported`, `not_ready`, `not_available`, `timeout`, `backend_not_registered`
+
+## Key Dependencies
+
+- `tauri` v2 with `tray-icon` feature
+- `windows` v0.61 (WinRT/Win32 bindings)
+- `tokio` v1 (async runtime)
+- `reqwest` with native-tls (HTTP client)
+- `tracing` + `tracing-appender` (logging)
+
+## Configuration
+
+App settings persist to `%APPDATA%\com.meowcal.sub\config.json`. Key settings:
+- Source/target languages
+- Capture interval (ms)
+- Overlay appearance
+- Translation backend preferences
+
+## Platform Requirements
+
+- Windows 11 24H2 (Build 26100+)
+- Copilot+ PC (Snapdragon X, Intel Core Ultra, or AMD Ryzen AI)
+- Visual Studio Build Tools with ARM64 support
