@@ -7,15 +7,20 @@
 // This keeps the app responsive and lets the backend manager fall back cleanly.
 // =============================================================================
 
-use super::{BackendId, LlmError, ReadyState, TranslatorBackend};
+use super::{BackendId, LlmError, ReadyState, TranslatorBackend, WindowsAiDiagnostics};
 use async_trait::async_trait;
 use std::time::Duration;
 use tracing::{debug, info, warn};
 
 #[cfg(target_os = "windows")]
-use windows::core::HSTRING;
+use windows::core::{HSTRING, PWSTR};
 #[cfg(target_os = "windows")]
-use windows::Win32::Foundation::{REGDB_E_CLASSNOTREG, RPC_E_CHANGED_MODE};
+use windows::Win32::Foundation::{
+    APPMODEL_ERROR_NO_PACKAGE, ERROR_INSUFFICIENT_BUFFER, REGDB_E_CLASSNOTREG,
+    RPC_E_CHANGED_MODE, WIN32_ERROR,
+};
+#[cfg(target_os = "windows")]
+use windows::Win32::Storage::Packaging::Appx::GetCurrentPackageFullName;
 #[cfg(target_os = "windows")]
 use windows::Win32::System::WinRT::{
     IActivationFactory, RoGetActivationFactory, RoInitialize, RO_INIT_MULTITHREADED,
@@ -107,6 +112,46 @@ impl PhiSilica {
     /// Public readiness check (placeholder).
     pub fn get_ready_state(&self) -> ReadyState {
         self.readiness().0
+    }
+
+    /// Diagnostics snapshot for UI.
+    pub fn diagnostics(&self) -> WindowsAiDiagnostics {
+        let (ready_state, notes) = self.readiness();
+        let packaging = detect_packaging();
+
+        let packaging_note = if !cfg!(target_os = "windows") {
+            "Windows-only backend.".to_string()
+        } else if packaging.packaged {
+            match packaging.package_full_name.as_ref() {
+                Some(name) => format!("Packaged app detected: {}", name),
+                None => "Packaged app detected.".to_string(),
+            }
+        } else if let Some(error) = &packaging.error {
+            format!("Packaging check failed: {}", error)
+        } else {
+            "App is not MSIX packaged. Windows AI requires packaging + systemAIModels capability."
+                .to_string()
+        };
+
+        let capability_note = if !cfg!(target_os = "windows") {
+            "Capability checks are Windows-only.".to_string()
+        } else if !packaging.packaged {
+            "systemAIModels capability can only be declared in packaged apps.".to_string()
+        } else {
+            "Ensure systemAIModels capability is declared in appxmanifest (not runtime-checkable)."
+                .to_string()
+        };
+
+        WindowsAiDiagnostics {
+            ready_state,
+            notes,
+            runtime_class_present: self.runtime_class_present,
+            bindings_enabled: self.bindings_enabled,
+            packaged: packaging.packaged,
+            package_full_name: packaging.package_full_name,
+            packaging_note,
+            capability_note,
+        }
     }
 
     /// Ensure the model is ready (placeholder for EnsureReadyAsync).
@@ -219,6 +264,75 @@ fn detect_runtime_class() -> (bool, Option<String>) {
     #[cfg(not(target_os = "windows"))]
     {
         (false, None)
+    }
+}
+
+struct PackagingInfo {
+    packaged: bool,
+    package_full_name: Option<String>,
+    error: Option<String>,
+}
+
+fn detect_packaging() -> PackagingInfo {
+    #[cfg(target_os = "windows")]
+    {
+        let mut length: u32 = 0;
+        let result = unsafe { GetCurrentPackageFullName(&mut length, None) };
+
+        if result == APPMODEL_ERROR_NO_PACKAGE {
+            return PackagingInfo {
+                packaged: false,
+                package_full_name: None,
+                error: None,
+            };
+        }
+
+        if result != ERROR_INSUFFICIENT_BUFFER && result != WIN32_ERROR(0) {
+            return PackagingInfo {
+                packaged: false,
+                package_full_name: None,
+                error: Some(format!("GetCurrentPackageFullName failed: {}", result.0)),
+            };
+        }
+
+        if length == 0 {
+            return PackagingInfo {
+                packaged: true,
+                package_full_name: None,
+                error: None,
+            };
+        }
+
+        let mut buffer: Vec<u16> = vec![0; length as usize];
+        let result = unsafe {
+            GetCurrentPackageFullName(&mut length, Some(PWSTR(buffer.as_mut_ptr())))
+        };
+
+        if result != WIN32_ERROR(0) {
+            return PackagingInfo {
+                packaged: true,
+                package_full_name: None,
+                error: Some(format!("GetCurrentPackageFullName failed: {}", result.0)),
+            };
+        }
+
+        let trimmed_len = length.saturating_sub(1) as usize;
+        let full_name = String::from_utf16_lossy(&buffer[..trimmed_len]);
+
+        PackagingInfo {
+            packaged: true,
+            package_full_name: Some(full_name),
+            error: None,
+        }
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        PackagingInfo {
+            packaged: false,
+            package_full_name: None,
+            error: None,
+        }
     }
 }
 

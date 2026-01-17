@@ -201,11 +201,17 @@
             </div>
 
             <div class="settings-group settings-inline-actions">
+                <button class="btn btn-outline btn-small" id="btn-download-offline-mt">
+                    Download translateLocally
+                </button>
                 <button class="btn btn-outline btn-small" id="btn-refresh-backends">
                     Refresh Backend Status
                 </button>
                 <button class="btn btn-outline btn-small" id="btn-edge-model-download">
                     Prepare Edge Model
+                </button>
+                <button class="btn btn-outline btn-small" id="btn-windows-ai-diagnostics">
+                    Windows AI Diagnostics
                 </button>
             </div>
 
@@ -224,6 +230,67 @@
             <p class="footer-hint">Minimize to system tray to keep running in background</p>
         </footer>
         
+    </div>
+
+    <!-- translateLocally Download Modal -->
+    <div class="modal hidden" id="download-modal" role="dialog" aria-modal="true">
+        <div class="modal-backdrop" id="download-backdrop"></div>
+        <div class="modal-content" role="document">
+            <div class="modal-header">
+                <h3>Download translateLocally</h3>
+            </div>
+            <div class="modal-body">
+                <div class="settings-group">
+                    <label class="setting-label">Recommended build</label>
+                    <div id="download-recommendation" class="setting-hint">Loading...</div>
+                </div>
+                <div class="settings-group">
+                    <label class="setting-label" for="download-option">
+                        Build to download
+                    </label>
+                    <select id="download-option" class="select"></select>
+                    <p class="setting-hint" id="download-option-notes"></p>
+                </div>
+                <div class="settings-group">
+                    <label class="setting-label" for="download-install-dir">
+                        Install folder
+                    </label>
+                    <input
+                        type="text"
+                        id="download-install-dir"
+                        class="text-input"
+                        placeholder="C:\\tools\\translateLocally"
+                    >
+                    <p class="setting-hint">
+                        The app saves the binary as translateLocally.exe (or use a full file path).
+                    </p>
+                </div>
+            </div>
+            <div class="modal-actions">
+                <button class="btn btn-outline btn-small" id="btn-cancel-download">
+                    Cancel
+                </button>
+                <button class="btn btn-primary btn-small" id="btn-confirm-download">
+                    Download
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Diagnostics Modal -->
+    <div class="modal hidden" id="diagnostics-modal" role="dialog" aria-modal="true">
+        <div class="modal-backdrop" id="diagnostics-backdrop"></div>
+        <div class="modal-content" role="document">
+            <div class="modal-header">
+                <h3>Windows AI Diagnostics</h3>
+            </div>
+            <div class="modal-body" id="windows-ai-diagnostics"></div>
+            <div class="modal-actions">
+                <button class="btn btn-outline btn-small" id="btn-close-diagnostics">
+                    Close
+                </button>
+            </div>
+        </div>
     </div>
     
     <!-- Scripts -->

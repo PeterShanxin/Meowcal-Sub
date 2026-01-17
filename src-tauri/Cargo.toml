@@ -45,6 +45,11 @@ serde_json = "1"           # JSON parsing and generation
 # Rust's way of handling async operations (like JavaScript's async/await)
 tokio = { version = "1", features = ["full"] }
 
+# --- HTTP Client ---
+# Used for downloading translateLocally binaries from GitHub.
+# Use Windows native TLS to avoid rustls/ring toolchain friction on Windows ARM64.
+reqwest = { version = "0.12", default-features = false, features = ["native-tls", "stream", "json"] }
+
 # --- Global State ---
 # For managing persistent capture session
 lazy_static = "1.4"
@@ -85,6 +90,9 @@ windows = { version = "0.61", features = [
     "Win32_System_WinRT",
     "Win32_System_WinRT_Direct3D11",
     "Win32_System_WinRT_Graphics_Capture",
+
+    # App packaging detection (MSIX)
+    "Win32_Storage_Packaging_Appx",
     
     # Globalization for language support
     "Globalization",

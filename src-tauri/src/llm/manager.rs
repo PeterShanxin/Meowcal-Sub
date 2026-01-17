@@ -4,9 +4,9 @@
 
 use crate::config::TranslationConfig;
 use crate::llm::{
-    BackendId, BackendInfo, EdgeTranslatorBackend, MockBackend, OfflineMtBackend, PhiSilica,
-    ReadyState, TranslationDiagnostics, TranslationDiagnosticsState, TranslationOutcome,
-    TranslatorBackend,
+    BackendId, BackendInfo, EdgeTranslatorBackend, FoundryLocalBackend, MockBackend,
+    OfflineMtBackend, PhiSilica, ReadyState, TranslationDiagnostics, TranslationDiagnosticsState,
+    TranslationOutcome, TranslatorBackend,
 };
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
@@ -34,8 +34,10 @@ impl TranslationManager {
     ) -> Self {
         let mut backends: Vec<Box<dyn TranslatorBackend>> = Vec::new();
 
-        backends.push(Box::new(PhiSilica::new()));
+        // Fallback order: Foundry Local -> Offline MT -> Windows AI -> Edge -> Mock
+        backends.push(Box::new(FoundryLocalBackend::new(config.foundry_local.clone())));
         backends.push(Box::new(OfflineMtBackend::new(app.clone(), config.offline_mt.clone())));
+        backends.push(Box::new(PhiSilica::new()));
         backends.push(Box::new(EdgeTranslatorBackend::new(app)));
         backends.push(Box::new(MockBackend::new()));
 
@@ -321,6 +323,7 @@ impl TranslationManager {
 
     fn is_enabled(&self, id: BackendId) -> bool {
         match id {
+            BackendId::FoundryLocal => self.config.enable_foundry_local,
             BackendId::WindowsAi => self.config.enable_windows_ai,
             BackendId::OfflineMt => self.config.enable_offline_mt,
             BackendId::EdgeTranslator => self.config.enable_edge_translator,
@@ -347,11 +350,13 @@ impl TranslationManager {
             ids.push(preferred);
         }
 
-        // Desired fallback order:
-        // 1) Windows AI, 2) Offline MT, 3) Edge Translator, 4) Mock
+        // Fallback order:
+        // 1) Foundry Local (primary), 2) Offline MT, 3) Windows AI (experimental), 4) Mock
+        // Edge Translator is deprecated and disabled by default
         ids.extend([
-            BackendId::WindowsAi,
+            BackendId::FoundryLocal,
             BackendId::OfflineMt,
+            BackendId::WindowsAi,
             BackendId::EdgeTranslator,
             BackendId::Mock,
         ]);
@@ -413,10 +418,12 @@ mod tests {
     fn base_config() -> TranslationConfig {
         TranslationConfig {
             preferred_backend: "auto".to_string(),
+            enable_foundry_local: true,
             enable_windows_ai: true,
             enable_offline_mt: true,
             enable_edge_translator: true,
             allow_mock_fallback: true,
+            foundry_local: crate::config::FoundryLocalConfig::default(),
             offline_mt: OfflineMtConfig::default(),
         }
     }

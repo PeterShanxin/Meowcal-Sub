@@ -17,14 +17,19 @@ use crate::config::{save_config, AppConfig, CaptureRegion};
 use crate::capture;
 use crate::ocr::WindowsOcr;
 use crate::llm::{
-    BackendInfo, TranslationDiagnostics, TranslationDiagnosticsState, TranslationManager,
-    TranslationOutcome,
+    BackendInfo, FoundryLocalBackend, OfflineMtBackend, PhiSilica, TranslationDiagnostics,
+    TranslationDiagnosticsState, TranslationManager, TranslationOutcome, TranslatorBackend,
+    WindowsAiDiagnostics,
 };
 use crate::overlay;
+use reqwest::Client;
 use serde::Serialize;
+use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tauri::{AppHandle, Emitter, Manager, State};
+use tauri_plugin_opener::OpenerExt;
+use tokio::fs;
 use tokio::sync::watch;
 use tracing::{info, warn, debug};
 
@@ -83,6 +88,44 @@ pub struct SystemInfo {
     pub windows_ocr_available: bool,
 }
 
+/// Offline MT binary detection result
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OfflineMtDetection {
+    pub path: String,
+    pub source: String,
+}
+
+/// An available translateLocally download option for this platform.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TranslateLocallyDownloadOption {
+    pub id: String,
+    pub label: String,
+    pub asset_name: String,
+    pub url: String,
+    pub notes: String,
+}
+
+/// Download info for translateLocally (recommended build + options).
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TranslateLocallyDownloadInfo {
+    pub recommended_id: String,
+    pub default_install_dir: String,
+    pub options: Vec<TranslateLocallyDownloadOption>,
+}
+
+/// Result after a translateLocally download attempt.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TranslateLocallyDownloadResult {
+    pub path: String,
+    pub option_id: String,
+    pub used_fallback: bool,
+    pub notes: String,
+}
+
 /// Get information about the system
 /// 
 /// Called from JavaScript: `const info = await invoke('get_system_info');`
@@ -119,6 +162,324 @@ pub fn get_system_info() -> SystemInfo {
     );
     
     info
+}
+
+// =============================================================================
+// DOWNLOAD COMMANDS (OFFLINE MT)
+// =============================================================================
+
+const TRANSLATE_LOCALLY_BASE_URL: &str =
+    "https://github.com/XapaJIaMnu/translateLocally/releases/download/latest";
+
+/// Open the translateLocally download page in the default browser.
+#[tauri::command]
+pub fn open_translate_locally_download(app: AppHandle) -> Result<(), String> {
+    let url = "https://github.com/XapaJIaMnu/translateLocally/releases/tag/latest";
+    app.opener().open_url(url, None::<&str>).map_err(|e| e.to_string())
+}
+
+/// Get recommended translateLocally download options for this machine.
+#[tauri::command]
+pub fn get_translate_locally_download_info(app: AppHandle) -> Result<TranslateLocallyDownloadInfo, String> {
+    build_translate_locally_download_info(&app)
+}
+
+/// Download translateLocally and return the installed binary path.
+#[tauri::command]
+pub async fn download_translate_locally(
+    app: AppHandle,
+    option_id: Option<String>,
+    install_dir: String,
+) -> Result<TranslateLocallyDownloadResult, String> {
+    let download_info = build_translate_locally_download_info(&app)?;
+    let mut options = download_info.options;
+
+    if options.is_empty() {
+        return Err("No translateLocally builds available for this platform.".to_string());
+    }
+
+    // Pick the requested option or fall back to the recommended one.
+    let requested = option_id
+        .and_then(|id| {
+            let trimmed = id.trim().to_string();
+            if trimmed.is_empty() {
+                None
+            } else {
+                Some(trimmed)
+            }
+        })
+        .unwrap_or_else(|| download_info.recommended_id.clone());
+
+    let mut order = Vec::new();
+    if let Some(index) = options.iter().position(|opt| opt.id == requested) {
+        let option = options.remove(index);
+        order.push(option);
+    }
+    order.extend(options);
+
+    // Resolve the install path (folder or full file path).
+    let target_path = resolve_install_target(&app, &install_dir)?;
+    if let Some(parent) = target_path.parent() {
+        fs::create_dir_all(parent)
+            .await
+            .map_err(|e| format!("Failed to create install dir: {}", e))?;
+    }
+    let mut last_error = None;
+
+    // Try the requested build first, then fall back if the download fails.
+    for (idx, option) in order.iter().enumerate() {
+        let result = download_translate_locally_asset(&option.url, &target_path).await;
+        match result {
+            Ok(_) => {
+                let used_fallback = idx > 0;
+                let notes = if used_fallback {
+                    format!("Downloaded fallback build: {}", option.label)
+                } else {
+                    format!("Downloaded: {}", option.label)
+                };
+                return Ok(TranslateLocallyDownloadResult {
+                    path: target_path.to_string_lossy().to_string(),
+                    option_id: option.id.clone(),
+                    used_fallback,
+                    notes,
+                });
+            }
+            Err(err) => {
+                last_error = Some(err);
+                continue;
+            }
+        }
+    }
+
+    Err(last_error.unwrap_or_else(|| "Download failed.".to_string()))
+}
+
+/// Try to detect translateLocally binary on disk.
+#[tauri::command]
+pub fn detect_offline_mt_binary(
+    state: State<'_, AppState>,
+    app: AppHandle,
+) -> Option<OfflineMtDetection> {
+    let config = state.config.lock().unwrap().translation.offline_mt.clone();
+    OfflineMtBackend::detect_binary(&app, &config).map(|(path, source)| OfflineMtDetection {
+        path: path.to_string_lossy().to_string(),
+        source: source.to_string(),
+    })
+}
+
+/// Get detailed diagnostics for Windows AI backend.
+#[tauri::command]
+pub fn get_windows_ai_diagnostics() -> WindowsAiDiagnostics {
+    let phi = PhiSilica::new();
+    phi.diagnostics()
+}
+
+// =============================================================================
+// FOUNDRY LOCAL COMMANDS
+// =============================================================================
+
+/// Foundry Local service status
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FoundryLocalStatus {
+    pub service_running: bool,
+    pub service_url: Option<String>,
+    pub models: Vec<String>,
+    pub notes: String,
+}
+
+/// Get the status of Foundry Local service
+#[tauri::command]
+pub fn get_foundry_local_status(state: State<'_, AppState>) -> FoundryLocalStatus {
+    let config = {
+        let guard = state.config.lock().unwrap();
+        guard.translation.foundry_local.clone()
+    };
+
+    let backend = FoundryLocalBackend::new(config);
+    let service_url = FoundryLocalBackend::get_service_url_from_cli();
+    let service_running = service_url.is_some();
+
+    FoundryLocalStatus {
+        service_running,
+        service_url,
+        models: Vec::new(), // Sync version, use list_foundry_local_models for async
+        notes: backend.notes(),
+    }
+}
+
+/// List available models from Foundry Local
+#[tauri::command]
+pub async fn list_foundry_local_models(state: State<'_, AppState>) -> Result<Vec<String>, String> {
+    let config = {
+        let guard = state.config.lock().unwrap();
+        guard.translation.foundry_local.clone()
+    };
+
+    let backend = FoundryLocalBackend::new(config);
+    backend.list_models().await.map_err(|e| e.to_string())
+}
+
+/// Refresh Foundry Local service status (re-detect service)
+#[tauri::command]
+pub fn refresh_foundry_local_status(state: State<'_, AppState>) -> FoundryLocalStatus {
+    get_foundry_local_status(state)
+}
+
+fn build_translate_locally_download_info(
+    app: &AppHandle,
+) -> Result<TranslateLocallyDownloadInfo, String> {
+    let options = translate_locally_options()?;
+    if options.is_empty() {
+        return Err("No translateLocally builds found for this platform.".to_string());
+    }
+
+    let recommended_id = options
+        .first()
+        .map(|opt| opt.id.clone())
+        .unwrap_or_else(|| "unknown".to_string());
+
+    Ok(TranslateLocallyDownloadInfo {
+        recommended_id,
+        default_install_dir: default_translate_locally_dir(app).to_string_lossy().to_string(),
+        options,
+    })
+}
+
+fn translate_locally_options() -> Result<Vec<TranslateLocallyDownloadOption>, String> {
+    if std::env::consts::OS != "windows" {
+        return Err("In-app download is only available on Windows.".to_string());
+    }
+
+    let arch = std::env::consts::ARCH;
+    let mut options = Vec::new();
+
+    // Prefer AVX build on x86_64, but stay compatible for ARM64 and older CPUs.
+    if arch == "aarch64" {
+        options.push(build_option(
+            "win-x64",
+            "Windows x64 (non-AVX) - recommended for ARM64",
+            "translateLocally.windows-2019.x86-64.exe",
+            "Runs under x64 emulation. AVX builds will not run on ARM64.",
+        ));
+    } else if arch == "x86_64" {
+        if supports_avx() {
+            options.push(build_option(
+                "win-avx",
+                "Windows x64 (AVX optimized)",
+                "translateLocally.windows-2022.core-avx-i.exe",
+                "Fastest option if your CPU supports AVX.",
+            ));
+        }
+
+        options.push(build_option(
+            "win-x64",
+            "Windows x64 (non-AVX)",
+            "translateLocally.windows-2019.x86-64.exe",
+            "Most compatible option for older CPUs.",
+        ));
+    } else {
+        return Err(format!("Unsupported CPU architecture: {}", arch));
+    }
+
+    Ok(options)
+}
+
+fn build_option(id: &str, label: &str, asset_name: &str, notes: &str) -> TranslateLocallyDownloadOption {
+    TranslateLocallyDownloadOption {
+        id: id.to_string(),
+        label: label.to_string(),
+        asset_name: asset_name.to_string(),
+        // Use the GitHub "latest/download" URL to avoid extra API calls.
+        url: format!("{}/{}", TRANSLATE_LOCALLY_BASE_URL, asset_name),
+        notes: notes.to_string(),
+    }
+}
+
+fn supports_avx() -> bool {
+    #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+    {
+        std::is_x86_feature_detected!("avx")
+    }
+
+    #[cfg(not(any(target_arch = "x86", target_arch = "x86_64")))]
+    {
+        false
+    }
+}
+
+fn default_translate_locally_dir(app: &AppHandle) -> PathBuf {
+    if cfg!(target_os = "windows") {
+        if let Ok(local_appdata) = std::env::var("LOCALAPPDATA") {
+            return PathBuf::from(local_appdata).join("translateLocally");
+        }
+    }
+
+    app.path()
+        .app_data_dir()
+        .unwrap_or_else(|_| PathBuf::from("."))
+        .join("translateLocally")
+}
+
+fn resolve_install_target(app: &AppHandle, raw_input: &str) -> Result<PathBuf, String> {
+    let trimmed = raw_input.trim();
+    if trimmed.is_empty() {
+        return Err("Install path is required.".to_string());
+    }
+
+    let path = PathBuf::from(trimmed);
+    let mut resolved = if path.is_absolute() {
+        path
+    } else {
+        app.path()
+            .app_data_dir()
+            .map_err(|e| format!("Failed to resolve app data dir: {}", e))?
+            .join(path)
+    };
+
+    // If the user already provided a file path, keep it.
+    if resolved.extension().is_some() {
+        return Ok(resolved);
+    }
+
+    resolved.push(default_translate_locally_filename());
+    Ok(resolved)
+}
+
+fn default_translate_locally_filename() -> &'static str {
+    if cfg!(target_os = "windows") {
+        "translateLocally.exe"
+    } else {
+        "translateLocally"
+    }
+}
+
+async fn download_translate_locally_asset(url: &str, target_path: &PathBuf) -> Result<(), String> {
+    let client = Client::builder()
+        .user_agent("Meowcal-Sub/0.1.0")
+        .build()
+        .map_err(|e| format!("Failed to build HTTP client: {}", e))?;
+
+    let response = client
+        .get(url)
+        .send()
+        .await
+        .map_err(|e| format!("Download request failed: {}", e))?;
+
+    if !response.status().is_success() {
+        return Err(format!("Download failed: HTTP {}", response.status()));
+    }
+
+    let bytes = response
+        .bytes()
+        .await
+        .map_err(|e| format!("Failed to read download: {}", e))?;
+
+    fs::write(target_path, &bytes)
+        .await
+        .map_err(|e| format!("Failed to write file: {}", e))?;
+
+    Ok(())
 }
 
 // =============================================================================

@@ -49,6 +49,10 @@ impl OfflineMtBackend {
             return (Some(path), Some("resources"), config_path_missing);
         }
 
+        if let Some(path) = Self::resolve_from_common_paths() {
+            return (Some(path), Some("common path"), config_path_missing);
+        }
+
         if let Some(path) = Self::resolve_from_path() {
             return (Some(path), Some("path"), config_path_missing);
         }
@@ -87,6 +91,15 @@ impl OfflineMtBackend {
         None
     }
 
+    fn resolve_from_common_paths() -> Option<PathBuf> {
+        for dir in Self::common_install_dirs() {
+            if let Some(path) = Self::find_candidate_in_dir(&dir) {
+                return Some(path);
+            }
+        }
+        None
+    }
+
     fn resolve_from_path() -> Option<PathBuf> {
         let paths = env::var_os("PATH")?;
         for dir in env::split_paths(&paths) {
@@ -95,6 +108,35 @@ impl OfflineMtBackend {
             }
         }
         None
+    }
+
+    fn common_install_dirs() -> Vec<PathBuf> {
+        let mut dirs = Vec::new();
+
+        if cfg!(target_os = "windows") {
+            dirs.push(PathBuf::from(r"C:\tools\translateLocally"));
+            dirs.push(PathBuf::from(r"C:\translateLocally"));
+
+            if let Ok(program_files) = env::var("ProgramFiles") {
+                dirs.push(PathBuf::from(program_files).join("translateLocally"));
+            }
+            if let Ok(program_files_x86) = env::var("ProgramFiles(x86)") {
+                dirs.push(PathBuf::from(program_files_x86).join("translateLocally"));
+            }
+            if let Ok(local_appdata) = env::var("LOCALAPPDATA") {
+                dirs.push(PathBuf::from(local_appdata).join("translateLocally"));
+            }
+            if let Ok(user_profile) = env::var("USERPROFILE") {
+                dirs.push(
+                    PathBuf::from(user_profile)
+                        .join("AppData")
+                        .join("Local")
+                        .join("translateLocally"),
+                );
+            }
+        }
+
+        dirs
     }
 
     fn find_candidate_in_dir(dir: &Path) -> Option<PathBuf> {
@@ -260,6 +302,18 @@ impl OfflineMtBackend {
         }
 
         chunks
+    }
+
+    pub fn detect_binary(
+        app: &AppHandle,
+        config: &OfflineMtConfig,
+    ) -> Option<(PathBuf, &'static str)> {
+        let (path, source, _) = Self::resolve_binary_path(app, config);
+        match (path, source) {
+            (Some(path), Some(source)) => Some((path, source)),
+            (Some(path), None) => Some((path, "unknown")),
+            _ => None,
+        }
     }
 }
 

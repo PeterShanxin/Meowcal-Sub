@@ -11,12 +11,14 @@ mod phi_silica;
 mod manager;
 mod offline_mt;
 mod edge_translator;
+mod foundry_local;
 mod mock;
 
 pub use phi_silica::*;
 pub use manager::*;
 pub use offline_mt::*;
 pub use edge_translator::*;
+pub use foundry_local::*;
 pub use mock::*;
 
 use async_trait::async_trait;
@@ -52,6 +54,7 @@ impl LlmError {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub enum BackendId {
+    FoundryLocal,
     WindowsAi,
     OfflineMt,
     EdgeTranslator,
@@ -62,6 +65,7 @@ impl BackendId {
     /// Canonical string id for logs and config
     pub fn as_str(&self) -> &'static str {
         match self {
+            BackendId::FoundryLocal => "foundry_local",
             BackendId::WindowsAi => "windows_ai",
             BackendId::OfflineMt => "offline_mt",
             BackendId::EdgeTranslator => "edge_translator",
@@ -72,6 +76,7 @@ impl BackendId {
     /// Parse a backend id from config strings
     pub fn from_str(value: &str) -> Option<Self> {
         match value.trim().to_lowercase().as_str() {
+            "foundry_local" | "foundrylocal" | "foundry-local" | "foundry" => Some(BackendId::FoundryLocal),
             "windows_ai" | "windowsai" | "windows-ai" | "phi" | "phi_silica" => Some(BackendId::WindowsAi),
             "offline_mt" | "offlinemt" | "offline-mt" | "translatelocally" => Some(BackendId::OfflineMt),
             "edge_translator" | "edgetranslator" | "edge-translator" => Some(BackendId::EdgeTranslator),
@@ -118,6 +123,20 @@ pub struct TranslationDiagnostics {
     pub backends: Vec<BackendInfo>,
     pub last_error_by_backend: HashMap<String, String>,
     pub last_latency_by_backend: HashMap<String, u128>,
+}
+
+/// Windows AI diagnostics snapshot for UI.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WindowsAiDiagnostics {
+    pub ready_state: ReadyState,
+    pub notes: String,
+    pub runtime_class_present: bool,
+    pub bindings_enabled: bool,
+    pub packaged: bool,
+    pub package_full_name: Option<String>,
+    pub packaging_note: String,
+    pub capability_note: String,
 }
 
 /// Internal diagnostics state (stored in AppState).

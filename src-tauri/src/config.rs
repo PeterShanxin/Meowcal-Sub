@@ -99,21 +99,40 @@ pub struct TranslationConfig {
     /// Preferred backend id (use "auto" for fallback selection)
     pub preferred_backend: String,
 
+    /// Enable Foundry Local backend (primary, OpenAI-compatible)
+    pub enable_foundry_local: bool,
+
     /// Enable Windows AI backend (Phi Silica / LanguageModel)
     pub enable_windows_ai: bool,
 
     /// Enable offline MT backend (translateLocally/ORT)
     pub enable_offline_mt: bool,
 
-    /// Enable experimental Edge Translator backend
+    /// Enable experimental Edge Translator backend (deprecated)
+    #[serde(default)]
     pub enable_edge_translator: bool,
 
     /// Allow passthrough/mock fallback if all backends fail
     pub allow_mock_fallback: bool,
 
+    /// Foundry Local backend configuration
+    #[serde(default)]
+    pub foundry_local: FoundryLocalConfig,
+
     /// Offline MT backend configuration
     #[serde(default)]
     pub offline_mt: OfflineMtConfig,
+}
+
+/// Configuration for Foundry Local backend
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct FoundryLocalConfig {
+    /// Selected model alias (e.g., "qwen2.5-0.5b", "phi-3-mini-4k")
+    pub model: Option<String>,
+
+    /// Request timeout in milliseconds
+    pub timeout_ms: u32,
 }
 
 /// Configuration for offline MT backend
@@ -234,11 +253,22 @@ impl Default for TranslationConfig {
     fn default() -> Self {
         Self {
             preferred_backend: "auto".to_string(),
+            enable_foundry_local: true,
             enable_windows_ai: cfg!(target_os = "windows"),
             enable_offline_mt: true,
             enable_edge_translator: false,
             allow_mock_fallback: true,
+            foundry_local: FoundryLocalConfig::default(),
             offline_mt: OfflineMtConfig::default(),
+        }
+    }
+}
+
+impl Default for FoundryLocalConfig {
+    fn default() -> Self {
+        Self {
+            model: None,
+            timeout_ms: 30000,
         }
     }
 }

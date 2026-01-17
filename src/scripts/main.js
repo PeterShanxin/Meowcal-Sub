@@ -30,6 +30,7 @@ const appState = {
     captureRegion: null,
     settings: null,
     systemInfo: null,
+    downloadInfo: null,
 };
 
 // =============================================================================
@@ -318,9 +319,33 @@ function setupEventListeners() {
     document.getElementById('btn-refresh-backends')
         .addEventListener('click', refreshTranslationDiagnostics);
 
+    // Download translateLocally
+    document.getElementById('btn-download-offline-mt')
+        .addEventListener('click', handleOfflineMtDownload);
+
     // Edge model preparation
     document.getElementById('btn-edge-model-download')
         .addEventListener('click', handleEdgeModelDownload);
+
+    // Windows AI diagnostics
+    document.getElementById('btn-windows-ai-diagnostics')
+        .addEventListener('click', handleWindowsAiDiagnostics);
+
+    // Diagnostics modal close
+    document.getElementById('btn-close-diagnostics')
+        .addEventListener('click', closeDiagnosticsModal);
+    document.getElementById('diagnostics-backdrop')
+        .addEventListener('click', closeDiagnosticsModal);
+
+    // translateLocally download modal actions
+    document.getElementById('btn-cancel-download')
+        .addEventListener('click', closeDownloadModal);
+    document.getElementById('download-backdrop')
+        .addEventListener('click', closeDownloadModal);
+    document.getElementById('btn-confirm-download')
+        .addEventListener('click', handleConfirmTranslateLocallyDownload);
+    document.getElementById('download-option')
+        .addEventListener('change', updateDownloadOptionNotes);
 }
 
 // =============================================================================
@@ -478,6 +503,7 @@ async function refreshTranslationDiagnostics() {
     try {
         const diagnostics = await window.__TAURI__.core.invoke('get_translation_diagnostics');
         updateBackendStatusUI(diagnostics);
+        await autoDetectOfflineMtPath();
     } catch (error) {
         console.error('Failed to load backend diagnostics:', error);
         container.innerHTML = '<div class="backend-status-empty">Failed to load backend status.</div>';
@@ -599,6 +625,289 @@ async function handleEdgeModelDownload() {
     }
 }
 
+async function handleOfflineMtDownload() {
+    try {
+        const info = await loadTranslateLocallyDownloadInfo();
+        if (!info) {
+            return;
+        }
+        populateDownloadModal(info);
+        openDownloadModal();
+    } catch (error) {
+        console.error('Failed to prepare download modal:', error);
+        showToast('Failed to load download options', 'error');
+    }
+}
+
+async function autoDetectOfflineMtPath(force = false) {
+    const input = document.getElementById('offline-mt-path');
+    if (!input) {
+        return;
+    }
+
+    if (!force && input.value.trim().length > 0) {
+        return;
+    }
+
+    try {
+        const detection = await window.__TAURI__.core.invoke('detect_offline_mt_binary');
+        if (detection && detection.path) {
+            input.value = detection.path;
+            showToast(`Found translateLocally via ${detection.source}. Click Save Settings.`, 'success');
+        } else if (force) {
+            showToast('translateLocally not found yet. Install it and click Refresh.', 'warning');
+        }
+    } catch (error) {
+        console.error('Offline MT detection failed:', error);
+    }
+}
+
+async function handleWindowsAiDiagnostics() {
+    try {
+        const diagnostics = await window.__TAURI__.core.invoke('get_windows_ai_diagnostics');
+        renderWindowsAiDiagnostics(diagnostics);
+        openDiagnosticsModal();
+    } catch (error) {
+        console.error('Failed to load Windows AI diagnostics:', error);
+        showToast('Failed to load Windows AI diagnostics', 'error');
+    }
+}
+
+async function loadTranslateLocallyDownloadInfo() {
+    if (appState.downloadInfo) {
+        return appState.downloadInfo;
+    }
+
+    try {
+        const info = await window.__TAURI__.core.invoke('get_translate_locally_download_info');
+        appState.downloadInfo = info;
+        return info;
+    } catch (error) {
+        console.error('Failed to load download info:', error);
+        showToast('translateLocally download not available on this device', 'error');
+        return null;
+    }
+}
+
+function populateDownloadModal(info) {
+    const recommendation = document.getElementById('download-recommendation');
+    const optionSelect = document.getElementById('download-option');
+    const installDir = document.getElementById('download-install-dir');
+
+    if (!recommendation || !optionSelect || !installDir) {
+        return;
+    }
+
+    optionSelect.innerHTML = '';
+    info.options.forEach((option) => {
+        const opt = document.createElement('option');
+        opt.value = option.id;
+        opt.textContent = option.label;
+        optionSelect.appendChild(opt);
+    });
+
+    const recommendedId = info.recommendedId || (info.options[0] ? info.options[0].id : '');
+    optionSelect.value = recommendedId;
+    const recommendedOption = info.options.find((option) => option.id === recommendedId);
+    recommendation.textContent = recommendedOption?.label || 'Recommended build';
+
+    if (!installDir.value.trim()) {
+        installDir.value = info.defaultInstallDir || '';
+    }
+
+    updateDownloadOptionNotes();
+}
+
+function updateDownloadOptionNotes() {
+    const info = appState.downloadInfo;
+    const optionSelect = document.getElementById('download-option');
+    const notes = document.getElementById('download-option-notes');
+
+    if (!info || !optionSelect || !notes) {
+        return;
+    }
+
+    const selected = info.options.find((option) => option.id === optionSelect.value);
+    notes.textContent = selected?.notes || '';
+
+    const recommendation = document.getElementById('download-recommendation');
+    if (recommendation && info.recommendedId) {
+        const recommendedOption = info.options.find(
+            (option) => option.id === info.recommendedId
+        );
+        recommendation.textContent = recommendedOption?.label || 'Recommended build';
+    }
+}
+
+async function handleConfirmTranslateLocallyDownload() {
+    const optionSelect = document.getElementById('download-option');
+    const installDir = document.getElementById('download-install-dir');
+    const confirmButton = document.getElementById('btn-confirm-download');
+
+    if (!optionSelect || !installDir || !confirmButton) {
+        return;
+    }
+
+    const optionId = optionSelect.value;
+    const targetDir = installDir.value.trim();
+    if (!targetDir) {
+        showToast('Install folder is required', 'error');
+        return;
+    }
+
+    confirmButton.disabled = true;
+    const originalLabel = confirmButton.textContent;
+    confirmButton.textContent = 'Downloading...';
+
+    try {
+        const result = await window.__TAURI__.core.invoke('download_translate_locally', {
+            optionId,
+            installDir: targetDir,
+        });
+
+        const offlineInput = document.getElementById('offline-mt-path');
+        if (offlineInput) {
+            offlineInput.value = result.path;
+        }
+
+        if (appState.settings?.translation?.offlineMt) {
+            appState.settings.translation.offlineMt.binaryPath = result.path;
+        }
+
+        showToast(result.notes || 'translateLocally downloaded', 'success');
+        closeDownloadModal();
+        await refreshTranslationDiagnostics();
+    } catch (error) {
+        console.error('Download failed:', error);
+        showToast(`Download failed: ${String(error)}`, 'error');
+    } finally {
+        confirmButton.disabled = false;
+        confirmButton.textContent = originalLabel;
+    }
+}
+
+function openDownloadModal() {
+    const modal = document.getElementById('download-modal');
+    if (modal) {
+        modal.classList.remove('hidden');
+    }
+}
+
+function closeDownloadModal() {
+    const modal = document.getElementById('download-modal');
+    if (modal) {
+        modal.classList.add('hidden');
+    }
+}
+
+function renderWindowsAiDiagnostics(diagnostics) {
+    const container = document.getElementById('windows-ai-diagnostics');
+    if (!container) {
+        return;
+    }
+
+    container.innerHTML = '';
+
+    if (!diagnostics) {
+        container.textContent = 'No diagnostics available.';
+        return;
+    }
+
+    const readyState = formatReadyState(diagnostics.readyState);
+    const readyClass = diagnostics.readyState === 'ready'
+        ? 'ok'
+        : diagnostics.readyState === 'notReady'
+            ? 'warn'
+            : 'blocked';
+    container.appendChild(
+        createDiagnosticItem('Ready State', readyState.label, diagnostics.notes, readyClass)
+    );
+
+    const runtimeDetail = diagnostics.runtimeClassPresent
+        ? 'LanguageModel runtime class detected.'
+        : 'LanguageModel runtime class not registered.';
+    container.appendChild(
+        createDiagnosticItem(
+            'Runtime Class',
+            diagnostics.runtimeClassPresent ? 'OK' : 'Blocked',
+            runtimeDetail,
+            diagnostics.runtimeClassPresent ? 'ok' : 'blocked'
+        )
+    );
+
+    const bindingsDetail = diagnostics.bindingsEnabled
+        ? 'Bindings enabled.'
+        : 'Enable feature windows_ai and add WinAppSDK bindings.';
+    container.appendChild(
+        createDiagnosticItem(
+            'Bindings',
+            diagnostics.bindingsEnabled ? 'OK' : 'Blocked',
+            bindingsDetail,
+            diagnostics.bindingsEnabled ? 'ok' : 'blocked'
+        )
+    );
+
+    const packagingDetail = diagnostics.packagingNote || 'Packaging status unknown.';
+    container.appendChild(
+        createDiagnosticItem(
+            'Packaging',
+            diagnostics.packaged ? 'OK' : 'Blocked',
+            packagingDetail,
+            diagnostics.packaged ? 'ok' : 'blocked'
+        )
+    );
+
+    const capabilityDetail = diagnostics.capabilityNote || 'Capability status unknown.';
+    container.appendChild(
+        createDiagnosticItem(
+            'Capability',
+            diagnostics.packaged ? 'Warn' : 'Blocked',
+            capabilityDetail,
+            diagnostics.packaged ? 'warn' : 'blocked'
+        )
+    );
+}
+
+function createDiagnosticItem(label, status, detail, statusClass) {
+    const item = document.createElement('div');
+    item.className = 'diag-item';
+
+    const header = document.createElement('div');
+    header.className = 'diag-header';
+
+    const title = document.createElement('span');
+    title.className = 'diag-label';
+    title.textContent = label;
+
+    const badge = document.createElement('span');
+    badge.className = `diag-status ${statusClass}`;
+    badge.textContent = status;
+
+    header.appendChild(title);
+    header.appendChild(badge);
+
+    const body = document.createElement('div');
+    body.textContent = detail;
+
+    item.appendChild(header);
+    item.appendChild(body);
+    return item;
+}
+
+function openDiagnosticsModal() {
+    const modal = document.getElementById('diagnostics-modal');
+    if (modal) {
+        modal.classList.remove('hidden');
+    }
+}
+
+function closeDiagnosticsModal() {
+    const modal = document.getElementById('diagnostics-modal');
+    if (modal) {
+        modal.classList.add('hidden');
+    }
+}
+
 /**
  * Set up listener for capture status events from the Rust backend
  * This notifies us if:
@@ -706,7 +1015,7 @@ function updateStatus(state, text) {
 /**
  * Show a toast notification
  * @param {string} message
- * @param {'success' | 'error'} type
+ * @param {'success' | 'error' | 'warning'} type
  */
 function showToast(message, type = 'success') {
     // Remove existing toast if any
