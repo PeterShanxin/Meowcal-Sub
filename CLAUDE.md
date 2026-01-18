@@ -27,6 +27,36 @@ cargo clippy    # Lint
 cargo fmt       # Format
 ```
 
+## Browser Dev Mode (for AI Agents)
+
+Browser dev mode allows AI agents (like Claude with browser automation) to test the UI through a standard browser while connecting to the real Rust backend via HTTP.
+
+```powershell
+# Start both backend and frontend
+.\dev-browser.cmd
+
+# Or start separately:
+npm run dev:backend   # Rust HTTP server on localhost:3001
+npm run dev:browser   # Static frontend on localhost:3000
+```
+
+**Architecture:**
+```
+┌─────────────────┐         ┌─────────────────┐
+│  Browser        │──HTTP──▶│  Rust Backend   │
+│  localhost:3000 │         │  localhost:3001 │
+└─────────────────┘         └─────────────────┘
+```
+
+**Key files:**
+- `src-tauri/src/http_server.rs` - Axum HTTP server with REST API
+- `src/scripts/tauri-bridge.js` - Unified API bridge (auto-detects Tauri vs browser)
+- `dev-browser.cmd` - Combined launcher script
+
+**API Endpoints:** `GET /api/health`, `/api/settings`, `/api/translation/diagnostics`, `/api/foundry-local/status`, etc.
+
+**Limitations:** Tauri-only features (area selector, screen capture, overlay) return 501 with helpful messages.
+
 ## Architecture
 
 ### Backend (src-tauri/src/)
@@ -36,6 +66,7 @@ cargo fmt       # Format
 | `main.rs` | Entry point, tray icon setup, logging config |
 | `commands.rs` | Tauri IPC commands (JS ↔ Rust bridge) |
 | `config.rs` | Settings structs & JSON persistence to APPDATA |
+| `http_server.rs` | HTTP API for browser dev mode (Axum) |
 | `capture/` | Screen capture: `graphics_capture.rs` (primary, HW-accelerated) + `win32.rs` (GDI fallback) |
 | `ocr/` | Windows.Media.Ocr WinRT bindings |
 | `llm/` | Translation backends with auto-fallback chain |
@@ -95,6 +126,7 @@ Common error codes: `not_supported`, `not_ready`, `not_available`, `timeout`, `b
 - `windows` v0.61 (WinRT/Win32 bindings)
 - `tokio` v1 (async runtime)
 - `reqwest` with native-tls (HTTP client)
+- `axum` + `tower-http` (HTTP server for browser dev mode)
 - `tracing` + `tracing-appender` (logging)
 
 ## Configuration
