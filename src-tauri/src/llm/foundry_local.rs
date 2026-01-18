@@ -68,17 +68,14 @@ impl FoundryLocalBackend {
             .build()
             .unwrap_or_default();
 
-        let backend = Self {
+        Self {
             config,
             http_client,
             service_url: RwLock::new(None),
             service_available: AtomicBool::new(false),
             cached_models: RwLock::new(Vec::new()),
-        };
-
-        // Try to detect service on initialization
-        backend.refresh_service_status();
-        backend
+        }
+        // Note: Service detection happens lazily on first is_available() call
     }
 
     /// Get the service URL by parsing `foundry service status` output
@@ -89,7 +86,7 @@ impl FoundryLocalBackend {
             .ok()?;
 
         let stdout = String::from_utf8_lossy(&output.stdout);
-        
+
         // Parse output like: "🟢 Service is Started on http://127.0.0.1:59971/, PID 29716!"
         // or: "🟢 Model management service is running on http://127.0.0.1:59971/openai/status"
         for line in stdout.lines() {
@@ -116,13 +113,110 @@ impl FoundryLocalBackend {
         None
     }
 
+    /// Get cached models by parsing `foundry cache list` output
+    /// This is a fallback when the API doesn't return models (e.g., models cached but not running)
+    pub fn get_cached_models_from_cli() -> Vec<String> {
+        let output = Command::new("foundry")
+            .args(["cache", "list"])
+            .output();
+
+        let Ok(output) = output else {
+            debug!("Failed to run 'foundry cache list'");
+            return Vec::new();
+        };
+
+        if !output.status.success() {
+            debug!("'foundry cache list' returned non-zero status");
+            return Vec::new();
+        }
+
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let mut models = Vec::new();
+
+        // Parse output to extract model names
+        // Expected format varies, but typically includes model identifiers
+        for line in stdout.lines() {
+            let line = line.trim();
+            if line.is_empty() || line.starts_with("Cache") || line.starts_with("Total") {
+                continue;
+            }
+
+            // Try to extract model name (handles various output formats)
+            // Common pattern: "qwen2.5-0.5b    1.2 GB    2024-01-18"
+            if let Some(model_name) = line.split_whitespace().next() {
+                if !model_name.is_empty() && !model_name.starts_with('-') {
+                    models.push(model_name.to_string());
+                }
+            }
+        }
+
+        debug!("Found {} cached models via CLI: {:?}", models.len(), models);
+        models
+    }
+
+    /// Try to start the Foundry service if it's not running
+    fn try_start_service() -> bool {
+        debug!("Attempting to start Foundry Local service");
+        let output = Command::new("foundry")
+            .args(["service", "start"])
+            .output();
+
+        match output {
+            Ok(out) if out.status.success() => {
+                debug!("Foundry Local service start command sent successfully");
+                // Service will be available when ready (no need to block here)
+                true
+            }
+            Ok(out) => {
+                let stderr = String::from_utf8_lossy(&out.stderr);
+                debug!("Failed to start Foundry Local service: {}", stderr);
+                false
+            }
+            Err(e) => {
+                debug!("Foundry command not found or failed to execute: {}", e);
+                false
+            }
+        }
+    }
+
     /// Refresh service status and URL
     pub fn refresh_service_status(&self) {
         if let Some(url) = Self::get_service_url_from_cli() {
             debug!("Foundry Local service detected at {}", url);
             *self.service_url.write().unwrap() = Some(url);
             self.service_available.store(true, Ordering::SeqCst);
+
+            // Also try to populate models from CLI if cache is empty
+            let models = self.cached_models.read().unwrap();
+            if models.is_empty() {
+                drop(models); // Release read lock before acquiring write lock
+                let cli_models = Self::get_cached_models_from_cli();
+                if !cli_models.is_empty() {
+                    debug!("Populated {} models from CLI during refresh", cli_models.len());
+                    *self.cached_models.write().unwrap() = cli_models;
+                }
+            }
         } else {
+            debug!("Foundry Local service not running, attempting to start");
+
+            // Try to start the service
+            if Self::try_start_service() {
+                // Check again after starting
+                if let Some(url) = Self::get_service_url_from_cli() {
+                    debug!("Foundry Local service started at {}", url);
+                    *self.service_url.write().unwrap() = Some(url);
+                    self.service_available.store(true, Ordering::SeqCst);
+
+                    // Populate models from CLI
+                    let cli_models = Self::get_cached_models_from_cli();
+                    if !cli_models.is_empty() {
+                        debug!("Populated {} models after service start", cli_models.len());
+                        *self.cached_models.write().unwrap() = cli_models;
+                    }
+                    return;
+                }
+            }
+
             debug!("Foundry Local service not available");
             *self.service_url.write().unwrap() = None;
             self.service_available.store(false, Ordering::SeqCst);
@@ -140,25 +234,50 @@ impl FoundryLocalBackend {
             LlmError::ApiError("Foundry Local service not running".to_string())
         })?;
 
-        let url = format!("{}/v1/models", base_url);
-        
-        let response = self
-            .http_client
-            .get(&url)
-            .send()
-            .await
-            .map_err(|e| LlmError::ApiError(format!("Failed to fetch models: {}", e)))?;
+        // Try /openai/v1/models first (standard Foundry Local path)
+        let url = format!("{}/openai/v1/models", base_url);
+
+        let response = self.http_client.get(&url).send().await;
+
+        // If /openai/ path fails, try fallback to /v1/models (for compatibility)
+        let response = match response {
+            Ok(resp) if resp.status().is_success() => resp,
+            Ok(resp) if resp.status().as_u16() == 404 => {
+                debug!("Foundry Local /openai/v1/models returned 404, trying /v1/models");
+                let fallback_url = format!("{}/v1/models", base_url);
+                self.http_client
+                    .get(&fallback_url)
+                    .send()
+                    .await
+                    .map_err(|e| LlmError::ApiError(format!("Failed to fetch models: {}", e)))?
+            }
+            Ok(resp) => {
+                return Err(LlmError::ApiError(format!(
+                    "Models endpoint returned status {}",
+                    resp.status()
+                )));
+            }
+            Err(e) => {
+                return Err(LlmError::ApiError(format!("Failed to fetch models: {}", e)));
+            }
+        };
 
         let models_response: ModelsResponse = response
             .json()
             .await
             .map_err(|e| LlmError::ApiError(format!("Failed to parse models response: {}", e)))?;
 
-        let model_ids: Vec<String> = models_response.data.into_iter().map(|m| m.id).collect();
-        
+        let mut model_ids: Vec<String> = models_response.data.into_iter().map(|m| m.id).collect();
+
+        // If API returned empty list, fall back to CLI-based discovery
+        if model_ids.is_empty() {
+            debug!("API returned no models, trying CLI fallback");
+            model_ids = Self::get_cached_models_from_cli();
+        }
+
         // Cache the models
         *self.cached_models.write().unwrap() = model_ids.clone();
-        
+
         Ok(model_ids)
     }
 
@@ -177,7 +296,7 @@ impl FoundryLocalBackend {
     /// Check if service is healthy by probing the models endpoint
     pub async fn check_health(&self) -> bool {
         if let Some(url) = self.get_service_url() {
-            let models_url = format!("{}/v1/models", url);
+            let models_url = format!("{}/openai/v1/models", url);
             if let Ok(resp) = self.http_client.get(&models_url).send().await {
                 return resp.status().is_success();
             }
@@ -220,12 +339,12 @@ impl TranslatorBackend for FoundryLocalBackend {
     fn notes(&self) -> String {
         if let Some(url) = self.get_service_url() {
             if let Some(model) = self.get_model() {
-                format!("Service at {}. Using model: {}", url, model)
+                format!("Service at {}. Using model: {}. If translation fails, run: foundry model run {}", url, model, model)
             } else {
                 format!("Service at {}. No models cached - run: foundry model run <model>", url)
             }
         } else {
-            "Foundry Local service not running. Start with: foundry service start".to_string()
+            "Foundry Local not available. Install from: winget install Microsoft.FoundryLocal".to_string()
         }
     }
 
@@ -247,7 +366,7 @@ impl TranslatorBackend for FoundryLocalBackend {
             LlmError::ModelNotAvailable("No model available. Run: foundry model run <model>".to_string())
         })?;
 
-        let url = format!("{}/v1/chat/completions", base_url);
+        let url = format!("{}/openai/v1/chat/completions", base_url);
 
         let system_prompt = format!(
             "You are a translator. Translate the following text from {} to {}. \

@@ -35,6 +35,52 @@ impl OfflineMtBackend {
         }
     }
 
+    /// Create a new OfflineMtBackend without Tauri AppHandle (for HTTP server mode)
+    pub fn new_standalone(config: OfflineMtConfig) -> Self {
+        let (binary_path, binary_source, config_path_missing) =
+            Self::resolve_binary_path_standalone(&config);
+
+        Self {
+            config,
+            binary_path,
+            binary_source,
+            config_path_missing,
+        }
+    }
+
+    /// Resolve binary path without Tauri AppHandle
+    fn resolve_binary_path_standalone(
+        config: &OfflineMtConfig,
+    ) -> (Option<PathBuf>, Option<&'static str>, bool) {
+        if let Some(path) = Self::resolve_from_config(config) {
+            return (Some(path), Some("config"), false);
+        }
+
+        let config_path_missing = config.binary_path.is_some();
+
+        if let Some(path) = Self::resolve_from_common_paths() {
+            return (Some(path), Some("common path"), config_path_missing);
+        }
+
+        if let Some(path) = Self::resolve_from_path() {
+            return (Some(path), Some("path"), config_path_missing);
+        }
+
+        (None, None, config_path_missing)
+    }
+
+    /// Detect binary without Tauri AppHandle (for HTTP server mode)
+    pub fn detect_binary_standalone(
+        config: &OfflineMtConfig,
+    ) -> Option<(PathBuf, &'static str)> {
+        let (path, source, _) = Self::resolve_binary_path_standalone(config);
+        match (path, source) {
+            (Some(path), Some(source)) => Some((path, source)),
+            (Some(path), None) => Some((path, "unknown")),
+            _ => None,
+        }
+    }
+
     fn resolve_binary_path(
         app: &AppHandle,
         config: &OfflineMtConfig,

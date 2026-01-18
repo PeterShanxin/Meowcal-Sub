@@ -142,82 +142,159 @@
 
             <h3 class="settings-subtitle">Translation Backend</h3>
 
-            <div class="settings-group">
-                <label class="setting-label" for="backend-preference">
-                    Backend Preference
-                </label>
-                <select id="backend-preference" class="select">
-                    <option value="auto">Auto (Windows AI -> Offline MT -> Edge)</option>
-                    <option value="windows_ai">Windows AI (Phi Silica)</option>
-                    <option value="offline_mt">Offline MT (translateLocally)</option>
-                    <option value="edge_translator">Edge Translator (Experimental)</option>
-                </select>
-                <p class="setting-hint">
-                    Auto selects the first ready backend based on the default order.
-                </p>
-            </div>
-
-            <div class="settings-group backend-toggles">
-                <div class="toggle-wrapper">
-                    <span class="toggle-label">Enable Windows AI</span>
-                    <label class="toggle">
-                        <input type="checkbox" id="toggle-windows-ai">
-                        <span class="toggle-slider"></span>
+            <!-- Quick Start Card -->
+            <div class="settings-card quick-start-card">
+                <div class="settings-group">
+                    <label class="setting-label" for="backend-preference">
+                        Backend Preference
                     </label>
+                    <select id="backend-preference" class="select">
+                        <option value="auto">Auto (recommended)</option>
+                        <option value="foundry_local">Foundry Local</option>
+                        <option value="offline_mt">Offline MT</option>
+                        <option value="windows_ai">Windows AI</option>
+                        <option value="edge_translator">Edge Translator</option>
+                    </select>
+                    <p class="setting-hint">
+                        Auto selects Foundry Local → Offline MT → Windows AI → Edge
+                    </p>
                 </div>
-                <div class="toggle-wrapper">
-                    <span class="toggle-label">Enable Offline MT</span>
-                    <label class="toggle">
-                        <input type="checkbox" id="toggle-offline-mt">
-                        <span class="toggle-slider"></span>
-                    </label>
-                </div>
-                <div class="toggle-wrapper">
-                    <span class="toggle-label">Enable Edge Translator</span>
-                    <label class="toggle">
-                        <input type="checkbox" id="toggle-edge-translator">
-                        <span class="toggle-slider"></span>
-                    </label>
-                </div>
-                <div class="toggle-wrapper">
-                    <span class="toggle-label">Allow Passthrough Fallback</span>
-                    <label class="toggle">
-                        <input type="checkbox" id="toggle-mock-fallback">
-                        <span class="toggle-slider"></span>
-                    </label>
+                <div class="primary-status" id="primary-status">
+                    <span class="primary-label">Primary:</span>
+                    <span id="primary-backend-name">Checking...</span>
+                    <span class="status-pill" id="primary-status-pill">●</span>
                 </div>
             </div>
 
-            <div class="settings-group">
-                <label class="setting-label" for="offline-mt-path">
-                    translateLocally Path (Offline MT)
-                </label>
-                <input
-                    type="text"
-                    id="offline-mt-path"
-                    class="text-input"
-                    placeholder="C:\\tools\\translateLocally\\translateLocally.exe"
-                >
+            <!-- Priority Card: Foundry Local (Primary Backend) -->
+            <div class="settings-card priority-card">
+                <h4 class="card-title">
+                    <span class="card-icon">⚡</span>
+                    Foundry Local
+                    <span class="badge badge-primary">Primary</span>
+                </h4>
+
+                <div class="toggle-wrapper">
+                    <span class="toggle-label">Enable Foundry Local</span>
+                    <label class="toggle">
+                        <input type="checkbox" id="toggle-foundry-local" checked>
+                        <span class="toggle-slider"></span>
+                    </label>
+                </div>
+
+                <div class="settings-group">
+                    <label class="setting-label" for="foundry-local-model">Model</label>
+                    <select id="foundry-local-model" class="select">
+                        <option value="">Auto (first available)</option>
+                    </select>
+                </div>
+
+                <div class="backend-status-inline" id="foundry-status">
+                    <span class="status-text">Checking service...</span>
+                </div>
+
+                <div class="card-actions">
+                    <button class="btn btn-outline btn-small" id="btn-refresh-backends">
+                        Refresh Status
+                    </button>
+                </div>
             </div>
 
-            <div class="settings-group settings-inline-actions">
-                <button class="btn btn-outline btn-small" id="btn-download-offline-mt">
-                    Download translateLocally
-                </button>
-                <button class="btn btn-outline btn-small" id="btn-refresh-backends">
-                    Refresh Backend Status
-                </button>
-                <button class="btn btn-outline btn-small" id="btn-edge-model-download">
-                    Prepare Edge Model
-                </button>
-                <button class="btn btn-outline btn-small" id="btn-windows-ai-diagnostics">
-                    Windows AI Diagnostics
-                </button>
-            </div>
+            <!-- Collapsible: Fallback Backends -->
+            <details class="settings-section" id="fallback-backends-section">
+                <summary class="collapsible-header">
+                    <span class="section-title">
+                        <span class="section-icon">⚙</span>
+                        Fallback Backends
+                    </span>
+                    <span class="badge badge-count" id="fallback-count">3 configured</span>
+                </summary>
+                <div class="collapsible-content">
+                    <!-- Offline MT -->
+                    <div class="backend-card">
+                        <div class="toggle-wrapper">
+                            <span class="toggle-label">Offline MT (translateLocally)</span>
+                            <label class="toggle">
+                                <input type="checkbox" id="toggle-offline-mt">
+                                <span class="toggle-slider"></span>
+                            </label>
+                        </div>
+                        <div class="settings-group">
+                            <label class="setting-label" for="offline-mt-path">Binary Path</label>
+                            <input
+                                type="text"
+                                id="offline-mt-path"
+                                class="text-input"
+                                placeholder="C:\\tools\\translateLocally\\translateLocally.exe"
+                            >
+                        </div>
+                        <div class="card-actions">
+                            <button class="btn btn-outline btn-small" id="btn-download-offline-mt">
+                                Download
+                            </button>
+                        </div>
+                    </div>
 
-            <div class="backend-status" id="backend-status">
-                <div class="backend-status-empty">Backend status not loaded yet.</div>
-            </div>
+                    <!-- Windows AI -->
+                    <div class="backend-card">
+                        <div class="toggle-wrapper">
+                            <span class="toggle-label">Windows AI (Copilot Runtime)</span>
+                            <label class="toggle">
+                                <input type="checkbox" id="toggle-windows-ai">
+                                <span class="toggle-slider"></span>
+                            </label>
+                        </div>
+                        <div class="card-actions">
+                            <button class="btn btn-outline btn-small" id="btn-windows-ai-diagnostics">
+                                View Diagnostics
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Edge Translator -->
+                    <div class="backend-card">
+                        <div class="toggle-wrapper">
+                            <span class="toggle-label">Edge Translator (Experimental)</span>
+                            <label class="toggle">
+                                <input type="checkbox" id="toggle-edge-translator">
+                                <span class="toggle-slider"></span>
+                            </label>
+                        </div>
+                        <div class="card-actions">
+                            <button class="btn btn-outline btn-small" id="btn-edge-model-download">
+                                Prepare Model
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Passthrough Fallback -->
+                    <div class="backend-card">
+                        <div class="toggle-wrapper">
+                            <span class="toggle-label">Allow Passthrough Fallback</span>
+                            <label class="toggle">
+                                <input type="checkbox" id="toggle-mock-fallback">
+                                <span class="toggle-slider"></span>
+                            </label>
+                        </div>
+                        <p class="setting-hint">
+                            If all backends fail, return OCR text without translation
+                        </p>
+                    </div>
+                </div>
+            </details>
+
+            <!-- Collapsible: Backend Diagnostics -->
+            <details class="settings-section" id="diagnostics-section">
+                <summary class="collapsible-header">
+                    <span class="section-title">Backend Status</span>
+                    <span class="status-summary" id="status-summary">Checking...</span>
+                </summary>
+                <div class="collapsible-content">
+                    <div class="backend-status" id="backend-status">
+                        <div class="backend-status-empty">Backend status not loaded yet.</div>
+                    </div>
+                </div>
+            </details>
             
             <button class="btn btn-outline" id="btn-save-settings">
                 Save Settings
@@ -294,6 +371,8 @@
     </div>
     
     <!-- Scripts -->
+    <!-- Load bridge first to set up unified API before other scripts run -->
+    <script src="scripts/tauri-bridge.js"></script>
     <script src="scripts/edge_translator.js"></script>
     <script src="scripts/main.js"></script>
     <script src="scripts/settings.js"></script>

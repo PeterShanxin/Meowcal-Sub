@@ -1,0 +1,316 @@
+// =============================================================================
+// TAURI-BRIDGE.JS - Unified API Bridge for Tauri and Browser Modes
+// =============================================================================
+// This module provides a unified interface for calling backend commands.
+// - In Tauri mode: Uses native IPC (window.__TAURI__.core.invoke)
+// - In Browser mode: Uses HTTP API (fetch to localhost:3001)
+//
+// This allows the frontend to work in both environments without changes.
+// =============================================================================
+
+(function() {
+    'use strict';
+
+    // Detect if we're running inside Tauri's WebView
+    const isTauri = !!(window.__TAURI__ && window.__TAURI__.core);
+
+    // HTTP API base URL (used in browser mode)
+    const API_BASE = 'http://localhost:3001/api';
+
+    // Commands that are not available in browser mode (require Tauri window APIs)
+    const TAURI_ONLY_COMMANDS = [
+        'open_area_selector',
+        'close_area_selector',
+        'start_translation',
+        'stop_translation',
+    ];
+
+    // =============================================================================
+    // COMMAND ROUTING
+    // =============================================================================
+
+    /**
+     * Map Tauri command names to HTTP endpoints
+     */
+    const COMMAND_TO_ENDPOINT = {
+        // System
+        'get_system_info': { method: 'GET', path: '/system-info' },
+
+        // Settings
+        'get_settings': { method: 'GET', path: '/settings' },
+        'save_settings': { method: 'POST', path: '/settings' },
+
+        // Translation diagnostics
+        'get_translation_diagnostics': { method: 'GET', path: '/translation/diagnostics' },
+        'list_translation_backends': { method: 'GET', path: '/translation/diagnostics' },
+        'translate_once': { method: 'POST', path: '/translation/translate' },
+
+        // Foundry Local
+        'list_foundry_local_models': { method: 'GET', path: '/foundry-local/models' },
+        'get_foundry_local_status': { method: 'GET', path: '/foundry-local/status' },
+        'refresh_foundry_local_status': { method: 'GET', path: '/foundry-local/status' },
+
+        // Windows AI
+        'get_windows_ai_diagnostics': { method: 'GET', path: '/windows-ai/diagnostics' },
+
+        // Offline MT
+        'detect_offline_mt_binary': { method: 'GET', path: '/offline-mt/detect' },
+
+        // Capture region
+        'get_capture_region': { method: 'GET', path: '/capture-region' },
+        'set_capture_region': { method: 'POST', path: '/capture-region' },
+
+        // Tauri-only (will return graceful error)
+        'open_area_selector': { method: 'POST', path: '/area-selector' },
+        'start_translation': { method: 'POST', path: '/translation/start' },
+        'stop_translation': { method: 'POST', path: '/translation/stop' },
+    };
+
+    // =============================================================================
+    // HTTP API CLIENT
+    // =============================================================================
+
+    /**
+     * Make an HTTP request to the backend API
+     */
+    async function httpRequest(method, path, body = null) {
+        const url = API_BASE + path;
+        const options = {
+            method,
+            headers: {
+                'Content-Type': 'application/json',
+            },
+        };
+
+        if (body !== null) {
+            options.body = JSON.stringify(body);
+        }
+
+        const response = await fetch(url, options);
+
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            if (errorData.browserMode) {
+                throw new Error(errorData.message || 'Feature not available in browser mode');
+            }
+            throw new Error(`HTTP ${response.status}: ${errorData.error || response.statusText}`);
+        }
+
+        return response.json();
+    }
+
+    /**
+     * Invoke a command via HTTP API (browser mode)
+     */
+    async function httpInvoke(command, args = {}) {
+        const mapping = COMMAND_TO_ENDPOINT[command];
+
+        if (!mapping) {
+            console.warn(`[TauriBridge] Unknown command: ${command}`);
+            throw new Error(`Unknown command: ${command}`);
+        }
+
+        // Handle special response transformations
+        let result = await httpRequest(mapping.method, mapping.path, mapping.method === 'POST' ? args : null);
+
+        // Transform responses to match Tauri format
+        if (command === 'list_foundry_local_models') {
+            // HTTP returns { models: [...] }, Tauri returns [...]
+            return result.models || [];
+        }
+
+        if (command === 'detect_offline_mt_binary') {
+            // HTTP returns { found, path, source }, Tauri returns { path, source } or null
+            if (!result.found) return null;
+            return { path: result.path, source: result.source };
+        }
+
+        if (command === 'list_translation_backends') {
+            // Return backends array from diagnostics
+            return result.backends || [];
+        }
+
+        return result;
+    }
+
+    // =============================================================================
+    // UNIFIED INVOKE FUNCTION
+    // =============================================================================
+
+    /**
+     * Invoke a backend command (works in both Tauri and browser modes)
+     *
+     * @param {string} command - The command name (e.g., 'get_settings')
+     * @param {object} args - Optional arguments for the command
+     * @returns {Promise<any>} - The command result
+     */
+    async function invoke(command, args = {}) {
+        if (isTauri) {
+            // Use native Tauri IPC
+            return window.__TAURI__.core.invoke(command, args);
+        }
+
+        // Use HTTP API
+        return httpInvoke(command, args);
+    }
+
+    // =============================================================================
+    // EVENT SYSTEM (BROWSER MODE)
+    // =============================================================================
+
+    // In browser mode, events are not supported (no real-time updates)
+    // We provide no-op implementations to prevent errors
+
+    const eventListeners = new Map();
+
+    /**
+     * Listen for events (no-op in browser mode)
+     */
+    async function listen(eventName, callback) {
+        if (isTauri) {
+            return window.__TAURI__.event.listen(eventName, callback);
+        }
+
+        // Browser mode: store listener but never call it
+        // (Could implement SSE/WebSocket for real-time updates in the future)
+        console.log(`[TauriBridge] Event listener registered (browser mode, no real-time updates): ${eventName}`);
+
+        if (!eventListeners.has(eventName)) {
+            eventListeners.set(eventName, []);
+        }
+        eventListeners.get(eventName).push(callback);
+
+        // Return an unlisten function (no-op)
+        return () => {
+            const listeners = eventListeners.get(eventName);
+            if (listeners) {
+                const index = listeners.indexOf(callback);
+                if (index > -1) {
+                    listeners.splice(index, 1);
+                }
+            }
+        };
+    }
+
+    /**
+     * Emit an event (no-op in browser mode)
+     */
+    async function emit(eventName, payload) {
+        if (isTauri) {
+            return window.__TAURI__.event.emit(eventName, payload);
+        }
+
+        // Browser mode: trigger local listeners (for testing)
+        const listeners = eventListeners.get(eventName);
+        if (listeners) {
+            listeners.forEach(callback => callback({ payload }));
+        }
+    }
+
+    // =============================================================================
+    // BROWSER MODE DETECTION & UI
+    // =============================================================================
+
+    /**
+     * Check if running in browser mode
+     */
+    function isBrowserMode() {
+        return !isTauri;
+    }
+
+    /**
+     * Show browser mode indicator in the UI
+     */
+    function showBrowserModeIndicator() {
+        if (!isBrowserMode()) return;
+
+        // Create the indicator element
+        const indicator = document.createElement('div');
+        indicator.id = 'browser-mode-indicator';
+        indicator.innerHTML = `
+            <span class="browser-mode-badge">BROWSER MODE</span>
+            <span class="browser-mode-hint">Some features unavailable</span>
+        `;
+        indicator.style.cssText = `
+            position: fixed;
+            bottom: 10px;
+            right: 10px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 8px 12px;
+            border-radius: 8px;
+            font-size: 12px;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            z-index: 9999;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end;
+            gap: 2px;
+        `;
+
+        // Style the badge
+        const badge = indicator.querySelector('.browser-mode-badge');
+        badge.style.cssText = `
+            font-weight: 600;
+            letter-spacing: 0.5px;
+        `;
+
+        // Style the hint
+        const hint = indicator.querySelector('.browser-mode-hint');
+        hint.style.cssText = `
+            font-size: 10px;
+            opacity: 0.8;
+        `;
+
+        // Add to page when DOM is ready
+        if (document.body) {
+            document.body.appendChild(indicator);
+        } else {
+            document.addEventListener('DOMContentLoaded', () => {
+                document.body.appendChild(indicator);
+            });
+        }
+
+        console.log('[TauriBridge] Browser mode active - using HTTP API');
+    }
+
+    // =============================================================================
+    // EXPORTS
+    // =============================================================================
+
+    // Create the bridge object
+    const TauriBridge = {
+        // Core functions
+        invoke,
+        isTauri,
+        isBrowserMode,
+
+        // Event system
+        event: {
+            listen,
+            emit,
+        },
+
+        // UI helpers
+        showBrowserModeIndicator,
+
+        // Constants
+        API_BASE,
+        TAURI_ONLY_COMMANDS,
+    };
+
+    // Expose globally
+    window.TauriBridge = TauriBridge;
+
+    // Auto-show browser mode indicator
+    if (isBrowserMode()) {
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', showBrowserModeIndicator);
+        } else {
+            showBrowserModeIndicator();
+        }
+    }
+
+    console.log(`[TauriBridge] Initialized in ${isTauri ? 'Tauri' : 'Browser'} mode`);
+})();

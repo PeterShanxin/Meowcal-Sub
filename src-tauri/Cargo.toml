@@ -116,6 +116,11 @@ tracing-appender = "0.2"
 # Allows us to use async functions in traits (Rust-specific thing)
 async-trait = "0.1"
 
+# --- HTTP Server (for browser dev mode) ---
+# Axum is a lightweight async web framework for exposing APIs
+axum = "0.8"
+tower-http = { version = "0.6", features = ["cors"] }
+
 # =============================================================================
 # BUILD DEPENDENCIES
 # =============================================================================

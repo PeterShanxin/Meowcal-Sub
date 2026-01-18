@@ -1,0 +1,25 @@
+{
+  "name": "meowcal-sub",
+  "version": "0.1.0",
+  "description": "NPU-accelerated subtitle translation for Copilot+ PCs",
+  "private": true,
+  "scripts": {
+    "dev:browser": "npx serve src -l 3000 -C",
+    "dev:backend": "cd src-tauri && cargo run -- --http-only",
+    "tauri": "tauri",
+    "tauri:dev": "tauri dev",
+    "tauri:build": "tauri build"
+  },
+  "devDependencies": {
+    "serve": "^14.2.0"
+  },
+  "keywords": [
+    "tauri",
+    "subtitle",
+    "translation",
+    "ocr",
+    "copilot-plus"
+  ],
+  "author": "PeterShanxin",
+  "license": "MIT"
+}

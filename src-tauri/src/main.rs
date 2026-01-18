@@ -2,12 +2,16 @@
 // MAIN.RS - Application Entry Point
 // =============================================================================
 // This is where the app starts! Think of it like index.js or main.py.
-// 
+//
 // What happens when the app launches:
 // 1. Set up logging (so we can see debug messages)
 // 2. Create the Tauri app with our custom commands
 // 3. Set up the system tray icon
 // 4. Start the main window
+//
+// BROWSER DEV MODE:
+// Run with --http-only flag to start only the HTTP server (no Tauri window).
+// This allows testing the frontend in a browser.
 // =============================================================================
 
 // Tell Rust not to show console window on Windows when running the release build
@@ -27,32 +31,55 @@ use tracing_subscriber::FmtSubscriber;
 // Import our custom modules
 use meowcal_sub::commands::{self, AppState};
 use meowcal_sub::config::load_config;
+use meowcal_sub::http_server;
 
 // =============================================================================
 // MAIN FUNCTION
 // =============================================================================
 
 fn main() {
+    // Check for --http-only flag (browser dev mode)
+    let args: Vec<String> = std::env::args().collect();
+    let http_only_mode = args.iter().any(|arg| arg == "--http-only");
+
     // --- Step 1: Set up logging ---
-    // Log to a file in the logs directory
-    let file_appender = tracing_appender::rolling::daily("logs", "meowcal-sub.log");
-    let (non_blocking, guard) = tracing_appender::non_blocking(file_appender);
+    if http_only_mode {
+        // Log to console in HTTP-only mode for easier debugging
+        let subscriber = FmtSubscriber::builder()
+            .with_max_level(Level::DEBUG)
+            .with_ansi(true)
+            .pretty()
+            .finish();
+        tracing::subscriber::set_global_default(subscriber)
+            .expect("setting default subscriber failed");
+    } else {
+        // Log to file in normal mode
+        let file_appender = tracing_appender::rolling::daily("logs", "meowcal-sub.log");
+        let (non_blocking, guard) = tracing_appender::non_blocking(file_appender);
 
-    let subscriber = FmtSubscriber::builder()
-        .with_max_level(Level::DEBUG)
-        .with_writer(non_blocking)
-        .with_ansi(false) // File logs shouldn't have color codes
-        .pretty()
-        .finish();
+        let subscriber = FmtSubscriber::builder()
+            .with_max_level(Level::DEBUG)
+            .with_writer(non_blocking)
+            .with_ansi(false) // File logs shouldn't have color codes
+            .pretty()
+            .finish();
 
-    tracing::subscriber::set_global_default(subscriber)
-        .expect("setting default subscriber failed");
-    
-    // INFO: We must keep the guard alive!
-    // We'll leak it since main() runs for the whole app duration
-    Box::leak(Box::new(guard));
-    
+        tracing::subscriber::set_global_default(subscriber)
+            .expect("setting default subscriber failed");
+
+        // INFO: We must keep the guard alive!
+        // We'll leak it since main() runs for the whole app duration
+        Box::leak(Box::new(guard));
+    }
+
     info!("🐱 Meowcal Sub starting up...");
+
+    // If --http-only flag is set, run only the HTTP server
+    if http_only_mode {
+        info!("🌐 Running in HTTP-only mode (browser dev mode)");
+        run_http_only_mode();
+        return;
+    }
 
     // --- Step 2: Build and run the Tauri app ---
     tauri::Builder::default()
@@ -176,4 +203,36 @@ fn main() {
         // Run the app!
         .run(tauri::generate_context!())
         .expect("Failed to run Meowcal Sub");
+}
+
+// =============================================================================
+// HTTP-ONLY MODE (Browser Dev Mode)
+// =============================================================================
+
+/// Run only the HTTP server without Tauri windows.
+/// Used for browser-based testing by AI agents.
+fn run_http_only_mode() {
+    // Create a tokio runtime for the HTTP server
+    let runtime = tokio::runtime::Runtime::new().expect("Failed to create tokio runtime");
+
+    runtime.block_on(async {
+        println!();
+        println!("╔════════════════════════════════════════════════════════════════╗");
+        println!("║         MEOWCAL SUB - BROWSER DEV MODE                         ║");
+        println!("╠════════════════════════════════════════════════════════════════╣");
+        println!("║  HTTP API server starting on http://localhost:3001             ║");
+        println!("║  Frontend served separately on http://localhost:3000           ║");
+        println!("║                                                                ║");
+        println!("║  To test in browser:                                           ║");
+        println!("║    1. Run: npx serve src -l 3000 -C                            ║");
+        println!("║    2. Open: http://localhost:3000                              ║");
+        println!("║                                                                ║");
+        println!("║  Press Ctrl+C to stop                                          ║");
+        println!("╚════════════════════════════════════════════════════════════════╝");
+        println!();
+
+        if let Err(e) = http_server::start_server(3001).await {
+            eprintln!("❌ HTTP server error: {}", e);
+        }
+    });
 }

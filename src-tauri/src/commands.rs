@@ -300,10 +300,17 @@ pub fn get_foundry_local_status(state: State<'_, AppState>) -> FoundryLocalStatu
     let service_url = FoundryLocalBackend::get_service_url_from_cli();
     let service_running = service_url.is_some();
 
+    // Get cached models from CLI (synchronous)
+    let models = if service_running {
+        FoundryLocalBackend::get_cached_models_from_cli()
+    } else {
+        Vec::new()
+    };
+
     FoundryLocalStatus {
         service_running,
         service_url,
-        models: Vec::new(), // Sync version, use list_foundry_local_models for async
+        models,
         notes: backend.notes(),
     }
 }

@@ -102,7 +102,7 @@ async function loadSystemInfo() {
 
     try {
         // Call the Rust function 'get_system_info'
-        const info = await window.__TAURI__.core.invoke('get_system_info');
+        const info = await TauriBridge.invoke('get_system_info');
         appState.systemInfo = info;
 
         // Update the UI with system info
@@ -173,7 +173,7 @@ async function loadSettings() {
     console.log('Loading settings...');
 
     try {
-        const settings = await window.__TAURI__.core.invoke('get_settings');
+        const settings = await TauriBridge.invoke('get_settings');
         appState.settings = settings;
 
         // Update UI with loaded settings
@@ -206,20 +206,35 @@ function applyTranslationSettings(translation) {
     const config = normalizeTranslationConfig(translation);
 
     document.getElementById('backend-preference').value = config.preferredBackend;
+    document.getElementById('toggle-foundry-local').checked = config.enableFoundryLocal;
     document.getElementById('toggle-windows-ai').checked = config.enableWindowsAi;
     document.getElementById('toggle-offline-mt').checked = config.enableOfflineMt;
     document.getElementById('toggle-edge-translator').checked = config.enableEdgeTranslator;
     document.getElementById('toggle-mock-fallback').checked = config.allowMockFallback;
     document.getElementById('offline-mt-path').value = config.offlineMt.binaryPath || '';
+
+    // Load Foundry Local model selector
+    const foundryModel = config.foundryLocal?.model || '';
+    document.getElementById('foundry-local-model').value = foundryModel;
+
+    // Populate Foundry Local models in background (don't block UI initialization)
+    loadFoundryLocalModels().catch(error => {
+        console.warn('Background model loading failed:', error);
+    });
 }
 
 function normalizeTranslationConfig(translation) {
     const defaultConfig = {
         preferredBackend: 'auto',
+        enableFoundryLocal: true,
         enableWindowsAi: true,
         enableOfflineMt: true,
         enableEdgeTranslator: false,
         allowMockFallback: true,
+        foundryLocal: {
+            model: null,
+            timeoutMs: 30000,
+        },
         offlineMt: {
             binaryPath: null,
             timeoutMs: 3000,
@@ -233,10 +248,15 @@ function normalizeTranslationConfig(translation) {
 
     return {
         preferredBackend: translation.preferredBackend || defaultConfig.preferredBackend,
+        enableFoundryLocal: translation.enableFoundryLocal ?? defaultConfig.enableFoundryLocal,
         enableWindowsAi: translation.enableWindowsAi ?? defaultConfig.enableWindowsAi,
         enableOfflineMt: translation.enableOfflineMt ?? defaultConfig.enableOfflineMt,
         enableEdgeTranslator: translation.enableEdgeTranslator ?? defaultConfig.enableEdgeTranslator,
         allowMockFallback: translation.allowMockFallback ?? defaultConfig.allowMockFallback,
+        foundryLocal: {
+            model: translation.foundryLocal?.model ?? defaultConfig.foundryLocal.model,
+            timeoutMs: translation.foundryLocal?.timeoutMs ?? defaultConfig.foundryLocal.timeoutMs,
+        },
         offlineMt: {
             binaryPath: translation.offlineMt?.binaryPath ?? defaultConfig.offlineMt.binaryPath,
             timeoutMs: translation.offlineMt?.timeoutMs ?? defaultConfig.offlineMt.timeoutMs,
@@ -251,12 +271,15 @@ function normalizeTranslationConfig(translation) {
 async function saveSettings() {
     const translationConfig = normalizeTranslationConfig(appState.settings?.translation);
     const offlineMtPath = document.getElementById('offline-mt-path').value.trim();
+    const foundryModel = document.getElementById('foundry-local-model').value.trim();
 
     translationConfig.preferredBackend = document.getElementById('backend-preference').value;
+    translationConfig.enableFoundryLocal = document.getElementById('toggle-foundry-local').checked;
     translationConfig.enableWindowsAi = document.getElementById('toggle-windows-ai').checked;
     translationConfig.enableOfflineMt = document.getElementById('toggle-offline-mt').checked;
     translationConfig.enableEdgeTranslator = document.getElementById('toggle-edge-translator').checked;
     translationConfig.allowMockFallback = document.getElementById('toggle-mock-fallback').checked;
+    translationConfig.foundryLocal.model = foundryModel.length > 0 ? foundryModel : null;
     translationConfig.offlineMt.binaryPath = offlineMtPath.length > 0 ? offlineMtPath : null;
 
     const settings = {
@@ -278,7 +301,7 @@ async function saveSettings() {
     };
 
     try {
-        await window.__TAURI__.core.invoke('save_settings', { settings });
+        await TauriBridge.invoke('save_settings', { settings });
         appState.settings = settings;
         showToast('Settings saved!', 'success');
         console.log('Settings saved:', settings);
@@ -286,6 +309,35 @@ async function saveSettings() {
     } catch (error) {
         console.error('Failed to save settings:', error);
         showToast('Failed to save settings', 'error');
+    }
+}
+
+/**
+ * Load available Foundry Local models and populate the dropdown
+ */
+async function loadFoundryLocalModels() {
+    const select = document.getElementById('foundry-local-model');
+    if (!select) return;
+
+    try {
+        const models = await TauriBridge.invoke('list_foundry_local_models');
+
+        // Clear existing options except the first (Auto)
+        while (select.options.length > 1) {
+            select.remove(1);
+        }
+
+        // Add models to dropdown
+        models.forEach(model => {
+            const option = document.createElement('option');
+            option.value = model;
+            option.textContent = model;
+            select.appendChild(option);
+        });
+
+        console.log(`Loaded ${models.length} Foundry Local models`);
+    } catch (error) {
+        console.warn('Failed to load Foundry Local models:', error);
     }
 }
 
@@ -360,7 +412,7 @@ async function handleSelectArea() {
 
     try {
         // Open the fullscreen selector overlay
-        await window.__TAURI__.core.invoke('open_area_selector');
+        await TauriBridge.invoke('open_area_selector');
         console.log('Selector window opened');
 
         // Start polling for region changes (fallback in case events don't work)
@@ -390,7 +442,7 @@ function startRegionPolling() {
         attempts++;
 
         try {
-            const region = await window.__TAURI__.core.invoke('get_capture_region');
+            const region = await TauriBridge.invoke('get_capture_region');
 
             // Check if we got a new region
             if (region && (!previousRegion ||
@@ -428,7 +480,7 @@ function startRegionPolling() {
  */
 async function setupRegionSelectedListener() {
     try {
-        const unlisten = await window.__TAURI__.event.listen('region-selected', (event) => {
+        const unlisten = await TauriBridge.event.listen('region-selected', (event) => {
             const region = event.payload;
             console.log('Region selected via event:', region);
 
@@ -471,7 +523,7 @@ function handleClearRegion() {
  */
 async function setupTranslationUpdateListener() {
     try {
-        await window.__TAURI__.event.listen('translation-update', (event) => {
+        await TauriBridge.event.listen('translation-update', (event) => {
             const { original, translated, timestamp } = event.payload;
             console.log('🌐 Translation update:', {
                 original,
@@ -501,7 +553,7 @@ async function refreshTranslationDiagnostics() {
     }
 
     try {
-        const diagnostics = await window.__TAURI__.core.invoke('get_translation_diagnostics');
+        const diagnostics = await TauriBridge.invoke('get_translation_diagnostics');
         updateBackendStatusUI(diagnostics);
         await autoDetectOfflineMtPath();
     } catch (error) {
@@ -512,6 +564,8 @@ async function refreshTranslationDiagnostics() {
 
 function backendIdKey(id) {
     switch (id) {
+        case 'foundryLocal':
+            return 'foundry_local';
         case 'windowsAi':
             return 'windows_ai';
         case 'offlineMt':
@@ -593,6 +647,79 @@ function updateBackendStatusUI(diagnostics) {
         row.appendChild(notes);
         container.appendChild(row);
     });
+
+    // Update new UI elements
+    updatePrimaryStatus(diagnostics);
+    updateFoundryStatusInline(diagnostics);
+    updateStatusSummary(diagnostics);
+}
+
+/**
+ * Update primary status display in quick start card
+ */
+function updatePrimaryStatus(diagnostics) {
+    const nameEl = document.getElementById('primary-backend-name');
+    const pillEl = document.getElementById('primary-status-pill');
+
+    if (!nameEl || !pillEl || !diagnostics.backends) return;
+
+    // Find first ready backend
+    const primaryBackend = diagnostics.backends.find(b => b.readyState === 'ready');
+
+    if (primaryBackend) {
+        nameEl.textContent = primaryBackend.name;
+        pillEl.textContent = '● READY';
+        pillEl.className = 'status-pill ready';
+    } else {
+        // Find first enabled backend even if not ready
+        const fallbackBackend = diagnostics.backends.find(b => b.available);
+        if (fallbackBackend) {
+            nameEl.textContent = fallbackBackend.name;
+            const statusInfo = formatReadyState(fallbackBackend.readyState);
+            pillEl.textContent = `● ${statusInfo.label.toUpperCase()}`;
+            pillEl.className = `status-pill ${statusInfo.className}`;
+        } else {
+            nameEl.textContent = 'None';
+            pillEl.textContent = '● NOT CONFIGURED';
+            pillEl.className = 'status-pill not-supported';
+        }
+    }
+}
+
+/**
+ * Update Foundry Local status inline display
+ */
+function updateFoundryStatusInline(diagnostics) {
+    const statusEl = document.getElementById('foundry-status');
+    if (!statusEl || !diagnostics.backends) return;
+
+    const foundry = diagnostics.backends.find(b => b.id === 'foundryLocal');
+    if (!foundry) {
+        statusEl.innerHTML = '<span class="status-text">Foundry Local not found</span>';
+        return;
+    }
+
+    const statusInfo = formatReadyState(foundry.readyState);
+    const statusClass = statusInfo.className;
+    const pill = `<span class="status-pill ${statusClass}">● ${statusInfo.label.toUpperCase()}</span>`;
+
+    statusEl.innerHTML = `
+        ${pill}
+        <span class="status-text">${foundry.notes}</span>
+    `;
+}
+
+/**
+ * Update status summary (X/Y ready)
+ */
+function updateStatusSummary(diagnostics) {
+    const summaryEl = document.getElementById('status-summary');
+    if (!summaryEl || !diagnostics.backends) return;
+
+    const totalBackends = diagnostics.backends.length;
+    const readyBackends = diagnostics.backends.filter(b => b.readyState === 'ready').length;
+
+    summaryEl.textContent = `${readyBackends}/${totalBackends} Ready`;
 }
 
 async function handleEdgeModelDownload() {
@@ -650,7 +777,7 @@ async function autoDetectOfflineMtPath(force = false) {
     }
 
     try {
-        const detection = await window.__TAURI__.core.invoke('detect_offline_mt_binary');
+        const detection = await TauriBridge.invoke('detect_offline_mt_binary');
         if (detection && detection.path) {
             input.value = detection.path;
             showToast(`Found translateLocally via ${detection.source}. Click Save Settings.`, 'success');
@@ -664,7 +791,7 @@ async function autoDetectOfflineMtPath(force = false) {
 
 async function handleWindowsAiDiagnostics() {
     try {
-        const diagnostics = await window.__TAURI__.core.invoke('get_windows_ai_diagnostics');
+        const diagnostics = await TauriBridge.invoke('get_windows_ai_diagnostics');
         renderWindowsAiDiagnostics(diagnostics);
         openDiagnosticsModal();
     } catch (error) {
@@ -679,7 +806,7 @@ async function loadTranslateLocallyDownloadInfo() {
     }
 
     try {
-        const info = await window.__TAURI__.core.invoke('get_translate_locally_download_info');
+        const info = await TauriBridge.invoke('get_translate_locally_download_info');
         appState.downloadInfo = info;
         return info;
     } catch (error) {
@@ -760,7 +887,7 @@ async function handleConfirmTranslateLocallyDownload() {
     confirmButton.textContent = 'Downloading...';
 
     try {
-        const result = await window.__TAURI__.core.invoke('download_translate_locally', {
+        const result = await TauriBridge.invoke('download_translate_locally', {
             optionId,
             installDir: targetDir,
         });
@@ -918,7 +1045,7 @@ async function setupCaptureStatusListener() {
     try {
         let hasShownFallbackWarning = false;  // Only show once per session
 
-        await window.__TAURI__.event.listen('capture-status', (event) => {
+        await TauriBridge.event.listen('capture-status', (event) => {
             const { usingFallback, message, isError } = event.payload;
             console.log('📸 Capture status:', event.payload);
 
@@ -950,7 +1077,7 @@ async function handleStartTranslation() {
     console.log('Starting translation...');
 
     try {
-        await window.__TAURI__.core.invoke('start_translation');
+        await TauriBridge.invoke('start_translation');
         appState.isRunning = true;
 
         // Update UI
@@ -973,7 +1100,7 @@ async function handleStopTranslation() {
     console.log('Stopping translation...');
 
     try {
-        await window.__TAURI__.core.invoke('stop_translation');
+        await TauriBridge.invoke('stop_translation');
         appState.isRunning = false;
 
         // Update UI
