@@ -185,8 +185,8 @@ impl FoundryLocalBackend {
 
         let lower = candidate.to_ascii_lowercase();
         let blocked = [
-            "models", "model", "alias", "cache", "total", "name", "id", "status", "size", "gb",
-            "mb", "kb", "tb",
+            "models", "model", "alias", "cache", "cached", "total", "name", "id", "status",
+            "size", "gb", "mb", "kb", "tb",
         ];
         if blocked.contains(&lower.as_str()) {
             return false;
@@ -476,11 +476,38 @@ impl TranslatorBackend for FoundryLocalBackend {
             .post(&url)
             .json(&request)
             .send()
-            .await
-            .map_err(|e| {
+            .await;
+
+        let response = match response {
+            Ok(resp) if resp.status().is_success() => resp,
+            Ok(resp) if resp.status().as_u16() == 404 => {
+                debug!("Foundry Local /openai/v1/chat/completions returned 404, trying /v1/chat/completions");
+                let fallback_url = format!("{}/v1/chat/completions", base_url);
+                self.http_client
+                    .post(&fallback_url)
+                    .json(&request)
+                    .send()
+                    .await
+                    .map_err(|e| {
+                        warn!("Foundry Local request failed: {}", e);
+                        LlmError::ApiError(format!("Request failed: {}", e))
+                    })?
+            }
+            Ok(resp) => {
+                let status = resp.status();
+                let body = resp.text().await.unwrap_or_default();
+                warn!("Foundry Local returned error {}: {}", status, body);
+                return Err(LlmError::ApiError(format!(
+                    "API error {}: {}",
+                    status,
+                    body.chars().take(200).collect::<String>()
+                )));
+            }
+            Err(e) => {
                 warn!("Foundry Local request failed: {}", e);
-                LlmError::ApiError(format!("Request failed: {}", e))
-            })?;
+                return Err(LlmError::ApiError(format!("Request failed: {}", e)));
+            }
+        };
 
         if !response.status().is_success() {
             let status = response.status();

@@ -27,7 +27,7 @@ use serde::Serialize;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
-use tauri::{AppHandle, Emitter, Manager, State};
+use tauri::{async_runtime, AppHandle, Emitter, Manager, State};
 use tauri_plugin_opener::OpenerExt;
 use tokio::fs;
 use tokio::sync::watch;
@@ -256,14 +256,26 @@ pub async fn download_translate_locally(
 
 /// Try to detect translateLocally binary on disk.
 #[tauri::command]
-pub fn detect_offline_mt_binary(
+pub async fn detect_offline_mt_binary(
     state: State<'_, AppState>,
     app: AppHandle,
-) -> Option<OfflineMtDetection> {
+) -> Result<Option<OfflineMtDetection>, String> {
     let config = state.config.lock().unwrap().translation.offline_mt.clone();
-    OfflineMtBackend::detect_binary(&app, &config).map(|(path, source)| OfflineMtDetection {
-        path: path.to_string_lossy().to_string(),
-        source: source.to_string(),
+    let app_handle = app.clone();
+
+    async_runtime::spawn_blocking(move || {
+        OfflineMtBackend::detect_binary(&app_handle, &config).map(|(path, source)| {
+            OfflineMtDetection {
+                path: path.to_string_lossy().to_string(),
+                source: source.to_string(),
+            }
+        })
+    })
+    .await
+    .map_err(|err| {
+        let message = format!("Offline MT detection task failed: {}", err);
+        warn!("{}", message);
+        message
     })
 }
 
@@ -290,12 +302,64 @@ pub struct FoundryLocalStatus {
 
 /// Get the status of Foundry Local service
 #[tauri::command]
-pub fn get_foundry_local_status(state: State<'_, AppState>) -> FoundryLocalStatus {
+pub async fn get_foundry_local_status(
+    state: State<'_, AppState>,
+) -> Result<FoundryLocalStatus, String> {
     let config = {
         let guard = state.config.lock().unwrap();
         guard.translation.foundry_local.clone()
     };
 
+    async_runtime::spawn_blocking(move || build_foundry_local_status(config))
+        .await
+        .map_err(|err| {
+            let message = format!("Foundry Local status task failed: {}", err);
+            warn!("{}", message);
+            message
+        })
+}
+
+/// List available models from Foundry Local
+#[tauri::command]
+pub async fn list_foundry_local_models(state: State<'_, AppState>) -> Result<Vec<String>, String> {
+    let config = {
+        let guard = state.config.lock().unwrap();
+        guard.translation.foundry_local.clone()
+    };
+
+    let backend = FoundryLocalBackend::new(config);
+    backend.refresh_service_status();
+    backend.list_models().await.map_err(|e| e.to_string())
+}
+
+/// Refresh Foundry Local service status (re-detect service)
+#[tauri::command]
+pub async fn refresh_foundry_local_status(
+    state: State<'_, AppState>,
+) -> Result<FoundryLocalStatus, String> {
+    get_foundry_local_status(state).await
+}
+
+/// Prepare Foundry Local (attempt to start service and refresh status)
+#[tauri::command]
+pub async fn prepare_foundry_local(
+    state: State<'_, AppState>,
+) -> Result<FoundryLocalStatus, String> {
+    let config = {
+        let guard = state.config.lock().unwrap();
+        guard.translation.foundry_local.clone()
+    };
+
+    async_runtime::spawn_blocking(move || build_foundry_local_status(config))
+        .await
+        .map_err(|err| {
+            let message = format!("Foundry Local prepare task failed: {}", err);
+            warn!("{}", message);
+            message
+        })
+}
+
+fn build_foundry_local_status(config: crate::config::FoundryLocalConfig) -> FoundryLocalStatus {
     let backend = FoundryLocalBackend::new(config);
     backend.refresh_service_status();
     let service_url = FoundryLocalBackend::get_service_url_from_cli();
@@ -315,53 +379,6 @@ pub fn get_foundry_local_status(state: State<'_, AppState>) -> FoundryLocalStatu
         notes: backend.notes(),
     }
 }
-
-/// List available models from Foundry Local
-#[tauri::command]
-pub async fn list_foundry_local_models(state: State<'_, AppState>) -> Result<Vec<String>, String> {
-    let config = {
-        let guard = state.config.lock().unwrap();
-        guard.translation.foundry_local.clone()
-    };
-
-    let backend = FoundryLocalBackend::new(config);
-    backend.refresh_service_status();
-    backend.list_models().await.map_err(|e| e.to_string())
-}
-
-/// Refresh Foundry Local service status (re-detect service)
-#[tauri::command]
-pub fn refresh_foundry_local_status(state: State<'_, AppState>) -> FoundryLocalStatus {
-    get_foundry_local_status(state)
-}
-
-/// Prepare Foundry Local (attempt to start service and refresh status)
-#[tauri::command]
-pub fn prepare_foundry_local(state: State<'_, AppState>) -> FoundryLocalStatus {
-    let config = {
-        let guard = state.config.lock().unwrap();
-        guard.translation.foundry_local.clone()
-    };
-
-    let backend = FoundryLocalBackend::new(config);
-    backend.refresh_service_status();
-
-    let service_url = FoundryLocalBackend::get_service_url_from_cli();
-    let service_running = service_url.is_some();
-    let models = if service_running {
-        FoundryLocalBackend::get_cached_models_from_cli()
-    } else {
-        Vec::new()
-    };
-
-    FoundryLocalStatus {
-        service_running,
-        service_url,
-        models,
-        notes: backend.notes(),
-    }
-}
-
 fn build_translate_locally_download_info(
     app: &AppHandle,
 ) -> Result<TranslateLocallyDownloadInfo, String> {
@@ -690,15 +707,28 @@ pub struct CaptureStatusPayload {
 
 /// List translation backends and their readiness
 #[tauri::command]
-pub fn list_translation_backends(state: State<'_, AppState>, app: AppHandle) -> Vec<BackendInfo> {
+pub async fn list_translation_backends(
+    state: State<'_, AppState>,
+    app: AppHandle,
+) -> Result<Vec<BackendInfo>, String> {
     let config = {
         let guard = state.config.lock().unwrap();
         guard.translation.clone()
     };
 
     let diagnostics = state.translation_diagnostics.clone();
-    let manager = TranslationManager::new(config, app, diagnostics);
-    manager.list_backends()
+    let app_handle = app.clone();
+
+    async_runtime::spawn_blocking(move || {
+        let manager = TranslationManager::new(config, app_handle, diagnostics);
+        manager.list_backends()
+    })
+    .await
+    .map_err(|err| {
+        let message = format!("Translation backend listing task failed: {}", err);
+        warn!("{}", message);
+        message
+    })
 }
 
 /// Translate a single text input (for debugging/UI testing)
@@ -724,18 +754,28 @@ pub async fn translate_once(
 
 /// Get diagnostics for translation backends
 #[tauri::command]
-pub fn get_translation_diagnostics(
+pub async fn get_translation_diagnostics(
     state: State<'_, AppState>,
     app: AppHandle,
-) -> TranslationDiagnostics {
+) -> Result<TranslationDiagnostics, String> {
     let config = {
         let guard = state.config.lock().unwrap();
         guard.translation.clone()
     };
 
     let diagnostics = state.translation_diagnostics.clone();
-    let manager = TranslationManager::new(config, app, diagnostics);
-    manager.diagnostics_snapshot()
+    let app_handle = app.clone();
+
+    async_runtime::spawn_blocking(move || {
+        let manager = TranslationManager::new(config, app_handle, diagnostics);
+        manager.diagnostics_snapshot()
+    })
+    .await
+    .map_err(|err| {
+        let message = format!("Translation diagnostics task failed: {}", err);
+        warn!("{}", message);
+        message
+    })
 }
 
 /// Start the translation process
