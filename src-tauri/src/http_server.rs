@@ -204,18 +204,6 @@ async fn get_translation_diagnostics(State(state): State<HttpAppState>) -> impl 
         });
     }
 
-    // Windows AI / Phi Silica
-    if config.translation.enable_windows_ai {
-        let phi = PhiSilica::new();
-        backends.push(BackendInfo {
-            id: BackendId::WindowsAi,
-            name: "Windows AI (Phi Silica)".to_string(),
-            available: true,
-            ready_state: phi.ready_state(),
-            notes: phi.notes(),
-        });
-    }
-
     // Offline MT
     if config.translation.enable_offline_mt {
         let offline = OfflineMtBackend::new_standalone(config.translation.offline_mt.clone());
@@ -225,6 +213,18 @@ async fn get_translation_diagnostics(State(state): State<HttpAppState>) -> impl 
             available: true,
             ready_state: offline.ready_state(),
             notes: offline.notes(),
+        });
+    }
+
+    // Windows AI / Phi Silica
+    if config.translation.enable_windows_ai {
+        let phi = PhiSilica::new();
+        backends.push(BackendInfo {
+            id: BackendId::WindowsAi,
+            name: "Windows AI (Phi Silica)".to_string(),
+            available: true,
+            ready_state: phi.ready_state(),
+            notes: phi.notes(),
         });
     }
 
@@ -267,6 +267,30 @@ async fn list_foundry_local_models(State(state): State<HttpAppState>) -> impl In
 async fn get_foundry_local_status(State(state): State<HttpAppState>) -> impl IntoResponse {
     let config = state.config.lock().unwrap().clone();
     let backend = FoundryLocalBackend::new(config.translation.foundry_local);
+    backend.refresh_service_status();
+
+    let service_url = FoundryLocalBackend::get_service_url_from_cli();
+    let service_running = service_url.is_some();
+    let models = if service_running {
+        FoundryLocalBackend::get_cached_models_from_cli()
+    } else {
+        Vec::new()
+    };
+
+    Json(FoundryLocalStatus {
+        service_running,
+        service_url,
+        models,
+        notes: backend.notes(),
+    })
+}
+
+/// POST /api/foundry-local/prepare - Attempt to start Foundry Local service
+async fn prepare_foundry_local(State(state): State<HttpAppState>) -> impl IntoResponse {
+    let config = state.config.lock().unwrap().clone();
+    let backend = FoundryLocalBackend::new(config.translation.foundry_local);
+
+    backend.refresh_service_status();
 
     let service_url = FoundryLocalBackend::get_service_url_from_cli();
     let service_running = service_url.is_some();
@@ -397,6 +421,7 @@ pub fn create_router(state: HttpAppState) -> Router {
         // Foundry Local
         .route("/api/foundry-local/models", get(list_foundry_local_models))
         .route("/api/foundry-local/status", get(get_foundry_local_status))
+        .route("/api/foundry-local/prepare", post(prepare_foundry_local))
         // Windows AI
         .route("/api/windows-ai/diagnostics", get(get_windows_ai_diagnostics))
         // Offline MT

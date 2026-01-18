@@ -4,20 +4,18 @@
 // This module defines:
 // 1. Backend interfaces and readiness states
 // 2. Backend selection + fallback manager
-// 3. Implementations for each backend (Windows AI, Offline MT, Edge, Mock)
+// 3. Implementations for each backend (Windows AI, Offline MT, Mock)
 // =============================================================================
 
 mod phi_silica;
 mod manager;
 mod offline_mt;
-mod edge_translator;
 mod foundry_local;
 mod mock;
 
 pub use phi_silica::*;
 pub use manager::*;
 pub use offline_mt::*;
-pub use edge_translator::*;
 pub use foundry_local::*;
 pub use mock::*;
 
@@ -57,7 +55,6 @@ pub enum BackendId {
     FoundryLocal,
     WindowsAi,
     OfflineMt,
-    EdgeTranslator,
     Mock,
 }
 
@@ -68,7 +65,6 @@ impl BackendId {
             BackendId::FoundryLocal => "foundry_local",
             BackendId::WindowsAi => "windows_ai",
             BackendId::OfflineMt => "offline_mt",
-            BackendId::EdgeTranslator => "edge_translator",
             BackendId::Mock => "mock",
         }
     }
@@ -79,7 +75,6 @@ impl BackendId {
             "foundry_local" | "foundrylocal" | "foundry-local" | "foundry" => Some(BackendId::FoundryLocal),
             "windows_ai" | "windowsai" | "windows-ai" | "phi" | "phi_silica" => Some(BackendId::WindowsAi),
             "offline_mt" | "offlinemt" | "offline-mt" | "translatelocally" => Some(BackendId::OfflineMt),
-            "edge_translator" | "edgetranslator" | "edge-translator" => Some(BackendId::EdgeTranslator),
             "mock" | "passthrough" | "none" => Some(BackendId::Mock),
             _ => None,
         }

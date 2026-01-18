@@ -297,6 +297,7 @@ pub fn get_foundry_local_status(state: State<'_, AppState>) -> FoundryLocalStatu
     };
 
     let backend = FoundryLocalBackend::new(config);
+    backend.refresh_service_status();
     let service_url = FoundryLocalBackend::get_service_url_from_cli();
     let service_running = service_url.is_some();
 
@@ -324,6 +325,7 @@ pub async fn list_foundry_local_models(state: State<'_, AppState>) -> Result<Vec
     };
 
     let backend = FoundryLocalBackend::new(config);
+    backend.refresh_service_status();
     backend.list_models().await.map_err(|e| e.to_string())
 }
 
@@ -331,6 +333,33 @@ pub async fn list_foundry_local_models(state: State<'_, AppState>) -> Result<Vec
 #[tauri::command]
 pub fn refresh_foundry_local_status(state: State<'_, AppState>) -> FoundryLocalStatus {
     get_foundry_local_status(state)
+}
+
+/// Prepare Foundry Local (attempt to start service and refresh status)
+#[tauri::command]
+pub fn prepare_foundry_local(state: State<'_, AppState>) -> FoundryLocalStatus {
+    let config = {
+        let guard = state.config.lock().unwrap();
+        guard.translation.foundry_local.clone()
+    };
+
+    let backend = FoundryLocalBackend::new(config);
+    backend.refresh_service_status();
+
+    let service_url = FoundryLocalBackend::get_service_url_from_cli();
+    let service_running = service_url.is_some();
+    let models = if service_running {
+        FoundryLocalBackend::get_cached_models_from_cli()
+    } else {
+        Vec::new()
+    };
+
+    FoundryLocalStatus {
+        service_running,
+        service_url,
+        models,
+        notes: backend.notes(),
+    }
 }
 
 fn build_translate_locally_download_info(
@@ -1013,4 +1042,3 @@ pub fn stop_translation(state: State<'_, AppState>, app: AppHandle) -> Result<()
     info!("✅ Translation stopped!");
     Ok(())
 }
-

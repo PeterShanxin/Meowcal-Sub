@@ -49,6 +49,7 @@
         'list_foundry_local_models': { method: 'GET', path: '/foundry-local/models' },
         'get_foundry_local_status': { method: 'GET', path: '/foundry-local/status' },
         'refresh_foundry_local_status': { method: 'GET', path: '/foundry-local/status' },
+        'prepare_foundry_local': { method: 'POST', path: '/foundry-local/prepare' },
 
         // Windows AI
         'get_windows_ai_diagnostics': { method: 'GET', path: '/windows-ai/diagnostics' },

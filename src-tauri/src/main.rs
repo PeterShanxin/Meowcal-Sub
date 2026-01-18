@@ -106,6 +106,7 @@ fn main() {
             commands::get_foundry_local_status,
             commands::list_foundry_local_models,
             commands::refresh_foundry_local_status,
+            commands::prepare_foundry_local,
         ])
         .plugin(tauri_plugin_opener::init())
         // Register our app state (shared across all commands)

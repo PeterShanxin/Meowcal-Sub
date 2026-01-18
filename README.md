@@ -85,12 +85,12 @@ Edit settings in the app or modify `%APPDATA%\\com.meowcal.sub\\config.json`:
 ### Translation Backends (Auto Fallback)
 
 Default order:
-1) Windows AI (Phi Silica / LanguageModel)
+1) Foundry Local
 2) Offline MT (translateLocally / ORT model)
-3) Edge Translator (experimental)
+3) Windows AI (Phi Silica / LanguageModel)
 4) Passthrough (OCR text)
 
-You can configure backend preferences and feature flags under `translation` in config.
+You can configure backend feature flags under `translation` in config.
 
 #### Offline MT (translateLocally) Setup
 
@@ -103,7 +103,6 @@ Example config snippet:
 ```json
 {
   "translation": {
-    "preferredBackend": "offline_mt",
     "offlineMt": {
       "binaryPath": "C:\\\\tools\\\\translateLocally\\\\translateLocally.exe",
       "timeoutMs": 3000,
@@ -120,7 +119,7 @@ Build issues:
 - `failed to remove file ... meowcal-sub.exe`: close the running app (tray icon) and retry.
 
 Common backend status/warning codes:
-- `not_supported`: API/runtime not available (Windows AI or Edge Translator missing).
+- `not_supported`: API/runtime not available (Windows AI missing).
 - `not_ready`: model needs first-time download or bindings not wired yet.
 - `not_available`: offline MT binary not found.
 - `timeout`: backend hung or took too long; fallback used.
@@ -129,7 +128,6 @@ Common backend status/warning codes:
 If translation falls back to passthrough (OCR text), check:
 - Windows AI: ensure Copilot+ PC + Windows 11 24H2, WinAppSDK bindings, and required capabilities.
 - Offline MT: set `translation.offlineMt.binaryPath` or add `translateLocally` to PATH.
-- Edge Translator: WebView2 runtime must support `navigator.translation`; it’s experimental and opt-in.
 
 ## 🏗️ Project Structure
 

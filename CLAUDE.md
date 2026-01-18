@@ -75,10 +75,9 @@ npm run dev:browser   # Static frontend on localhost:3000
 ### Translation Backend Fallback Chain
 
 1. **Foundry Local** (primary) - OpenAI-compatible local endpoint
-2. **Windows AI / Phi Silica** - Copilot Runtime (placeholder until APIs stable)
-3. **Offline MT** - translateLocally binary wrapper
-4. **Edge Translator** - WebView2-based (experimental)
-5. **Passthrough** - Returns OCR text if all else fails
+2. **Offline MT** - translateLocally binary wrapper
+3. **Windows AI / Phi Silica** - Copilot Runtime (placeholder until APIs stable)
+4. **Passthrough** - Returns OCR text if all else fails
 
 ### Frontend (src/)
 
@@ -135,7 +134,7 @@ App settings persist to `%APPDATA%\com.meowcal.sub\config.json`. Key settings:
 - Source/target languages
 - Capture interval (ms)
 - Overlay appearance
-- Translation backend preferences
+- Translation backend flags
 
 ## Platform Requirements
 

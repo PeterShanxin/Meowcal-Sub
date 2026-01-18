@@ -4,9 +4,9 @@
 
 use crate::config::TranslationConfig;
 use crate::llm::{
-    BackendId, BackendInfo, EdgeTranslatorBackend, FoundryLocalBackend, MockBackend,
-    OfflineMtBackend, PhiSilica, ReadyState, TranslationDiagnostics, TranslationDiagnosticsState,
-    TranslationOutcome, TranslatorBackend,
+    BackendId, BackendInfo, FoundryLocalBackend, MockBackend, OfflineMtBackend, PhiSilica,
+    ReadyState, TranslationDiagnostics, TranslationDiagnosticsState, TranslationOutcome,
+    TranslatorBackend,
 };
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
@@ -34,11 +34,10 @@ impl TranslationManager {
     ) -> Self {
         let mut backends: Vec<Box<dyn TranslatorBackend>> = Vec::new();
 
-        // Fallback order: Foundry Local -> Offline MT -> Windows AI -> Edge -> Mock
+        // Fallback order: Foundry Local -> Offline MT -> Windows AI -> Mock
         backends.push(Box::new(FoundryLocalBackend::new(config.foundry_local.clone())));
         backends.push(Box::new(OfflineMtBackend::new(app.clone(), config.offline_mt.clone())));
         backends.push(Box::new(PhiSilica::new()));
-        backends.push(Box::new(EdgeTranslatorBackend::new(app)));
         backends.push(Box::new(MockBackend::new()));
 
         Self {
@@ -70,6 +69,12 @@ impl TranslationManager {
             .iter()
             .map(|backend| {
                 let enabled = self.is_enabled(backend.id());
+                let ready_state = if enabled {
+                    backend.ready_state()
+                } else {
+                    ReadyState::NotSupported
+                };
+                let available = enabled && backend.is_available();
                 let mut notes = backend.notes();
 
                 if !enabled {
@@ -83,12 +88,8 @@ impl TranslationManager {
                 BackendInfo {
                     id: backend.id(),
                     name: backend.name().to_string(),
-                    available: enabled && backend.is_available(),
-                    ready_state: if enabled {
-                        backend.ready_state()
-                    } else {
-                        ReadyState::NotSupported
-                    },
+                    available,
+                    ready_state,
                     notes,
                 }
             })
@@ -326,42 +327,19 @@ impl TranslationManager {
             BackendId::FoundryLocal => self.config.enable_foundry_local,
             BackendId::WindowsAi => self.config.enable_windows_ai,
             BackendId::OfflineMt => self.config.enable_offline_mt,
-            BackendId::EdgeTranslator => self.config.enable_edge_translator,
             BackendId::Mock => self.config.allow_mock_fallback,
         }
     }
 
-    fn preferred_backend(&self) -> Option<BackendId> {
-        if self.config.preferred_backend.trim().is_empty() {
-            return None;
-        }
-
-        if self.config.preferred_backend.eq_ignore_ascii_case("auto") {
-            return None;
-        }
-
-        BackendId::from_str(&self.config.preferred_backend)
-    }
-
     fn ordered_backend_ids(&self) -> Vec<BackendId> {
-        let mut ids = Vec::new();
-
-        if let Some(preferred) = self.preferred_backend() {
-            ids.push(preferred);
-        }
-
         // Fallback order:
         // 1) Foundry Local (primary), 2) Offline MT, 3) Windows AI (experimental), 4) Mock
-        // Edge Translator is deprecated and disabled by default
-        ids.extend([
+        vec![
             BackendId::FoundryLocal,
             BackendId::OfflineMt,
             BackendId::WindowsAi,
-            BackendId::EdgeTranslator,
             BackendId::Mock,
-        ]);
-
-        ids
+        ]
     }
 }
 
@@ -417,11 +395,9 @@ mod tests {
 
     fn base_config() -> TranslationConfig {
         TranslationConfig {
-            preferred_backend: "auto".to_string(),
             enable_foundry_local: true,
             enable_windows_ai: true,
             enable_offline_mt: true,
-            enable_edge_translator: true,
             allow_mock_fallback: true,
             foundry_local: crate::config::FoundryLocalConfig::default(),
             offline_mt: OfflineMtConfig::default(),
@@ -445,13 +421,6 @@ mod tests {
                 response: Ok("ok".to_string()),
                 delay_ms: 0,
             }),
-            Box::new(TestBackend {
-                id: BackendId::EdgeTranslator,
-                available: true,
-                ready_state: ReadyState::Ready,
-                response: Ok("edge".to_string()),
-                delay_ms: 0,
-            }),
         ];
 
         let diagnostics = Arc::new(Mutex::new(TranslationDiagnosticsState::default()));
@@ -467,42 +436,10 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_preferred_backend() {
-        let backends: Vec<Box<dyn TranslatorBackend>> = vec![
-            Box::new(TestBackend {
-                id: BackendId::WindowsAi,
-                available: true,
-                ready_state: ReadyState::Ready,
-                response: Ok("win".to_string()),
-                delay_ms: 0,
-            }),
-            Box::new(TestBackend {
-                id: BackendId::EdgeTranslator,
-                available: true,
-                ready_state: ReadyState::Ready,
-                response: Ok("edge".to_string()),
-                delay_ms: 0,
-            }),
-        ];
-
-        let diagnostics = Arc::new(Mutex::new(TranslationDiagnosticsState::default()));
-        let mut config = base_config();
-        config.preferred_backend = "edge_translator".to_string();
-
-        let manager = TranslationManager::with_backends(config, backends, diagnostics, 200);
-        let outcome = manager
-            .translate_with_fallback("hello", "en-US", "zh-CN")
-            .await;
-
-        assert_eq!(outcome.backend_used, BackendId::EdgeTranslator);
-        assert_eq!(outcome.translated, "edge");
-    }
-
-    #[tokio::test]
     async fn test_backend_timeout_fallback() {
         let backends: Vec<Box<dyn TranslatorBackend>> = vec![
             Box::new(TestBackend {
-                id: BackendId::WindowsAi,
+                id: BackendId::FoundryLocal,
                 available: true,
                 ready_state: ReadyState::Ready,
                 response: Ok("slow".to_string()),

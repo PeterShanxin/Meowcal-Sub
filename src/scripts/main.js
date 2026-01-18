@@ -61,9 +61,6 @@ async function initializeApp() {
         // Set up listener for capture status (fallback/error notifications)
         await setupCaptureStatusListener();
 
-        // Register Edge Translator bridge (experimental)
-        await registerEdgeTranslatorBridge();
-
         // Load backend diagnostics
         await refreshTranslationDiagnostics();
 
@@ -75,22 +72,6 @@ async function initializeApp() {
         console.error('❌ Failed to initialize app:', error);
         updateStatus('error', 'Initialization failed');
         showToast('Failed to initialize: ' + error.message, 'error');
-    }
-}
-
-/**
- * Register the Edge Translator bridge (if available)
- */
-async function registerEdgeTranslatorBridge() {
-    if (!window.MeowcalEdgeTranslator ||
-        typeof window.MeowcalEdgeTranslator.registerEdgeTranslatorBridge !== 'function') {
-        return;
-    }
-
-    try {
-        await window.MeowcalEdgeTranslator.registerEdgeTranslatorBridge();
-    } catch (error) {
-        console.warn('Edge Translator bridge registration failed:', error);
     }
 }
 
@@ -205,11 +186,9 @@ async function loadSettings() {
 function applyTranslationSettings(translation) {
     const config = normalizeTranslationConfig(translation);
 
-    document.getElementById('backend-preference').value = config.preferredBackend;
     document.getElementById('toggle-foundry-local').checked = config.enableFoundryLocal;
     document.getElementById('toggle-windows-ai').checked = config.enableWindowsAi;
     document.getElementById('toggle-offline-mt').checked = config.enableOfflineMt;
-    document.getElementById('toggle-edge-translator').checked = config.enableEdgeTranslator;
     document.getElementById('toggle-mock-fallback').checked = config.allowMockFallback;
     document.getElementById('offline-mt-path').value = config.offlineMt.binaryPath || '';
 
@@ -225,11 +204,9 @@ function applyTranslationSettings(translation) {
 
 function normalizeTranslationConfig(translation) {
     const defaultConfig = {
-        preferredBackend: 'auto',
         enableFoundryLocal: true,
         enableWindowsAi: true,
         enableOfflineMt: true,
-        enableEdgeTranslator: false,
         allowMockFallback: true,
         foundryLocal: {
             model: null,
@@ -247,11 +224,9 @@ function normalizeTranslationConfig(translation) {
     }
 
     return {
-        preferredBackend: translation.preferredBackend || defaultConfig.preferredBackend,
         enableFoundryLocal: translation.enableFoundryLocal ?? defaultConfig.enableFoundryLocal,
         enableWindowsAi: translation.enableWindowsAi ?? defaultConfig.enableWindowsAi,
         enableOfflineMt: translation.enableOfflineMt ?? defaultConfig.enableOfflineMt,
-        enableEdgeTranslator: translation.enableEdgeTranslator ?? defaultConfig.enableEdgeTranslator,
         allowMockFallback: translation.allowMockFallback ?? defaultConfig.allowMockFallback,
         foundryLocal: {
             model: translation.foundryLocal?.model ?? defaultConfig.foundryLocal.model,
@@ -273,11 +248,9 @@ async function saveSettings() {
     const offlineMtPath = document.getElementById('offline-mt-path').value.trim();
     const foundryModel = document.getElementById('foundry-local-model').value.trim();
 
-    translationConfig.preferredBackend = document.getElementById('backend-preference').value;
     translationConfig.enableFoundryLocal = document.getElementById('toggle-foundry-local').checked;
     translationConfig.enableWindowsAi = document.getElementById('toggle-windows-ai').checked;
     translationConfig.enableOfflineMt = document.getElementById('toggle-offline-mt').checked;
-    translationConfig.enableEdgeTranslator = document.getElementById('toggle-edge-translator').checked;
     translationConfig.allowMockFallback = document.getElementById('toggle-mock-fallback').checked;
     translationConfig.foundryLocal.model = foundryModel.length > 0 ? foundryModel : null;
     translationConfig.offlineMt.binaryPath = offlineMtPath.length > 0 ? offlineMtPath : null;
@@ -370,14 +343,12 @@ function setupEventListeners() {
     // Backend diagnostics refresh
     document.getElementById('btn-refresh-backends')
         .addEventListener('click', refreshTranslationDiagnostics);
+    document.getElementById('btn-prepare-foundry')
+        .addEventListener('click', handlePrepareFoundryLocal);
 
     // Download translateLocally
     document.getElementById('btn-download-offline-mt')
         .addEventListener('click', handleOfflineMtDownload);
-
-    // Edge model preparation
-    document.getElementById('btn-edge-model-download')
-        .addEventListener('click', handleEdgeModelDownload);
 
     // Windows AI diagnostics
     document.getElementById('btn-windows-ai-diagnostics')
@@ -556,9 +527,51 @@ async function refreshTranslationDiagnostics() {
         const diagnostics = await TauriBridge.invoke('get_translation_diagnostics');
         updateBackendStatusUI(diagnostics);
         await autoDetectOfflineMtPath();
+        if (document.getElementById('toggle-foundry-local')?.checked) {
+            await loadFoundryLocalModels();
+        }
     } catch (error) {
         console.error('Failed to load backend diagnostics:', error);
         container.innerHTML = '<div class="backend-status-empty">Failed to load backend status.</div>';
+    }
+}
+
+/**
+ * Attempt to prepare Foundry Local (start service if needed)
+ */
+async function handlePrepareFoundryLocal() {
+    const button = document.getElementById('btn-prepare-foundry');
+    if (!button) {
+        return;
+    }
+
+    button.disabled = true;
+    const originalLabel = button.textContent;
+    button.textContent = 'Preparing...';
+
+    try {
+        const status = await TauriBridge.invoke('prepare_foundry_local');
+        await refreshTranslationDiagnostics();
+
+        if (status?.serviceRunning) {
+            if (status.models && status.models.length > 0) {
+                showToast('Foundry Local is running', 'success');
+            } else {
+                showToast('Foundry Local started. No models cached yet.', 'warning');
+            }
+            await loadFoundryLocalModels();
+        } else {
+            const note = status?.notes ||
+                'Foundry Local not available. Install via: winget install Microsoft.FoundryLocal';
+            showToast(note, 'warning');
+        }
+    } catch (error) {
+        console.error('Failed to prepare Foundry Local:', error);
+        const message = error?.message ? error.message : String(error);
+        showToast(`Failed to prepare Foundry Local: ${message}`, 'error');
+    } finally {
+        button.disabled = false;
+        button.textContent = originalLabel;
     }
 }
 
@@ -570,8 +583,6 @@ function backendIdKey(id) {
             return 'windows_ai';
         case 'offlineMt':
             return 'offline_mt';
-        case 'edgeTranslator':
-            return 'edge_translator';
         case 'mock':
             return 'mock';
         default:
@@ -649,41 +660,10 @@ function updateBackendStatusUI(diagnostics) {
     });
 
     // Update new UI elements
-    updatePrimaryStatus(diagnostics);
     updateFoundryStatusInline(diagnostics);
+    updateOfflineMtStatusInline(diagnostics);
+    updateWindowsAiStatusInline(diagnostics);
     updateStatusSummary(diagnostics);
-}
-
-/**
- * Update primary status display in quick start card
- */
-function updatePrimaryStatus(diagnostics) {
-    const nameEl = document.getElementById('primary-backend-name');
-    const pillEl = document.getElementById('primary-status-pill');
-
-    if (!nameEl || !pillEl || !diagnostics.backends) return;
-
-    // Find first ready backend
-    const primaryBackend = diagnostics.backends.find(b => b.readyState === 'ready');
-
-    if (primaryBackend) {
-        nameEl.textContent = primaryBackend.name;
-        pillEl.textContent = '● READY';
-        pillEl.className = 'status-pill ready';
-    } else {
-        // Find first enabled backend even if not ready
-        const fallbackBackend = diagnostics.backends.find(b => b.available);
-        if (fallbackBackend) {
-            nameEl.textContent = fallbackBackend.name;
-            const statusInfo = formatReadyState(fallbackBackend.readyState);
-            pillEl.textContent = `● ${statusInfo.label.toUpperCase()}`;
-            pillEl.className = `status-pill ${statusInfo.className}`;
-        } else {
-            nameEl.textContent = 'None';
-            pillEl.textContent = '● NOT CONFIGURED';
-            pillEl.className = 'status-pill not-supported';
-        }
-    }
 }
 
 /**
@@ -699,13 +679,74 @@ function updateFoundryStatusInline(diagnostics) {
         return;
     }
 
-    const statusInfo = formatReadyState(foundry.readyState);
+    let readyState = foundry.readyState;
+    if (!foundry.available && readyState === 'ready') {
+        readyState = 'notReady';
+    }
+
+    const statusInfo = formatReadyState(readyState);
     const statusClass = statusInfo.className;
     const pill = `<span class="status-pill ${statusClass}">● ${statusInfo.label.toUpperCase()}</span>`;
 
     statusEl.innerHTML = `
         ${pill}
         <span class="status-text">${foundry.notes}</span>
+    `;
+}
+
+/**
+ * Update Offline MT status inline display
+ */
+function updateOfflineMtStatusInline(diagnostics) {
+    const statusEl = document.getElementById('offline-mt-status');
+    if (!statusEl || !diagnostics.backends) return;
+
+    const offline = diagnostics.backends.find(b => b.id === 'offlineMt');
+    if (!offline) {
+        statusEl.innerHTML = '<span class="status-text">Offline MT not found</span>';
+        return;
+    }
+
+    let readyState = offline.readyState;
+    if (!offline.available && readyState === 'ready') {
+        readyState = 'notReady';
+    }
+
+    const statusInfo = formatReadyState(readyState);
+    const statusClass = statusInfo.className;
+    const pill = `<span class="status-pill ${statusClass}">● ${statusInfo.label.toUpperCase()}</span>`;
+
+    statusEl.innerHTML = `
+        ${pill}
+        <span class="status-text">${offline.notes}</span>
+    `;
+}
+
+/**
+ * Update Windows AI status inline display
+ */
+function updateWindowsAiStatusInline(diagnostics) {
+    const statusEl = document.getElementById('windows-ai-status');
+    if (!statusEl || !diagnostics.backends) return;
+
+    const windowsAi = diagnostics.backends.find(b => b.id === 'windowsAi');
+    if (!windowsAi) {
+        statusEl.innerHTML = '<span class="status-text">Windows AI not found</span>';
+        return;
+    }
+
+    let readyState = windowsAi.readyState;
+    if (!windowsAi.available && readyState === 'ready') {
+        readyState = 'notReady';
+    }
+
+    const statusInfo = formatReadyState(readyState);
+    const statusClass = statusInfo.className;
+    const pill = `<span class="status-pill ${statusClass}">● ${statusInfo.label.toUpperCase()}</span>`;
+
+    statusEl.innerHTML = `
+        ${pill}
+        <span class="status-text">${windowsAi.notes}</span>
     `;
 }
 
@@ -720,36 +761,6 @@ function updateStatusSummary(diagnostics) {
     const readyBackends = diagnostics.backends.filter(b => b.readyState === 'ready').length;
 
     summaryEl.textContent = `${readyBackends}/${totalBackends} Ready`;
-}
-
-async function handleEdgeModelDownload() {
-    if (!window.MeowcalEdgeTranslator ||
-        typeof window.MeowcalEdgeTranslator.prepareEdgeTranslator !== 'function') {
-        showToast('Edge Translator API not available', 'error');
-        return;
-    }
-
-    const sourceLanguage = document.getElementById('source-language').value;
-    const targetLanguage = document.getElementById('target-language').value;
-
-    try {
-        const result = await window.MeowcalEdgeTranslator.prepareEdgeTranslator(
-            sourceLanguage,
-            targetLanguage
-        );
-
-        if (result.readyState === 'ready') {
-            showToast('Edge model already available', 'success');
-        } else if (result.readyState === 'notReady') {
-            showToast(result.notes || 'Edge model download started', 'success');
-        } else {
-            showToast(result.notes || 'Edge model not available', 'error');
-        }
-        await refreshTranslationDiagnostics();
-    } catch (error) {
-        console.error('Edge model prepare failed:', error);
-        showToast('Failed to prepare Edge model', 'error');
-    }
 }
 
 async function handleOfflineMtDownload() {

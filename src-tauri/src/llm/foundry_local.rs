@@ -7,11 +7,14 @@ use crate::llm::{BackendId, LlmError, ReadyState, TranslatorBackend};
 use async_trait::async_trait;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
-use std::process::Command;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::process::{Command, Stdio};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::RwLock;
-use std::time::Duration;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tracing::{debug, warn};
+
+const START_ATTEMPT_COOLDOWN_MS: u64 = 30_000;
+static LAST_START_ATTEMPT_MS: AtomicU64 = AtomicU64::new(0);
 
 /// Response from /v1/models endpoint
 #[derive(Debug, Deserialize)]
@@ -90,26 +93,37 @@ impl FoundryLocalBackend {
         // Parse output like: "🟢 Service is Started on http://127.0.0.1:59971/, PID 29716!"
         // or: "🟢 Model management service is running on http://127.0.0.1:59971/openai/status"
         for line in stdout.lines() {
-            if let Some(start) = line.find("http://") {
-                let url_part = &line[start..];
-                // Extract just the base URL (up to port)
-                if let Some(end) = url_part.find('/').filter(|&i| i > 7) {
-                    // Find the port end
-                    let base_url = &url_part[..end];
-                    return Some(base_url.to_string());
-                }
-                // Try to extract URL with port pattern
-                let url_chars: String = url_part
-                    .chars()
-                    .take_while(|c| c.is_alphanumeric() || *c == ':' || *c == '.' || *c == '/')
-                    .collect();
-                if url_chars.len() > 10 {
-                    // Remove trailing slash if present
-                    let base = url_chars.trim_end_matches('/');
-                    return Some(base.to_string());
-                }
+            if let Some(url) = Self::extract_base_url_from_line(line) {
+                return Some(url);
             }
         }
+        None
+    }
+
+    fn extract_base_url_from_line(line: &str) -> Option<String> {
+        let start = line
+            .find("http://")
+            .or_else(|| line.find("https://"))?;
+        let after = &line[start..];
+        let end = after
+            .find(|c: char| c.is_whitespace() || c == ',' || c == ')' || c == '!')
+            .unwrap_or(after.len());
+        let raw = after[..end]
+            .trim_end_matches(|c: char| c == '.' || c == ',' || c == ';' || c == '!')
+            .trim_end_matches('/');
+
+        if let Some(scheme_idx) = raw.find("://") {
+            let host_start = scheme_idx + 3;
+            if let Some(path_idx) = raw[host_start..].find('/') {
+                let end_idx = host_start + path_idx;
+                return Some(raw[..end_idx].trim_end_matches('/').to_string());
+            }
+        }
+
+        if raw.len() > 10 {
+            return Some(raw.to_string());
+        }
+
         None
     }
 
@@ -143,9 +157,19 @@ impl FoundryLocalBackend {
 
             // Try to extract model name (handles various output formats)
             // Common pattern: "qwen2.5-0.5b    1.2 GB    2024-01-18"
-            if let Some(model_name) = line.split_whitespace().next() {
-                if !model_name.is_empty() && !model_name.starts_with('-') {
-                    models.push(model_name.to_string());
+            let mut found = None;
+            for token in line.split_whitespace() {
+                let candidate = token.trim_matches(|c: char| {
+                    c == ',' || c == ':' || c == ';' || c == '|' || c == '[' || c == ']'
+                });
+                if Self::is_probable_model_id(candidate) {
+                    found = Some(candidate.to_string());
+                    break;
+                }
+            }
+            if let Some(model_name) = found {
+                if !models.contains(&model_name) {
+                    models.push(model_name);
                 }
             }
         }
@@ -154,23 +178,61 @@ impl FoundryLocalBackend {
         models
     }
 
+    fn is_probable_model_id(candidate: &str) -> bool {
+        if candidate.is_empty() {
+            return false;
+        }
+
+        let lower = candidate.to_ascii_lowercase();
+        let blocked = [
+            "models", "model", "alias", "cache", "total", "name", "id", "status", "size", "gb",
+            "mb", "kb", "tb",
+        ];
+        if blocked.contains(&lower.as_str()) {
+            return false;
+        }
+
+        let has_alpha = candidate.chars().any(|c| c.is_ascii_alphabetic());
+        if !has_alpha {
+            return false;
+        }
+
+        candidate.chars().any(|c| c.is_ascii_alphanumeric())
+    }
+
     /// Try to start the Foundry service if it's not running
     fn try_start_service() -> bool {
-        debug!("Attempting to start Foundry Local service");
-        let output = Command::new("foundry")
-            .args(["service", "start"])
-            .output();
+        let now_ms = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis() as u64;
+        let last_attempt = LAST_START_ATTEMPT_MS.load(Ordering::SeqCst);
+        if now_ms.saturating_sub(last_attempt) < START_ATTEMPT_COOLDOWN_MS {
+            debug!("Skipping Foundry Local service start (cooldown active)");
+            return false;
+        }
+        LAST_START_ATTEMPT_MS.store(now_ms, Ordering::SeqCst);
 
-        match output {
-            Ok(out) if out.status.success() => {
-                debug!("Foundry Local service start command sent successfully");
+        debug!("Attempting to start Foundry Local service");
+        let mut command = Command::new("foundry");
+        command
+            .args(["service", "start"])
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null());
+
+        #[cfg(target_os = "windows")]
+        {
+            use std::os::windows::process::CommandExt;
+            const CREATE_NO_WINDOW: u32 = 0x08000000;
+            command.creation_flags(CREATE_NO_WINDOW);
+        }
+
+        match command.spawn() {
+            Ok(_child) => {
+                debug!("Foundry Local service start command launched");
                 // Service will be available when ready (no need to block here)
                 true
-            }
-            Ok(out) => {
-                let stderr = String::from_utf8_lossy(&out.stderr);
-                debug!("Failed to start Foundry Local service: {}", stderr);
-                false
             }
             Err(e) => {
                 debug!("Foundry command not found or failed to execute: {}", e);
@@ -275,6 +337,17 @@ impl FoundryLocalBackend {
             model_ids = Self::get_cached_models_from_cli();
         }
 
+        model_ids.retain(|id| !id.trim().is_empty());
+        let mut seen = Vec::new();
+        model_ids.retain(|id| {
+            if seen.contains(id) {
+                false
+            } else {
+                seen.push(id.clone());
+                true
+            }
+        });
+
         // Cache the models
         *self.cached_models.write().unwrap() = model_ids.clone();
 
@@ -328,11 +401,17 @@ impl TranslatorBackend for FoundryLocalBackend {
             return ReadyState::NotReady;
         }
 
-        // Check if we have a model configured or cached
-        if self.get_model().is_some() {
-            ReadyState::Ready
-        } else {
+        let models = self.cached_models.read().unwrap();
+        if let Some(ref model) = self.config.model {
+            if models.iter().any(|m| m == model) {
+                ReadyState::Ready
+            } else {
+                ReadyState::NotReady
+            }
+        } else if models.is_empty() {
             ReadyState::NotReady
+        } else {
+            ReadyState::Ready
         }
     }
 
@@ -344,7 +423,7 @@ impl TranslatorBackend for FoundryLocalBackend {
                 format!("Service at {}. No models cached - run: foundry model run <model>", url)
             }
         } else {
-            "Foundry Local not available. Install from: winget install Microsoft.FoundryLocal".to_string()
+            "Foundry Local not running. If installed, run: foundry service start. If not installed: winget install Microsoft.FoundryLocal".to_string()
         }
     }
 
