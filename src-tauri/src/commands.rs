@@ -553,7 +553,7 @@ pub fn get_settings(state: State<'_, AppState>) -> AppConfig {
 /// 
 /// Called from JavaScript: `await invoke('save_settings', { settings: { ... } });`
 #[tauri::command]
-pub fn save_settings(
+pub async fn save_settings(
     settings: AppConfig,
     state: State<'_, AppState>,
     app: AppHandle,
@@ -582,11 +582,21 @@ pub fn save_settings(
     }
 
     // Update the in-memory config
-    let mut config = state.config.lock().unwrap();
-    *config = updated.clone();
+    {
+        let mut config = state.config.lock().unwrap();
+        *config = updated.clone();
+    }
 
-    // Persist to disk
-    save_config(&app, &updated)?;
+    // Persist to disk without blocking the UI thread
+    let app_handle = app.clone();
+    let updated_clone = updated.clone();
+    async_runtime::spawn_blocking(move || save_config(&app_handle, &updated_clone))
+        .await
+        .map_err(|err| {
+            let message = format!("Failed to save settings: {}", err);
+            warn!("{}", message);
+            message
+        })??;
 
     Ok(())
 }

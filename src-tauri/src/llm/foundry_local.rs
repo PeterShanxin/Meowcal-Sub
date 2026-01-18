@@ -94,7 +94,7 @@ impl FoundryLocalBackend {
         // or: "🟢 Model management service is running on http://127.0.0.1:59971/openai/status"
         for line in stdout.lines() {
             if let Some(url) = Self::extract_base_url_from_line(line) {
-                return Some(url);
+                return Some(Self::normalize_service_url(&url));
             }
         }
         None
@@ -127,6 +127,25 @@ impl FoundryLocalBackend {
         None
     }
 
+    fn normalize_service_url(raw: &str) -> String {
+        let trimmed = raw.trim_end_matches('/');
+        let without_path = trimmed
+            .find("/openai/")
+            .or_else(|| trimmed.find("/v1/"))
+            .map(|idx| &trimmed[..idx])
+            .unwrap_or(trimmed);
+
+        if let Some(scheme_idx) = without_path.find("://") {
+            let after_scheme = &without_path[scheme_idx + 3..];
+            if let Some(path_idx) = after_scheme.find('/') {
+                let host = &after_scheme[..path_idx];
+                return format!("{}://{}", &without_path[..scheme_idx], host);
+            }
+        }
+
+        without_path.to_string()
+    }
+
     /// Get cached models by parsing `foundry cache list` output
     /// This is a fallback when the API doesn't return models (e.g., models cached but not running)
     pub fn get_cached_models_from_cli() -> Vec<String> {
@@ -147,29 +166,42 @@ impl FoundryLocalBackend {
         let stdout = String::from_utf8_lossy(&output.stdout);
         let mut models = Vec::new();
 
-        // Parse output to extract model names
+        // Parse output to extract model IDs
         // Expected format varies, but typically includes model identifiers
         for line in stdout.lines() {
             let line = line.trim();
-            if line.is_empty() || line.starts_with("Cache") || line.starts_with("Total") {
+            let lower = line.to_ascii_lowercase();
+            if line.is_empty()
+                || lower.starts_with("cache")
+                || lower.starts_with("total")
+                || lower.starts_with("models")
+                || lower.starts_with("alias")
+                || line.starts_with('-')
+                || lower.contains("cached on device")
+            {
                 continue;
             }
 
-            // Try to extract model name (handles various output formats)
-            // Common pattern: "qwen2.5-0.5b    1.2 GB    2024-01-18"
-            let mut found = None;
-            for token in line.split_whitespace() {
-                let candidate = token.trim_matches(|c: char| {
-                    c == ',' || c == ':' || c == ';' || c == '|' || c == '[' || c == ']'
-                });
-                if Self::is_probable_model_id(candidate) {
-                    found = Some(candidate.to_string());
-                    break;
+            let tokens: Vec<&str> = line.split_whitespace().collect();
+            if tokens.is_empty() {
+                continue;
+            }
+
+            let mut candidate = tokens.last().copied().unwrap_or_default();
+            if !candidate.contains(':') {
+                if let Some(with_colon) = tokens.iter().rev().find(|token| token.contains(':')) {
+                    candidate = with_colon;
                 }
             }
-            if let Some(model_name) = found {
-                if !models.contains(&model_name) {
-                    models.push(model_name);
+
+            let candidate = candidate.trim_matches(|c: char| {
+                c == ',' || c == ';' || c == '|' || c == '[' || c == ']'
+            });
+
+            if Self::is_probable_model_id(candidate) {
+                let model_id = candidate.to_string();
+                if !models.contains(&model_id) {
+                    models.push(model_id);
                 }
             }
         }
@@ -180,6 +212,10 @@ impl FoundryLocalBackend {
 
     fn is_probable_model_id(candidate: &str) -> bool {
         if candidate.is_empty() {
+            return false;
+        }
+
+        if candidate.len() < 3 {
             return false;
         }
 
@@ -335,6 +371,26 @@ impl FoundryLocalBackend {
         if model_ids.is_empty() {
             debug!("API returned no models, trying CLI fallback");
             model_ids = Self::get_cached_models_from_cli();
+        } else if model_ids.iter().any(|id| !id.contains(':')) {
+            let cli_models = Self::get_cached_models_from_cli();
+            if !cli_models.is_empty() {
+                let resolved = model_ids
+                    .into_iter()
+                    .map(|model| {
+                        if model.contains(':') {
+                            model
+                        } else {
+                            let prefix = format!("{}-", model);
+                            cli_models
+                                .iter()
+                                .find(|entry| entry.starts_with(&prefix) && entry.contains(':'))
+                                .cloned()
+                                .unwrap_or(model)
+                        }
+                    })
+                    .collect();
+                model_ids = resolved;
+            }
         }
 
         model_ids.retain(|id| !id.trim().is_empty());
@@ -356,14 +412,40 @@ impl FoundryLocalBackend {
 
     /// Get the model to use (configured or first available)
     fn get_model(&self) -> Option<String> {
-        // Use configured model if set
+        let models = self.cached_models.read().unwrap();
+
+        // Use configured model if set and available
         if let Some(ref model) = self.config.model {
-            return Some(model.clone());
+            if Self::model_in_cache(model, &models) {
+                return Some(self.resolve_model_id(model, &models));
+            }
         }
 
         // Otherwise use first cached model
-        let models = self.cached_models.read().unwrap();
-        models.first().cloned()
+        models
+            .first()
+            .map(|model| self.resolve_model_id(model, &models))
+    }
+
+    fn resolve_model_id(&self, model: &str, models: &[String]) -> String {
+        if model.contains(':') {
+            return model.to_string();
+        }
+
+        let prefix = format!("{}-", model);
+        if let Some(id) = models
+            .iter()
+            .find(|entry| entry.starts_with(&prefix) && entry.contains(':'))
+        {
+            return id.clone();
+        }
+
+        model.to_string()
+    }
+
+    fn model_in_cache(model: &str, models: &[String]) -> bool {
+        models.iter().any(|m| m == model)
+            || (!model.contains(':') && models.iter().any(|m| m.starts_with(&format!("{}-", model))))
     }
 
     /// Check if service is healthy by probing the models endpoint
@@ -403,7 +485,7 @@ impl TranslatorBackend for FoundryLocalBackend {
 
         let models = self.cached_models.read().unwrap();
         if let Some(ref model) = self.config.model {
-            if models.iter().any(|m| m == model) {
+            if Self::model_in_cache(model, &models) {
                 ReadyState::Ready
             } else {
                 ReadyState::NotReady
