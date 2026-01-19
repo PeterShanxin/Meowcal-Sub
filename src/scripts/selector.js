@@ -188,6 +188,12 @@ function handleMouseUp(e) {
     // Show action buttons
     showActionButtons();
 
+    // Add has-selection class to enable drag/resize handles
+    selectionBox.classList.add('has-selection');
+
+    // Set up drag and resize handlers
+    setupDragAndResize();
+
     // Update visual state
     document.body.classList.add('selection-ready');
     instructions.style.opacity = '0.4';
@@ -333,7 +339,7 @@ function resetSelection() {
     state.region = null;
 
     // Hide elements
-    selectionBox.classList.remove('active', 'complete');
+    selectionBox.classList.remove('active', 'complete', 'has-selection');
     hideActionButtons();
 
     // Reset visual state
@@ -389,3 +395,209 @@ window.onkeydown = function (e) {
         return false;
     }
 };
+
+// =============================================================================
+// DRAG AND RESIZE FUNCTIONALITY
+// =============================================================================
+
+// Extended state for drag/resize (added to global scope for simplicity)
+let isDragging = false;
+let isResizing = false;
+let resizeHandle = null;
+let dragStartX = 0;
+let dragStartY = 0;
+let dragRegionStart = null;
+
+/**
+ * Set up drag and resize handlers after selection is complete
+ */
+function setupDragAndResize() {
+    // Handle resize handle mouse down
+    const handles = selectionBox.querySelectorAll('.resize-handle');
+    handles.forEach(handle => {
+        handle.addEventListener('mousedown', handleResizeStart);
+    });
+
+    // Handle drag start on the selection box itself
+    selectionBox.addEventListener('mousedown', handleDragStart);
+}
+
+/**
+ * Start resizing when a handle is clicked
+ */
+function handleResizeStart(e) {
+    if (!state.hasSelection) return;
+
+    e.preventDefault();
+    e.stopPropagation();
+
+    isResizing = true;
+    resizeHandle = e.target.dataset.position;
+    dragStartX = e.screenX;
+    dragStartY = e.screenY;
+    dragRegionStart = { ...state.region };
+
+    console.log(`Resize started from ${resizeHandle} handle`);
+}
+
+/**
+ * Start dragging when selection box is clicked
+ */
+function handleDragStart(e) {
+    if (!state.hasSelection) return;
+
+    // Ignore if clicking on resize handle, button, or dimensions
+    if (e.target.classList.contains('resize-handle') ||
+        e.target.classList.contains('dimensions') ||
+        e.target.closest('button')) {
+        return;
+    }
+
+    e.preventDefault();
+    e.stopPropagation();
+
+    isDragging = true;
+    dragStartX = e.screenX;
+    dragStartY = e.screenY;
+    dragRegionStart = { ...state.region };
+
+    console.log('Drag started');
+}
+
+// Override existing mousemove for drag/resize
+const originalMouseMove = handleMouseMove;
+handleMouseMove = function (e) {
+    if (isDragging) {
+        e.preventDefault();
+        handleDrag(e);
+    } else if (isResizing) {
+        e.preventDefault();
+        handleResize(e);
+    } else {
+        originalMouseMove(e);
+    }
+};
+
+// Override existing mouseup for drag/resize
+const originalMouseUp = handleMouseUp;
+handleMouseUp = function (e) {
+    if (isDragging) {
+        e.preventDefault();
+        isDragging = false;
+        dragRegionStart = null;
+        console.log('Drag ended');
+    } else if (isResizing) {
+        e.preventDefault();
+        isResizing = false;
+        resizeHandle = null;
+        dragRegionStart = null;
+        console.log('Resize ended');
+    } else {
+        originalMouseUp(e);
+    }
+};
+
+/**
+ * Handle dragging the selection box
+ */
+function handleDrag(e) {
+    if (!dragRegionStart) return;
+
+    const deltaX = e.screenX - dragStartX;
+    const deltaY = e.screenY - dragStartY;
+
+    // Update region position
+    state.region.x = dragRegionStart.x + deltaX;
+    state.region.y = dragRegionStart.y + deltaY;
+
+    // Update state for visual update
+    state.startX = state.region.x;
+    state.startY = state.region.y;
+    state.currentX = state.region.x + state.region.width;
+    state.currentY = state.region.y + state.region.height;
+
+    updateSelectionBox();
+}
+
+/**
+ * Handle resizing the selection box
+ */
+function handleResize(e) {
+    if (!dragRegionStart || !resizeHandle) return;
+
+    const deltaX = e.screenX - dragStartX;
+    const deltaY = e.screenY - dragStartY;
+
+    const minSize = 30;
+    let newX = dragRegionStart.x;
+    let newY = dragRegionStart.y;
+    let newWidth = dragRegionStart.width;
+    let newHeight = dragRegionStart.height;
+
+    // Adjust based on which handle is being dragged
+    switch (resizeHandle) {
+        case 'nw':
+            newX = dragRegionStart.x + deltaX;
+            newY = dragRegionStart.y + deltaY;
+            newWidth = dragRegionStart.width - deltaX;
+            newHeight = dragRegionStart.height - deltaY;
+            break;
+        case 'n':
+            newY = dragRegionStart.y + deltaY;
+            newHeight = dragRegionStart.height - deltaY;
+            break;
+        case 'ne':
+            newY = dragRegionStart.y + deltaY;
+            newWidth = dragRegionStart.width + deltaX;
+            newHeight = dragRegionStart.height - deltaY;
+            break;
+        case 'w':
+            newX = dragRegionStart.x + deltaX;
+            newWidth = dragRegionStart.width - deltaX;
+            break;
+        case 'e':
+            newWidth = dragRegionStart.width + deltaX;
+            break;
+        case 'sw':
+            newX = dragRegionStart.x + deltaX;
+            newWidth = dragRegionStart.width - deltaX;
+            newHeight = dragRegionStart.height + deltaY;
+            break;
+        case 's':
+            newHeight = dragRegionStart.height + deltaY;
+            break;
+        case 'se':
+            newWidth = dragRegionStart.width + deltaX;
+            newHeight = dragRegionStart.height + deltaY;
+            break;
+    }
+
+    // Enforce minimum size
+    if (newWidth < minSize) {
+        if (resizeHandle.includes('w')) {
+            newX = dragRegionStart.x + dragRegionStart.width - minSize;
+        }
+        newWidth = minSize;
+    }
+    if (newHeight < minSize) {
+        if (resizeHandle.includes('n')) {
+            newY = dragRegionStart.y + dragRegionStart.height - minSize;
+        }
+        newHeight = minSize;
+    }
+
+    // Update region
+    state.region.x = newX;
+    state.region.y = newY;
+    state.region.width = newWidth;
+    state.region.height = newHeight;
+
+    // Update state for visual update
+    state.startX = newX;
+    state.startY = newY;
+    state.currentX = newX + newWidth;
+    state.currentY = newY + newHeight;
+
+    updateSelectionBox();
+}
+

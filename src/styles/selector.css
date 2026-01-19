@@ -117,6 +117,12 @@ body {
         0 0 20px rgba(255, 159, 67, 0.3);
 }
 
+/* Allow pointer events after selection for drag/resize */
+.selection-box.has-selection {
+    pointer-events: auto;
+    cursor: move;
+}
+
 .selection-box.active {
     display: block;
     animation: pulse-border 1.5s ease-in-out infinite;
@@ -164,52 +170,120 @@ body {
     top: -36px;
 }
 
-/* --- Corner Handles --- */
-.selection-box .corner-tr,
-.selection-box .corner-bl {
+/* --- Resize Handles --- */
+.resize-handle {
     position: absolute;
     width: 14px;
     height: 14px;
-    border: 3px solid #ff9f43;
-    background: rgba(15, 15, 15, 0.9);
+    background: #ff9f43;
+    border: 2px solid rgba(255, 255, 255, 0.9);
+    border-radius: 50%;
+    pointer-events: auto;
+    cursor: pointer;
+
+    /* Hidden by default, shown when selection is complete */
+    opacity: 0;
+    transform: scale(0.5);
+    transition: opacity 0.2s ease, transform 0.2s ease, background 0.15s ease;
+
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
+    z-index: 60;
 }
 
-.selection-box::before,
-.selection-box::after {
-    content: '';
-    position: absolute;
-    width: 14px;
-    height: 14px;
-    border: 3px solid #ff9f43;
-    background: rgba(15, 15, 15, 0.9);
+/* Show handles after selection is complete */
+.selection-box.has-selection .resize-handle {
+    opacity: 1;
+    transform: scale(1);
 }
 
-.selection-box::before {
+.resize-handle:hover {
+    background: rgba(255, 255, 255, 1);
+    transform: scale(1.2);
+}
+
+/* Position each handle */
+.resize-handle[data-position="nw"] {
     top: -7px;
     left: -7px;
-    border-right: none;
-    border-bottom: none;
+    cursor: nwse-resize;
 }
 
-.selection-box::after {
-    bottom: -7px;
-    right: -7px;
-    border-left: none;
-    border-top: none;
+.resize-handle[data-position="n"] {
+    top: -7px;
+    left: 50%;
+    transform: translateX(-50%) scale(0.5);
+    cursor: ns-resize;
 }
 
-.selection-box .corner-tr {
+.selection-box.has-selection .resize-handle[data-position="n"] {
+    transform: translateX(-50%) scale(1);
+}
+
+.resize-handle[data-position="n"]:hover {
+    transform: translateX(-50%) scale(1.2);
+}
+
+.resize-handle[data-position="ne"] {
     top: -7px;
     right: -7px;
-    border-left: none;
-    border-bottom: none;
+    cursor: nesw-resize;
 }
 
-.selection-box .corner-bl {
+.resize-handle[data-position="w"] {
+    top: 50%;
+    left: -7px;
+    transform: translateY(-50%) scale(0.5);
+    cursor: ew-resize;
+}
+
+.selection-box.has-selection .resize-handle[data-position="w"] {
+    transform: translateY(-50%) scale(1);
+}
+
+.resize-handle[data-position="w"]:hover {
+    transform: translateY(-50%) scale(1.2);
+}
+
+.resize-handle[data-position="e"] {
+    top: 50%;
+    right: -7px;
+    transform: translateY(-50%) scale(0.5);
+    cursor: ew-resize;
+}
+
+.selection-box.has-selection .resize-handle[data-position="e"] {
+    transform: translateY(-50%) scale(1);
+}
+
+.resize-handle[data-position="e"]:hover {
+    transform: translateY(-50%) scale(1.2);
+}
+
+.resize-handle[data-position="sw"] {
     bottom: -7px;
     left: -7px;
-    border-right: none;
-    border-top: none;
+    cursor: nesw-resize;
+}
+
+.resize-handle[data-position="s"] {
+    bottom: -7px;
+    left: 50%;
+    transform: translateX(-50%) scale(0.5);
+    cursor: ns-resize;
+}
+
+.selection-box.has-selection .resize-handle[data-position="s"] {
+    transform: translateX(-50%) scale(1);
+}
+
+.resize-handle[data-position="s"]:hover {
+    transform: translateX(-50%) scale(1.2);
+}
+
+.resize-handle[data-position="se"] {
+    bottom: -7px;
+    right: -7px;
+    cursor: nwse-resize;
 }
 
 /* --- Action Buttons --- */
