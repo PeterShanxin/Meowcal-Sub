@@ -52,11 +52,12 @@ fn get_overlay_window(app: &AppHandle) -> Option<WebviewWindow> {
 }
 
 /// Show the overlay window
-/// 
-/// This also makes the window click-through (ignore cursor events)
+///
+/// Note: Click-through is NOT enabled by default so the settings button can be clicked.
+/// The frontend will manage click-through state based on user interaction.
 pub fn show_overlay(app: &AppHandle) -> Result<(), String> {
     info!("🔍 Looking for overlay window...");
-    
+
     let window = match get_overlay_window(app) {
         Some(w) => {
             info!("✅ Found overlay window");
@@ -68,21 +69,22 @@ pub fn show_overlay(app: &AppHandle) -> Result<(), String> {
             return Err(err.to_string());
         }
     };
-    
-    // Make the window click-through
-    if let Err(e) = window.set_ignore_cursor_events(true) {
-        info!("⚠️ Failed to set click-through: {}", e);
+
+    // Don't set click-through here - let the frontend manage it
+    // This allows the settings button to be clickable
+    if let Err(e) = window.set_focusable(false) {
+        info!("⚠️ Failed to set overlay focusable: {}", e);
     }
-    
+
     // Show the window
     window.show()
         .map_err(|e| format!("Failed to show overlay: {}", e))?;
-    
+
     // Emit visibility event
     app.emit("overlay-visibility", true)
         .map_err(|e| format!("Failed to emit visibility event: {}", e))?;
-    
-    info!("✅ Overlay shown and set to click-through");
+
+    info!("✅ Overlay shown (click-through managed by frontend)");
     Ok(())
 }
 

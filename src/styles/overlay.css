@@ -1,9 +1,9 @@
 /* =============================================================================
    OVERLAY.CSS - Styles for the Subtitle Overlay Window
    =============================================================================
-   This window is fullscreen, transparent, and click-through.
+   This window is fullscreen, transparent, and managed click-through.
    It renders:
-   1. A "premium" border around the capture region
+   1. A "premium" border around the capture region (with resize handles)
    2. Subtitles below/above the capture region
    ============================================================================= */
 
@@ -20,8 +20,11 @@ html, body {
     background: transparent;
     overflow: hidden;
     font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif;
-    /* Ensure the window itself is transparent */
     -webkit-app-region: no-drag;
+
+    /* CRITICAL: Let clicks pass through the transparent overlay window */
+    /* Only the capture-frame and subtitle-container have pointer-events: auto */
+    pointer-events: none;
 }
 
 /* =============================================================================
@@ -30,37 +33,62 @@ html, body {
 
 .capture-frame {
     position: absolute;
-    /* Size and position will be set by JavaScript */
     border: 2px solid rgba(138, 180, 248, 0.8);
     border-radius: 8px;
-    pointer-events: none;
-    
+
+    /* Enable pointer events for dragging/resizing */
+    pointer-events: auto;
+    cursor: move;
+
     /* Premium glow effect */
-    box-shadow: 
+    box-shadow:
         0 0 10px rgba(138, 180, 248, 0.4),
         0 0 20px rgba(138, 180, 248, 0.2),
         inset 0 0 10px rgba(138, 180, 248, 0.1);
-    
-    /* Subtle animation */
+
+    /* Subtle pulsing animation */
     animation: pulse-glow 2s ease-in-out infinite;
-    
-    transition: 
-        top 0.2s ease-out,
-        left 0.2s ease-out,
-        width 0.2s ease-out,
-        height 0.2s ease-out,
-        opacity 0.3s ease;
+
+    /* Smooth transitions for position/size changes and fade */
+    transition:
+        top 0.15s ease-out,
+        left 0.15s ease-out,
+        width 0.15s ease-out,
+        height 0.15s ease-out,
+        opacity 0.5s ease-out,
+        border-color 0.2s ease;
+}
+
+/* Disable smooth transitions during drag/resize for instant feedback */
+.capture-frame.dragging {
+    transition: opacity 0.5s ease-out, border-color 0.2s ease;
+    border-color: rgba(138, 180, 248, 1);
+    box-shadow:
+        0 0 15px rgba(138, 180, 248, 0.6),
+        0 0 30px rgba(138, 180, 248, 0.3),
+        inset 0 0 15px rgba(138, 180, 248, 0.15);
+}
+
+/* Faded state - auto-hides after inactivity */
+.capture-frame.faded {
+    opacity: 0.15;
+    animation: none;
+}
+
+.capture-frame.faded:hover {
+    opacity: 1;
+    animation: pulse-glow 2s ease-in-out infinite;
 }
 
 @keyframes pulse-glow {
     0%, 100% {
-        box-shadow: 
+        box-shadow:
             0 0 10px rgba(138, 180, 248, 0.4),
             0 0 20px rgba(138, 180, 248, 0.2),
             inset 0 0 10px rgba(138, 180, 248, 0.1);
     }
     50% {
-        box-shadow: 
+        box-shadow:
             0 0 15px rgba(138, 180, 248, 0.6),
             0 0 30px rgba(138, 180, 248, 0.3),
             inset 0 0 15px rgba(138, 180, 248, 0.15);
@@ -75,6 +103,12 @@ html, body {
     border-color: rgba(138, 180, 248, 1);
     border-style: solid;
     border-width: 0;
+    pointer-events: none;
+    transition: opacity 0.3s ease;
+}
+
+.capture-frame.faded .corner {
+    opacity: 0;
 }
 
 .capture-frame .corner.top-left {
@@ -110,32 +144,159 @@ html, body {
 }
 
 /* =============================================================================
+   RESIZE HANDLES - 8 handles for resizing the capture region
+   ============================================================================= */
+
+.resize-handle {
+    position: absolute;
+    width: 12px;
+    height: 12px;
+    background: rgba(138, 180, 248, 0.9);
+    border: 2px solid rgba(255, 255, 255, 0.9);
+    border-radius: 50%;
+    pointer-events: auto;
+
+    /* Hidden by default, shown on hover */
+    opacity: 0;
+    transform: scale(0.5);
+    transition:
+        opacity 0.2s ease,
+        transform 0.2s ease,
+        background 0.15s ease;
+
+    /* Shadow for depth */
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+}
+
+/* Show handles when hovering over the capture frame */
+.capture-frame:hover .resize-handle,
+.capture-frame.dragging .resize-handle {
+    opacity: 1;
+    transform: scale(1);
+}
+
+.resize-handle:hover {
+    background: rgba(255, 255, 255, 1);
+    transform: scale(1.2);
+}
+
+/* Position each handle */
+.resize-handle[data-position="nw"] {
+    top: -6px;
+    left: -6px;
+    cursor: nwse-resize;
+}
+
+.resize-handle[data-position="n"] {
+    top: -6px;
+    left: 50%;
+    transform: translateX(-50%) scale(0.5);
+    cursor: ns-resize;
+}
+
+.capture-frame:hover .resize-handle[data-position="n"],
+.capture-frame.dragging .resize-handle[data-position="n"] {
+    transform: translateX(-50%) scale(1);
+}
+
+.resize-handle[data-position="n"]:hover {
+    transform: translateX(-50%) scale(1.2);
+}
+
+.resize-handle[data-position="ne"] {
+    top: -6px;
+    right: -6px;
+    cursor: nesw-resize;
+}
+
+.resize-handle[data-position="w"] {
+    top: 50%;
+    left: -6px;
+    transform: translateY(-50%) scale(0.5);
+    cursor: ew-resize;
+}
+
+.capture-frame:hover .resize-handle[data-position="w"],
+.capture-frame.dragging .resize-handle[data-position="w"] {
+    transform: translateY(-50%) scale(1);
+}
+
+.resize-handle[data-position="w"]:hover {
+    transform: translateY(-50%) scale(1.2);
+}
+
+.resize-handle[data-position="e"] {
+    top: 50%;
+    right: -6px;
+    transform: translateY(-50%) scale(0.5);
+    cursor: ew-resize;
+}
+
+.capture-frame:hover .resize-handle[data-position="e"],
+.capture-frame.dragging .resize-handle[data-position="e"] {
+    transform: translateY(-50%) scale(1);
+}
+
+.resize-handle[data-position="e"]:hover {
+    transform: translateY(-50%) scale(1.2);
+}
+
+.resize-handle[data-position="sw"] {
+    bottom: -6px;
+    left: -6px;
+    cursor: nesw-resize;
+}
+
+.resize-handle[data-position="s"] {
+    bottom: -6px;
+    left: 50%;
+    transform: translateX(-50%) scale(0.5);
+    cursor: ns-resize;
+}
+
+.capture-frame:hover .resize-handle[data-position="s"],
+.capture-frame.dragging .resize-handle[data-position="s"] {
+    transform: translateX(-50%) scale(1);
+}
+
+.resize-handle[data-position="s"]:hover {
+    transform: translateX(-50%) scale(1.2);
+}
+
+.resize-handle[data-position="se"] {
+    bottom: -6px;
+    right: -6px;
+    cursor: nwse-resize;
+}
+
+/* =============================================================================
    SUBTITLE CONTAINER - Holds the translated text
    ============================================================================= */
 
 .subtitle-container {
     position: absolute;
-    /* Position will be set by JavaScript (below capture region) */
-    left: 50%;
-    transform: translateX(-50%);
-    
-    max-width: 90vw;
     padding: 12px 24px;
-    
-    /* Dark semi-transparent background */
+
     background: rgba(0, 0, 0, 0.75);
     backdrop-filter: blur(8px);
     -webkit-backdrop-filter: blur(8px);
     border-radius: 8px;
-    
-    /* Subtle border */
     border: 1px solid rgba(255, 255, 255, 0.1);
-    
-    pointer-events: none;
-    
-    transition: 
+
+    pointer-events: auto;
+
+    transition:
         top 0.2s ease-out,
+        left 0.2s ease-out,
+        width 0.2s ease-out,
         opacity 0.3s ease;
+
+    overflow: hidden;
+    box-sizing: border-box;
+}
+
+.subtitle-container.dragging {
+    transition: opacity 0.3s ease;
 }
 
 .subtitle-text {
@@ -144,13 +305,11 @@ html, body {
     font-weight: 500;
     line-height: 1.4;
     text-align: center;
-    
-    /* Text shadow for readability */
-    text-shadow: 
+
+    text-shadow:
         0 1px 2px rgba(0, 0, 0, 0.8),
         0 0 8px rgba(0, 0, 0, 0.5);
-    
-    /* Smooth text changes */
+
     transition: opacity 0.2s ease;
 }
 
@@ -192,8 +351,163 @@ html, body {
     font-size: 12px;
     border-radius: 4px;
     z-index: 9999;
+    pointer-events: none;
 }
 
 .debug-info span {
     display: block;
+}
+
+/* =============================================================================
+   SETTINGS BUTTON - Gear icon in subtitle container
+   ============================================================================= */
+
+.settings-button {
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    width: 24px;
+    height: 24px;
+    padding: 4px;
+
+    background: rgba(255, 255, 255, 0.15);
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+
+    color: rgba(255, 255, 255, 0.5);
+
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    transition:
+        background 0.2s ease,
+        color 0.2s ease,
+        opacity 0.2s ease;
+
+    opacity: 0.6;
+    pointer-events: auto;
+}
+
+.settings-button:hover {
+    opacity: 1;
+    background: rgba(255, 255, 255, 0.25);
+    color: rgba(255, 255, 255, 0.9);
+}
+
+.settings-button:active {
+    background: rgba(255, 255, 255, 0.35);
+}
+
+.settings-button svg {
+    display: block;
+}
+
+/* =============================================================================
+   SETTINGS MENU - Popup menu for settings
+   ============================================================================= */
+
+.settings-menu {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+
+    min-width: 280px;
+    padding: 16px;
+
+    background: rgba(30, 30, 30, 0.95);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border-radius: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+
+    box-shadow:
+        0 8px 32px rgba(0, 0, 0, 0.4),
+        0 0 0 1px rgba(255, 255, 255, 0.05);
+
+    z-index: 10000;
+
+    transition: opacity 0.2s ease, transform 0.2s ease;
+    pointer-events: auto;
+}
+
+.settings-menu.hidden {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.95);
+    pointer-events: none;
+}
+
+.settings-menu.visible {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+}
+
+.settings-menu-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: #ffffff;
+    margin-bottom: 16px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.settings-item {
+    margin-bottom: 12px;
+}
+
+.settings-item:last-child {
+    margin-bottom: 0;
+}
+
+.settings-item label {
+    display: block;
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.7);
+    margin-bottom: 8px;
+}
+
+.settings-slider-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.settings-slider {
+    flex: 1;
+    height: 4px;
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 2px;
+    appearance: none;
+    -webkit-appearance: none;
+    cursor: pointer;
+}
+
+.settings-slider::-webkit-slider-thumb {
+    appearance: none;
+    -webkit-appearance: none;
+    width: 16px;
+    height: 16px;
+    background: #8ab4f8;
+    border-radius: 50%;
+    cursor: pointer;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+    transition: transform 0.1s ease;
+}
+
+.settings-slider::-webkit-slider-thumb:hover {
+    transform: scale(1.1);
+}
+
+.settings-slider::-webkit-slider-thumb:active {
+    transform: scale(0.95);
+}
+
+.settings-value {
+    min-width: 40px;
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.9);
+    text-align: right;
+    font-family: 'Consolas', monospace;
 }
