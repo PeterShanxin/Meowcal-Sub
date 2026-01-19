@@ -715,6 +715,16 @@ pub struct CaptureStatusPayload {
     pub is_error: bool,
 }
 
+/// Check if translation is currently running
+/// 
+/// Called from JavaScript: `const running = await invoke('is_translation_running');`
+/// This allows the frontend to sync button state with backend on page load/reload.
+#[tauri::command]
+pub fn is_translation_running(state: State<'_, AppState>) -> bool {
+    let is_running = state.is_running.lock().unwrap();
+    *is_running
+}
+
 /// List translation backends and their readiness
 #[tauri::command]
 pub async fn list_translation_backends(

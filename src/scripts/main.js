@@ -64,6 +64,10 @@ async function initializeApp() {
         // Load backend diagnostics
         await refreshTranslationDiagnostics();
 
+        // Sync translation running state with backend
+        // This fixes button state mismatch when page reloads while translation is running
+        await syncTranslationState();
+
         // Update status to ready
         updateStatus('ready', 'Ready');
 
@@ -1084,6 +1088,43 @@ async function setupCaptureStatusListener() {
         console.log('Capture status listener set up');
     } catch (error) {
         console.error('Failed to set up capture status listener:', error);
+    }
+}
+
+// =============================================================================
+// STATE SYNC
+// =============================================================================
+
+/**
+ * Sync translation running state with backend
+ * Called on initialization to fix button state mismatch after page reload
+ */
+async function syncTranslationState() {
+    try {
+        const isRunning = await TauriBridge.invoke('is_translation_running');
+        console.log('Translation running state from backend:', isRunning);
+
+        appState.isRunning = isRunning;
+
+        if (isRunning) {
+            // Update UI to show Stop button
+            document.getElementById('btn-start').style.display = 'none';
+            document.getElementById('btn-stop').style.display = 'flex';
+            document.getElementById('btn-stop').disabled = false;
+            updateStatus('running', 'Translating...');
+        } else {
+            // Update UI to show Start button
+            document.getElementById('btn-stop').style.display = 'none';
+            document.getElementById('btn-start').style.display = 'flex';
+            // Start button enabled state depends on region being set
+            if (appState.captureRegion) {
+                document.getElementById('btn-start').disabled = false;
+            }
+        }
+    } catch (error) {
+        console.warn('Failed to sync translation state:', error);
+        // Assume not running if we can't check
+        appState.isRunning = false;
     }
 }
 

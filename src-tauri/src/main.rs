@@ -93,6 +93,7 @@ fn main() {
             commands::close_area_selector,
             commands::start_translation,
             commands::stop_translation,
+            commands::is_translation_running,
             commands::get_system_info,
             commands::list_translation_backends,
             commands::get_translation_diagnostics,
