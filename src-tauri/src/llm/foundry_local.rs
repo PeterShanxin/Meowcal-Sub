@@ -210,6 +210,52 @@ impl FoundryLocalBackend {
         models
     }
 
+    /// Get model context window size from `foundry model info <model>` output
+    /// Returns None if detection fails (caller should use default budget)
+    pub fn get_model_context_window(model: &str) -> Option<usize> {
+        let output = Command::new("foundry")
+            .args(["model", "info", model])
+            .output()
+            .ok()?;
+
+        if !output.status.success() {
+            debug!("'foundry model info {}' returned non-zero status", model);
+            return None;
+        }
+
+        let stdout = String::from_utf8_lossy(&output.stdout);
+
+        // Parse output looking for context window/length info
+        // Expected formats may vary, look for common patterns:
+        // "context_length: 4096" or "max_position_embeddings: 4096"
+        for line in stdout.lines() {
+            let line_lower = line.to_lowercase();
+            if line_lower.contains("context") || line_lower.contains("position") || line_lower.contains("length") {
+                // Try to extract a number
+                if let Some(num) = Self::extract_number_from_line(line) {
+                    if num >= 512 && num <= 131072 {
+                        debug!("Detected context window for {}: {}", model, num);
+                        return Some(num);
+                    }
+                }
+            }
+        }
+
+        debug!("Could not detect context window for model {}", model);
+        None
+    }
+
+    /// Extract the first reasonable number from a line
+    fn extract_number_from_line(line: &str) -> Option<usize> {
+        for part in line.split_whitespace() {
+            let cleaned = part.trim_matches(|c: char| !c.is_ascii_digit());
+            if let Ok(num) = cleaned.parse::<usize>() {
+                return Some(num);
+            }
+        }
+        None
+    }
+
     fn is_probable_model_id(candidate: &str) -> bool {
         if candidate.is_empty() {
             return false;
