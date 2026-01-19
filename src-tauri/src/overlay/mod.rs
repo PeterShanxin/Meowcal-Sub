@@ -72,6 +72,12 @@ pub fn show_overlay(app: &AppHandle) -> Result<(), String> {
 
     // Don't set click-through here - let the frontend manage it
     // This allows the settings button to be clickable
+    if let Err(e) = window.set_decorations(false) {
+        info!("⚠️ Failed to enforce overlay decorations: {}", e);
+    }
+    if let Err(e) = window.set_title("") {
+        info!("⚠️ Failed to clear overlay title: {}", e);
+    }
     if let Err(e) = window.set_focusable(false) {
         info!("⚠️ Failed to set overlay focusable: {}", e);
     }

@@ -861,7 +861,7 @@ pub async fn start_translation(
     }
     
     info!("✅ Translation started! Interval: {}ms, Target: {}", interval_ms, target_language);
-    
+
     // Show the overlay and send the capture region to it
     if let Err(e) = overlay::show_overlay(&app) {
         warn!("⚠️ Failed to show overlay: {}", e);
@@ -873,7 +873,10 @@ pub async fn start_translation(
     // Initialize translation backend manager
     let diagnostics = state.translation_diagnostics.clone();
     let translation_manager = TranslationManager::new(translation_config, app.clone(), diagnostics);
-    
+
+    // Clone app handle for use inside the async block to access state
+    let app_for_region = app.clone();
+
     // Spawn the background translation loop
     tokio::spawn(async move {
         // Initialize OCR engine using the configured source language
@@ -904,7 +907,7 @@ pub async fn start_translation(
         let mut fallback_notified = false;
         
         // Initialize persistent capture session (no border flashing)
-        let session_initialized = match capture::init_capture_session() {
+        let mut use_persistent_session = match capture::init_capture_session() {
             Ok(_) => {
                 info!("✅ Persistent capture session initialized");
                 true
@@ -914,6 +917,8 @@ pub async fn start_translation(
                 false
             }
         };
+
+        let mut session_failures = 0;
         
         loop {
             // Check if we should stop
@@ -921,7 +926,7 @@ pub async fn start_translation(
                 info!("🛑 Stop signal received, exiting loop");
                 break;
             }
-            
+
             // Also check for channel changes (non-blocking)
             if stop_rx.has_changed().unwrap_or(false) {
                 let _ = stop_rx.borrow_and_update();
@@ -930,30 +935,92 @@ pub async fn start_translation(
                     break;
                 }
             }
-            
-            debug!("📸 Capturing region: {:?}", capture_region);
-            
-            // Step 1: Capture screen region
-            // If persistent session is available, use it (no border flashing)
-            // Otherwise fall back to smart_capture which creates new session each time
-            let capture_result = if session_initialized {
-                match capture::capture_with_session(&capture_region) {
-                    Ok(result) => result,
-                    Err(e) => {
-                        warn!("⚠️ Session capture failed: {}", e);
-                        let status = CaptureStatusPayload {
-                            using_fallback: false,
-                            message: format!("Capture failed: {}", e),
-                            is_error: true,
-                        };
-                        let _ = app.emit("capture-status", status);
+
+            // Re-read the capture region from state (allows live resize/reposition)
+            let current_capture_region = {
+                let state = app_for_region.state::<AppState>();
+                let region_opt = state.capture_region.lock().unwrap().clone();
+                let scale = *state.capture_scale_factor.lock().unwrap();
+                // Mutex guards are dropped here before any await
+                match region_opt {
+                    Some(r) => r.scaled(scale),
+                    None => {
+                        drop(state); // Ensure state reference is dropped
+                        warn!("⚠️ No capture region set, skipping frame");
                         tokio::time::sleep(Duration::from_millis(interval_ms as u64)).await;
                         continue;
                     }
                 }
+            };
+
+            debug!("📸 Capturing region: {:?}", current_capture_region);
+            
+            // Step 1: Capture screen region
+            // If persistent session is available, use it (no border flashing)
+            // Otherwise fall back to smart_capture which creates new session each time
+            let capture_result = if use_persistent_session {
+                match capture::capture_with_session(&current_capture_region) {
+                    Ok(result) => {
+                        session_failures = 0;
+                        result
+                    }
+                    Err(e) => {
+                        session_failures += 1;
+                        warn!(
+                            "⚠️ Session capture failed (attempt {}): {}",
+                            session_failures, e
+                        );
+
+                        if session_failures == 1 {
+                            capture::close_capture_session();
+                            match capture::init_capture_session() {
+                                Ok(_) => {
+                                    info!("✅ Capture session restarted");
+                                }
+                                Err(restart_err) => {
+                                    warn!(
+                                        "⚠️ Failed to restart capture session, falling back: {}",
+                                        restart_err
+                                    );
+                                    use_persistent_session = false;
+                                }
+                            }
+                        } else if session_failures >= 3 {
+                            warn!("⚠️ Disabling persistent capture after repeated failures");
+                            capture::close_capture_session();
+                            use_persistent_session = false;
+                        }
+
+                        // Try smart capture to avoid surfacing transient session errors
+                        match capture::smart_capture(&current_capture_region) {
+                            Ok((result, fallback)) => {
+                                if fallback && !fallback_notified {
+                                    fallback_notified = true;
+                                    let status = CaptureStatusPayload {
+                                        using_fallback: true,
+                                        message: "Using GDI fallback - video content may not capture correctly".to_string(),
+                                        is_error: false,
+                                    };
+                                    let _ = app.emit("capture-status", status);
+                                }
+                                result
+                            }
+                            Err(fallback_err) => {
+                                let status = CaptureStatusPayload {
+                                    using_fallback: false,
+                                    message: format!("Capture failed: {}", fallback_err),
+                                    is_error: true,
+                                };
+                                let _ = app.emit("capture-status", status);
+                                tokio::time::sleep(Duration::from_millis(interval_ms as u64)).await;
+                                continue;
+                            }
+                        }
+                    }
+                }
             } else {
                 // Fallback to smart_capture (creates new session each time)
-                match capture::smart_capture(&capture_region) {
+                match capture::smart_capture(&current_capture_region) {
                     Ok((result, fallback)) => {
                         if fallback && !fallback_notified {
                             fallback_notified = true;
@@ -1090,5 +1157,30 @@ pub fn stop_translation(state: State<'_, AppState>, app: AppHandle) -> Result<()
     }
     
     info!("✅ Translation stopped!");
+    Ok(())
+}
+
+// =============================================================================
+// OVERLAY COMMANDS
+// =============================================================================
+
+/// Set whether the overlay window ignores cursor events (click-through)
+///
+/// When `ignore` is true, the overlay is click-through (default during translation).
+/// When `ignore` is false, the overlay can receive mouse events (for settings interaction).
+///
+/// Called from JavaScript: `await invoke('set_overlay_click_through', { ignore: false });`
+#[tauri::command]
+pub fn set_overlay_click_through(app: AppHandle, ignore: bool) -> Result<(), String> {
+    info!("Setting overlay click-through: {}", ignore);
+
+    let window = app
+        .get_webview_window("overlay")
+        .ok_or("Overlay window not found")?;
+
+    window
+        .set_ignore_cursor_events(ignore)
+        .map_err(|e| format!("Failed to set cursor events: {}", e))?;
+
     Ok(())
 }

@@ -36,11 +36,13 @@
         "decorations": false,
         "alwaysOnTop": true,
         "visible": false,
+        "focus": true,
+        "focusable": true,
         "skipTaskbar": true,
         "resizable": false
       },
       {
-        "title": "Overlay",
+        "title": "",
         "label": "overlay",
         "url": "overlay.html",
         "fullscreen": true,
@@ -48,6 +50,8 @@
         "decorations": false,
         "alwaysOnTop": true,
         "visible": false,
+        "focus": false,
+        "focusable": false,
         "skipTaskbar": true,
         "resizable": false
       }

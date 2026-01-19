@@ -107,6 +107,8 @@ fn main() {
             commands::list_foundry_local_models,
             commands::refresh_foundry_local_status,
             commands::prepare_foundry_local,
+            // Overlay commands
+            commands::set_overlay_click_through,
         ])
         .plugin(tauri_plugin_opener::init())
         // Register our app state (shared across all commands)

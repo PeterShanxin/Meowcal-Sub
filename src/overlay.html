@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Meowcal Sub - Overlay</title>
+    <title></title>
     <link rel="stylesheet" href="styles/overlay.css">
 </head>
 <body>
@@ -21,11 +21,39 @@
         <div class="corner top-right"></div>
         <div class="corner bottom-left"></div>
         <div class="corner bottom-right"></div>
+
+        <!-- 8 Resize handles (appear on hover) -->
+        <div class="resize-handle" data-position="nw"></div>
+        <div class="resize-handle" data-position="n"></div>
+        <div class="resize-handle" data-position="ne"></div>
+        <div class="resize-handle" data-position="w"></div>
+        <div class="resize-handle" data-position="e"></div>
+        <div class="resize-handle" data-position="sw"></div>
+        <div class="resize-handle" data-position="s"></div>
+        <div class="resize-handle" data-position="se"></div>
     </div>
     
     <!-- Subtitle display area -->
     <div id="subtitle-container" class="subtitle-container hidden">
         <div id="subtitle-text" class="subtitle-text"></div>
+        <!-- Settings gear button (top-right corner of subtitle container) -->
+        <button id="settings-button" class="settings-button" title="Overlay Settings">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+                <path d="M19.14 12.94c.04-.31.06-.63.06-.94 0-.31-.02-.63-.06-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.04.31-.06.63-.06.94s.02.63.06.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"/>
+            </svg>
+        </button>
+    </div>
+
+    <!-- Settings popup menu -->
+    <div id="settings-menu" class="settings-menu hidden">
+        <div class="settings-menu-title">Overlay Settings</div>
+        <div class="settings-item">
+            <label for="font-size-slider">Font Size</label>
+            <div class="settings-slider-row">
+                <input type="range" id="font-size-slider" min="12" max="48" value="24" class="settings-slider">
+                <span id="font-size-display" class="settings-value">24px</span>
+            </div>
+        </div>
     </div>
     
     <!-- DEBUG: Visible indicator that overlay loaded (remove in production) -->
