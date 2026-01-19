@@ -12,8 +12,10 @@ mod manager;
 mod offline_mt;
 mod foundry_local;
 mod mock;
+mod context;
 
 pub use phi_silica::*;
+pub use context::*;
 pub use manager::*;
 pub use offline_mt::*;
 pub use foundry_local::*;
