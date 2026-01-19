@@ -108,6 +108,9 @@ pub struct TranslationConfig {
     /// Allow passthrough/mock fallback if all backends fail
     pub allow_mock_fallback: bool,
 
+    /// Enable context-aware translation (session memory for names, genre, history)
+    pub enable_context_aware: bool,
+
     /// Foundry Local backend configuration
     #[serde(default)]
     pub foundry_local: FoundryLocalConfig,
@@ -249,6 +252,7 @@ impl Default for TranslationConfig {
             enable_windows_ai: cfg!(target_os = "windows"),
             enable_offline_mt: true,
             allow_mock_fallback: true,
+            enable_context_aware: true,  // Enabled by default
             foundry_local: FoundryLocalConfig::default(),
             offline_mt: OfflineMtConfig::default(),
         }
@@ -340,5 +344,40 @@ mod tests {
     fn test_capture_region_invalid() {
         let region = CaptureRegion::new(0, 0, 0, 50);
         assert!(!region.is_valid());
+    }
+
+    #[test]
+    fn test_translation_config_defaults() {
+        let config = TranslationConfig::default();
+        assert!(config.enable_foundry_local);
+        assert!(config.enable_offline_mt);
+        assert!(config.allow_mock_fallback);
+        assert!(config.enable_context_aware); // Context-aware enabled by default
+    }
+
+    #[test]
+    fn test_translation_config_serialization() {
+        // Test that enable_context_aware serializes/deserializes correctly
+        let config = TranslationConfig::default();
+        let json = serde_json::to_string(&config).unwrap();
+        assert!(json.contains("enableContextAware")); // camelCase in JSON
+
+        let deserialized: TranslationConfig = serde_json::from_str(&json).unwrap();
+        assert_eq!(deserialized.enable_context_aware, config.enable_context_aware);
+    }
+
+    #[test]
+    fn test_translation_config_missing_field_uses_default() {
+        // Test that missing enable_context_aware field uses default (true)
+        let json = r#"{
+            "enableFoundryLocal": true,
+            "enableWindowsAi": false,
+            "enableOfflineMt": true,
+            "allowMockFallback": true,
+            "foundryLocal": {},
+            "offlineMt": {}
+        }"#;
+        let config: TranslationConfig = serde_json::from_str(json).unwrap();
+        assert!(config.enable_context_aware); // Should default to true
     }
 }
