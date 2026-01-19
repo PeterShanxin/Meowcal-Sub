@@ -51,17 +51,25 @@ fn get_overlay_window(app: &AppHandle) -> Option<WebviewWindow> {
     window
 }
 
-/// Configure the overlay window as "non-rude" to prevent Windows from
-/// treating it as a fullscreen app that should hide the taskbar.
+/// Configure the overlay window as a chromeless popup covering the full screen.
 ///
-/// Windows "Rude Window Manager" automatically disables taskbar always-on-top
-/// when it detects a fullscreen window. Setting the "NonRudeHWND" property
-/// tells Windows Shell to not treat this window as rude.
+/// This approach:
+/// 1. Sets WS_POPUP style - removes all window chrome (titlebar, borders)
+/// 2. Covers the entire virtual screen (all monitors)
+/// 3. Sets NonRudeHWND property - prevents Windows from hiding the taskbar
+///
+/// This is how professional overlays (OBS, Discord, game overlays) work.
 #[cfg(windows)]
-fn configure_overlay_as_non_rude(window: &WebviewWindow) -> Result<(), String> {
+fn configure_overlay_as_chromeless_popup(window: &WebviewWindow) -> Result<(), String> {
     use raw_window_handle::HasWindowHandle;
     use windows::Win32::Foundation::HANDLE;
-    use windows::Win32::UI::WindowsAndMessaging::SetPropW;
+    use windows::Win32::UI::WindowsAndMessaging::{
+        SetPropW, SetWindowLongPtrW, SetWindowPos,
+        GWL_STYLE, WS_POPUP, WS_VISIBLE,
+        SWP_FRAMECHANGED, SWP_NOZORDER,
+        GetSystemMetrics, SM_XVIRTUALSCREEN, SM_YVIRTUALSCREEN,
+        SM_CXVIRTUALSCREEN, SM_CYVIRTUALSCREEN,
+    };
     use windows::core::w;
 
     // Get the raw window handle from Tauri
@@ -78,12 +86,36 @@ fn configure_overlay_as_non_rude(window: &WebviewWindow) -> Result<(), String> {
 
         // SAFETY: We have a valid HWND from Tauri's window handle
         unsafe {
-            // NonRudeHWND property tells Windows Rude Window Manager to not treat
+            // 1. Set WS_POPUP style - this removes ALL window chrome
+            // WS_POPUP creates a borderless, titlebar-less window
+            let new_style = WS_POPUP.0 | WS_VISIBLE.0;
+            SetWindowLongPtrW(hwnd, GWL_STYLE, new_style as isize);
+
+            // 2. Get virtual screen bounds (covers all monitors)
+            let x = GetSystemMetrics(SM_XVIRTUALSCREEN);
+            let y = GetSystemMetrics(SM_YVIRTUALSCREEN);
+            let width = GetSystemMetrics(SM_CXVIRTUALSCREEN);
+            let height = GetSystemMetrics(SM_CYVIRTUALSCREEN);
+
+            info!("Virtual screen: ({}, {}) {}x{}", x, y, width, height);
+
+            // 3. Resize and reposition to cover full virtual screen
+            // SWP_FRAMECHANGED forces Windows to recalculate the frame after style change
+            // Using None for hwndInsertAfter with SWP_NOZORDER keeps current z-order
+            SetWindowPos(
+                hwnd,
+                None,  // hwndInsertAfter - ignored due to SWP_NOZORDER
+                x, y, width, height,
+                SWP_FRAMECHANGED | SWP_NOZORDER,
+            ).map_err(|e| format!("SetWindowPos failed: {}", e))?;
+
+            // 4. Set NonRudeHWND property - tells Windows Shell to not treat
             // this window as a fullscreen "rude" window that should hide the taskbar
             SetPropW(hwnd, w!("NonRudeHWND"), Some(HANDLE(1 as *mut _)))
-                .map_err(|e| format!("SetPropW failed: {}", e))?;
+                .map_err(|e| format!("SetPropW NonRudeHWND failed: {}", e))?;
         }
-        info!("Set NonRudeHWND property on overlay window");
+
+        info!("Configured overlay as chromeless popup with NonRudeHWND");
         Ok(())
     } else {
         Err("Window handle is not Win32".to_string())
@@ -121,11 +153,12 @@ pub fn show_overlay(app: &AppHandle) -> Result<(), String> {
         info!("⚠️ Failed to set overlay focusable: {}", e);
     }
 
-    // Configure as non-rude BEFORE showing to prevent taskbar interference
+    // Configure as chromeless popup BEFORE showing
+    // This sets WS_POPUP style, covers full screen, and applies NonRudeHWND
     #[cfg(windows)]
-    if let Err(e) = configure_overlay_as_non_rude(&window) {
-        tracing::warn!("Failed to configure overlay as non-rude: {}", e);
-        // Continue anyway - overlay will work, just may block taskbar auto-hide
+    if let Err(e) = configure_overlay_as_chromeless_popup(&window) {
+        tracing::warn!("Failed to configure overlay as chromeless popup: {}", e);
+        // Continue anyway - overlay will work but may have visual issues
     }
 
     // Show the window
