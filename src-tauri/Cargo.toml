@@ -35,6 +35,7 @@ tauri = { version = "2", features = [
     "tray-icon",          # System tray support (the icon in the taskbar)
 ] }
 tauri-plugin-opener = "2"  # Opens URLs/files with system defaults
+raw-window-handle = "0.6"  # Cross-platform window handle access (for NonRudeHWND)
 
 # --- Serialization ---
 # Converts Rust structs to/from JSON (for sending data between Rust and JavaScript)

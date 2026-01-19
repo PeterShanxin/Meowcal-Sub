@@ -51,6 +51,45 @@ fn get_overlay_window(app: &AppHandle) -> Option<WebviewWindow> {
     window
 }
 
+/// Configure the overlay window as "non-rude" to prevent Windows from
+/// treating it as a fullscreen app that should hide the taskbar.
+///
+/// Windows "Rude Window Manager" automatically disables taskbar always-on-top
+/// when it detects a fullscreen window. Setting the "NonRudeHWND" property
+/// tells Windows Shell to not treat this window as rude.
+#[cfg(windows)]
+fn configure_overlay_as_non_rude(window: &WebviewWindow) -> Result<(), String> {
+    use raw_window_handle::HasWindowHandle;
+    use windows::Win32::Foundation::HANDLE;
+    use windows::Win32::UI::WindowsAndMessaging::SetPropW;
+    use windows::core::w;
+
+    // Get the raw window handle from Tauri
+    let handle = window
+        .window_handle()
+        .map_err(|e| format!("Failed to get window handle: {}", e))?;
+
+    let raw_handle = handle.as_raw();
+
+    // Extract HWND from the raw handle (Windows-specific)
+    if let raw_window_handle::RawWindowHandle::Win32(win32_handle) = raw_handle {
+        let hwnd_ptr = win32_handle.hwnd.get() as isize;
+        let hwnd = windows::Win32::Foundation::HWND(hwnd_ptr as *mut _);
+
+        // SAFETY: We have a valid HWND from Tauri's window handle
+        unsafe {
+            // NonRudeHWND property tells Windows Rude Window Manager to not treat
+            // this window as a fullscreen "rude" window that should hide the taskbar
+            SetPropW(hwnd, w!("NonRudeHWND"), Some(HANDLE(1 as *mut _)))
+                .map_err(|e| format!("SetPropW failed: {}", e))?;
+        }
+        info!("Set NonRudeHWND property on overlay window");
+        Ok(())
+    } else {
+        Err("Window handle is not Win32".to_string())
+    }
+}
+
 /// Show the overlay window
 ///
 /// Note: Click-through is NOT enabled by default so the settings button can be clicked.
@@ -80,6 +119,13 @@ pub fn show_overlay(app: &AppHandle) -> Result<(), String> {
     }
     if let Err(e) = window.set_focusable(false) {
         info!("⚠️ Failed to set overlay focusable: {}", e);
+    }
+
+    // Configure as non-rude BEFORE showing to prevent taskbar interference
+    #[cfg(windows)]
+    if let Err(e) = configure_overlay_as_non_rude(&window) {
+        tracing::warn!("Failed to configure overlay as non-rude: {}", e);
+        // Continue anyway - overlay will work, just may block taskbar auto-hide
     }
 
     // Show the window

@@ -45,7 +45,7 @@
         "title": "",
         "label": "overlay",
         "url": "overlay.html",
-        "fullscreen": true,
+        "maximized": true,
         "transparent": true,
         "decorations": false,
         "alwaysOnTop": true,
