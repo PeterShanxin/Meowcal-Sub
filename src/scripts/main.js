@@ -346,6 +346,16 @@ function setupEventListeners() {
     document.getElementById('btn-prepare-foundry')
         .addEventListener('click', handlePrepareFoundryLocal);
 
+    // Auto-save when language settings change to ensure translation direction is persisted
+    document.getElementById('source-language').addEventListener('change', async () => {
+        console.log('Source language changed, auto-saving...');
+        await saveSettings();
+    });
+    document.getElementById('target-language').addEventListener('change', async () => {
+        console.log('Target language changed, auto-saving...');
+        await saveSettings();
+    });
+
     // Download translateLocally
     document.getElementById('btn-download-offline-mt')
         .addEventListener('click', handleOfflineMtDownload);

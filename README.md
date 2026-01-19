@@ -125,6 +125,15 @@ Common backend status/warning codes:
 - `timeout`: backend hung or took too long; fallback used.
 - `backend_not_registered`: misconfigured backend id.
 
+### Known Issues
+
+**Overlay Window Chrome:**
+- Clicking the capture frame then switching to the main Meowcal-Sub window may cause a persistent window bar to appear at the top of the screen. Hover over the capture frame area to dismiss.
+- When clicking "Start Translation", there may be a brief white flash and faint acrylic edges visible at screen edges. This is the overlay window initializing.
+
+**Button State Mismatch (intermittent):**
+- Under certain conditions, the Start/Stop button state may become out of sync with the actual translation state. If clicking "Start Translation" shows "Translation is already running" error, the app may need to be restarted.
+
 If translation falls back to passthrough (OCR text), check:
 - Foundry Local: ensure it's running and accessible at the configured endpoint.
 - Offline MT: set `translation.offlineMt.binaryPath` or add `translateLocally` to PATH.

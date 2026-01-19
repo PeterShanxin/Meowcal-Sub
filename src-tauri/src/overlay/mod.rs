@@ -146,12 +146,9 @@ pub fn show_overlay(app: &AppHandle) -> Result<(), String> {
     if let Err(e) = window.set_decorations(false) {
         info!("⚠️ Failed to enforce overlay decorations: {}", e);
     }
-    if let Err(e) = window.set_title("") {
-        info!("⚠️ Failed to clear overlay title: {}", e);
-    }
-    if let Err(e) = window.set_focusable(false) {
-        info!("⚠️ Failed to set overlay focusable: {}", e);
-    }
+    // NOTE: Removed set_title("") and set_focusable(false) - these can cause
+    // window Chrome to briefly appear on some Windows versions. The WS_POPUP
+    // style set by configure_overlay_as_chromeless_popup handles this properly.
 
     // Configure as chromeless popup BEFORE showing
     // This sets WS_POPUP style, covers full screen, and applies NonRudeHWND
@@ -164,6 +161,13 @@ pub fn show_overlay(app: &AppHandle) -> Result<(), String> {
     // Show the window
     window.show()
         .map_err(|e| format!("Failed to show overlay: {}", e))?;
+
+    // Re-apply WS_POPUP style AFTER showing to ensure it persists
+    // This prevents any window Chrome from appearing when the window gains focus
+    #[cfg(windows)]
+    if let Err(e) = configure_overlay_as_chromeless_popup(&window) {
+        tracing::warn!("Failed to re-apply overlay popup style after show: {}", e);
+    }
 
     // Emit visibility event
     app.emit("overlay-visibility", true)
