@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Meowcal-Sub is a local subtitle translation app for Windows ARM64 Copilot+ PCs, built with Tauri 2.0 (Rust backend + vanilla HTML/CSS/JS frontend). All OCR and translation runs locally for privacy.
+Meowcal-Sub is a local LLM-powered subtitle translation app for Windows, built with Tauri 2.0 (Rust backend + vanilla HTML/CSS/JS frontend). It captures any screen region, performs OCR, translates via local LLM backends (like Foundry Local), and displays subtitles in a floating overlay. All processing runs locally for privacy.
 
 ## Build & Development Commands
 
@@ -74,9 +74,9 @@ npm run dev:browser   # Static frontend on localhost:3000
 
 ### Translation Backend Fallback Chain
 
-1. **Foundry Local** (primary) - OpenAI-compatible local endpoint
+1. **Foundry Local** (primary) - OpenAI-compatible local LLM endpoint
 2. **Offline MT** - translateLocally binary wrapper
-3. **Windows AI / Phi Silica** - Copilot Runtime (placeholder until APIs stable)
+3. **Windows AI** - Copilot Runtime (experimental, placeholder)
 4. **Passthrough** - Returns OCR text if all else fails
 
 ### Frontend (src/)
@@ -138,6 +138,6 @@ App settings persist to `%APPDATA%\com.meowcal.sub\config.json`. Key settings:
 
 ## Platform Requirements
 
-- Windows 11 24H2 (Build 26100+)
-- Copilot+ PC (Snapdragon X, Intel Core Ultra, or AMD Ryzen AI)
-- Visual Studio Build Tools with ARM64 support
+- Windows 10/11
+- Visual Studio Build Tools (for compilation)
+- Local LLM backend (e.g., Foundry Local) for translation
