@@ -815,12 +815,13 @@ pub async fn start_translation(
     info!(">>> START_TRANSLATION COMMAND CALLED <<<");
     info!("Starting translation...");
     
-    // Check if already running
+    // Check if already running and mark as running atomically
     {
-        let is_running = state.is_running.lock().unwrap();
+        let mut is_running = state.is_running.lock().unwrap();
         if *is_running {
             return Err("Translation is already running".to_string());
         }
+        *is_running = true;
     }
     
     // Get the capture region
@@ -864,11 +865,7 @@ pub async fn start_translation(
         *stop_signal = Some(stop_tx);
     }
     
-    // Mark as running
-    {
-        let mut is_running = state.is_running.lock().unwrap();
-        *is_running = true;
-    }
+    // Note: is_running is already set to true above (atomic check-and-set)
     
     info!("✅ Translation started! Interval: {}ms, Target: {}", interval_ms, target_language);
 
@@ -889,6 +886,13 @@ pub async fn start_translation(
 
     // Spawn the background translation loop
     tokio::spawn(async move {
+        // Helper to reset is_running state on early exit
+        let reset_running_state = || {
+            let state = app.state::<AppState>();
+            let mut is_running = state.is_running.lock().unwrap();
+            *is_running = false;
+        };
+
         // Initialize OCR engine using the configured source language
         let ocr = match WindowsOcr::with_language(&source_language) {
             Ok(o) => {
@@ -904,6 +908,7 @@ pub async fn start_translation(
                     Ok(o) => o,
                     Err(e) => {
                         warn!("❌ Failed to initialize OCR: {}", e);
+                        reset_running_state();
                         return;
                     }
                 }

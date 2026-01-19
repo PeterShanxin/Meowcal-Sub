@@ -14,7 +14,8 @@
     box-sizing: border-box;
 }
 
-html, body {
+html,
+body {
     width: 100%;
     height: 100%;
     background: transparent;
@@ -55,8 +56,15 @@ html, body {
         left 0.15s ease-out,
         width 0.15s ease-out,
         height 0.15s ease-out,
-        opacity 0.5s ease-out,
-        border-color 0.2s ease;
+        opacity 0.6s cubic-bezier(0.4, 0, 0.2, 1),
+        border-color 0.2s ease,
+        transform 0.6s cubic-bezier(0.4, 0, 0.2, 1),
+        filter 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+
+    /* GPU acceleration for smooth animations */
+    will-change: opacity, transform, filter;
+    transform: scale(1);
+    filter: blur(0px);
 }
 
 /* Disable smooth transitions during drag/resize for instant feedback */
@@ -69,24 +77,34 @@ html, body {
         inset 0 0 15px rgba(138, 180, 248, 0.15);
 }
 
-/* Faded state - auto-hides after inactivity */
+/* Faded state - completely invisible with premium edge-dissolve effect */
 .capture-frame.faded {
-    opacity: 0.15;
+    opacity: 0;
+    transform: scale(1.03);
+    filter: blur(2px);
     animation: none;
+    pointer-events: none;
 }
 
+/* Reappear animation when hovering near */
 .capture-frame.faded:hover {
     opacity: 1;
+    transform: scale(1);
+    filter: blur(0px);
     animation: pulse-glow 2s ease-in-out infinite;
+    pointer-events: auto;
 }
 
 @keyframes pulse-glow {
-    0%, 100% {
+
+    0%,
+    100% {
         box-shadow:
             0 0 10px rgba(138, 180, 248, 0.4),
             0 0 20px rgba(138, 180, 248, 0.2),
             inset 0 0 10px rgba(138, 180, 248, 0.1);
     }
+
     50% {
         box-shadow:
             0 0 15px rgba(138, 180, 248, 0.6),
@@ -332,8 +350,15 @@ html, body {
 }
 
 @keyframes fadeIn {
-    from { opacity: 0; transform: translateY(5px); }
-    to { opacity: 1; transform: translateY(0); }
+    from {
+        opacity: 0;
+        transform: translateY(5px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
 }
 
 /* =============================================================================

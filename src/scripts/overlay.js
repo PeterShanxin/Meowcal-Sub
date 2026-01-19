@@ -208,7 +208,7 @@ async function updateClickThroughState() {
 
 function startClickThroughMonitor() {
     if (clickThroughMonitor) return;
-    clickThroughMonitor = setInterval(updateClickThroughState, 80);
+    clickThroughMonitor = setInterval(updateClickThroughState, 150);
 }
 
 function stopClickThroughMonitor() {
@@ -359,6 +359,8 @@ function setupResizeHandles(captureFrame) {
             e.preventDefault();
             e.stopPropagation();
 
+            if (!overlayState.region) return;
+
             overlayState.isResizing = true;
             overlayState.resizeHandle = handle.dataset.position;
             overlayState.dragStart = {
@@ -468,6 +470,7 @@ function setupDragToReposition(captureFrame) {
     captureFrame.addEventListener('mousedown', (e) => {
         // Ignore if clicking on a resize handle or if already resizing
         if (e.target.classList.contains('resize-handle') || overlayState.isResizing) return;
+        if (!overlayState.region) return;
 
         e.preventDefault();
 

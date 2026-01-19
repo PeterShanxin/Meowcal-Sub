@@ -457,7 +457,7 @@ function startRegionPolling() {
             clearInterval(pollingInterval);
             pollingInterval = null;
         }
-    }, 100);
+    }, 250);
 }
 
 /**
