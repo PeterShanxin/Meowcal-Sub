@@ -578,11 +578,17 @@ async function setupEventListeners(elements) {
 
         // Translation updates
         await window.__TAURI__.event.listen('translation-update', (event) => {
-            const { translated, timestamp } = event.payload;
+            const { translated, timestamp, backendUsed, warnings } = event.payload;
             console.log('🌐 Translation:', translated);
             updateSubtitleText(subtitleText, translated, subtitleContainer);
             if (debugStatus) {
-                debugStatus.textContent = `Last: ${new Date(timestamp).toLocaleTimeString()}`;
+                const time = new Date(timestamp).toLocaleTimeString();
+                const backend = backendUsed || 'unknown';
+                const warningCount = Array.isArray(warnings) ? warnings.length : 0;
+                const backendLabel = backend === 'mock' ? 'mock (passthrough)' : backend;
+                debugStatus.textContent = warningCount > 0
+                    ? `Backend: ${backendLabel} @ ${time} | warnings: ${warningCount}`
+                    : `Backend: ${backendLabel} @ ${time}`;
             }
         });
 
@@ -594,6 +600,8 @@ async function setupEventListeners(elements) {
 
             if (visible) {
                 await refreshScaleFactor();
+                // Ensure the capture frame is visible immediately (it may still be faded from a previous session)
+                showCaptureFrame();
                 // Fetch region and show
                 try {
                     const region = await window.__TAURI__.core.invoke('get_capture_region');
@@ -611,6 +619,7 @@ async function setupEventListeners(elements) {
 
                 captureFrame.classList.remove('hidden');
                 captureFrame.classList.add('visible');
+                captureFrame.classList.remove('faded');
 
                 // Start fade timer (frame fades after inactivity)
                 scheduleFadeOut();
@@ -620,6 +629,7 @@ async function setupEventListeners(elements) {
                 // Hide everything
                 captureFrame.classList.add('hidden');
                 captureFrame.classList.remove('visible');
+                captureFrame.classList.remove('faded');
                 subtitleContainer.classList.add('hidden');
                 subtitleContainer.classList.remove('visible');
 

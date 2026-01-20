@@ -184,10 +184,45 @@ impl TranslationContext {
         let entries: Vec<_> = self.history.drain(..drain_count).collect();
 
         // Recalculate token count
-        self.history_tokens = self.history.iter().map(|e| e.token_estimate).sum();
+        self.recalculate_history_tokens();
         self.needs_compression = false;
 
         entries
+    }
+
+    /// Restore drained history entries (oldest first)
+    pub fn restore_history_entries(&mut self, entries: Vec<HistoryEntry>) {
+        if entries.is_empty() {
+            return;
+        }
+
+        for entry in entries.into_iter().rev() {
+            self.history.push_front(entry);
+        }
+
+        self.recalculate_history_tokens();
+    }
+
+    /// Trim history to stay within the budget (accounting for memory)
+    pub fn cap_history_to_budget(&mut self) {
+        if !self.enabled {
+            return;
+        }
+
+        let memory_tokens = self.memory.as_ref().map(|m| Self::estimate_tokens(m)).unwrap_or(0);
+        let budget = self.budget_tokens.saturating_sub(memory_tokens);
+
+        self.recalculate_history_tokens();
+
+        while self.history_tokens > budget {
+            if let Some(entry) = self.history.pop_front() {
+                self.history_tokens = self.history_tokens.saturating_sub(entry.token_estimate);
+            } else {
+                break;
+            }
+        }
+
+        self.needs_compression = false;
     }
 
     /// Update memory with summarized content
@@ -234,7 +269,11 @@ impl TranslationContext {
         let cjk_count = text.chars().filter(|c| Self::is_cjk(*c)).count();
         let total_chars = text.chars().count();
         let non_cjk_count = total_chars.saturating_sub(cjk_count);
-        cjk_count + (non_cjk_count / 4).max(if non_cjk_count > 0 || cjk_count == 0 { 1 } else { 0 })
+        cjk_count + (non_cjk_count + 3) / 4
+    }
+
+    fn recalculate_history_tokens(&mut self) {
+        self.history_tokens = self.history.iter().map(|e| e.token_estimate).sum();
     }
 
     fn is_cjk(c: char) -> bool {

@@ -54,6 +54,7 @@ pub struct ScreenCaptureSession {
     full_width: u32,
     full_height: u32,
     staging_texture: Option<ID3D11Texture2D>,
+    last_full_buffer: Option<Vec<u8>>,
 }
 
 impl ScreenCaptureSession {
@@ -150,28 +151,38 @@ impl ScreenCaptureSession {
             full_width,
             full_height,
             staging_texture: None,
+            last_full_buffer: None,
         })
     }
     
-    /// Grab the latest frame from the capture session.
-    /// 
-    /// This is efficient because the session is already running and we just
-    /// grab whatever frame is available in the pool.
-    pub fn grab_frame(&mut self) -> Result<(Vec<u8>, u32, u32), CaptureError> {
-        // Try to get the latest frame (non-blocking, drain old frames)
-        let mut frame = None;
-        
+    /// Ensure we have a captured full-screen frame in memory.
+    ///
+    /// If no new frame arrives, reuses the last captured buffer. This avoids
+    /// treating "no changes on screen" as an error, and keeps region cropping
+    /// responsive when the user moves/resizes the capture box.
+    fn ensure_full_frame(&mut self) -> Result<(), CaptureError> {
         // Drain all available frames to get the latest one
+        let mut frame = None;
         while let Ok(f) = self.frame_receiver.try_recv() {
             frame = Some(f);
         }
-        
-        // If no frame available, wait for one with timeout
+
         let frame = match frame {
             Some(f) => f,
             None => {
-                self.frame_receiver.recv_timeout(std::time::Duration::from_millis(500))
-                    .map_err(|_| CaptureError::GraphicsCaptureError("Timeout waiting for frame".to_string()))?
+                // If we already have a buffer, it's fine to reuse it.
+                if self.last_full_buffer.is_some() {
+                    return Ok(());
+                }
+
+                // Otherwise, wait a bit longer for the very first frame.
+                self.frame_receiver
+                    .recv_timeout(std::time::Duration::from_millis(1500))
+                    .map_err(|_| {
+                        CaptureError::GraphicsCaptureError(
+                            "Timeout waiting for first frame".to_string(),
+                        )
+                    })?
             }
         };
         
@@ -196,8 +207,8 @@ impl ScreenCaptureSession {
         
         // Read pixels from staging texture
         let buffer = read_texture_pixels(&self.d3d_context, &staging_texture, self.full_width, self.full_height)?;
-        
-        Ok((buffer, self.full_width, self.full_height))
+        self.last_full_buffer = Some(buffer);
+        Ok(())
     }
     
     /// Get or create a staging texture for CPU readback.
@@ -238,11 +249,13 @@ impl ScreenCaptureSession {
             ));
         }
         
-        // Grab the full screen
-        let (full_buffer, full_width, full_height) = self.grab_frame()?;
+        self.ensure_full_frame()?;
+        let full_buffer = self.last_full_buffer.as_deref().ok_or_else(|| {
+            CaptureError::GraphicsCaptureError("No captured frame available".to_string())
+        })?;
         
         // Crop to region
-        let cropped = crop_region(&full_buffer, full_width, full_height, region)?;
+        let cropped = crop_region(full_buffer, self.full_width, self.full_height, region)?;
         
         Ok(CaptureResult::new(
             cropped,
@@ -287,9 +300,7 @@ pub fn init_capture_session() -> Result<(), CaptureError> {
 /// Call this when stopping translation.
 pub fn close_capture_session() {
     let mut session = CAPTURE_SESSION.lock().unwrap();
-    if let Some(s) = session.take() {
-        s.close();
-    }
+    let _ = session.take();
 }
 
 /// Capture a region using the persistent session.
@@ -430,7 +441,6 @@ pub fn capture_region_graphics(region: &CaptureRegion) -> Result<CaptureResult, 
     // Otherwise create a one-shot session
     let mut session = ScreenCaptureSession::new()?;
     let result = session.capture_region(region);
-    session.close();
     result
 }
 
