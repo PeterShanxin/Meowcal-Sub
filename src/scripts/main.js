@@ -194,6 +194,7 @@ function applyTranslationSettings(translation) {
     document.getElementById('toggle-windows-ai').checked = config.enableWindowsAi;
     document.getElementById('toggle-offline-mt').checked = config.enableOfflineMt;
     document.getElementById('toggle-mock-fallback').checked = config.allowMockFallback;
+    document.getElementById('toggle-context-aware').checked = config.enableContextAware;
     document.getElementById('offline-mt-path').value = config.offlineMt.binaryPath || '';
 
     // Load Foundry Local model selector
@@ -212,6 +213,7 @@ function normalizeTranslationConfig(translation) {
         enableWindowsAi: true,
         enableOfflineMt: true,
         allowMockFallback: true,
+        enableContextAware: true,
         foundryLocal: {
             model: null,
             timeoutMs: 30000,
@@ -232,6 +234,7 @@ function normalizeTranslationConfig(translation) {
         enableWindowsAi: translation.enableWindowsAi ?? defaultConfig.enableWindowsAi,
         enableOfflineMt: translation.enableOfflineMt ?? defaultConfig.enableOfflineMt,
         allowMockFallback: translation.allowMockFallback ?? defaultConfig.allowMockFallback,
+        enableContextAware: translation.enableContextAware ?? defaultConfig.enableContextAware,
         foundryLocal: {
             model: translation.foundryLocal?.model ?? defaultConfig.foundryLocal.model,
             timeoutMs: translation.foundryLocal?.timeoutMs ?? defaultConfig.foundryLocal.timeoutMs,
@@ -256,6 +259,7 @@ async function saveSettings() {
     translationConfig.enableWindowsAi = document.getElementById('toggle-windows-ai').checked;
     translationConfig.enableOfflineMt = document.getElementById('toggle-offline-mt').checked;
     translationConfig.allowMockFallback = document.getElementById('toggle-mock-fallback').checked;
+    translationConfig.enableContextAware = document.getElementById('toggle-context-aware').checked;
     translationConfig.foundryLocal.model = foundryModel.length > 0 ? foundryModel : null;
     translationConfig.offlineMt.binaryPath = offlineMtPath.length > 0 ? offlineMtPath : null;
 
