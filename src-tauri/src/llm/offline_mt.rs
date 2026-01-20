@@ -12,7 +12,7 @@ use tauri::{AppHandle, Manager};
 use tokio::io::AsyncWriteExt;
 use tokio::process::Command;
 use tokio::time::{timeout, Duration};
-use tracing::debug;
+use tracing::{debug, info};
 
 /// Offline MT backend (translateLocally CLI)
 pub struct OfflineMtBackend {
@@ -399,6 +399,15 @@ impl TranslatorBackend for OfflineMtBackend {
             return Ok(String::new());
         }
 
+        info!(
+            target: "translation_io",
+            source_text = %text,
+            source_lang = %source_language,
+            target_lang = %target_language,
+            backend = "offline_mt",
+            "Translation request"
+        );
+
         let max_chars = self.config.max_chunk_chars.max(1);
         let segments = Self::split_lines_preserve(text);
         let mut translated = String::new();
@@ -426,6 +435,13 @@ impl TranslatorBackend for OfflineMtBackend {
             "Offline MT translated {} chars into {} chars",
             text.chars().count(),
             translated.chars().count()
+        );
+        info!(
+            target: "translation_io",
+            translated_text = %translated,
+            source_chars = text.chars().count(),
+            translated_chars = translated.chars().count(),
+            "Translation response"
         );
 
         Ok(translated)

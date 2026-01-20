@@ -53,9 +53,26 @@ fn main() {
         tracing::subscriber::set_global_default(subscriber)
             .expect("setting default subscriber failed");
     } else {
-        // Log to file in normal mode
-        let file_appender = tracing_appender::rolling::daily("logs", "meowcal-sub.log");
-        let (non_blocking, guard) = tracing_appender::non_blocking(file_appender);
+        // Log to file in normal mode - per-session with unique timestamp
+        // Create logs directory if it doesn't exist
+        std::fs::create_dir_all("logs").ok();
+        
+        // Clean up old log files (older than 7 days)
+        cleanup_old_logs("logs", 7);
+        
+        // Generate session-unique log filename with full timestamp
+        let now = chrono::Local::now();
+        let log_filename = format!("meowcal-sub_{}.log", now.format("%Y-%m-%d_%H-%M-%S"));
+        let log_path = std::path::Path::new("logs").join(&log_filename);
+        
+        // Create a file appender for this specific session
+        let file = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&log_path)
+            .expect("Failed to open log file");
+        
+        let (non_blocking, guard) = tracing_appender::non_blocking(file);
 
         let subscriber = FmtSubscriber::builder()
             .with_max_level(Level::DEBUG)
@@ -239,4 +256,50 @@ fn run_http_only_mode() {
             eprintln!("❌ HTTP server error: {}", e);
         }
     });
+}
+
+// =============================================================================
+// LOG CLEANUP
+// =============================================================================
+
+/// Clean up old log files to prevent folder bloat.
+/// Deletes log files older than `max_age_days` days.
+fn cleanup_old_logs(logs_dir: &str, max_age_days: u64) {
+    use std::fs;
+    use std::time::{Duration, SystemTime};
+    
+    let max_age = Duration::from_secs(max_age_days * 24 * 60 * 60);
+    let now = SystemTime::now();
+    
+    let entries = match fs::read_dir(logs_dir) {
+        Ok(entries) => entries,
+        Err(_) => return, // Directory doesn't exist or can't be read
+    };
+    
+    for entry in entries.flatten() {
+        let path = entry.path();
+        
+        // Only process .log files
+        if path.extension().map_or(true, |ext| ext != "log") {
+            continue;
+        }
+        
+        // Check file modification time
+        let metadata = match fs::metadata(&path) {
+            Ok(m) => m,
+            Err(_) => continue,
+        };
+        
+        let modified = match metadata.modified() {
+            Ok(t) => t,
+            Err(_) => continue,
+        };
+        
+        // Delete if older than max_age
+        if let Ok(age) = now.duration_since(modified) {
+            if age > max_age {
+                let _ = fs::remove_file(&path);
+            }
+        }
+    }
 }
