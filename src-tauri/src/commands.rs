@@ -1126,7 +1126,6 @@ pub async fn start_translation(
 
             // Check if context needs compression (async, don't block)
             if translation_manager.needs_context_compression() {
-                let _manager_clone = &translation_manager;
                 debug!("Context needs compression, scheduling summarization");
                 // Note: We'll add async summarization in a follow-up task
             }
