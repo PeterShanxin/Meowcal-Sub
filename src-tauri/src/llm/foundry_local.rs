@@ -504,6 +504,85 @@ impl FoundryLocalBackend {
         }
         false
     }
+
+    /// Summarize translation history into a compact memory block
+    pub async fn summarize_context(
+        &self,
+        history: &[(String, String)], // (source, translation) pairs
+    ) -> Result<String, LlmError> {
+        if history.is_empty() {
+            return Ok(String::new());
+        }
+
+        let base_url = self.get_service_url().ok_or_else(|| {
+            LlmError::ApiError("Foundry Local service not running".to_string())
+        })?;
+
+        let model = self.get_model().ok_or_else(|| {
+            LlmError::ModelNotAvailable("No model available".to_string())
+        })?;
+
+        let url = format!("{}/openai/v1/chat/completions", base_url);
+
+        // Build history text
+        let history_text: String = history
+            .iter()
+            .map(|(src, trans)| format!("\"{}\" -> \"{}\"", src, trans))
+            .collect::<Vec<_>>()
+            .join("\n");
+
+        let system_prompt = "You are a helpful assistant that extracts key information from subtitle translations. \
+            Given a list of subtitle translations, extract and summarize:\n\
+            1. Character names (original -> translated)\n\
+            2. Genre/tone of the content\n\
+            3. Any recurring terms or proper nouns\n\n\
+            Be extremely concise. Output in this format:\n\
+            Genre: [detected genre]. Names: [name mappings]. Terms: [key terms]\n\
+            If you can't determine something, omit it. Maximum 100 words.";
+
+        let request = ChatCompletionRequest {
+            model,
+            messages: vec![
+                ChatMessage {
+                    role: "system".to_string(),
+                    content: system_prompt.to_string(),
+                },
+                ChatMessage {
+                    role: "user".to_string(),
+                    content: format!("Summarize these subtitle translations:\n{}", history_text),
+                },
+            ],
+            temperature: 0.3,
+            max_tokens: 256,
+        };
+
+        let response = self
+            .http_client
+            .post(&url)
+            .json(&request)
+            .send()
+            .await
+            .map_err(|e| LlmError::ApiError(format!("Summarization request failed: {}", e)))?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            return Err(LlmError::ApiError(format!("Summarization failed: HTTP {}", status)));
+        }
+
+        let completion: ChatCompletionResponse = response
+            .json()
+            .await
+            .map_err(|e| LlmError::ApiError(format!("Failed to parse response: {}", e)))?;
+
+        let summary = completion
+            .choices
+            .first()
+            .map(|c| c.message.content.trim().to_string())
+            .unwrap_or_default();
+
+        debug!("Context summarization produced {} chars", summary.len());
+        Ok(summary)
+    }
 }
 
 #[async_trait]
