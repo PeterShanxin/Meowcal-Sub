@@ -556,17 +556,55 @@ impl FoundryLocalBackend {
             max_tokens: 256,
         };
 
+        debug!("Sending summarization request to Foundry Local: {}", url);
+
         let response = self
             .http_client
             .post(&url)
             .json(&request)
             .send()
-            .await
-            .map_err(|e| LlmError::ApiError(format!("Summarization request failed: {}", e)))?;
+            .await;
+
+        let response = match response {
+            Ok(resp) if resp.status().is_success() => resp,
+            Ok(resp) if resp.status().as_u16() == 404 => {
+                debug!("Foundry Local /openai/v1/chat/completions returned 404, trying /v1/chat/completions");
+                let fallback_url = format!("{}/v1/chat/completions", base_url);
+                self.http_client
+                    .post(&fallback_url)
+                    .json(&request)
+                    .send()
+                    .await
+                    .map_err(|e| {
+                        warn!("Foundry Local summarization request failed: {}", e);
+                        LlmError::ApiError(format!("Summarization request failed: {}", e))
+                    })?
+            }
+            Ok(resp) => {
+                let status = resp.status();
+                let body = resp.text().await.unwrap_or_default();
+                warn!("Foundry Local summarization returned error {}: {}", status, body);
+                return Err(LlmError::ApiError(format!(
+                    "Summarization API error {}: {}",
+                    status,
+                    body.chars().take(200).collect::<String>()
+                )));
+            }
+            Err(e) => {
+                warn!("Foundry Local summarization request failed: {}", e);
+                return Err(LlmError::ApiError(format!("Summarization request failed: {}", e)));
+            }
+        };
 
         if !response.status().is_success() {
             let status = response.status();
-            return Err(LlmError::ApiError(format!("Summarization failed: HTTP {}", status)));
+            let body = response.text().await.unwrap_or_default();
+            warn!("Foundry Local summarization returned error {}: {}", status, body);
+            return Err(LlmError::ApiError(format!(
+                "Summarization API error {}: {}",
+                status,
+                body.chars().take(200).collect::<String>()
+            )));
         }
 
         let completion: ChatCompletionResponse = response
