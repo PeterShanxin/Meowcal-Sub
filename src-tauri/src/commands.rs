@@ -1082,27 +1082,55 @@ pub async fn start_translation(
                 tokio::time::sleep(Duration::from_millis(interval_ms as u64)).await;
                 continue;
             }
-            
+
             let current_text = ocr_result.text.trim().to_string();
-            if current_text == last_text {
-                debug!("Same text as last frame, skipping");
+
+            // Use context-aware deduplication if enabled, otherwise simple string compare
+            let is_duplicate = if translation_manager.is_duplicate(&current_text) {
+                true
+            } else {
+                current_text == last_text
+            };
+
+            if is_duplicate {
+                debug!("Duplicate text detected, skipping");
                 tokio::time::sleep(Duration::from_millis(interval_ms as u64)).await;
                 continue;
             }
-            
+
             last_text = current_text.clone();
             info!("📝 OCR detected ({} chars)", current_text.chars().count());
             
             // Step 3: Translate via backend manager with fallback
+            // Get context prompt if available
+            let context_prompt = translation_manager.get_context_prompt();
+
+            // Build enhanced text with context if available
+            let text_to_translate = if let Some(ref ctx) = context_prompt {
+                format!("{}\n\nTranslate: {}", ctx, current_text)
+            } else {
+                current_text.clone()
+            };
+
             let outcome = translation_manager
-                .translate_with_fallback(&current_text, &source_language, &target_language)
+                .translate_with_fallback(&text_to_translate, &source_language, &target_language)
                 .await;
             let TranslationOutcome {
                 translated,
                 backend_used,
                 warnings,
             } = outcome;
-            
+
+            // Record successful translation in context
+            translation_manager.record_translation(&current_text, &translated);
+
+            // Check if context needs compression (async, don't block)
+            if translation_manager.needs_context_compression() {
+                let _manager_clone = &translation_manager;
+                debug!("Context needs compression, scheduling summarization");
+                // Note: We'll add async summarization in a follow-up task
+            }
+
             info!("🌐 Translation produced ({} chars)", translated.chars().count());
             
             // Step 4: Emit event to frontend
