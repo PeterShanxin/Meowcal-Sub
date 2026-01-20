@@ -11,7 +11,7 @@ use std::process::{Command, Stdio};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::RwLock;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
-use tracing::{debug, warn};
+use tracing::{debug, info, warn};
 
 const START_ATTEMPT_COOLDOWN_MS: u64 = 30_000;
 static LAST_START_ATTEMPT_MS: AtomicU64 = AtomicU64::new(0);
@@ -715,6 +715,14 @@ impl TranslatorBackend for FoundryLocalBackend {
         };
 
         debug!("Sending translation request to Foundry Local: {}", url);
+        info!(
+            target: "translation_io",
+            source_text = %text,
+            source_lang = %source_language,
+            target_lang = %target_language,
+            model = %request.model,
+            "Translation request"
+        );
 
         let response = self
             .http_client
@@ -780,6 +788,13 @@ impl TranslatorBackend for FoundryLocalBackend {
             "Foundry Local translated {} chars to {} chars",
             text.chars().count(),
             translated.chars().count()
+        );
+        info!(
+            target: "translation_io",
+            translated_text = %translated,
+            source_chars = text.chars().count(),
+            translated_chars = translated.chars().count(),
+            "Translation response"
         );
 
         Ok(translated)
