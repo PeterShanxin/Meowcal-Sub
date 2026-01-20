@@ -17,7 +17,7 @@ use crate::config::{save_config, AppConfig, CaptureRegion};
 use crate::capture;
 use crate::ocr::WindowsOcr;
 use crate::llm::{
-    BackendInfo, FoundryLocalBackend, OfflineMtBackend, PhiSilica, TranslationDiagnostics,
+    BackendId, BackendInfo, FoundryLocalBackend, OfflineMtBackend, PhiSilica, TranslationDiagnostics,
     TranslationDiagnosticsState, TranslationManager, TranslationOutcome, TranslatorBackend,
     WindowsAiDiagnostics,
 };
@@ -25,8 +25,9 @@ use crate::overlay;
 use reqwest::Client;
 use serde::Serialize;
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use tauri::{async_runtime, AppHandle, Emitter, Manager, State};
 use tauri_plugin_opener::OpenerExt;
 use tokio::fs;
@@ -170,6 +171,9 @@ pub fn get_system_info() -> SystemInfo {
 
 const TRANSLATE_LOCALLY_BASE_URL: &str =
     "https://github.com/XapaJIaMnu/translateLocally/releases/download/latest";
+const CONTEXT_SUMMARY_MAX_RETRIES: usize = 3;
+const CONTEXT_SUMMARY_RETRY_DELAY_MS: u64 = 500;
+const MOCK_RETRY_COOLDOWN_MS: u64 = 2500;
 
 /// Open the translateLocally download page in the default browser.
 #[tauri::command]
@@ -798,6 +802,22 @@ pub async fn get_translation_diagnostics(
     })
 }
 
+struct CompressionFlagGuard {
+    flag: Arc<AtomicBool>,
+}
+
+impl CompressionFlagGuard {
+    fn new(flag: Arc<AtomicBool>) -> Self {
+        Self { flag }
+    }
+}
+
+impl Drop for CompressionFlagGuard {
+    fn drop(&mut self) {
+        self.flag.store(false, Ordering::SeqCst);
+    }
+}
+
 /// Start the translation process
 /// 
 /// This will:
@@ -854,6 +874,9 @@ pub async fn start_translation(
             config.translation.clone(),
         )
     };
+
+    let context_enabled = translation_config.enable_context_aware;
+    let translation_config_for_summary = translation_config.clone();
     
     // Create a stop signal channel
     // The sender stays here, the receiver goes to the spawned task
@@ -879,7 +902,12 @@ pub async fn start_translation(
 
     // Initialize translation backend manager
     let diagnostics = state.translation_diagnostics.clone();
-    let translation_manager = TranslationManager::new(translation_config, app.clone(), diagnostics);
+    let translation_manager = Arc::new(TranslationManager::new(
+        translation_config,
+        app.clone(),
+        diagnostics,
+    ));
+    let compression_in_flight = Arc::new(AtomicBool::new(false));
 
     // Clone app handle for use inside the async block to access state
     let app_for_region = app.clone();
@@ -917,6 +945,10 @@ pub async fn start_translation(
         
         // Keep track of last OCR text to avoid duplicate processing
         let mut last_text = String::new();
+        let mut last_backend_used = BackendId::Mock;
+        let mut last_attempt_at = Instant::now()
+            .checked_sub(Duration::from_millis(MOCK_RETRY_COOLDOWN_MS))
+            .unwrap_or_else(Instant::now);
         
         // Track if we've already notified about fallback
         let mut fallback_notified = false;
@@ -1085,35 +1117,45 @@ pub async fn start_translation(
 
             let current_text = ocr_result.text.trim().to_string();
 
-            // Use context-aware deduplication if enabled, otherwise simple string compare
-            let is_duplicate = if translation_manager.is_duplicate(&current_text) {
-                true
-            } else {
-                current_text == last_text
-            };
+            let now = Instant::now();
+            let is_exact_duplicate = current_text == last_text;
+            if is_exact_duplicate {
+                if last_backend_used != BackendId::Mock {
+                    debug!("Duplicate text detected, skipping");
+                    tokio::time::sleep(Duration::from_millis(interval_ms as u64)).await;
+                    continue;
+                }
 
-            if is_duplicate {
-                debug!("Duplicate text detected, skipping");
+                // If we fell back to passthrough last time, retry occasionally so we can recover
+                // once the LLM backend becomes ready (avoid spamming requests every frame).
+                if now.duration_since(last_attempt_at) < Duration::from_millis(MOCK_RETRY_COOLDOWN_MS) {
+                    debug!("Duplicate text (mock cooldown), skipping");
+                    tokio::time::sleep(Duration::from_millis(interval_ms as u64)).await;
+                    continue;
+                }
+            }
+
+            if context_enabled && translation_manager.is_duplicate(&current_text) {
+                debug!("Duplicate text detected (context dedup), skipping");
                 tokio::time::sleep(Duration::from_millis(interval_ms as u64)).await;
                 continue;
             }
 
             last_text = current_text.clone();
+            last_attempt_at = now;
             info!("📝 OCR detected ({} chars)", current_text.chars().count());
             
             // Step 3: Translate via backend manager with fallback
             // Get context prompt if available
             let context_prompt = translation_manager.get_context_prompt();
 
-            // Build enhanced text with context if available
-            let text_to_translate = if let Some(ref ctx) = context_prompt {
-                format!("{}\n\nTranslate: {}", ctx, current_text)
-            } else {
-                current_text.clone()
-            };
-
             let outcome = translation_manager
-                .translate_with_fallback(&text_to_translate, &source_language, &target_language)
+                .translate_with_context(
+                    &current_text,
+                    &source_language,
+                    &target_language,
+                    context_prompt.as_deref(),
+                )
                 .await;
             let TranslationOutcome {
                 translated,
@@ -1121,13 +1163,74 @@ pub async fn start_translation(
                 warnings,
             } = outcome;
 
-            // Record successful translation in context
-            translation_manager.record_translation(&current_text, &translated);
+            // Record successful translation in context (avoid polluting history with passthrough output)
+            if backend_used != BackendId::Mock {
+                translation_manager.record_translation(&current_text, &translated);
+            }
+            last_backend_used = backend_used;
 
             // Check if context needs compression (async, don't block)
-            if translation_manager.needs_context_compression() {
+            if translation_manager.needs_context_compression()
+                && !compression_in_flight.swap(true, Ordering::SeqCst)
+            {
                 debug!("Context needs compression, scheduling summarization");
-                // Note: We'll add async summarization in a follow-up task
+                let manager = Arc::clone(&translation_manager);
+                let config = translation_config_for_summary.clone();
+                let compression_flag = Arc::clone(&compression_in_flight);
+
+                tokio::spawn(async move {
+                    let _reset = CompressionFlagGuard::new(compression_flag);
+                    let history_entries = manager.get_history_for_summarization();
+                    if history_entries.is_empty() {
+                        return;
+                    }
+
+                    if !config.enable_foundry_local {
+                        manager.restore_history_entries(history_entries);
+                        manager.cap_history_to_budget();
+                        return;
+                    }
+
+                    let history_pairs: Vec<(String, String)> = history_entries
+                        .iter()
+                        .map(|entry| (entry.source.clone(), entry.translation.clone()))
+                        .collect();
+
+                    let backend = FoundryLocalBackend::new(config.foundry_local.clone());
+
+                    for attempt in 1..=CONTEXT_SUMMARY_MAX_RETRIES {
+                        match backend.summarize_context(&history_pairs).await {
+                            Ok(summary) if !summary.trim().is_empty() => {
+                                manager.update_context_memory(summary);
+                                return;
+                            }
+                            Ok(_) => {
+                                warn!(
+                                    "Context summarization attempt {} returned empty output",
+                                    attempt
+                                );
+                            }
+                            Err(err) => {
+                                warn!(
+                                    "Context summarization attempt {} failed: {}",
+                                    attempt,
+                                    err
+                                );
+                            }
+                        }
+
+                        if attempt == CONTEXT_SUMMARY_MAX_RETRIES {
+                            manager.restore_history_entries(history_entries);
+                            manager.cap_history_to_budget();
+                            return;
+                        }
+
+                        tokio::time::sleep(Duration::from_millis(
+                            CONTEXT_SUMMARY_RETRY_DELAY_MS,
+                        ))
+                        .await;
+                    }
+                });
             }
 
             info!("🌐 Translation produced ({} chars)", translated.chars().count());

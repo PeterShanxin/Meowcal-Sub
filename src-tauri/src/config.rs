@@ -263,7 +263,7 @@ impl Default for FoundryLocalConfig {
     fn default() -> Self {
         Self {
             model: None,
-            timeout_ms: 30000,
+            timeout_ms: 8000,
         }
     }
 }

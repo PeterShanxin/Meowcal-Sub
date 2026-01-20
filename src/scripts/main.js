@@ -199,10 +199,25 @@ function applyTranslationSettings(translation) {
 
     // Load Foundry Local model selector
     const foundryModel = config.foundryLocal?.model || '';
-    document.getElementById('foundry-local-model').value = foundryModel;
+    const modelSelect = document.getElementById('foundry-local-model');
+    if (modelSelect) {
+        if (foundryModel) {
+            // Ensure the selected model is visible immediately even before the list loads
+            const hasOption = Array.from(modelSelect.options).some(opt => opt.value === foundryModel);
+            if (!hasOption) {
+                const option = document.createElement('option');
+                option.value = foundryModel;
+                option.textContent = `${foundryModel} (selected)`;
+                modelSelect.appendChild(option);
+            }
+            modelSelect.value = foundryModel;
+        } else {
+            modelSelect.value = '';
+        }
+    }
 
     // Populate Foundry Local models in background (don't block UI initialization)
-    loadFoundryLocalModels().catch(error => {
+    loadFoundryLocalModels(foundryModel).catch(error => {
         console.warn('Background model loading failed:', error);
     });
 }
@@ -296,11 +311,12 @@ async function saveSettings() {
 /**
  * Load available Foundry Local models and populate the dropdown
  */
-async function loadFoundryLocalModels() {
+async function loadFoundryLocalModels(selectedModel = null) {
     const select = document.getElementById('foundry-local-model');
     if (!select) return;
 
     try {
+        const desiredModel = selectedModel ?? select.value;
         const models = await TauriBridge.invoke('list_foundry_local_models');
 
         // Clear existing options except the first (Auto)
@@ -315,6 +331,20 @@ async function loadFoundryLocalModels() {
             option.textContent = model;
             select.appendChild(option);
         });
+
+        // Ensure the selected model is shown even if it's not in the cached list yet
+        if (desiredModel) {
+            const hasDesired = Array.from(select.options).some(opt => opt.value === desiredModel);
+            if (!hasDesired) {
+                const option = document.createElement('option');
+                option.value = desiredModel;
+                option.textContent = `${desiredModel} (selected)`;
+                select.appendChild(option);
+            }
+            select.value = desiredModel;
+        } else {
+            select.value = '';
+        }
 
         console.log(`Loaded ${models.length} Foundry Local models`);
     } catch (error) {
@@ -353,6 +383,12 @@ function setupEventListeners() {
         .addEventListener('click', refreshTranslationDiagnostics);
     document.getElementById('btn-prepare-foundry')
         .addEventListener('click', handlePrepareFoundryLocal);
+
+    // Auto-save when Foundry Local model changes so backend status matches selection
+    document.getElementById('foundry-local-model').addEventListener('change', async () => {
+        console.log('Foundry Local model changed, auto-saving...');
+        await saveSettings();
+    });
 
     // Auto-save when language settings change to ensure translation direction is persisted
     document.getElementById('source-language').addEventListener('change', async () => {
@@ -405,7 +441,7 @@ async function handleSelectArea() {
         console.log('Selector window opened');
 
         // Start polling for region changes (fallback in case events don't work)
-        startRegionPolling();
+        await startRegionPolling();
     } catch (error) {
         console.error('Failed to open area selector:', error);
         showToast('Failed to open selector: ' + error, 'error');
@@ -417,13 +453,21 @@ async function handleSelectArea() {
  */
 let pollingInterval = null;
 
-function startRegionPolling() {
+async function startRegionPolling() {
     // Stop any existing polling
     if (pollingInterval) {
         clearInterval(pollingInterval);
     }
 
-    const previousRegion = appState.captureRegion;
+    // Establish a baseline from the backend so restored regions don't trigger a false "selected" toast
+    let baselineRegion = null;
+    try {
+        baselineRegion = await TauriBridge.invoke('get_capture_region');
+    } catch (e) {
+        // Ignore baseline fetch errors; we'll fall back to current app state
+    }
+    baselineRegion = baselineRegion || appState.captureRegion;
+
     let attempts = 0;
     const maxAttempts = 100; // 10 seconds max
 
@@ -434,11 +478,11 @@ function startRegionPolling() {
             const region = await TauriBridge.invoke('get_capture_region');
 
             // Check if we got a new region
-            if (region && (!previousRegion ||
-                region.x !== previousRegion.x ||
-                region.y !== previousRegion.y ||
-                region.width !== previousRegion.width ||
-                region.height !== previousRegion.height)) {
+            if (region && (!baselineRegion ||
+                region.x !== baselineRegion.x ||
+                region.y !== baselineRegion.y ||
+                region.width !== baselineRegion.width ||
+                region.height !== baselineRegion.height)) {
 
                 console.log('Region detected via polling:', region);
                 clearInterval(pollingInterval);
@@ -670,7 +714,11 @@ function updateBackendStatusUI(diagnostics) {
             extra = extra ? `${extra} Last error: ${errorCode}.` : `Last error: ${errorCode}.`;
         }
 
-        notes.textContent = backend.notes || extra || 'No notes available.';
+        let notesText = backend.notes || '';
+        if (extra) {
+            notesText = notesText ? `${notesText} ${extra}` : extra;
+        }
+        notes.textContent = notesText || 'No notes available.';
 
         row.appendChild(header);
         row.appendChild(notes);
@@ -706,9 +754,25 @@ function updateFoundryStatusInline(diagnostics) {
     const statusClass = statusInfo.className;
     const pill = `<span class="status-pill ${statusClass}">● ${statusInfo.label.toUpperCase()}</span>`;
 
+    const backendKey = backendIdKey(foundry.id);
+    const errorCode = diagnostics.lastErrorByBackend?.[backendKey];
+    const latency = diagnostics.lastLatencyByBackend?.[backendKey];
+    let extra = '';
+    if (typeof latency === 'number') {
+        extra = `Last latency: ${latency}ms.`;
+    }
+    if (errorCode) {
+        extra = extra ? `${extra} Last error: ${errorCode}.` : `Last error: ${errorCode}.`;
+    }
+
+    let notesText = foundry.notes || '';
+    if (extra) {
+        notesText = notesText ? `${notesText} ${extra}` : extra;
+    }
+
     statusEl.innerHTML = `
         ${pill}
-        <span class="status-text">${foundry.notes}</span>
+        <span class="status-text">${notesText}</span>
     `;
 }
 
@@ -1142,19 +1206,44 @@ async function syncTranslationState() {
 async function handleStartTranslation() {
     console.log('Starting translation...');
 
+    const startButton = document.getElementById('btn-start');
+    const stopButton = document.getElementById('btn-stop');
+
+    // Provide immediate UI feedback (backend startup can take a moment)
+    if (startButton) {
+        startButton.disabled = true;
+    }
+    updateStatus('running', 'Starting...');
+    showToast('Starting translation...', 'success');
+
     try {
         await TauriBridge.invoke('start_translation');
         appState.isRunning = true;
 
         // Update UI
-        document.getElementById('btn-start').style.display = 'none';
-        document.getElementById('btn-stop').style.display = 'flex';
-        document.getElementById('btn-stop').disabled = false;
+        if (startButton) {
+            startButton.style.display = 'none';
+        }
+        if (stopButton) {
+            stopButton.style.display = 'flex';
+            stopButton.disabled = false;
+        }
         updateStatus('running', 'Translating...');
 
         showToast('Translation started!', 'success');
     } catch (error) {
         console.error('Failed to start translation:', error);
+        appState.isRunning = false;
+
+        // Restore UI state on failure
+        if (stopButton) {
+            stopButton.style.display = 'none';
+        }
+        if (startButton) {
+            startButton.style.display = 'flex';
+            startButton.disabled = !appState.captureRegion;
+        }
+        updateStatus('ready', 'Ready');
         showToast('Failed to start: ' + error, 'error');
     }
 }

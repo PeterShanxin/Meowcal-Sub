@@ -90,7 +90,7 @@ Uses vanilla JS with `invoke()` for Tauri IPC. No framework.
 
 ## Coding Conventions
 
-- **Logging**: Use `tracing` crate (`info!`, `debug!`, `warn!`) - logs to `src-tauri/logs/meowcal-sub.log`
+- **Logging**: Use `tracing` crate (`info!`, `debug!`, `warn!`) - logs to `%APPDATA%\\com.meowcal.sub\\logs\\meowcal-sub_<timestamp>.log` (override with `MEOWCAL_LOG_DIR`)
 - **Comments**: Heavy inline comments for beginner-friendliness
 - **Errors**: Use `thiserror` for custom error types
 - **Async**: `tokio` runtime for async operations
@@ -113,7 +113,7 @@ The `/dev` command supports chaining workflows (e.g., PM → UI → Tech) with H
 
 ## Debugging
 
-- **Backend logs**: `src-tauri/logs/meowcal-sub.log` (rolling daily, DEBUG level)
+- **Backend logs**: `%APPDATA%\\com.meowcal.sub\\logs\\meowcal-sub_<timestamp>.log` (DEBUG level; override with `MEOWCAL_LOG_DIR`)
 - **Frontend logs**: Browser DevTools (Ctrl+Shift+I in dev mode)
 - **Translation diagnostics**: `get_translation_diagnostics` command shows backend availability
 

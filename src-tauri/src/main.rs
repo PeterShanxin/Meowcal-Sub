@@ -33,6 +33,25 @@ use meowcal_sub::commands::{self, AppState};
 use meowcal_sub::config::load_config;
 use meowcal_sub::http_server;
 
+const LOG_RETENTION_DAYS: u64 = 7;
+
+fn resolve_log_dir() -> std::path::PathBuf {
+    if let Ok(dir) = std::env::var("MEOWCAL_LOG_DIR") {
+        let trimmed = dir.trim();
+        if !trimmed.is_empty() {
+            return std::path::PathBuf::from(trimmed);
+        }
+    }
+
+    if let Ok(appdata) = std::env::var("APPDATA") {
+        return std::path::PathBuf::from(appdata)
+            .join("com.meowcal.sub")
+            .join("logs");
+    }
+
+    std::path::PathBuf::from("logs")
+}
+
 // =============================================================================
 // MAIN FUNCTION
 // =============================================================================
@@ -55,15 +74,16 @@ fn main() {
     } else {
         // Log to file in normal mode - per-session with unique timestamp
         // Create logs directory if it doesn't exist
-        std::fs::create_dir_all("logs").ok();
+        let logs_dir = resolve_log_dir();
+        std::fs::create_dir_all(&logs_dir).ok();
         
-        // Clean up old log files (older than 7 days)
-        cleanup_old_logs("logs", 7);
+        // Clean up old log files (older than LOG_RETENTION_DAYS days)
+        cleanup_old_logs(&logs_dir, LOG_RETENTION_DAYS);
         
         // Generate session-unique log filename with full timestamp
         let now = chrono::Local::now();
         let log_filename = format!("meowcal-sub_{}.log", now.format("%Y-%m-%d_%H-%M-%S"));
-        let log_path = std::path::Path::new("logs").join(&log_filename);
+        let log_path = logs_dir.join(&log_filename);
         
         // Create a file appender for this specific session
         let file = std::fs::OpenOptions::new()
@@ -264,7 +284,7 @@ fn run_http_only_mode() {
 
 /// Clean up old log files to prevent folder bloat.
 /// Deletes log files older than `max_age_days` days.
-fn cleanup_old_logs(logs_dir: &str, max_age_days: u64) {
+fn cleanup_old_logs(logs_dir: &std::path::Path, max_age_days: u64) {
     use std::fs;
     use std::time::{Duration, SystemTime};
     

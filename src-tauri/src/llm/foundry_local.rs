@@ -228,15 +228,29 @@ impl FoundryLocalBackend {
         // Parse output looking for context window/length info
         // Expected formats may vary, look for common patterns:
         // "context_length: 4096" or "max_position_embeddings: 4096"
+        let context_keys = [
+            "context_length",
+            "context length",
+            "context_window",
+            "context window",
+            "context:",
+            "context =",
+            "max_position_embeddings",
+            "max position embeddings",
+            "max_position",
+            "max position",
+            "n_ctx",
+        ];
         for line in stdout.lines() {
             let line_lower = line.to_lowercase();
-            if line_lower.contains("context") || line_lower.contains("position") || line_lower.contains("length") {
-                // Try to extract a number
-                if let Some(num) = Self::extract_number_from_line(line) {
-                    if num >= 512 && num <= 131072 {
-                        debug!("Detected context window for {}: {}", model, num);
-                        return Some(num);
-                    }
+            if !context_keys.iter().any(|key| line_lower.contains(key)) {
+                continue;
+            }
+
+            if let Some(num) = Self::extract_number_from_line(line) {
+                if num >= 512 && num <= 131072 {
+                    debug!("Detected context window for {}: {}", model, num);
+                    return Some(num);
                 }
             }
         }
@@ -553,7 +567,7 @@ impl FoundryLocalBackend {
                 },
             ],
             temperature: 0.3,
-            max_tokens: 256,
+            max_tokens: 150,
         };
 
         debug!("Sending summarization request to Foundry Local: {}", url);
@@ -662,8 +676,33 @@ impl TranslatorBackend for FoundryLocalBackend {
 
     fn notes(&self) -> String {
         if let Some(url) = self.get_service_url() {
-            if let Some(model) = self.get_model() {
-                format!("Service at {}. Using model: {}. If translation fails, run: foundry model run {}", url, model, model)
+            let models = self.cached_models.read().unwrap();
+
+            if let Some(ref configured) = self.config.model {
+                if Self::model_in_cache(configured, &models) {
+                    let resolved = self.resolve_model_id(configured, &models);
+                    format!("Service at {}. Selected model: {}.", url, resolved)
+                } else if models.is_empty() {
+                    format!(
+                        "Service at {}. Selected model: {} (not cached). No models cached - run: foundry model run {}",
+                        url,
+                        configured,
+                        configured
+                    )
+                } else {
+                    format!(
+                        "Service at {}. Selected model: {} (not cached). Run: foundry model run {}",
+                        url,
+                        configured,
+                        configured
+                    )
+                }
+            } else if let Some(model) = models.first() {
+                let resolved = self.resolve_model_id(model, &models);
+                format!(
+                    "Service at {}. Auto-selected model: {}. To pick a different model, choose one and Save Settings.",
+                    url, resolved
+                )
             } else {
                 format!("Service at {}. No models cached - run: foundry model run <model>", url)
             }
