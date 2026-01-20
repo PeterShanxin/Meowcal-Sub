@@ -5,10 +5,10 @@
 use crate::config::TranslationConfig;
 use crate::llm::{
     BackendId, BackendInfo, FoundryLocalBackend, MockBackend, OfflineMtBackend, PhiSilica,
-    ReadyState, TranslationDiagnostics, TranslationDiagnosticsState, TranslationOutcome,
-    TranslatorBackend,
+    ReadyState, TranslationContext, TranslationDiagnostics, TranslationDiagnosticsState,
+    TranslationOutcome, TranslatorBackend,
 };
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, RwLock};
 use std::time::Instant;
 use tauri::AppHandle;
 use tokio::time::{timeout, Duration};
@@ -23,6 +23,8 @@ pub struct TranslationManager {
     backends: Vec<Box<dyn TranslatorBackend>>,
     diagnostics: Arc<Mutex<TranslationDiagnosticsState>>,
     backend_timeout_ms: u64,
+    /// Session translation context (shared across calls)
+    context: Arc<RwLock<TranslationContext>>,
 }
 
 impl TranslationManager {
@@ -40,12 +42,46 @@ impl TranslationManager {
         backends.push(Box::new(PhiSilica::new()));
         backends.push(Box::new(MockBackend::new()));
 
+        // Initialize context with auto-detected budget
+        let context_budget = Self::detect_context_budget(&config);
+        let context = TranslationContext::new(context_budget, config.enable_context_aware);
+
         Self {
             config,
             backends,
             diagnostics,
             backend_timeout_ms: DEFAULT_BACKEND_TIMEOUT_MS,
+            context: Arc::new(RwLock::new(context)),
         }
+    }
+
+    /// Detect appropriate context budget based on model
+    fn detect_context_budget(config: &TranslationConfig) -> usize {
+        // Try to detect from Foundry Local model if available
+        if config.enable_foundry_local {
+            if let Some(ref model) = config.foundry_local.model {
+                if let Some(window) = FoundryLocalBackend::get_model_context_window(model) {
+                    // Use 15% of context window for translation context
+                    let budget = (window as f32 * 0.15) as usize;
+                    debug!("Context budget from model {}: {} tokens", model, budget);
+                    return budget.clamp(200, 2000);
+                }
+            }
+
+            // Try first cached model
+            let cached_models = FoundryLocalBackend::get_cached_models_from_cli();
+            if let Some(first_model) = cached_models.first() {
+                if let Some(window) = FoundryLocalBackend::get_model_context_window(first_model) {
+                    let budget = (window as f32 * 0.15) as usize;
+                    debug!("Context budget from first cached model {}: {} tokens", first_model, budget);
+                    return budget.clamp(200, 2000);
+                }
+            }
+        }
+
+        // Default budget if detection fails
+        debug!("Using default context budget: 500 tokens");
+        500
     }
 
     #[cfg(test)]
@@ -55,11 +91,13 @@ impl TranslationManager {
         diagnostics: Arc<Mutex<TranslationDiagnosticsState>>,
         backend_timeout_ms: u64,
     ) -> Self {
+        let context = TranslationContext::new(500, config.enable_context_aware);
         Self {
             config,
             backends,
             diagnostics,
             backend_timeout_ms,
+            context: Arc::new(RwLock::new(context)),
         }
     }
 
@@ -315,6 +353,55 @@ impl TranslationManager {
         }
     }
 
+    /// Check if text is duplicate (for deduplication in capture loop)
+    pub fn is_duplicate(&self, text: &str) -> bool {
+        if !self.config.enable_context_aware {
+            return false;
+        }
+        self.context.read().unwrap().is_duplicate(text)
+    }
+
+    /// Record a successful translation in context
+    pub fn record_translation(&self, source: &str, translation: &str) {
+        if !self.config.enable_context_aware {
+            return;
+        }
+        self.context.write().unwrap().add_translation(source, translation);
+    }
+
+    /// Get context prompt to enhance translation request
+    pub fn get_context_prompt(&self) -> Option<String> {
+        if !self.config.enable_context_aware {
+            return None;
+        }
+        self.context.read().unwrap().build_context_prompt()
+    }
+
+    /// Check if context needs compression (memory summarization)
+    pub fn needs_context_compression(&self) -> bool {
+        self.context.read().unwrap().needs_compression()
+    }
+
+    /// Get history entries for summarization
+    pub fn get_history_for_summarization(&self) -> Vec<crate::llm::HistoryEntry> {
+        self.context.write().unwrap().get_history_for_summarization()
+    }
+
+    /// Update context memory with summarized content
+    pub fn update_context_memory(&self, memory: String) {
+        self.context.write().unwrap().set_memory(memory);
+    }
+
+    /// Reset context (call when capture session ends)
+    pub fn reset_context(&self) {
+        self.context.write().unwrap().reset();
+    }
+
+    /// Get context usage stats (for diagnostics)
+    pub fn context_usage(&self) -> (usize, usize) {
+        self.context.read().unwrap().token_usage()
+    }
+
     fn backend_by_id(&self, id: BackendId) -> Option<&dyn TranslatorBackend> {
         self.backends
             .iter()
@@ -399,6 +486,7 @@ mod tests {
             enable_windows_ai: true,
             enable_offline_mt: true,
             allow_mock_fallback: true,
+            enable_context_aware: true,
             foundry_local: crate::config::FoundryLocalConfig::default(),
             offline_mt: OfflineMtConfig::default(),
         }
