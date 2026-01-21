@@ -400,6 +400,28 @@ function setupEventListeners() {
         await saveSettings();
     });
 
+    // Auto-save when translation toggles change
+    document.getElementById('toggle-context-aware').addEventListener('change', async () => {
+        console.log('Context memory toggled, auto-saving...');
+        await saveSettings();
+    });
+    document.getElementById('toggle-foundry-local').addEventListener('change', async () => {
+        console.log('Foundry Local toggled, auto-saving...');
+        await saveSettings();
+    });
+    document.getElementById('toggle-windows-ai').addEventListener('change', async () => {
+        console.log('Windows AI toggled, auto-saving...');
+        await saveSettings();
+    });
+    document.getElementById('toggle-offline-mt').addEventListener('change', async () => {
+        console.log('Offline MT toggled, auto-saving...');
+        await saveSettings();
+    });
+    document.getElementById('toggle-mock-fallback').addEventListener('change', async () => {
+        console.log('Passthrough fallback toggled, auto-saving...');
+        await saveSettings();
+    });
+
     // Download translateLocally
     document.getElementById('btn-download-offline-mt')
         .addEventListener('click', handleOfflineMtDownload);
