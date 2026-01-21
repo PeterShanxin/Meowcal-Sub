@@ -308,6 +308,20 @@ async function saveSettings() {
     }
 }
 
+const AUTO_SAVE_DELAY_MS = 350;
+let autoSaveTimer = null;
+
+function scheduleAutoSave() {
+    if (autoSaveTimer) {
+        clearTimeout(autoSaveTimer);
+    }
+
+    autoSaveTimer = setTimeout(async () => {
+        autoSaveTimer = null;
+        await saveSettings();
+    }, AUTO_SAVE_DELAY_MS);
+}
+
 /**
  * Load available Foundry Local models and populate the dropdown
  */
@@ -377,6 +391,10 @@ function setupEventListeners() {
     document.getElementById('capture-interval').addEventListener('input', (e) => {
         document.getElementById('interval-value').textContent = e.target.value;
     });
+    document.getElementById('capture-interval').addEventListener('change', () => {
+        console.log('Capture interval changed, auto-saving...');
+        scheduleAutoSave();
+    });
 
     // Backend diagnostics refresh
     document.getElementById('btn-refresh-backends')
@@ -385,41 +403,45 @@ function setupEventListeners() {
         .addEventListener('click', handlePrepareFoundryLocal);
 
     // Auto-save when Foundry Local model changes so backend status matches selection
-    document.getElementById('foundry-local-model').addEventListener('change', async () => {
+    document.getElementById('foundry-local-model').addEventListener('change', () => {
         console.log('Foundry Local model changed, auto-saving...');
-        await saveSettings();
+        scheduleAutoSave();
     });
 
     // Auto-save when language settings change to ensure translation direction is persisted
-    document.getElementById('source-language').addEventListener('change', async () => {
+    document.getElementById('source-language').addEventListener('change', () => {
         console.log('Source language changed, auto-saving...');
-        await saveSettings();
+        scheduleAutoSave();
     });
-    document.getElementById('target-language').addEventListener('change', async () => {
+    document.getElementById('target-language').addEventListener('change', () => {
         console.log('Target language changed, auto-saving...');
-        await saveSettings();
+        scheduleAutoSave();
     });
 
     // Auto-save when translation toggles change
-    document.getElementById('toggle-context-aware').addEventListener('change', async () => {
+    document.getElementById('toggle-context-aware').addEventListener('change', () => {
         console.log('Context memory toggled, auto-saving...');
-        await saveSettings();
+        scheduleAutoSave();
     });
-    document.getElementById('toggle-foundry-local').addEventListener('change', async () => {
+    document.getElementById('toggle-foundry-local').addEventListener('change', () => {
         console.log('Foundry Local toggled, auto-saving...');
-        await saveSettings();
+        scheduleAutoSave();
     });
-    document.getElementById('toggle-windows-ai').addEventListener('change', async () => {
+    document.getElementById('toggle-windows-ai').addEventListener('change', () => {
         console.log('Windows AI toggled, auto-saving...');
-        await saveSettings();
+        scheduleAutoSave();
     });
-    document.getElementById('toggle-offline-mt').addEventListener('change', async () => {
+    document.getElementById('toggle-offline-mt').addEventListener('change', () => {
         console.log('Offline MT toggled, auto-saving...');
-        await saveSettings();
+        scheduleAutoSave();
     });
-    document.getElementById('toggle-mock-fallback').addEventListener('change', async () => {
+    document.getElementById('toggle-mock-fallback').addEventListener('change', () => {
         console.log('Passthrough fallback toggled, auto-saving...');
-        await saveSettings();
+        scheduleAutoSave();
+    });
+    document.getElementById('offline-mt-path').addEventListener('change', () => {
+        console.log('Offline MT path changed, auto-saving...');
+        scheduleAutoSave();
     });
 
     // Download translateLocally
