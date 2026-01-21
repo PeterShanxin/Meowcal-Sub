@@ -223,4 +223,18 @@ pub trait TranslatorBackend: Send + Sync {
         source_language: &str,
         target_language: &str,
     ) -> Result<String, LlmError>;
+
+    /// Translate text to target language, optionally providing session context.
+    ///
+    /// Default implementation ignores `context` and calls `translate()`.
+    async fn translate_with_context(
+        &self,
+        text: &str,
+        source_language: &str,
+        target_language: &str,
+        context: Option<&str>,
+    ) -> Result<String, LlmError> {
+        let _ = context;
+        self.translate(text, source_language, target_language).await
+    }
 }

@@ -800,6 +800,17 @@ impl TranslatorBackend for FoundryLocalBackend {
         source_language: &str,
         target_language: &str,
     ) -> Result<String, LlmError> {
+        self.translate_with_context(text, source_language, target_language, None)
+            .await
+    }
+
+    async fn translate_with_context(
+        &self,
+        text: &str,
+        source_language: &str,
+        target_language: &str,
+        context: Option<&str>,
+    ) -> Result<String, LlmError> {
         if text.trim().is_empty() {
             return Ok(String::new());
         }
@@ -825,18 +836,29 @@ impl TranslatorBackend for FoundryLocalBackend {
             source_label, target_label
         );
 
+        let mut messages = Vec::new();
+        messages.push(ChatMessage {
+            role: "system".to_string(),
+            content: system_prompt,
+        });
+
+        if let Some(ctx) = context.filter(|value| !value.trim().is_empty()) {
+            messages.push(ChatMessage {
+                role: "system".to_string(),
+                content: format!(
+                    "Session context for consistent subtitle translation (reference only; do NOT translate or repeat):\n{}",
+                    ctx.trim()
+                ),
+            });
+        }
+        messages.push(ChatMessage {
+            role: "user".to_string(),
+            content: text.to_string(),
+        });
+
         let request = ChatCompletionRequest {
             model,
-            messages: vec![
-                ChatMessage {
-                    role: "system".to_string(),
-                    content: system_prompt,
-                },
-                ChatMessage {
-                    role: "user".to_string(),
-                    content: text.to_string(),
-                },
-            ],
+            messages,
             temperature: 0.3, // Low temperature for consistent translations
             max_tokens: 2048,
         };
