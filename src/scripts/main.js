@@ -1254,13 +1254,21 @@ async function handleStartTranslation() {
 async function handleStopTranslation() {
     console.log('Stopping translation...');
 
+    const startButton = document.getElementById('btn-start');
+    const stopButton = document.getElementById('btn-stop');
+
     try {
         await TauriBridge.invoke('stop_translation');
         appState.isRunning = false;
 
         // Update UI
-        document.getElementById('btn-stop').style.display = 'none';
-        document.getElementById('btn-start').style.display = 'flex';
+        if (stopButton) {
+            stopButton.style.display = 'none';
+        }
+        if (startButton) {
+            startButton.style.display = 'flex';
+            startButton.disabled = !appState.captureRegion;
+        }
         updateStatus('ready', 'Ready');
 
         showToast('Translation stopped', 'success');
