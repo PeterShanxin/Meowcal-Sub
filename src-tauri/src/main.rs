@@ -22,11 +22,11 @@
 
 use tauri::{
     menu::{Menu, MenuItem},
-    tray::{TrayIconBuilder, TrayIconEvent, MouseButton, MouseButtonState},
+    tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
     Manager, PhysicalPosition, PhysicalSize,
 };
-use tracing::{info, Level};
-use tracing_subscriber::FmtSubscriber;
+use tracing::info;
+use tracing_subscriber::{EnvFilter, FmtSubscriber};
 
 // Import our custom modules
 use meowcal_sub::commands::{self, AppState};
@@ -34,6 +34,28 @@ use meowcal_sub::config::load_config;
 use meowcal_sub::http_server;
 
 const LOG_RETENTION_DAYS: u64 = 7;
+const DEFAULT_LOG_FILTER: &str = "meowcal_sub=debug,translation_io=info,tauri=info,axum=info,tower_http=info,hyper=warn,hyper_util=warn,reqwest=warn";
+
+fn resolve_log_filter() -> EnvFilter {
+    let custom = std::env::var("MEOWCAL_LOG_FILTER").ok();
+    let rust_log = std::env::var("RUST_LOG").ok();
+
+    for candidate in [custom, rust_log].into_iter().flatten() {
+        let trimmed = candidate.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+
+        match EnvFilter::try_new(trimmed) {
+            Ok(filter) => return filter,
+            Err(err) => {
+                eprintln!("Invalid log filter '{}': {}", trimmed, err);
+            }
+        }
+    }
+
+    EnvFilter::new(DEFAULT_LOG_FILTER)
+}
 
 fn resolve_log_dir() -> std::path::PathBuf {
     if let Ok(dir) = std::env::var("MEOWCAL_LOG_DIR") {
@@ -64,8 +86,9 @@ fn main() {
     // --- Step 1: Set up logging ---
     if http_only_mode {
         // Log to console in HTTP-only mode for easier debugging
+        let filter = resolve_log_filter();
         let subscriber = FmtSubscriber::builder()
-            .with_max_level(Level::DEBUG)
+            .with_env_filter(filter)
             .with_ansi(true)
             .pretty()
             .finish();
@@ -76,26 +99,27 @@ fn main() {
         // Create logs directory if it doesn't exist
         let logs_dir = resolve_log_dir();
         std::fs::create_dir_all(&logs_dir).ok();
-        
+
         // Clean up old log files (older than LOG_RETENTION_DAYS days)
         cleanup_old_logs(&logs_dir, LOG_RETENTION_DAYS);
-        
+
         // Generate session-unique log filename with full timestamp
         let now = chrono::Local::now();
         let log_filename = format!("meowcal-sub_{}.log", now.format("%Y-%m-%d_%H-%M-%S"));
         let log_path = logs_dir.join(&log_filename);
-        
+
         // Create a file appender for this specific session
         let file = std::fs::OpenOptions::new()
             .create(true)
             .append(true)
             .open(&log_path)
             .expect("Failed to open log file");
-        
+
         let (non_blocking, guard) = tracing_appender::non_blocking(file);
 
+        let filter = resolve_log_filter();
         let subscriber = FmtSubscriber::builder()
-            .with_max_level(Level::DEBUG)
+            .with_env_filter(filter)
             .with_writer(non_blocking)
             .with_ansi(false) // File logs shouldn't have color codes
             .pretty()
@@ -156,7 +180,7 @@ fn main() {
             info!("Setting up system tray...");
 
             // Load persisted config
-            let loaded_config = load_config(&app.handle());
+            let loaded_config = load_config(app.handle());
             {
                 let state = app.state::<AppState>();
                 *state.config.lock().unwrap() = loaded_config.clone();
@@ -178,20 +202,19 @@ fn main() {
                     let _ = window.maximize();
                 }
             }
-            
+
             // Create menu items for the tray
             let show_item = MenuItem::with_id(app, "show", "Show Window", true, None::<&str>)?;
-            let select_area_item = MenuItem::with_id(app, "select_area", "Select Area", true, None::<&str>)?;
+            let select_area_item =
+                MenuItem::with_id(app, "select_area", "Select Area", true, None::<&str>)?;
             let settings_item = MenuItem::with_id(app, "settings", "Settings", true, None::<&str>)?;
             let quit_item = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
 
             // Build the tray menu
-            let menu = Menu::with_items(app, &[
-                &show_item,
-                &select_area_item,
-                &settings_item,
-                &quit_item,
-            ])?;
+            let menu = Menu::with_items(
+                app,
+                &[&show_item, &select_area_item, &settings_item, &quit_item],
+            )?;
 
             // Create the tray icon
             let _tray = TrayIconBuilder::new()
@@ -226,7 +249,12 @@ fn main() {
                     }
                 })
                 .on_tray_icon_event(|tray, event| {
-                    if let TrayIconEvent::Click { button, button_state, .. } = event {
+                    if let TrayIconEvent::Click {
+                        button,
+                        button_state,
+                        ..
+                    } = event
+                    {
                         if button == MouseButton::Left && button_state == MouseButtonState::Up {
                             let app = tray.app_handle();
                             if let Some(window) = app.get_webview_window("main") {
@@ -287,34 +315,34 @@ fn run_http_only_mode() {
 fn cleanup_old_logs(logs_dir: &std::path::Path, max_age_days: u64) {
     use std::fs;
     use std::time::{Duration, SystemTime};
-    
+
     let max_age = Duration::from_secs(max_age_days * 24 * 60 * 60);
     let now = SystemTime::now();
-    
+
     let entries = match fs::read_dir(logs_dir) {
         Ok(entries) => entries,
         Err(_) => return, // Directory doesn't exist or can't be read
     };
-    
+
     for entry in entries.flatten() {
         let path = entry.path();
-        
+
         // Only process .log files
-        if path.extension().map_or(true, |ext| ext != "log") {
+        if path.extension().is_none_or(|ext| ext != "log") {
             continue;
         }
-        
+
         // Check file modification time
         let metadata = match fs::metadata(&path) {
             Ok(m) => m,
             Err(_) => continue,
         };
-        
+
         let modified = match metadata.modified() {
             Ok(t) => t,
             Err(_) => continue,
         };
-        
+
         // Delete if older than max_age
         if let Ok(age) = now.duration_since(modified) {
             if age > max_age {

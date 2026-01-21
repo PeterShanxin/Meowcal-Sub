@@ -16,8 +16,8 @@ use tracing::{debug, info, warn};
 use windows::core::{HSTRING, PWSTR};
 #[cfg(target_os = "windows")]
 use windows::Win32::Foundation::{
-    APPMODEL_ERROR_NO_PACKAGE, ERROR_INSUFFICIENT_BUFFER, REGDB_E_CLASSNOTREG,
-    RPC_E_CHANGED_MODE, WIN32_ERROR,
+    APPMODEL_ERROR_NO_PACKAGE, ERROR_INSUFFICIENT_BUFFER, REGDB_E_CLASSNOTREG, RPC_E_CHANGED_MODE,
+    WIN32_ERROR,
 };
 #[cfg(target_os = "windows")]
 use windows::Win32::Storage::Packaging::Appx::GetCurrentPackageFullName;
@@ -181,6 +181,12 @@ impl PhiSilica {
     }
 }
 
+impl Default for PhiSilica {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[async_trait]
 impl TranslatorBackend for PhiSilica {
     fn id(&self) -> BackendId {
@@ -255,7 +261,10 @@ fn detect_runtime_class() -> (bool, Option<String>) {
                 if err.code() == REGDB_E_CLASSNOTREG {
                     (false, None)
                 } else {
-                    (false, Some(format!("RoGetActivationFactory failed: {}", err)))
+                    (
+                        false,
+                        Some(format!("RoGetActivationFactory failed: {}", err)),
+                    )
                 }
             }
         }
@@ -304,9 +313,8 @@ fn detect_packaging() -> PackagingInfo {
         }
 
         let mut buffer: Vec<u16> = vec![0; length as usize];
-        let result = unsafe {
-            GetCurrentPackageFullName(&mut length, Some(PWSTR(buffer.as_mut_ptr())))
-        };
+        let result =
+            unsafe { GetCurrentPackageFullName(&mut length, Some(PWSTR(buffer.as_mut_ptr()))) };
 
         if result != WIN32_ERROR(0) {
             return PackagingInfo {
@@ -343,25 +351,25 @@ fn detect_packaging() -> PackagingInfo {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn test_create_phi_silica() {
         let phi = PhiSilica::new();
         println!("Phi Silica ready state: {:?}", phi.ready_state());
     }
-    
+
     #[tokio::test]
     async fn test_stub_translation() {
         let phi = PhiSilica::new();
-        
+
         let result = phi.translate("Hello, world!", "en-US", "zh-CN").await;
         assert!(result.is_err());
     }
-    
-    #[tokio::test] 
+
+    #[tokio::test]
     async fn test_empty_translation() {
         let phi = PhiSilica::new();
-        
+
         let result = phi.translate("", "en-US", "zh-CN").await;
         assert!(result.is_ok());
         assert!(result.unwrap().is_empty());

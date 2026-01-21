@@ -62,15 +62,13 @@ fn get_overlay_window(app: &AppHandle) -> Option<WebviewWindow> {
 #[cfg(windows)]
 fn configure_overlay_as_chromeless_popup(window: &WebviewWindow) -> Result<(), String> {
     use raw_window_handle::HasWindowHandle;
+    use windows::core::w;
     use windows::Win32::Foundation::HANDLE;
     use windows::Win32::UI::WindowsAndMessaging::{
-        SetPropW, SetWindowLongPtrW, SetWindowPos,
-        GWL_STYLE, WS_POPUP, WS_VISIBLE,
-        SWP_FRAMECHANGED, SWP_NOZORDER,
-        GetSystemMetrics, SM_XVIRTUALSCREEN, SM_YVIRTUALSCREEN,
-        SM_CXVIRTUALSCREEN, SM_CYVIRTUALSCREEN,
+        GetSystemMetrics, SetPropW, SetWindowLongPtrW, SetWindowPos, GWL_STYLE, SM_CXVIRTUALSCREEN,
+        SM_CYVIRTUALSCREEN, SM_XVIRTUALSCREEN, SM_YVIRTUALSCREEN, SWP_FRAMECHANGED, SWP_NOZORDER,
+        WS_POPUP, WS_VISIBLE,
     };
-    use windows::core::w;
 
     // Get the raw window handle from Tauri
     let handle = window
@@ -81,7 +79,7 @@ fn configure_overlay_as_chromeless_popup(window: &WebviewWindow) -> Result<(), S
 
     // Extract HWND from the raw handle (Windows-specific)
     if let raw_window_handle::RawWindowHandle::Win32(win32_handle) = raw_handle {
-        let hwnd_ptr = win32_handle.hwnd.get() as isize;
+        let hwnd_ptr = win32_handle.hwnd.get();
         let hwnd = windows::Win32::Foundation::HWND(hwnd_ptr as *mut _);
 
         // SAFETY: We have a valid HWND from Tauri's window handle
@@ -104,15 +102,23 @@ fn configure_overlay_as_chromeless_popup(window: &WebviewWindow) -> Result<(), S
             // Using None for hwndInsertAfter with SWP_NOZORDER keeps current z-order
             SetWindowPos(
                 hwnd,
-                None,  // hwndInsertAfter - ignored due to SWP_NOZORDER
-                x, y, width, height,
+                None, // hwndInsertAfter - ignored due to SWP_NOZORDER
+                x,
+                y,
+                width,
+                height,
                 SWP_FRAMECHANGED | SWP_NOZORDER,
-            ).map_err(|e| format!("SetWindowPos failed: {}", e))?;
+            )
+            .map_err(|e| format!("SetWindowPos failed: {}", e))?;
 
             // 4. Set NonRudeHWND property - tells Windows Shell to not treat
             // this window as a fullscreen "rude" window that should hide the taskbar
-            SetPropW(hwnd, w!("NonRudeHWND"), Some(HANDLE(1 as *mut _)))
-                .map_err(|e| format!("SetPropW NonRudeHWND failed: {}", e))?;
+            SetPropW(
+                hwnd,
+                w!("NonRudeHWND"),
+                Some(HANDLE(std::ptr::dangling_mut::<std::ffi::c_void>())),
+            )
+            .map_err(|e| format!("SetPropW NonRudeHWND failed: {}", e))?;
         }
 
         info!("Configured overlay as chromeless popup with NonRudeHWND");
@@ -159,7 +165,8 @@ pub fn show_overlay(app: &AppHandle) -> Result<(), String> {
     }
 
     // Show the window
-    window.show()
+    window
+        .show()
         .map_err(|e| format!("Failed to show overlay: {}", e))?;
 
     // Re-apply WS_POPUP style AFTER showing to ensure it persists
@@ -179,31 +186,33 @@ pub fn show_overlay(app: &AppHandle) -> Result<(), String> {
 
 /// Hide the overlay window
 pub fn hide_overlay(app: &AppHandle) -> Result<(), String> {
-    let window = get_overlay_window(app)
-        .ok_or("Overlay window not found")?;
-    
+    let window = get_overlay_window(app).ok_or("Overlay window not found")?;
+
     // Emit visibility event first
     let _ = app.emit("overlay-visibility", false);
-    
+
     // Hide the window
-    window.hide()
+    window
+        .hide()
         .map_err(|e| format!("Failed to hide overlay: {}", e))?;
-    
+
     info!("✅ Overlay hidden");
     Ok(())
 }
 
 /// Update the overlay with the current capture region
-/// 
+///
 /// This tells the overlay where to draw the border and position subtitles
 pub fn update_overlay_region(app: &AppHandle, region: &CaptureRegion) -> Result<(), String> {
     let payload = OverlayRegionPayload::from(region);
-    
+
     app.emit("overlay-update-region", payload)
         .map_err(|e| format!("Failed to emit region update: {}", e))?;
-    
-    debug!("📍 Overlay region updated: ({}, {}) {}x{}", 
-           region.x, region.y, region.width, region.height);
+
+    debug!(
+        "📍 Overlay region updated: ({}, {}) {}x{}",
+        region.x, region.y, region.width, region.height
+    );
     Ok(())
 }
 
@@ -229,10 +238,21 @@ pub struct OverlayPosition {
 
 impl OverlayPosition {
     pub fn new(x: i32, y: i32, width: i32, height: i32) -> Self {
-        Self { x, y, width, height }
+        Self {
+            x,
+            y,
+            width,
+            height,
+        }
     }
-    
-    pub fn from_capture_region(x: i32, y: i32, width: i32, capture_height: i32, offset_y: i32) -> Self {
+
+    pub fn from_capture_region(
+        x: i32,
+        y: i32,
+        width: i32,
+        capture_height: i32,
+        offset_y: i32,
+    ) -> Self {
         Self {
             x,
             y: y + capture_height + offset_y,
@@ -254,26 +274,26 @@ impl OverlayManager {
             is_visible: false,
         }
     }
-    
+
     pub fn set_position(&mut self, position: OverlayPosition) {
         debug!("Setting overlay position: {:?}", position);
         self.position = Some(position);
     }
-    
+
     pub fn show(&mut self) {
         info!("Showing overlay");
         self.is_visible = true;
     }
-    
+
     pub fn hide(&mut self) {
         info!("Hiding overlay");
         self.is_visible = false;
     }
-    
+
     pub fn set_text(&self, text: &str) {
         debug!("Updating overlay text: {}", text);
     }
-    
+
     pub fn is_visible(&self) -> bool {
         self.is_visible
     }
@@ -292,25 +312,25 @@ impl Default for OverlayManager {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn test_overlay_position_from_capture() {
         let pos = OverlayPosition::from_capture_region(100, 200, 800, 50, 10);
-        
+
         assert_eq!(pos.x, 100);
         assert_eq!(pos.y, 260);
         assert_eq!(pos.width, 800);
     }
-    
+
     #[test]
     fn test_overlay_manager() {
         let mut manager = OverlayManager::new();
-        
+
         assert!(!manager.is_visible());
-        
+
         manager.show();
         assert!(manager.is_visible());
-        
+
         manager.hide();
         assert!(!manager.is_visible());
     }

@@ -3,7 +3,7 @@
 // =============================================================================
 // This file is the "table of contents" for our Rust code.
 // It tells Rust which modules (folders/files) exist in our project.
-// 
+//
 // Think of it like: "Hey Rust, here are all the folders that contain code"
 // =============================================================================
 

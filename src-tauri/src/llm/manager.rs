@@ -37,13 +37,16 @@ impl TranslationManager {
         app: AppHandle,
         diagnostics: Arc<Mutex<TranslationDiagnosticsState>>,
     ) -> Self {
-        let mut backends: Vec<Box<dyn TranslatorBackend>> = Vec::new();
-
         // Fallback order: Foundry Local -> Offline MT -> Windows AI -> Mock
-        backends.push(Box::new(FoundryLocalBackend::new(config.foundry_local.clone())));
-        backends.push(Box::new(OfflineMtBackend::new(app.clone(), config.offline_mt.clone())));
-        backends.push(Box::new(PhiSilica::new()));
-        backends.push(Box::new(MockBackend::new()));
+        let backends: Vec<Box<dyn TranslatorBackend>> = vec![
+            Box::new(FoundryLocalBackend::new(config.foundry_local.clone())),
+            Box::new(OfflineMtBackend::new(
+                app.clone(),
+                config.offline_mt.clone(),
+            )),
+            Box::new(PhiSilica::new()),
+            Box::new(MockBackend::new()),
+        ];
 
         // Initialize context with auto-detected budget
         let context_budget = Self::detect_context_budget(&config);
@@ -176,15 +179,11 @@ impl TranslationManager {
 
         let input_chars = text.chars().count();
         if input_chars > MAX_TRANSLATION_INPUT_CHARS {
-            let warning = format!(
-                "input_too_long: max {} chars",
-                MAX_TRANSLATION_INPUT_CHARS
-            );
-            self.diagnostics.lock().unwrap().record_error(
-                BackendId::Mock,
-                "input_too_long",
-                None,
-            );
+            let warning = format!("input_too_long: max {} chars", MAX_TRANSLATION_INPUT_CHARS);
+            self.diagnostics
+                .lock()
+                .unwrap()
+                .record_error(BackendId::Mock, "input_too_long", None);
             return TranslationOutcome {
                 translated: text.to_string(),
                 backend_used: BackendId::Mock,
@@ -344,10 +343,11 @@ impl TranslationManager {
                             && attempt < max_attempts
                             && Self::should_retry_foundry_error(&err);
 
-                        self.diagnostics
-                            .lock()
-                            .unwrap()
-                            .record_error(id, err.code(), Some(latency_ms));
+                        self.diagnostics.lock().unwrap().record_error(
+                            id,
+                            err.code(),
+                            Some(latency_ms),
+                        );
                         warn!(
                             backend_id = id.as_str(),
                             ready_state = ?ready_state,
@@ -362,8 +362,7 @@ impl TranslationManager {
 
                         if should_retry {
                             let delay = Duration::from_millis(
-                                FOUNDRY_TRANSIENT_RETRY_DELAY_MS
-                                    .saturating_mul(attempt as u64),
+                                FOUNDRY_TRANSIENT_RETRY_DELAY_MS.saturating_mul(attempt as u64),
                             );
                             let remaining_after_delay =
                                 total_timeout.saturating_sub(started.elapsed());
@@ -377,10 +376,11 @@ impl TranslationManager {
                     }
                     Err(_) => {
                         let error_code = "timeout";
-                        self.diagnostics
-                            .lock()
-                            .unwrap()
-                            .record_error(id, error_code, Some(latency_ms));
+                        self.diagnostics.lock().unwrap().record_error(
+                            id,
+                            error_code,
+                            Some(latency_ms),
+                        );
                         warn!(
                             backend_id = id.as_str(),
                             ready_state = ?ready_state,
@@ -403,10 +403,10 @@ impl TranslationManager {
             if let Some(mock) = self.backend_by_id(BackendId::Mock) {
                 match mock.translate(text, source_language, target_language).await {
                     Ok(translated) => {
-                        self.diagnostics.lock().unwrap().record_success(
-                            BackendId::Mock,
-                            0,
-                        );
+                        self.diagnostics
+                            .lock()
+                            .unwrap()
+                            .record_success(BackendId::Mock, 0);
                         warnings.push("mock: fallback used".to_string());
                         return TranslationOutcome {
                             translated,
@@ -415,10 +415,11 @@ impl TranslationManager {
                         };
                     }
                     Err(err) => {
-                        self.diagnostics
-                            .lock()
-                            .unwrap()
-                            .record_error(BackendId::Mock, err.code(), None);
+                        self.diagnostics.lock().unwrap().record_error(
+                            BackendId::Mock,
+                            err.code(),
+                            None,
+                        );
                         warnings.push(format!("mock: {}", err));
                     }
                 }
@@ -427,10 +428,11 @@ impl TranslationManager {
 
         // Last resort: passthrough to keep the app responsive
         warnings.push("no translation backend available".to_string());
-        self.diagnostics
-            .lock()
-            .unwrap()
-            .record_error(BackendId::Mock, "no_backend_available", None);
+        self.diagnostics.lock().unwrap().record_error(
+            BackendId::Mock,
+            "no_backend_available",
+            None,
+        );
         TranslationOutcome {
             translated: text.to_string(),
             backend_used: BackendId::Mock,
@@ -565,8 +567,8 @@ impl TranslationManager {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::llm::LlmError;
     use crate::config::{OfflineMtConfig, TranslationConfig};
+    use crate::llm::LlmError;
     use async_trait::async_trait;
 
     struct TestBackend {
@@ -644,8 +646,7 @@ mod tests {
         ];
 
         let diagnostics = Arc::new(Mutex::new(TranslationDiagnosticsState::default()));
-        let manager =
-            TranslationManager::with_backends(base_config(), backends, diagnostics, 200);
+        let manager = TranslationManager::with_backends(base_config(), backends, diagnostics, 200);
 
         let outcome = manager
             .translate_with_fallback("hello", "en-US", "zh-CN")

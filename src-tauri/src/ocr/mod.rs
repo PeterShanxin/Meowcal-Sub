@@ -2,7 +2,7 @@
 // OCR MODULE - Optical Character Recognition
 // =============================================================================
 // This module reads text from images using Windows' built-in OCR engine.
-// 
+//
 // Windows OCR is:
 // - Free (no API keys needed)
 // - Fast (especially on Copilot+ PCs with NPU)
@@ -20,13 +20,13 @@ use thiserror::Error;
 pub enum OcrError {
     #[error("Failed to initialize OCR engine: {0}")]
     InitError(String),
-    
+
     #[error("OCR recognition failed: {0}")]
     RecognitionError(String),
-    
+
     #[error("Language not supported: {0}")]
     LanguageNotSupported(String),
-    
+
     #[error("Invalid image data: {0}")]
     InvalidImage(String),
 }
@@ -52,7 +52,7 @@ impl OcrResult {
             confidence: None,
         }
     }
-    
+
     /// Create an empty result (no text found)
     pub fn empty() -> Self {
         Self {
@@ -61,7 +61,7 @@ impl OcrResult {
             confidence: None,
         }
     }
-    
+
     /// Check if any text was recognized
     pub fn is_empty(&self) -> bool {
         self.text.trim().is_empty()

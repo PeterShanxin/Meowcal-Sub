@@ -8,13 +8,17 @@ use async_trait::async_trait;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use std::process::{Command, Stdio};
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, AtomicU8, Ordering};
 use std::sync::RwLock;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tracing::{debug, info, warn};
 
 const START_ATTEMPT_COOLDOWN_MS: u64 = 30_000;
 static LAST_START_ATTEMPT_MS: AtomicU64 = AtomicU64::new(0);
+
+const API_NAMESPACE_UNKNOWN: u8 = 0;
+const API_NAMESPACE_OPENAI: u8 = 1;
+const API_NAMESPACE_V1: u8 = 2;
 
 /// Response from /v1/models endpoint
 #[derive(Debug, Deserialize)]
@@ -62,6 +66,7 @@ pub struct FoundryLocalBackend {
     service_url: RwLock<Option<String>>,
     service_available: AtomicBool,
     cached_models: RwLock<Vec<String>>,
+    api_namespace: AtomicU8,
 }
 
 impl FoundryLocalBackend {
@@ -77,8 +82,24 @@ impl FoundryLocalBackend {
             service_url: RwLock::new(None),
             service_available: AtomicBool::new(false),
             cached_models: RwLock::new(Vec::new()),
+            api_namespace: AtomicU8::new(API_NAMESPACE_UNKNOWN),
         }
         // Note: Service detection happens lazily on first is_available() call
+    }
+
+    fn preferred_api_namespace(&self) -> u8 {
+        match self.api_namespace.load(Ordering::SeqCst) {
+            API_NAMESPACE_V1 => API_NAMESPACE_V1,
+            API_NAMESPACE_OPENAI => API_NAMESPACE_OPENAI,
+            _ => API_NAMESPACE_OPENAI, // Default to the Foundry Local /openai namespace when unknown.
+        }
+    }
+
+    fn api_url_for(&self, base_url: &str, api_namespace: u8, endpoint: &str) -> String {
+        match api_namespace {
+            API_NAMESPACE_V1 => format!("{}/v1/{}", base_url, endpoint),
+            _ => format!("{}/openai/v1/{}", base_url, endpoint),
+        }
     }
 
     /// Get the service URL by parsing `foundry service status` output
@@ -101,15 +122,13 @@ impl FoundryLocalBackend {
     }
 
     fn extract_base_url_from_line(line: &str) -> Option<String> {
-        let start = line
-            .find("http://")
-            .or_else(|| line.find("https://"))?;
+        let start = line.find("http://").or_else(|| line.find("https://"))?;
         let after = &line[start..];
         let end = after
             .find(|c: char| c.is_whitespace() || c == ',' || c == ')' || c == '!')
             .unwrap_or(after.len());
         let raw = after[..end]
-            .trim_end_matches(|c: char| c == '.' || c == ',' || c == ';' || c == '!')
+            .trim_end_matches(['.', ',', ';', '!'])
             .trim_end_matches('/');
 
         if let Some(scheme_idx) = raw.find("://") {
@@ -149,9 +168,7 @@ impl FoundryLocalBackend {
     /// Get cached models by parsing `foundry cache list` output
     /// This is a fallback when the API doesn't return models (e.g., models cached but not running)
     pub fn get_cached_models_from_cli() -> Vec<String> {
-        let output = Command::new("foundry")
-            .args(["cache", "list"])
-            .output();
+        let output = Command::new("foundry").args(["cache", "list"]).output();
 
         let Ok(output) = output else {
             debug!("Failed to run 'foundry cache list'");
@@ -194,9 +211,8 @@ impl FoundryLocalBackend {
                 }
             }
 
-            let candidate = candidate.trim_matches(|c: char| {
-                c == ',' || c == ';' || c == '|' || c == '[' || c == ']'
-            });
+            let candidate = candidate
+                .trim_matches(|c: char| c == ',' || c == ';' || c == '|' || c == '[' || c == ']');
 
             if Self::is_probable_model_id(candidate) {
                 let model_id = candidate.to_string();
@@ -248,7 +264,7 @@ impl FoundryLocalBackend {
             }
 
             if let Some(num) = Self::extract_number_from_line(line) {
-                if num >= 512 && num <= 131072 {
+                if (512..=131_072).contains(&num) {
                     debug!("Detected context window for {}: {}", model, num);
                     return Some(num);
                 }
@@ -281,8 +297,8 @@ impl FoundryLocalBackend {
 
         let lower = candidate.to_ascii_lowercase();
         let blocked = [
-            "models", "model", "alias", "cache", "cached", "total", "name", "id", "status",
-            "size", "gb", "mb", "kb", "tb",
+            "models", "model", "alias", "cache", "cached", "total", "name", "id", "status", "size",
+            "gb", "mb", "kb", "tb",
         ];
         if blocked.contains(&lower.as_str()) {
             return false;
@@ -350,7 +366,10 @@ impl FoundryLocalBackend {
                 drop(models); // Release read lock before acquiring write lock
                 let cli_models = Self::get_cached_models_from_cli();
                 if !cli_models.is_empty() {
-                    debug!("Populated {} models from CLI during refresh", cli_models.len());
+                    debug!(
+                        "Populated {} models from CLI during refresh",
+                        cli_models.len()
+                    );
                     *self.cached_models.write().unwrap() = cli_models;
                 }
             }
@@ -388,26 +407,46 @@ impl FoundryLocalBackend {
 
     /// List available models from the service
     pub async fn list_models(&self) -> Result<Vec<String>, LlmError> {
-        let base_url = self.get_service_url().ok_or_else(|| {
-            LlmError::ApiError("Foundry Local service not running".to_string())
-        })?;
+        let base_url = self
+            .get_service_url()
+            .ok_or_else(|| LlmError::ApiError("Foundry Local service not running".to_string()))?;
 
-        // Try /openai/v1/models first (standard Foundry Local path)
-        let url = format!("{}/openai/v1/models", base_url);
+        let preferred_namespace = self.preferred_api_namespace();
+        let url = self.api_url_for(&base_url, preferred_namespace, "models");
 
         let response = self.http_client.get(&url).send().await;
 
         // If /openai/ path fails, try fallback to /v1/models (for compatibility)
         let response = match response {
-            Ok(resp) if resp.status().is_success() => resp,
+            Ok(resp) if resp.status().is_success() => {
+                self.api_namespace
+                    .store(preferred_namespace, Ordering::SeqCst);
+                resp
+            }
             Ok(resp) if resp.status().as_u16() == 404 => {
-                debug!("Foundry Local /openai/v1/models returned 404, trying /v1/models");
-                let fallback_url = format!("{}/v1/models", base_url);
-                self.http_client
+                let fallback_namespace = if preferred_namespace == API_NAMESPACE_OPENAI {
+                    API_NAMESPACE_V1
+                } else {
+                    API_NAMESPACE_OPENAI
+                };
+                let fallback_url = self.api_url_for(&base_url, fallback_namespace, "models");
+                debug!(
+                    "Foundry Local models returned 404 for {}, trying {}",
+                    url, fallback_url
+                );
+                let resp = self
+                    .http_client
                     .get(&fallback_url)
                     .send()
                     .await
-                    .map_err(|e| LlmError::ApiError(format!("Failed to fetch models: {}", e)))?
+                    .map_err(|e| LlmError::ApiError(format!("Failed to fetch models: {}", e)))?;
+
+                if resp.status().is_success() {
+                    self.api_namespace
+                        .store(fallback_namespace, Ordering::SeqCst);
+                }
+
+                resp
             }
             Ok(resp) => {
                 return Err(LlmError::ApiError(format!(
@@ -505,15 +544,32 @@ impl FoundryLocalBackend {
 
     fn model_in_cache(model: &str, models: &[String]) -> bool {
         models.iter().any(|m| m == model)
-            || (!model.contains(':') && models.iter().any(|m| m.starts_with(&format!("{}-", model))))
+            || (!model.contains(':')
+                && models.iter().any(|m| m.starts_with(&format!("{}-", model))))
     }
 
     /// Check if service is healthy by probing the models endpoint
     pub async fn check_health(&self) -> bool {
         if let Some(url) = self.get_service_url() {
-            let models_url = format!("{}/openai/v1/models", url);
+            let preferred_namespace = self.preferred_api_namespace();
+            let models_url = self.api_url_for(&url, preferred_namespace, "models");
+
             if let Ok(resp) = self.http_client.get(&models_url).send().await {
-                return resp.status().is_success();
+                if resp.status().is_success() {
+                    self.api_namespace
+                        .store(preferred_namespace, Ordering::SeqCst);
+                    return true;
+                }
+
+                if resp.status().as_u16() == 404 {
+                    let fallback_namespace = if preferred_namespace == API_NAMESPACE_OPENAI {
+                        API_NAMESPACE_V1
+                    } else {
+                        API_NAMESPACE_OPENAI
+                    };
+                    self.api_namespace
+                        .store(fallback_namespace, Ordering::SeqCst);
+                }
             }
         }
         false
@@ -528,15 +584,16 @@ impl FoundryLocalBackend {
             return Ok(String::new());
         }
 
-        let base_url = self.get_service_url().ok_or_else(|| {
-            LlmError::ApiError("Foundry Local service not running".to_string())
-        })?;
+        let base_url = self
+            .get_service_url()
+            .ok_or_else(|| LlmError::ApiError("Foundry Local service not running".to_string()))?;
 
-        let model = self.get_model().ok_or_else(|| {
-            LlmError::ModelNotAvailable("No model available".to_string())
-        })?;
+        let model = self
+            .get_model()
+            .ok_or_else(|| LlmError::ModelNotAvailable("No model available".to_string()))?;
 
-        let url = format!("{}/openai/v1/chat/completions", base_url);
+        let preferred_namespace = self.preferred_api_namespace();
+        let url = self.api_url_for(&base_url, preferred_namespace, "chat/completions");
 
         // Build history text
         let history_text: String = history
@@ -572,19 +629,28 @@ impl FoundryLocalBackend {
 
         debug!("Sending summarization request to Foundry Local: {}", url);
 
-        let response = self
-            .http_client
-            .post(&url)
-            .json(&request)
-            .send()
-            .await;
+        let response = self.http_client.post(&url).json(&request).send().await;
 
         let response = match response {
-            Ok(resp) if resp.status().is_success() => resp,
+            Ok(resp) if resp.status().is_success() => {
+                self.api_namespace
+                    .store(preferred_namespace, Ordering::SeqCst);
+                resp
+            }
             Ok(resp) if resp.status().as_u16() == 404 => {
-                debug!("Foundry Local /openai/v1/chat/completions returned 404, trying /v1/chat/completions");
-                let fallback_url = format!("{}/v1/chat/completions", base_url);
-                self.http_client
+                let fallback_namespace = if preferred_namespace == API_NAMESPACE_OPENAI {
+                    API_NAMESPACE_V1
+                } else {
+                    API_NAMESPACE_OPENAI
+                };
+                let fallback_url =
+                    self.api_url_for(&base_url, fallback_namespace, "chat/completions");
+                debug!(
+                    "Foundry Local chat completions returned 404 for {}, trying {}",
+                    url, fallback_url
+                );
+                let resp = self
+                    .http_client
                     .post(&fallback_url)
                     .json(&request)
                     .send()
@@ -592,12 +658,22 @@ impl FoundryLocalBackend {
                     .map_err(|e| {
                         warn!("Foundry Local summarization request failed: {}", e);
                         LlmError::ApiError(format!("Summarization request failed: {}", e))
-                    })?
+                    })?;
+
+                if resp.status().is_success() {
+                    self.api_namespace
+                        .store(fallback_namespace, Ordering::SeqCst);
+                }
+
+                resp
             }
             Ok(resp) => {
                 let status = resp.status();
                 let body = resp.text().await.unwrap_or_default();
-                warn!("Foundry Local summarization returned error {}: {}", status, body);
+                warn!(
+                    "Foundry Local summarization returned error {}: {}",
+                    status, body
+                );
                 return Err(LlmError::ApiError(format!(
                     "Summarization API error {}: {}",
                     status,
@@ -606,14 +682,20 @@ impl FoundryLocalBackend {
             }
             Err(e) => {
                 warn!("Foundry Local summarization request failed: {}", e);
-                return Err(LlmError::ApiError(format!("Summarization request failed: {}", e)));
+                return Err(LlmError::ApiError(format!(
+                    "Summarization request failed: {}",
+                    e
+                )));
             }
         };
 
         if !response.status().is_success() {
             let status = response.status();
             let body = response.text().await.unwrap_or_default();
-            warn!("Foundry Local summarization returned error {}: {}", status, body);
+            warn!(
+                "Foundry Local summarization returned error {}: {}",
+                status, body
+            );
             return Err(LlmError::ApiError(format!(
                 "Summarization API error {}: {}",
                 status,
@@ -692,9 +774,7 @@ impl TranslatorBackend for FoundryLocalBackend {
                 } else {
                     format!(
                         "Service at {}. Selected model: {} (not cached). Run: foundry model run {}",
-                        url,
-                        configured,
-                        configured
+                        url, configured, configured
                     )
                 }
             } else if let Some(model) = models.first() {
@@ -704,7 +784,10 @@ impl TranslatorBackend for FoundryLocalBackend {
                     url, resolved
                 )
             } else {
-                format!("Service at {}. No models cached - run: foundry model run <model>", url)
+                format!(
+                    "Service at {}. No models cached - run: foundry model run <model>",
+                    url
+                )
             }
         } else {
             "Foundry Local not running. If installed, run: foundry service start. If not installed: winget install Microsoft.FoundryLocal".to_string()
@@ -721,15 +804,18 @@ impl TranslatorBackend for FoundryLocalBackend {
             return Ok(String::new());
         }
 
-        let base_url = self.get_service_url().ok_or_else(|| {
-            LlmError::ApiError("Foundry Local service not running".to_string())
-        })?;
+        let base_url = self
+            .get_service_url()
+            .ok_or_else(|| LlmError::ApiError("Foundry Local service not running".to_string()))?;
 
         let model = self.get_model().ok_or_else(|| {
-            LlmError::ModelNotAvailable("No model available. Run: foundry model run <model>".to_string())
+            LlmError::ModelNotAvailable(
+                "No model available. Run: foundry model run <model>".to_string(),
+            )
         })?;
 
-        let url = format!("{}/openai/v1/chat/completions", base_url);
+        let preferred_namespace = self.preferred_api_namespace();
+        let url = self.api_url_for(&base_url, preferred_namespace, "chat/completions");
 
         let system_prompt = format!(
             "You are a translator. Translate the following text from {} to {}. \
@@ -763,19 +849,28 @@ impl TranslatorBackend for FoundryLocalBackend {
             "Translation request"
         );
 
-        let response = self
-            .http_client
-            .post(&url)
-            .json(&request)
-            .send()
-            .await;
+        let response = self.http_client.post(&url).json(&request).send().await;
 
         let response = match response {
-            Ok(resp) if resp.status().is_success() => resp,
+            Ok(resp) if resp.status().is_success() => {
+                self.api_namespace
+                    .store(preferred_namespace, Ordering::SeqCst);
+                resp
+            }
             Ok(resp) if resp.status().as_u16() == 404 => {
-                debug!("Foundry Local /openai/v1/chat/completions returned 404, trying /v1/chat/completions");
-                let fallback_url = format!("{}/v1/chat/completions", base_url);
-                self.http_client
+                let fallback_namespace = if preferred_namespace == API_NAMESPACE_OPENAI {
+                    API_NAMESPACE_V1
+                } else {
+                    API_NAMESPACE_OPENAI
+                };
+                let fallback_url =
+                    self.api_url_for(&base_url, fallback_namespace, "chat/completions");
+                debug!(
+                    "Foundry Local chat completions returned 404 for {}, trying {}",
+                    url, fallback_url
+                );
+                let resp = self
+                    .http_client
                     .post(&fallback_url)
                     .json(&request)
                     .send()
@@ -783,7 +878,14 @@ impl TranslatorBackend for FoundryLocalBackend {
                     .map_err(|e| {
                         warn!("Foundry Local request failed: {}", e);
                         LlmError::ApiError(format!("Request failed: {}", e))
-                    })?
+                    })?;
+
+                if resp.status().is_success() {
+                    self.api_namespace
+                        .store(fallback_namespace, Ordering::SeqCst);
+                }
+
+                resp
             }
             Ok(resp) => {
                 let status = resp.status();

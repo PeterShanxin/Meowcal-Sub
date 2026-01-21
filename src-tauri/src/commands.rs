@@ -2,7 +2,7 @@
 // COMMANDS.RS - Tauri IPC Commands
 // =============================================================================
 // These are functions that JavaScript can call from the web UI!
-// 
+//
 // The #[tauri::command] attribute is magic - it automatically:
 // 1. Converts JavaScript arguments to Rust types
 // 2. Converts Rust return values to JavaScript types
@@ -13,14 +13,14 @@
 //   await invoke('save_settings', { settings: { ... } });
 // =============================================================================
 
-use crate::config::{save_config, AppConfig, CaptureRegion};
 use crate::capture;
-use crate::ocr::WindowsOcr;
+use crate::config::{save_config, AppConfig, CaptureRegion};
 use crate::llm::{
-    BackendId, BackendInfo, FoundryLocalBackend, OfflineMtBackend, PhiSilica, TranslationDiagnostics,
-    TranslationDiagnosticsState, TranslationManager, TranslationOutcome, TranslatorBackend,
-    WindowsAiDiagnostics,
+    BackendId, BackendInfo, FoundryLocalBackend, OfflineMtBackend, PhiSilica,
+    TranslationDiagnostics, TranslationDiagnosticsState, TranslationManager, TranslationOutcome,
+    TranslatorBackend, WindowsAiDiagnostics,
 };
+use crate::ocr::WindowsOcr;
 use crate::overlay;
 use reqwest::Client;
 use serde::Serialize;
@@ -32,7 +32,7 @@ use tauri::{async_runtime, AppHandle, Emitter, Manager, State};
 use tauri_plugin_opener::OpenerExt;
 use tokio::fs;
 use tokio::sync::watch;
-use tracing::{info, warn, debug};
+use tracing::{debug, info, warn};
 
 // =============================================================================
 // APP STATE
@@ -128,26 +128,26 @@ pub struct TranslateLocallyDownloadResult {
 }
 
 /// Get information about the system
-/// 
+///
 /// Called from JavaScript: `const info = await invoke('get_system_info');`
 #[tauri::command]
 pub fn get_system_info() -> SystemInfo {
     info!("Getting system info...");
-    
+
     // Check what features are available
     let is_arm64 = cfg!(target_arch = "aarch64");
-    
+
     // TODO: Actually detect NPU presence
     // For now, assume ARM64 Windows = Copilot+ PC
     let is_copilot_plus = is_arm64 && cfg!(target_os = "windows");
-    
+
     // TODO: Check if Phi Silica is available (Windows AI APIs)
     // This will be implemented when we add LLM support
     let phi_silica_available = false;
-    
+
     // Windows OCR should be available on all Windows 10/11 systems
     let windows_ocr_available = cfg!(target_os = "windows");
-    
+
     let info = SystemInfo {
         os: std::env::consts::OS.to_string(),
         arch: std::env::consts::ARCH.to_string(),
@@ -155,13 +155,16 @@ pub fn get_system_info() -> SystemInfo {
         phi_silica_available,
         windows_ocr_available,
     };
-    
+
     info!(
         "System: {} {}, Copilot+: {}, Phi Silica: {}, OCR: {}",
-        info.os, info.arch, info.is_copilot_plus, 
-        info.phi_silica_available, info.windows_ocr_available
+        info.os,
+        info.arch,
+        info.is_copilot_plus,
+        info.phi_silica_available,
+        info.windows_ocr_available
     );
-    
+
     info
 }
 
@@ -179,12 +182,16 @@ const MOCK_RETRY_COOLDOWN_MS: u64 = 2500;
 #[tauri::command]
 pub fn open_translate_locally_download(app: AppHandle) -> Result<(), String> {
     let url = "https://github.com/XapaJIaMnu/translateLocally/releases/tag/latest";
-    app.opener().open_url(url, None::<&str>).map_err(|e| e.to_string())
+    app.opener()
+        .open_url(url, None::<&str>)
+        .map_err(|e| e.to_string())
 }
 
 /// Get recommended translateLocally download options for this machine.
 #[tauri::command]
-pub fn get_translate_locally_download_info(app: AppHandle) -> Result<TranslateLocallyDownloadInfo, String> {
+pub fn get_translate_locally_download_info(
+    app: AppHandle,
+) -> Result<TranslateLocallyDownloadInfo, String> {
     build_translate_locally_download_info(&app)
 }
 
@@ -398,7 +405,9 @@ fn build_translate_locally_download_info(
 
     Ok(TranslateLocallyDownloadInfo {
         recommended_id,
-        default_install_dir: default_translate_locally_dir(app).to_string_lossy().to_string(),
+        default_install_dir: default_translate_locally_dir(app)
+            .to_string_lossy()
+            .to_string(),
         options,
     })
 }
@@ -442,7 +451,12 @@ fn translate_locally_options() -> Result<Vec<TranslateLocallyDownloadOption>, St
     Ok(options)
 }
 
-fn build_option(id: &str, label: &str, asset_name: &str, notes: &str) -> TranslateLocallyDownloadOption {
+fn build_option(
+    id: &str,
+    label: &str,
+    asset_name: &str,
+    notes: &str,
+) -> TranslateLocallyDownloadOption {
     TranslateLocallyDownloadOption {
         id: id.to_string(),
         label: label.to_string(),
@@ -544,7 +558,7 @@ async fn download_translate_locally_asset(url: &str, target_path: &PathBuf) -> R
 // =============================================================================
 
 /// Get the current app settings
-/// 
+///
 /// Called from JavaScript: `const settings = await invoke('get_settings');`
 #[tauri::command]
 pub fn get_settings(state: State<'_, AppState>) -> AppConfig {
@@ -554,7 +568,7 @@ pub fn get_settings(state: State<'_, AppState>) -> AppConfig {
 }
 
 /// Save new app settings
-/// 
+///
 /// Called from JavaScript: `await invoke('save_settings', { settings: { ... } });`
 #[tauri::command]
 pub async fn save_settings(
@@ -567,7 +581,7 @@ pub async fn save_settings(
     let mut updated = settings.clone();
 
     // Persist the last capture region into the config
-    let last_region = state.capture_region.lock().unwrap().clone();
+    let last_region = *state.capture_region.lock().unwrap();
     updated.last_capture_region = last_region;
 
     // Capture window preferences if possible
@@ -610,8 +624,8 @@ pub async fn save_settings(
 // =============================================================================
 
 /// Set the screen region to capture
-/// 
-/// Called from JavaScript: 
+///
+/// Called from JavaScript:
 /// `await invoke('set_capture_region', { x: 100, y: 100, width: 800, height: 100, scaleFactor: 1.0 });`
 #[tauri::command]
 pub fn set_capture_region(
@@ -622,8 +636,11 @@ pub fn set_capture_region(
     scale_factor: f64,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
-    info!("Setting capture region: ({}, {}) {}x{}", x, y, width, height);
-    
+    info!(
+        "Setting capture region: ({}, {}) {}x{}",
+        x, y, width, height
+    );
+
     // Validate the region
     if width <= 0 || height <= 0 {
         return Err("Width and height must be positive".to_string());
@@ -631,34 +648,39 @@ pub fn set_capture_region(
     if scale_factor <= 0.0 {
         return Err("Scale factor must be positive".to_string());
     }
-    
-    let region = CaptureRegion { x, y, width, height };
-    
+
+    let region = CaptureRegion {
+        x,
+        y,
+        width,
+        height,
+    };
+
     let mut capture_region = state.capture_region.lock().unwrap();
     *capture_region = Some(region);
 
     let mut capture_scale_factor = state.capture_scale_factor.lock().unwrap();
     *capture_scale_factor = scale_factor;
-    
+
     Ok(())
 }
 
 /// Get the current capture region (if set)
-/// 
+///
 /// Called from JavaScript: `const region = await invoke('get_capture_region');`
 #[tauri::command]
 pub fn get_capture_region(state: State<'_, AppState>) -> Option<CaptureRegion> {
     let region = state.capture_region.lock().unwrap();
-    region.clone()
+    *region
 }
 
 /// Open the area selector overlay window
-/// 
+///
 /// Called from JavaScript: `await invoke('open_area_selector');`
 #[tauri::command]
 pub async fn open_area_selector(app: AppHandle) -> Result<(), String> {
     info!("Opening area selector...");
-    
+
     if let Some(window) = app.get_webview_window("selector") {
         window.show().map_err(|e| e.to_string())?;
         window.set_focus().map_err(|e| e.to_string())?;
@@ -666,24 +688,24 @@ pub async fn open_area_selector(app: AppHandle) -> Result<(), String> {
     } else {
         return Err("Selector window not found".to_string());
     }
-    
+
     Ok(())
 }
 
 /// Close the area selector overlay window
-/// 
+///
 /// Called from JavaScript: `await invoke('close_area_selector');`
 #[tauri::command]
 pub async fn close_area_selector(app: AppHandle) -> Result<(), String> {
     info!("Closing area selector...");
-    
+
     if let Some(window) = app.get_webview_window("selector") {
         window.hide().map_err(|e| e.to_string())?;
         info!("✅ Area selector closed!");
     } else {
         return Err("Selector window not found".to_string());
     }
-    
+
     Ok(())
 }
 
@@ -720,7 +742,7 @@ pub struct CaptureStatusPayload {
 }
 
 /// Check if translation is currently running
-/// 
+///
 /// Called from JavaScript: `const running = await invoke('is_translation_running');`
 /// This allows the frontend to sync button state with backend on page load/reload.
 #[tauri::command]
@@ -819,22 +841,19 @@ impl Drop for CompressionFlagGuard {
 }
 
 /// Start the translation process
-/// 
+///
 /// This will:
 /// 1. Capture the screen region periodically
 /// 2. Run OCR on each capture
 /// 3. Translate the recognized text
 /// 4. Send results back to the overlay UI via events
-/// 
+///
 /// Called from JavaScript: `await invoke('start_translation');`
 #[tauri::command]
-pub async fn start_translation(
-    app: AppHandle,
-    state: State<'_, AppState>,
-) -> Result<(), String> {
+pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Result<(), String> {
     info!(">>> START_TRANSLATION COMMAND CALLED <<<");
     info!("Starting translation...");
-    
+
     // Check if already running and mark as running atomically
     {
         let mut is_running = state.is_running.lock().unwrap();
@@ -843,11 +862,11 @@ pub async fn start_translation(
         }
         *is_running = true;
     }
-    
+
     // Get the capture region
     let region = {
         let region_guard = state.capture_region.lock().unwrap();
-        match region_guard.clone() {
+        match *region_guard {
             Some(r) => r,
             None => return Err("No capture region set. Please select an area first.".to_string()),
         }
@@ -863,7 +882,7 @@ pub async fn start_translation(
         "Capture scale factor: {}, logical: {:?}, physical: {:?}",
         scale_factor, region, capture_region
     );
-    
+
     // Get settings from config
     let (interval_ms, source_language, target_language, translation_config) = {
         let config = state.config.lock().unwrap();
@@ -877,20 +896,23 @@ pub async fn start_translation(
 
     let context_enabled = translation_config.enable_context_aware;
     let translation_config_for_summary = translation_config.clone();
-    
+
     // Create a stop signal channel
     // The sender stays here, the receiver goes to the spawned task
     let (stop_tx, mut stop_rx) = watch::channel(false);
-    
+
     // Store the sender so stop_translation can use it
     {
         let mut stop_signal = state.stop_signal.lock().unwrap();
         *stop_signal = Some(stop_tx);
     }
-    
+
     // Note: is_running is already set to true above (atomic check-and-set)
-    
-    info!("✅ Translation started! Interval: {}ms, Target: {}", interval_ms, target_language);
+
+    info!(
+        "✅ Translation started! Interval: {}ms, Target: {}",
+        interval_ms, target_language
+    );
 
     // Show the overlay and send the capture region to it
     if let Err(e) = overlay::show_overlay(&app) {
@@ -942,17 +964,17 @@ pub async fn start_translation(
                 }
             }
         };
-        
+
         // Keep track of last OCR text to avoid duplicate processing
         let mut last_text = String::new();
         let mut last_backend_used = BackendId::Mock;
         let mut last_attempt_at = Instant::now()
             .checked_sub(Duration::from_millis(MOCK_RETRY_COOLDOWN_MS))
             .unwrap_or_else(Instant::now);
-        
+
         // Track if we've already notified about fallback
         let mut fallback_notified = false;
-        
+
         // Initialize persistent capture session (no border flashing)
         let mut use_persistent_session = match capture::init_capture_session() {
             Ok(_) => {
@@ -960,13 +982,16 @@ pub async fn start_translation(
                 true
             }
             Err(e) => {
-                warn!("⚠️ Failed to init persistent session, will use per-frame capture: {}", e);
+                warn!(
+                    "⚠️ Failed to init persistent session, will use per-frame capture: {}",
+                    e
+                );
                 false
             }
         };
 
         let mut session_failures = 0;
-        
+
         loop {
             // Check if we should stop
             if *stop_rx.borrow() {
@@ -986,13 +1011,25 @@ pub async fn start_translation(
             // Re-read the capture region from state (allows live resize/reposition)
             let current_capture_region = {
                 let state = app_for_region.state::<AppState>();
-                let region_opt = state.capture_region.lock().unwrap().clone();
+                let region_opt = *state.capture_region.lock().unwrap();
                 let scale = *state.capture_scale_factor.lock().unwrap();
                 // Mutex guards are dropped here before any await
                 match region_opt {
-                    Some(r) => r.scaled(scale),
+                    Some(r) => {
+                        let scaled = r.scaled(scale);
+                        let (screen_width, screen_height) = capture::get_screen_dimensions();
+
+                        if scaled.intersects_origin_bounds(screen_width, screen_height) {
+                            scaled
+                                .clamp_to_bounds(screen_width, screen_height)
+                                .unwrap_or(scaled)
+                        } else {
+                            // Keep the original region if it's completely outside the primary screen.
+                            // This preserves multi-monitor behavior for GDI fallback captures.
+                            scaled
+                        }
+                    }
                     None => {
-                        drop(state); // Ensure state reference is dropped
                         warn!("⚠️ No capture region set, skipping frame");
                         tokio::time::sleep(Duration::from_millis(interval_ms as u64)).await;
                         continue;
@@ -1001,7 +1038,7 @@ pub async fn start_translation(
             };
 
             debug!("📸 Capturing region: {:?}", current_capture_region);
-            
+
             // Step 1: Capture screen region
             // If persistent session is available, use it (no border flashing)
             // Otherwise fall back to smart_capture which creates new session each time
@@ -1073,7 +1110,9 @@ pub async fn start_translation(
                             fallback_notified = true;
                             let status = CaptureStatusPayload {
                                 using_fallback: true,
-                                message: "Using GDI fallback - video content may not capture correctly".to_string(),
+                                message:
+                                    "Using GDI fallback - video content may not capture correctly"
+                                        .to_string(),
                                 is_error: false,
                             };
                             let _ = app.emit("capture-status", status);
@@ -1093,13 +1132,22 @@ pub async fn start_translation(
                     }
                 }
             };
-            
+
+            // If stop was requested while we were capturing, don't do any more work or emit updates.
+            if *stop_rx.borrow() {
+                info!("🛑 Stop signal received, aborting current frame");
+                break;
+            }
+
             // Step 2: Run OCR
-            let ocr_result = match ocr.recognize(
-                &capture_result.data,
-                capture_result.width,
-                capture_result.height,
-            ).await {
+            let ocr_result = match ocr
+                .recognize(
+                    &capture_result.data,
+                    capture_result.width,
+                    capture_result.height,
+                )
+                .await
+            {
                 Ok(result) => result,
                 Err(e) => {
                     warn!("⚠️ OCR failed: {}", e);
@@ -1107,7 +1155,13 @@ pub async fn start_translation(
                     continue;
                 }
             };
-            
+
+            // If stop was requested while OCR was running, skip translation and exit cleanly.
+            if *stop_rx.borrow() {
+                info!("🛑 Stop signal received, aborting current frame");
+                break;
+            }
+
             // Skip if empty or same as last frame
             if ocr_result.is_empty() {
                 debug!("No text detected, skipping");
@@ -1128,7 +1182,9 @@ pub async fn start_translation(
 
                 // If we fell back to passthrough last time, retry occasionally so we can recover
                 // once the LLM backend becomes ready (avoid spamming requests every frame).
-                if now.duration_since(last_attempt_at) < Duration::from_millis(MOCK_RETRY_COOLDOWN_MS) {
+                if now.duration_since(last_attempt_at)
+                    < Duration::from_millis(MOCK_RETRY_COOLDOWN_MS)
+                {
                     debug!("Duplicate text (mock cooldown), skipping");
                     tokio::time::sleep(Duration::from_millis(interval_ms as u64)).await;
                     continue;
@@ -1144,7 +1200,7 @@ pub async fn start_translation(
             last_text = current_text.clone();
             last_attempt_at = now;
             info!("📝 OCR detected ({} chars)", current_text.chars().count());
-            
+
             // Step 3: Translate via backend manager with fallback
             // Get context prompt if available
             let context_prompt = translation_manager.get_context_prompt();
@@ -1163,6 +1219,12 @@ pub async fn start_translation(
                 warnings,
             } = outcome;
 
+            // If stop was requested while the translation backend was running, don't emit results.
+            if *stop_rx.borrow() {
+                info!("🛑 Stop signal received, discarding in-flight translation result");
+                break;
+            }
+
             // Record successful translation in context (avoid polluting history with passthrough output)
             if backend_used != BackendId::Mock {
                 translation_manager.record_translation(&current_text, &translated);
@@ -1177,9 +1239,13 @@ pub async fn start_translation(
                 let manager = Arc::clone(&translation_manager);
                 let config = translation_config_for_summary.clone();
                 let compression_flag = Arc::clone(&compression_in_flight);
+                let stop_rx_for_summary = stop_rx.clone();
 
                 tokio::spawn(async move {
                     let _reset = CompressionFlagGuard::new(compression_flag);
+                    if *stop_rx_for_summary.borrow() {
+                        return;
+                    }
                     let history_entries = manager.get_history_for_summarization();
                     if history_entries.is_empty() {
                         return;
@@ -1196,9 +1262,21 @@ pub async fn start_translation(
                         .map(|entry| (entry.source.clone(), entry.translation.clone()))
                         .collect();
 
+                    // Use a fresh backend instance for each summarization run to ensure a clean prompt
+                    // (no shared chat/session state), but make sure we refresh service discovery before use.
                     let backend = FoundryLocalBackend::new(config.foundry_local.clone());
+                    backend.refresh_service_status();
+
+                    if !backend.is_available() {
+                        manager.restore_history_entries(history_entries);
+                        manager.cap_history_to_budget();
+                        return;
+                    }
 
                     for attempt in 1..=CONTEXT_SUMMARY_MAX_RETRIES {
+                        if *stop_rx_for_summary.borrow() {
+                            return;
+                        }
                         match backend.summarize_context(&history_pairs).await {
                             Ok(summary) if !summary.trim().is_empty() => {
                                 manager.update_context_memory(summary);
@@ -1211,11 +1289,7 @@ pub async fn start_translation(
                                 );
                             }
                             Err(err) => {
-                                warn!(
-                                    "Context summarization attempt {} failed: {}",
-                                    attempt,
-                                    err
-                                );
+                                warn!("Context summarization attempt {} failed: {}", attempt, err);
                             }
                         }
 
@@ -1225,22 +1299,28 @@ pub async fn start_translation(
                             return;
                         }
 
-                        tokio::time::sleep(Duration::from_millis(
-                            CONTEXT_SUMMARY_RETRY_DELAY_MS,
-                        ))
-                        .await;
+                        tokio::time::sleep(Duration::from_millis(CONTEXT_SUMMARY_RETRY_DELAY_MS))
+                            .await;
                     }
                 });
             }
 
-            info!("🌐 Translation produced ({} chars)", translated.chars().count());
-            
+            if *stop_rx.borrow() {
+                info!("🛑 Stop signal received, skipping translation emission");
+                break;
+            }
+
+            info!(
+                "🌐 Translation produced ({} chars)",
+                translated.chars().count()
+            );
+
             // Step 4: Emit event to frontend
             let timestamp = SystemTime::now()
                 .duration_since(UNIX_EPOCH)
                 .unwrap_or_default()
                 .as_millis() as u64;
-            
+
             let payload = TranslationPayload {
                 original: current_text,
                 translated,
@@ -1248,30 +1328,31 @@ pub async fn start_translation(
                 warnings,
                 timestamp,
             };
-            
+
             if let Err(e) = app.emit("translation-update", payload) {
                 warn!("⚠️ Failed to emit event: {}", e);
             }
-            
+
             // Wait for next iteration
             tokio::time::sleep(Duration::from_millis(interval_ms as u64)).await;
         }
-        
+
         // Close the capture session when loop ends
         capture::close_capture_session();
+        reset_running_state();
         info!("Translation loop ended");
     });
-    
+
     Ok(())
 }
 
 /// Stop the translation process
-/// 
+///
 /// Called from JavaScript: `await invoke('stop_translation');`
 #[tauri::command]
 pub fn stop_translation(state: State<'_, AppState>, app: AppHandle) -> Result<(), String> {
     info!("Stopping translation...");
-    
+
     // Send the stop signal
     {
         let stop_signal = state.stop_signal.lock().unwrap();
@@ -1280,27 +1361,21 @@ pub fn stop_translation(state: State<'_, AppState>, app: AppHandle) -> Result<()
             info!("Stop signal sent");
         }
     }
-    
+
     // Clear the stop signal sender
     {
         let mut stop_signal = state.stop_signal.lock().unwrap();
         *stop_signal = None;
     }
-    
-    // Mark as not running
-    {
-        let mut is_running = state.is_running.lock().unwrap();
-        *is_running = false;
-    }
-    
+
     // Close the capture session
     capture::close_capture_session();
-    
+
     // Hide the overlay
     if let Err(e) = overlay::hide_overlay(&app) {
         warn!("⚠️ Failed to hide overlay: {}", e);
     }
-    
+
     info!("✅ Translation stopped!");
     Ok(())
 }

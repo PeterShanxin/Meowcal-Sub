@@ -56,6 +56,12 @@ impl HttpAppState {
     }
 }
 
+impl Default for HttpAppState {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 // =============================================================================
 // STANDALONE CONFIG HELPERS
 // =============================================================================
@@ -339,7 +345,8 @@ async fn open_area_selector() -> impl IntoResponse {
         StatusCode::NOT_IMPLEMENTED,
         Json(BrowserModeInfo {
             browser_mode: true,
-            message: "Area selector requires Tauri window. Not available in browser mode.".to_string(),
+            message: "Area selector requires Tauri window. Not available in browser mode."
+                .to_string(),
         }),
     )
 }
@@ -350,7 +357,8 @@ async fn start_translation() -> impl IntoResponse {
         StatusCode::NOT_IMPLEMENTED,
         Json(BrowserModeInfo {
             browser_mode: true,
-            message: "Screen capture requires Windows APIs. Not available in browser mode.".to_string(),
+            message: "Screen capture requires Windows APIs. Not available in browser mode."
+                .to_string(),
         }),
     )
 }
@@ -361,14 +369,15 @@ async fn stop_translation() -> impl IntoResponse {
         StatusCode::NOT_IMPLEMENTED,
         Json(BrowserModeInfo {
             browser_mode: true,
-            message: "Translation control requires Tauri runtime. Not available in browser mode.".to_string(),
+            message: "Translation control requires Tauri runtime. Not available in browser mode."
+                .to_string(),
         }),
     )
 }
 
 /// GET /api/capture-region - Get current capture region
 async fn get_capture_region(State(state): State<HttpAppState>) -> impl IntoResponse {
-    let region = state.capture_region.lock().unwrap().clone();
+    let region = *state.capture_region.lock().unwrap();
     Json(region)
 }
 
@@ -417,13 +426,19 @@ pub fn create_router(state: HttpAppState) -> Router {
         .route("/api/settings", get(get_settings))
         .route("/api/settings", post(save_settings))
         // Translation diagnostics
-        .route("/api/translation/diagnostics", get(get_translation_diagnostics))
+        .route(
+            "/api/translation/diagnostics",
+            get(get_translation_diagnostics),
+        )
         // Foundry Local
         .route("/api/foundry-local/models", get(list_foundry_local_models))
         .route("/api/foundry-local/status", get(get_foundry_local_status))
         .route("/api/foundry-local/prepare", post(prepare_foundry_local))
         // Windows AI
-        .route("/api/windows-ai/diagnostics", get(get_windows_ai_diagnostics))
+        .route(
+            "/api/windows-ai/diagnostics",
+            get(get_windows_ai_diagnostics),
+        )
         // Offline MT
         .route("/api/offline-mt/detect", get(detect_offline_mt_binary))
         // Capture region

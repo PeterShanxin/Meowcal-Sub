@@ -7,19 +7,19 @@
 // 3. Implementations for each backend (Windows AI, Offline MT, Mock)
 // =============================================================================
 
-mod phi_silica;
-mod manager;
-mod offline_mt;
-mod foundry_local;
-mod mock;
 mod context;
+mod foundry_local;
+mod manager;
+mod mock;
+mod offline_mt;
+mod phi_silica;
 
-pub use phi_silica::*;
 pub use context::*;
-pub use manager::*;
-pub use offline_mt::*;
 pub use foundry_local::*;
+pub use manager::*;
 pub use mock::*;
+pub use offline_mt::*;
+pub use phi_silica::*;
 
 use async_trait::async_trait;
 use serde::Serialize;
@@ -72,11 +72,18 @@ impl BackendId {
     }
 
     /// Parse a backend id from config strings
+    #[allow(clippy::should_implement_trait)]
     pub fn from_str(value: &str) -> Option<Self> {
         match value.trim().to_lowercase().as_str() {
-            "foundry_local" | "foundrylocal" | "foundry-local" | "foundry" => Some(BackendId::FoundryLocal),
-            "windows_ai" | "windowsai" | "windows-ai" | "phi" | "phi_silica" => Some(BackendId::WindowsAi),
-            "offline_mt" | "offlinemt" | "offline-mt" | "translatelocally" => Some(BackendId::OfflineMt),
+            "foundry_local" | "foundrylocal" | "foundry-local" | "foundry" => {
+                Some(BackendId::FoundryLocal)
+            }
+            "windows_ai" | "windowsai" | "windows-ai" | "phi" | "phi_silica" => {
+                Some(BackendId::WindowsAi)
+            }
+            "offline_mt" | "offlinemt" | "offline-mt" | "translatelocally" => {
+                Some(BackendId::OfflineMt)
+            }
             "mock" | "passthrough" | "none" => Some(BackendId::Mock),
             _ => None,
         }
