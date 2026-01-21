@@ -19,6 +19,11 @@ const MAX_TOKEN_BUDGET: usize = 2000;
 const COMPRESSION_THRESHOLD_PERCENT: f32 = 0.7;
 /// Similarity threshold for deduplication (0.0-1.0)
 const DEDUP_SIMILARITY_THRESHOLD: f32 = 0.85;
+/// Hard cap for summarized memory (tokens, estimated).
+const MAX_MEMORY_TOKENS: usize = 300;
+/// Maximum share of the context budget that memory can consume.
+/// Keeps room for recent history and prevents runaway prompts.
+const MEMORY_BUDGET_PERCENT: f32 = 0.35;
 
 /// A single translation history entry
 #[derive(Debug, Clone)]
@@ -126,28 +131,69 @@ impl TranslationContext {
 
     /// Build the context prompt to prepend to translation requests
     pub fn build_context_prompt(&self) -> Option<String> {
+        self.build_prompt(true)
+    }
+
+    /// Build a memory-only prompt (excludes recent history).
+    pub fn build_memory_prompt(&self) -> Option<String> {
+        self.build_prompt(false)
+    }
+
+    fn build_prompt(&self, include_recent: bool) -> Option<String> {
         if !self.enabled {
             return None;
         }
 
+        let budget = self.budget_tokens;
+        let mut tokens_used = 0usize;
         let mut parts = Vec::new();
 
-        // Add memory if present
+        // Add memory if present (already hard-capped, but still ensure we fit).
         if let Some(ref memory) = self.memory {
-            parts.push(format!("[Context: {}]", memory));
+            let memory_part = format!("[Context: {}]", memory.trim());
+            let memory_tokens = Self::estimate_tokens(&memory_part);
+            if memory_tokens <= budget {
+                parts.push(memory_part);
+                tokens_used = tokens_used.saturating_add(memory_tokens);
+            } else {
+                // Extremely defensive: if even the capped memory can't fit, truncate again.
+                let overhead_tokens = Self::estimate_tokens("[Context: ]");
+                let available = budget.saturating_sub(overhead_tokens);
+                let truncated = Self::truncate_to_token_budget(memory, available);
+                if !truncated.is_empty() {
+                    let candidate = format!("[Context: {}]", truncated);
+                    let candidate_tokens = Self::estimate_tokens(&candidate);
+                    if candidate_tokens <= budget {
+                        parts.push(candidate);
+                        tokens_used = tokens_used.saturating_add(candidate_tokens);
+                    }
+                }
+            }
         }
 
-        // Add recent history (last few entries for flow)
-        let recent_count = 3.min(self.history.len());
-        if recent_count > 0 {
-            let recent: Vec<_> = self.history.iter().rev().take(recent_count).collect();
-            let history_lines: Vec<String> = recent
-                .into_iter()
-                .rev()
-                .map(|e| format!("{} -> {}", e.source, e.translation))
-                .collect();
-            if !history_lines.is_empty() {
-                parts.push(format!("[Recent: {}]", history_lines.join(" | ")));
+        if include_recent {
+            // Add recent history (try to include up to 3 entries, but stop at the token budget).
+            let recent_count = 3.min(self.history.len());
+            if recent_count > 0 {
+                let recent: Vec<_> = self.history.iter().rev().take(recent_count).collect();
+                let mut selected = Vec::new();
+                let mut best_block: Option<String> = None;
+
+                for entry in recent.into_iter().rev() {
+                    selected.push(format!("{} -> {}", entry.source, entry.translation));
+                    let candidate = format!("[Recent: {}]", selected.join(" | "));
+                    let candidate_tokens = Self::estimate_tokens(&candidate);
+                    if tokens_used.saturating_add(candidate_tokens) <= budget {
+                        best_block = Some(candidate);
+                    } else {
+                        selected.pop();
+                        break;
+                    }
+                }
+
+                if let Some(block) = best_block {
+                    parts.push(block);
+                }
             }
         }
 
@@ -231,7 +277,26 @@ impl TranslationContext {
 
     /// Update memory with summarized content
     pub fn set_memory(&mut self, memory: String) {
-        self.memory = Some(memory);
+        if !self.enabled {
+            return;
+        }
+
+        let trimmed = memory.trim();
+        if trimmed.is_empty() {
+            self.memory = None;
+            return;
+        }
+
+        let budget = self.memory_token_budget();
+        let truncated = Self::truncate_to_token_budget(trimmed, budget);
+        if truncated.is_empty() {
+            self.memory = None;
+        } else {
+            self.memory = Some(truncated);
+        }
+
+        // Ensure we still fit the overall budget after updating memory.
+        self.cap_history_to_budget();
     }
 
     /// Get current memory content (for debugging/diagnostics)
@@ -278,6 +343,64 @@ impl TranslationContext {
         let total_chars = text.chars().count();
         let non_cjk_count = total_chars.saturating_sub(cjk_count);
         cjk_count + non_cjk_count.div_ceil(4)
+    }
+
+    fn memory_token_budget(&self) -> usize {
+        let percent_budget = ((self.budget_tokens as f32) * MEMORY_BUDGET_PERCENT) as usize;
+        percent_budget
+            .clamp(MIN_TOKEN_BUDGET / 5, MAX_MEMORY_TOKENS)
+            .min(self.budget_tokens)
+    }
+
+    fn truncate_to_token_budget(text: &str, max_tokens: usize) -> String {
+        if max_tokens == 0 {
+            return String::new();
+        }
+
+        let trimmed = text.trim();
+        if trimmed.is_empty() {
+            return String::new();
+        }
+
+        if Self::estimate_tokens(trimmed) <= max_tokens {
+            return trimmed.to_string();
+        }
+
+        let mut cjk_count = 0usize;
+        let mut non_cjk_count = 0usize;
+        let mut end = 0usize;
+
+        for (idx, ch) in trimmed.char_indices() {
+            if Self::is_cjk(ch) {
+                cjk_count += 1;
+            } else {
+                non_cjk_count += 1;
+            }
+
+            let tokens = cjk_count + non_cjk_count.div_ceil(4);
+            if tokens > max_tokens {
+                break;
+            }
+
+            end = idx + ch.len_utf8();
+        }
+
+        let mut prefix = trimmed[..end].trim().to_string();
+        if prefix.is_empty() {
+            return prefix;
+        }
+
+        // For ASCII-heavy text, try to avoid cutting mid-word.
+        if !prefix.chars().any(Self::is_cjk) {
+            if let Some(pos) = prefix.rfind(char::is_whitespace) {
+                let candidate = prefix[..pos].trim();
+                if !candidate.is_empty() {
+                    prefix = candidate.to_string();
+                }
+            }
+        }
+
+        prefix
     }
 
     fn recalculate_history_tokens(&mut self) {
@@ -380,6 +503,28 @@ mod tests {
         ctx.add_translation("Hello", "Hola");
         assert!(ctx.history.is_empty());
         assert!(ctx.build_context_prompt().is_none());
+    }
+
+    #[test]
+    fn test_memory_prompt_excludes_recent() {
+        let mut ctx = TranslationContext::new(500, true);
+        ctx.set_memory("Genre: drama. Names: X->Y".to_string());
+        ctx.add_translation("Hello", "Hola");
+
+        let prompt = ctx.build_memory_prompt().unwrap();
+        assert!(prompt.contains("Context:"));
+        assert!(!prompt.contains("Recent:"));
+    }
+
+    #[test]
+    fn test_memory_truncation_hard_cap() {
+        let mut ctx = TranslationContext::new(200, true);
+        let long = "a".repeat(2000);
+        ctx.set_memory(long);
+
+        let mem = ctx.memory().unwrap_or_default();
+        let budget = ctx.memory_token_budget();
+        assert!(TranslationContext::estimate_tokens(mem) <= budget);
     }
 
     #[test]
