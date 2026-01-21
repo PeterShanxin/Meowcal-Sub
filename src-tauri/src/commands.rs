@@ -25,7 +25,7 @@ use crate::overlay;
 use reqwest::Client;
 use serde::Serialize;
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use tauri::{async_runtime, AppHandle, Emitter, Manager, State};
@@ -176,6 +176,7 @@ const TRANSLATE_LOCALLY_BASE_URL: &str =
     "https://github.com/XapaJIaMnu/translateLocally/releases/download/latest";
 const CONTEXT_SUMMARY_MAX_RETRIES: usize = 3;
 const CONTEXT_SUMMARY_RETRY_DELAY_MS: u64 = 500;
+const CONTEXT_SUMMARY_STABILITY_DELAY_MS: u64 = 900;
 const MOCK_RETRY_COOLDOWN_MS: u64 = 2500;
 
 /// Open the translateLocally download page in the default browser.
@@ -930,6 +931,8 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
         diagnostics,
     ));
     let compression_in_flight = Arc::new(AtomicBool::new(false));
+    let context_generation = Arc::new(AtomicU64::new(0));
+    let last_summary_scheduled_ms = Arc::new(AtomicU64::new(0));
 
     // Clone app handle for use inside the async block to access state
     let app_for_region = app.clone();
@@ -1198,6 +1201,7 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
             }
 
             last_text = current_text.clone();
+            context_generation.fetch_add(1, Ordering::SeqCst);
             last_attempt_at = now;
             info!("📝 OCR detected ({} chars)", current_text.chars().count());
 
@@ -1231,78 +1235,112 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
             }
             last_backend_used = backend_used;
 
-            // Check if context needs compression (async, don't block)
-            if translation_manager.needs_context_compression()
-                && !compression_in_flight.swap(true, Ordering::SeqCst)
-            {
-                debug!("Context needs compression, scheduling summarization");
-                let manager = Arc::clone(&translation_manager);
-                let config = translation_config_for_summary.clone();
-                let compression_flag = Arc::clone(&compression_in_flight);
-                let stop_rx_for_summary = stop_rx.clone();
+            // Check if context needs compression (async, don't block).
+            //
+            // We throttle + delay the summarization so it runs during stable subtitle windows,
+            // reducing contention with the live translation loop.
+            if translation_manager.needs_context_compression() {
+                let now_ms = SystemTime::now()
+                    .duration_since(UNIX_EPOCH)
+                    .unwrap_or_default()
+                    .as_millis() as u64;
+                let cooldown_ms = translation_config_for_summary.context_summary_cooldown_ms as u64;
+                let last_scheduled = last_summary_scheduled_ms.load(Ordering::SeqCst);
+                let cooldown_ok =
+                    cooldown_ms == 0 || now_ms.saturating_sub(last_scheduled) >= cooldown_ms;
 
-                tokio::spawn(async move {
-                    let _reset = CompressionFlagGuard::new(compression_flag);
-                    if *stop_rx_for_summary.borrow() {
-                        return;
-                    }
-                    let history_entries = manager.get_history_for_summarization();
-                    if history_entries.is_empty() {
-                        return;
-                    }
+                if cooldown_ok && !compression_in_flight.swap(true, Ordering::SeqCst) {
+                    last_summary_scheduled_ms.store(now_ms, Ordering::SeqCst);
+                    debug!("Context needs compression, scheduling summarization");
 
-                    if !config.enable_foundry_local {
-                        manager.restore_history_entries(history_entries);
-                        manager.cap_history_to_budget();
-                        return;
-                    }
+                    let manager = Arc::clone(&translation_manager);
+                    let config = translation_config_for_summary.clone();
+                    let compression_flag = Arc::clone(&compression_in_flight);
+                    let stop_rx_for_summary = stop_rx.clone();
+                    let generation = Arc::clone(&context_generation);
+                    let scheduled_generation = generation.load(Ordering::SeqCst);
 
-                    let history_pairs: Vec<(String, String)> = history_entries
-                        .iter()
-                        .map(|entry| (entry.source.clone(), entry.translation.clone()))
-                        .collect();
+                    tokio::spawn(async move {
+                        let _reset = CompressionFlagGuard::new(compression_flag);
 
-                    // Use a fresh backend instance for each summarization run to ensure a clean prompt
-                    // (no shared chat/session state), but make sure we refresh service discovery before use.
-                    let backend = FoundryLocalBackend::new(config.foundry_local.clone());
-                    backend.refresh_service_status();
+                        tokio::time::sleep(Duration::from_millis(
+                            CONTEXT_SUMMARY_STABILITY_DELAY_MS,
+                        ))
+                        .await;
 
-                    if !backend.is_available() {
-                        manager.restore_history_entries(history_entries);
-                        manager.cap_history_to_budget();
-                        return;
-                    }
-
-                    for attempt in 1..=CONTEXT_SUMMARY_MAX_RETRIES {
                         if *stop_rx_for_summary.borrow() {
                             return;
                         }
-                        match backend.summarize_context(&history_pairs).await {
-                            Ok(summary) if !summary.trim().is_empty() => {
-                                manager.update_context_memory(summary);
-                                return;
-                            }
-                            Ok(_) => {
-                                warn!(
-                                    "Context summarization attempt {} returned empty output",
-                                    attempt
-                                );
-                            }
-                            Err(err) => {
-                                warn!("Context summarization attempt {} failed: {}", attempt, err);
-                            }
+
+                        // Abort if subtitles changed while we were waiting for an idle window.
+                        if generation.load(Ordering::SeqCst) != scheduled_generation {
+                            debug!("Skipping context summarization (text still changing)");
+                            return;
                         }
 
-                        if attempt == CONTEXT_SUMMARY_MAX_RETRIES {
+                        let history_entries = manager.get_history_for_summarization();
+                        if history_entries.is_empty() {
+                            return;
+                        }
+
+                        if !config.enable_foundry_local {
                             manager.restore_history_entries(history_entries);
                             manager.cap_history_to_budget();
                             return;
                         }
 
-                        tokio::time::sleep(Duration::from_millis(CONTEXT_SUMMARY_RETRY_DELAY_MS))
+                        let history_pairs: Vec<(String, String)> = history_entries
+                            .iter()
+                            .map(|entry| (entry.source.clone(), entry.translation.clone()))
+                            .collect();
+
+                        // Use a fresh backend instance for each summarization run to ensure a clean prompt
+                        // (no shared chat/session state), but make sure we refresh service discovery before use.
+                        let backend = FoundryLocalBackend::new(config.foundry_local.clone());
+                        backend.refresh_service_status();
+
+                        if !backend.is_available() {
+                            manager.restore_history_entries(history_entries);
+                            manager.cap_history_to_budget();
+                            return;
+                        }
+
+                        for attempt in 1..=CONTEXT_SUMMARY_MAX_RETRIES {
+                            if *stop_rx_for_summary.borrow() {
+                                return;
+                            }
+                            match backend.summarize_context(&history_pairs).await {
+                                Ok(summary) if !summary.trim().is_empty() => {
+                                    manager.update_context_memory(summary);
+                                    return;
+                                }
+                                Ok(_) => {
+                                    warn!(
+                                        "Context summarization attempt {} returned empty output",
+                                        attempt
+                                    );
+                                }
+                                Err(err) => {
+                                    warn!(
+                                        "Context summarization attempt {} failed: {}",
+                                        attempt, err
+                                    );
+                                }
+                            }
+
+                            if attempt == CONTEXT_SUMMARY_MAX_RETRIES {
+                                manager.restore_history_entries(history_entries);
+                                manager.cap_history_to_budget();
+                                return;
+                            }
+
+                            tokio::time::sleep(Duration::from_millis(
+                                CONTEXT_SUMMARY_RETRY_DELAY_MS,
+                            ))
                             .await;
-                    }
-                });
+                        }
+                    });
+                }
             }
 
             if *stop_rx.borrow() {
