@@ -4,11 +4,10 @@
 
 use crate::config::TranslationConfig;
 use crate::llm::{
-    language_prompt_label, BackendId, BackendInfo, FoundryLocalBackend, LlmError, MockBackend,
-    OfflineMtBackend, PhiSilica, ReadyState, TranslationContext, TranslationDiagnostics,
-    TranslationDiagnosticsState, TranslationOutcome, TranslatorBackend,
+    BackendId, BackendInfo, FoundryLocalBackend, LlmError, MockBackend, OfflineMtBackend,
+    PhiSilica, ReadyState, TranslationContext, TranslationDiagnostics, TranslationDiagnosticsState,
+    TranslationOutcome, TranslatorBackend,
 };
-use std::borrow::Cow;
 use std::sync::{Arc, Mutex, RwLock};
 use std::time::Instant;
 use tauri::AppHandle;
@@ -265,16 +264,12 @@ impl TranslationManager {
                 continue;
             }
 
-            let input_text: Cow<'_, str> = if Self::backend_supports_context(id) {
-                let target_label = language_prompt_label(target_language);
-                let directive = format!("Translate to {}: {}", target_label, text);
-                if let Some(ctx) = context_prompt {
-                    Cow::Owned(format!("{}\n\n{}", ctx, directive))
-                } else {
-                    Cow::Owned(directive)
-                }
+            // Only pass context to backends that explicitly support it.
+            // Keep the OCR text untouched so we never "translate the context".
+            let context_for_backend = if Self::backend_supports_context(id) {
+                context_prompt
             } else {
-                Cow::Borrowed(text)
+                None
             };
 
             let started = Instant::now();
@@ -313,7 +308,12 @@ impl TranslationManager {
 
                 let result = timeout(
                     remaining,
-                    backend.translate(input_text.as_ref(), source_language, target_language),
+                    backend.translate_with_context(
+                        text,
+                        source_language,
+                        target_language,
+                        context_for_backend,
+                    ),
                 )
                 .await;
                 let latency_ms = started.elapsed().as_millis();
