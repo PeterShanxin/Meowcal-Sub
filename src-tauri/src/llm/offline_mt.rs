@@ -70,9 +70,7 @@ impl OfflineMtBackend {
     }
 
     /// Detect binary without Tauri AppHandle (for HTTP server mode)
-    pub fn detect_binary_standalone(
-        config: &OfflineMtConfig,
-    ) -> Option<(PathBuf, &'static str)> {
+    pub fn detect_binary_standalone(config: &OfflineMtConfig) -> Option<(PathBuf, &'static str)> {
         let (path, source, _) = Self::resolve_binary_path_standalone(config);
         match (path, source) {
             (Some(path), Some(source)) => Some((path, source)),
@@ -123,10 +121,11 @@ impl OfflineMtBackend {
 
     fn resolve_from_resources(app: &AppHandle) -> Option<PathBuf> {
         let resource_dir = app.path().resource_dir().ok()?;
-        let mut candidates = Vec::new();
-        candidates.push(resource_dir.clone());
-        candidates.push(resource_dir.join("bin"));
-        candidates.push(resource_dir.join("sidecars"));
+        let candidates = vec![
+            resource_dir.clone(),
+            resource_dir.join("bin"),
+            resource_dir.join("sidecars"),
+        ];
 
         for dir in candidates {
             if let Some(path) = Self::find_candidate_in_dir(&dir) {
@@ -243,24 +242,19 @@ impl OfflineMtBackend {
             .map_err(|e| LlmError::ApiError(format!("Failed to start translateLocally: {}", e)))?;
 
         if let Some(mut stdin) = child.stdin.take() {
-            stdin
-                .write_all(line.as_bytes())
-                .await
-                .map_err(|e| LlmError::ApiError(format!("Failed to write to translateLocally: {}", e)))?;
-            stdin
-                .shutdown()
-                .await
-                .map_err(|e| LlmError::ApiError(format!("Failed to close translateLocally stdin: {}", e)))?;
+            stdin.write_all(line.as_bytes()).await.map_err(|e| {
+                LlmError::ApiError(format!("Failed to write to translateLocally: {}", e))
+            })?;
+            stdin.shutdown().await.map_err(|e| {
+                LlmError::ApiError(format!("Failed to close translateLocally stdin: {}", e))
+            })?;
         }
 
         let timeout_ms = self.config.timeout_ms.max(100) as u64;
         let output = timeout(Duration::from_millis(timeout_ms), child.wait_with_output())
             .await
             .map_err(|_| {
-                LlmError::ApiError(format!(
-                    "translateLocally timed out after {}ms",
-                    timeout_ms
-                ))
+                LlmError::ApiError(format!("translateLocally timed out after {}ms", timeout_ms))
             })?
             .map_err(|e| LlmError::ApiError(format!("translateLocally failed: {}", e)))?;
 
@@ -296,12 +290,12 @@ impl OfflineMtBackend {
         for chunk in text.split_inclusive('\n') {
             let mut line = chunk;
             let mut ending = "";
-            if chunk.ends_with('\n') {
-                line = &chunk[..chunk.len() - 1];
+            if let Some(stripped) = chunk.strip_suffix('\n') {
+                line = stripped;
                 ending = "\n";
             }
-            if line.ends_with('\r') {
-                line = &line[..line.len() - 1];
+            if let Some(stripped) = line.strip_suffix('\r') {
+                line = stripped;
                 ending = "\r\n";
             }
             segments.push(LineSegment {

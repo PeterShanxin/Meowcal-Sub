@@ -209,7 +209,11 @@ impl TranslationContext {
             return;
         }
 
-        let memory_tokens = self.memory.as_ref().map(|m| Self::estimate_tokens(m)).unwrap_or(0);
+        let memory_tokens = self
+            .memory
+            .as_ref()
+            .map(|m| Self::estimate_tokens(m))
+            .unwrap_or(0);
         let budget = self.budget_tokens.saturating_sub(memory_tokens);
 
         self.recalculate_history_tokens();
@@ -242,7 +246,11 @@ impl TranslationContext {
 
     /// Get current token usage
     pub fn token_usage(&self) -> (usize, usize) {
-        let memory_tokens = self.memory.as_ref().map(|m| Self::estimate_tokens(m)).unwrap_or(0);
+        let memory_tokens = self
+            .memory
+            .as_ref()
+            .map(|m| Self::estimate_tokens(m))
+            .unwrap_or(0);
         (self.history_tokens + memory_tokens, self.budget_tokens)
     }
 
@@ -269,7 +277,7 @@ impl TranslationContext {
         let cjk_count = text.chars().filter(|c| Self::is_cjk(*c)).count();
         let total_chars = text.chars().count();
         let non_cjk_count = total_chars.saturating_sub(cjk_count);
-        cjk_count + (non_cjk_count + 3) / 4
+        cjk_count + non_cjk_count.div_ceil(4)
     }
 
     fn recalculate_history_tokens(&mut self) {

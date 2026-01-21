@@ -15,24 +15,24 @@ use tauri::Manager;
 // =============================================================================
 
 /// The main configuration for the app
-/// 
+///
 /// This is what gets saved/loaded from settings, and what the UI reads/writes.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]  // Use camelCase in JSON (JavaScript convention)
+#[serde(rename_all = "camelCase")] // Use camelCase in JSON (JavaScript convention)
 pub struct AppConfig {
     /// The language to translate FROM (source language)
     /// Examples: "en-US", "ja-JP", "zh-CN"
     pub source_language: String,
-    
+
     /// The language to translate TO (target language)
     /// Examples: "en-US", "zh-CN", "es-ES"
     pub target_language: String,
-    
+
     /// How often to capture the screen (in milliseconds)
     /// Lower = more responsive, but more CPU/battery usage
     /// Recommended: 500-1000ms
     pub capture_interval_ms: u32,
-    
+
     /// Overlay settings
     pub overlay: OverlayConfig,
 
@@ -47,13 +47,13 @@ pub struct AppConfig {
     /// Window size/position preferences
     #[serde(default)]
     pub window_preferences: WindowPreferences,
-    
+
     /// Whether to start translation automatically when app opens
     pub auto_start: bool,
-    
+
     /// Whether to minimize to system tray instead of closing
     pub minimize_to_tray: bool,
-    
+
     /// Whether to start with Windows
     pub start_with_windows: bool,
 }
@@ -64,25 +64,25 @@ pub struct AppConfig {
 pub struct OverlayConfig {
     /// Font size for the translated text (in pixels)
     pub font_size: u32,
-    
+
     /// Font family (e.g., "Segoe UI", "Arial", "Microsoft YaHei")
     pub font_family: String,
-    
+
     /// Text color as CSS color (e.g., "#FFFFFF", "white", "rgb(255,255,255)")
     pub text_color: String,
-    
+
     /// Background color as CSS color with alpha (e.g., "rgba(0,0,0,0.7)")
     pub background_color: String,
-    
+
     /// How much to offset the overlay below the capture region (in pixels)
     pub offset_y: i32,
-    
+
     /// Maximum width of the overlay (in pixels, 0 = match capture region)
     pub max_width: u32,
 }
 
 /// Window size/position preferences
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase", default)]
 pub struct WindowPreferences {
     pub width: Option<u32>,
@@ -167,8 +167,8 @@ impl Default for AppConfig {
     fn default() -> Self {
         Self {
             source_language: "en-US".to_string(),
-            target_language: "zh-CN".to_string(),  // Chinese as default target
-            capture_interval_ms: 500,               // Capture every 500ms
+            target_language: "zh-CN".to_string(), // Chinese as default target
+            capture_interval_ms: 500,             // Capture every 500ms
             overlay: OverlayConfig::default(),
             translation: TranslationConfig::default(),
             last_capture_region: None,
@@ -185,10 +185,10 @@ impl Default for OverlayConfig {
         Self {
             font_size: 24,
             font_family: "Segoe UI".to_string(),
-            text_color: "#FFFFFF".to_string(),              // White text
+            text_color: "#FFFFFF".to_string(), // White text
             background_color: "rgba(0, 0, 0, 0.75)".to_string(), // Semi-transparent black
-            offset_y: 10,                                    // 10px below capture region
-            max_width: 0,                                    // Match capture region width
+            offset_y: 10,                      // 10px below capture region
+            max_width: 0,                      // Match capture region width
         }
     }
 }
@@ -200,14 +200,19 @@ impl Default for OverlayConfig {
 impl CaptureRegion {
     /// Create a new capture region
     pub fn new(x: i32, y: i32, width: i32, height: i32) -> Self {
-        Self { x, y, width, height }
+        Self {
+            x,
+            y,
+            width,
+            height,
+        }
     }
-    
+
     /// Check if the region is valid (positive dimensions)
     pub fn is_valid(&self) -> bool {
         self.width > 0 && self.height > 0
     }
-    
+
     /// Get the area in pixels
     pub fn area(&self) -> i32 {
         self.width * self.height
@@ -231,17 +236,80 @@ impl CaptureRegion {
             height: scaled_height,
         }
     }
-}
 
-impl Default for WindowPreferences {
-    fn default() -> Self {
-        Self {
-            width: None,
-            height: None,
-            x: None,
-            y: None,
-            is_maximized: false,
+    /// Returns true if this region overlaps the origin-based bounds rectangle (0..width, 0..height).
+    pub fn intersects_origin_bounds(&self, bounds_width: i32, bounds_height: i32) -> bool {
+        if !self.is_valid() || bounds_width <= 0 || bounds_height <= 0 {
+            return false;
         }
+
+        let left = self.x as i64;
+        let top = self.y as i64;
+        let right = left + self.width as i64;
+        let bottom = top + self.height as i64;
+
+        let bounds_right = bounds_width as i64;
+        let bounds_bottom = bounds_height as i64;
+
+        let inter_left = left.max(0);
+        let inter_top = top.max(0);
+        let inter_right = right.min(bounds_right);
+        let inter_bottom = bottom.min(bounds_bottom);
+
+        inter_right > inter_left && inter_bottom > inter_top
+    }
+
+    /// Clamp this region to fit within origin-based bounds (0..width, 0..height).
+    ///
+    /// The clamping behavior preserves the current width/height whenever possible by shifting the
+    /// region back into view. If the region is larger than the bounds, it will be capped.
+    pub fn clamp_to_bounds(&self, bounds_width: i32, bounds_height: i32) -> Option<Self> {
+        if !self.is_valid() || bounds_width <= 0 || bounds_height <= 0 {
+            return None;
+        }
+
+        let mut width = self.width;
+        let mut height = self.height;
+        let mut x = self.x;
+        let mut y = self.y;
+
+        // Cap the region size to the available bounds.
+        if width > bounds_width {
+            width = bounds_width;
+            x = 0;
+        }
+        if height > bounds_height {
+            height = bounds_height;
+            y = 0;
+        }
+
+        // Shift into bounds while preserving size.
+        if x < 0 {
+            x = 0;
+        }
+        if y < 0 {
+            y = 0;
+        }
+
+        // Ensure right/bottom edge doesn't exceed bounds.
+        if (x as i64) + (width as i64) > (bounds_width as i64) {
+            x = bounds_width - width;
+        }
+        if (y as i64) + (height as i64) > (bounds_height as i64) {
+            y = bounds_height - height;
+        }
+
+        // Final sanity check.
+        if width <= 0 || height <= 0 || x < 0 || y < 0 {
+            return None;
+        }
+
+        Some(Self {
+            x,
+            y,
+            width,
+            height,
+        })
     }
 }
 
@@ -252,7 +320,7 @@ impl Default for TranslationConfig {
             enable_windows_ai: cfg!(target_os = "windows"),
             enable_offline_mt: true,
             allow_mock_fallback: true,
-            enable_context_aware: true,  // Enabled by default
+            enable_context_aware: true, // Enabled by default
             foundry_local: FoundryLocalConfig::default(),
             offline_mt: OfflineMtConfig::default(),
         }
@@ -288,8 +356,7 @@ pub fn get_config_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
         .path()
         .app_data_dir()
         .map_err(|e| format!("Failed to resolve app data dir: {}", e))?;
-    fs::create_dir_all(&app_dir)
-        .map_err(|e| format!("Failed to create app data dir: {}", e))?;
+    fs::create_dir_all(&app_dir).map_err(|e| format!("Failed to create app data dir: {}", e))?;
     Ok(app_dir.join("config.json"))
 }
 
@@ -324,7 +391,7 @@ pub fn save_config(app: &tauri::AppHandle, config: &AppConfig) -> Result<(), Str
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn test_default_config() {
         let config = AppConfig::default();
@@ -332,14 +399,14 @@ mod tests {
         assert_eq!(config.target_language, "zh-CN");
         assert_eq!(config.capture_interval_ms, 500);
     }
-    
+
     #[test]
     fn test_capture_region_valid() {
         let region = CaptureRegion::new(0, 0, 100, 50);
         assert!(region.is_valid());
         assert_eq!(region.area(), 5000);
     }
-    
+
     #[test]
     fn test_capture_region_invalid() {
         let region = CaptureRegion::new(0, 0, 0, 50);
@@ -363,7 +430,10 @@ mod tests {
         assert!(json.contains("enableContextAware")); // camelCase in JSON
 
         let deserialized: TranslationConfig = serde_json::from_str(&json).unwrap();
-        assert_eq!(deserialized.enable_context_aware, config.enable_context_aware);
+        assert_eq!(
+            deserialized.enable_context_aware,
+            config.enable_context_aware
+        );
     }
 
     #[test]

@@ -14,6 +14,12 @@ impl MockBackend {
     }
 }
 
+impl Default for MockBackend {
+    fn default() -> Self {
+        Self
+    }
+}
+
 #[async_trait]
 impl TranslatorBackend for MockBackend {
     fn id(&self) -> BackendId {

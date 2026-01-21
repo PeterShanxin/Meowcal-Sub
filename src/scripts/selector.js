@@ -293,12 +293,19 @@ async function confirmSelection() {
     }
 
     const regionData = {
-        x: Math.round(state.region.x),
-        y: Math.round(state.region.y),
-        width: Math.round(state.region.width),
-        height: Math.round(state.region.height),
+        // Clamp to window bounds to avoid rounding pushing us slightly out-of-range
+        // (e.g. x = -1) which breaks Graphics Capture validation on the Rust side.
+        x: Math.max(0, Math.round(state.region.x)),
+        y: Math.max(0, Math.round(state.region.y)),
+        width: Math.max(1, Math.round(state.region.width)),
+        height: Math.max(1, Math.round(state.region.height)),
         scaleFactor: scaleFactor,
     };
+
+    // Ensure the region doesn't exceed the selector window bounds.
+    // This helps keep the capture region within screen limits after DPI scaling.
+    regionData.width = Math.max(1, Math.min(regionData.width, window.innerWidth - regionData.x));
+    regionData.height = Math.max(1, Math.min(regionData.height, window.innerHeight - regionData.y));
 
     console.log('Confirming region:', regionData);
 
