@@ -3,7 +3,7 @@
 // =============================================================================
 
 use crate::config::FoundryLocalConfig;
-use crate::llm::{BackendId, LlmError, ReadyState, TranslatorBackend};
+use crate::llm::{language_prompt_label, BackendId, LlmError, ReadyState, TranslatorBackend};
 use async_trait::async_trait;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
@@ -817,10 +817,12 @@ impl TranslatorBackend for FoundryLocalBackend {
         let preferred_namespace = self.preferred_api_namespace();
         let url = self.api_url_for(&base_url, preferred_namespace, "chat/completions");
 
+        let source_label = language_prompt_label(source_language);
+        let target_label = language_prompt_label(target_language);
         let system_prompt = format!(
             "You are a translator. Translate the following text from {} to {}. \
              Output ONLY the translated text, nothing else. No explanations, no quotes, no formatting.",
-            source_language, target_language
+            source_label, target_label
         );
 
         let request = ChatCompletionRequest {

@@ -23,6 +23,7 @@ pub use phi_silica::*;
 
 use async_trait::async_trait;
 use serde::Serialize;
+use std::borrow::Cow;
 use std::collections::HashMap;
 use thiserror::Error;
 
@@ -87,6 +88,22 @@ impl BackendId {
             "mock" | "passthrough" | "none" => Some(BackendId::Mock),
             _ => None,
         }
+    }
+}
+
+/// Provide a human-friendly language label for LLM prompts.
+pub fn language_prompt_label(code: &str) -> Cow<'_, str> {
+    match code.trim() {
+        "en-US" => Cow::Borrowed("English (US)"),
+        "en-GB" => Cow::Borrowed("English (UK)"),
+        "zh-CN" => Cow::Borrowed("Chinese (Simplified)"),
+        "zh-TW" => Cow::Borrowed("Chinese (Traditional)"),
+        "ja-JP" => Cow::Borrowed("Japanese"),
+        "ko-KR" => Cow::Borrowed("Korean"),
+        "es-ES" => Cow::Borrowed("Spanish"),
+        "fr-FR" => Cow::Borrowed("French"),
+        "de-DE" => Cow::Borrowed("German"),
+        _ => Cow::Owned(code.trim().to_string()),
     }
 }
 

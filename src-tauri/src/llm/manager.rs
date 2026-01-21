@@ -4,9 +4,9 @@
 
 use crate::config::TranslationConfig;
 use crate::llm::{
-    BackendId, BackendInfo, FoundryLocalBackend, LlmError, MockBackend, OfflineMtBackend,
-    PhiSilica, ReadyState, TranslationContext, TranslationDiagnostics, TranslationDiagnosticsState,
-    TranslationOutcome, TranslatorBackend,
+    language_prompt_label, BackendId, BackendInfo, FoundryLocalBackend, LlmError, MockBackend,
+    OfflineMtBackend, PhiSilica, ReadyState, TranslationContext, TranslationDiagnostics,
+    TranslationDiagnosticsState, TranslationOutcome, TranslatorBackend,
 };
 use std::borrow::Cow;
 use std::sync::{Arc, Mutex, RwLock};
@@ -266,10 +266,12 @@ impl TranslationManager {
             }
 
             let input_text: Cow<'_, str> = if Self::backend_supports_context(id) {
+                let target_label = language_prompt_label(target_language);
+                let directive = format!("Translate to {}: {}", target_label, text);
                 if let Some(ctx) = context_prompt {
-                    Cow::Owned(format!("{}\n\nTranslate: {}", ctx, text))
+                    Cow::Owned(format!("{}\n\n{}", ctx, directive))
                 } else {
-                    Cow::Borrowed(text)
+                    Cow::Owned(directive)
                 }
             } else {
                 Cow::Borrowed(text)
