@@ -187,13 +187,51 @@
                 </h4>
                 <p class="setting-hint">
                     Remember names, detect genre, and use recent history for more consistent translations within a session.
+                    Only affects Foundry Local.
                 </p>
-                <div class="toggle-wrapper">
-                    <span class="toggle-label">Enable Context Memory</span>
-                    <label class="toggle">
-                        <input type="checkbox" id="toggle-context-aware" checked>
-                        <span class="toggle-slider"></span>
-                    </label>
+                <div class="settings-group">
+                    <label class="setting-label" for="context-level">Context Level</label>
+                    <select id="context-level" class="select">
+                        <option value="off">Off</option>
+                        <option value="memoryOnly">Memory only</option>
+                        <option value="memoryAndRecent">Memory + recent</option>
+                    </select>
+                </div>
+                <div class="settings-group">
+                    <label class="setting-label" for="context-recent-count">Recent Lines</label>
+                    <input
+                        type="number"
+                        id="context-recent-count"
+                        class="text-input"
+                        min="0"
+                        max="10"
+                        step="1"
+                        value="3"
+                    >
+                </div>
+                <div class="settings-group">
+                    <label class="setting-label" for="context-budget-percent">Context Budget (%)</label>
+                    <input
+                        type="number"
+                        id="context-budget-percent"
+                        class="text-input"
+                        min="5"
+                        max="30"
+                        step="1"
+                        value="15"
+                    >
+                </div>
+                <div class="settings-group">
+                    <label class="setting-label" for="context-summary-cooldown-ms">Summary Cooldown (ms)</label>
+                    <input
+                        type="number"
+                        id="context-summary-cooldown-ms"
+                        class="text-input"
+                        min="0"
+                        max="120000"
+                        step="500"
+                        value="5000"
+                    >
                 </div>
             </div>
 

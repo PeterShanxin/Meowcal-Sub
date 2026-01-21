@@ -111,6 +111,24 @@ pub struct TranslationConfig {
     /// Enable context-aware translation (session memory for names, genre, history)
     pub enable_context_aware: bool,
 
+    /// Context level for Foundry Local prompts.
+    #[serde(default)]
+    pub context_level: ContextLevel,
+
+    /// How many recent translations to include in the prompt (MemoryAndRecent only).
+    #[serde(default = "default_context_recent_count")]
+    pub context_recent_count: usize,
+
+    /// Context budget as a percentage of the model context window.
+    ///
+    /// Example: 15 = use 15% of the model context for session context.
+    #[serde(default = "default_context_budget_percent")]
+    pub context_budget_percent: u8,
+
+    /// Minimum time between context summarization runs (milliseconds).
+    #[serde(default = "default_context_summary_cooldown_ms")]
+    pub context_summary_cooldown_ms: u32,
+
     /// Foundry Local backend configuration
     #[serde(default)]
     pub foundry_local: FoundryLocalConfig,
@@ -118,6 +136,49 @@ pub struct TranslationConfig {
     /// Offline MT backend configuration
     #[serde(default)]
     pub offline_mt: OfflineMtConfig,
+}
+
+/// Context-aware prompt level for Foundry Local.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "camelCase")]
+pub enum ContextLevel {
+    Off,
+    MemoryOnly,
+    #[default]
+    MemoryAndRecent,
+}
+
+fn default_context_recent_count() -> usize {
+    3
+}
+
+fn default_context_budget_percent() -> u8 {
+    15
+}
+
+fn default_context_summary_cooldown_ms() -> u32 {
+    5_000
+}
+
+impl TranslationConfig {
+    pub fn normalize(&mut self) {
+        // Keep the legacy toggle and the new level consistent.
+        if !self.enable_context_aware {
+            self.context_level = ContextLevel::Off;
+        } else if self.context_level == ContextLevel::Off {
+            self.enable_context_aware = false;
+        }
+
+        self.context_recent_count = self.context_recent_count.clamp(0, 10);
+        self.context_budget_percent = self.context_budget_percent.clamp(5, 30);
+        self.context_summary_cooldown_ms = self.context_summary_cooldown_ms.clamp(0, 120_000);
+    }
+}
+
+impl AppConfig {
+    pub fn normalize(&mut self) {
+        self.translation.normalize();
+    }
 }
 
 /// Configuration for Foundry Local backend
@@ -321,6 +382,10 @@ impl Default for TranslationConfig {
             enable_offline_mt: true,
             allow_mock_fallback: true,
             enable_context_aware: true, // Enabled by default
+            context_level: ContextLevel::MemoryAndRecent,
+            context_recent_count: default_context_recent_count(),
+            context_budget_percent: default_context_budget_percent(),
+            context_summary_cooldown_ms: default_context_summary_cooldown_ms(),
             foundry_local: FoundryLocalConfig::default(),
             offline_mt: OfflineMtConfig::default(),
         }
@@ -368,7 +433,8 @@ pub fn load_config(app: &tauri::AppHandle) -> AppConfig {
     };
 
     if let Ok(content) = fs::read_to_string(&path) {
-        if let Ok(config) = serde_json::from_str::<AppConfig>(&content) {
+        if let Ok(mut config) = serde_json::from_str::<AppConfig>(&content) {
+            config.normalize();
             return config;
         }
     }
@@ -379,7 +445,9 @@ pub fn load_config(app: &tauri::AppHandle) -> AppConfig {
 /// Save config to disk.
 pub fn save_config(app: &tauri::AppHandle, config: &AppConfig) -> Result<(), String> {
     let path = get_config_path(app)?;
-    let json = serde_json::to_string_pretty(config).map_err(|e| e.to_string())?;
+    let mut config = config.clone();
+    config.normalize();
+    let json = serde_json::to_string_pretty(&config).map_err(|e| e.to_string())?;
     fs::write(path, json).map_err(|e| e.to_string())?;
     Ok(())
 }
@@ -420,6 +488,10 @@ mod tests {
         assert!(config.enable_offline_mt);
         assert!(config.allow_mock_fallback);
         assert!(config.enable_context_aware); // Context-aware enabled by default
+        assert_eq!(config.context_level, ContextLevel::MemoryAndRecent);
+        assert_eq!(config.context_recent_count, 3);
+        assert_eq!(config.context_budget_percent, 15);
+        assert_eq!(config.context_summary_cooldown_ms, 5_000);
     }
 
     #[test]
@@ -428,12 +500,14 @@ mod tests {
         let config = TranslationConfig::default();
         let json = serde_json::to_string(&config).unwrap();
         assert!(json.contains("enableContextAware")); // camelCase in JSON
+        assert!(json.contains("contextLevel"));
 
         let deserialized: TranslationConfig = serde_json::from_str(&json).unwrap();
         assert_eq!(
             deserialized.enable_context_aware,
             config.enable_context_aware
         );
+        assert_eq!(deserialized.context_level, config.context_level);
     }
 
     #[test]
