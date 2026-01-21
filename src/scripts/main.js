@@ -194,8 +194,13 @@ function applyTranslationSettings(translation) {
     document.getElementById('toggle-windows-ai').checked = config.enableWindowsAi;
     document.getElementById('toggle-offline-mt').checked = config.enableOfflineMt;
     document.getElementById('toggle-mock-fallback').checked = config.allowMockFallback;
-    document.getElementById('toggle-context-aware').checked = config.enableContextAware;
+    document.getElementById('context-level').value = config.contextLevel;
+    document.getElementById('context-recent-count').value = config.contextRecentCount;
+    document.getElementById('context-budget-percent').value = config.contextBudgetPercent;
+    document.getElementById('context-summary-cooldown-ms').value = config.contextSummaryCooldownMs;
     document.getElementById('offline-mt-path').value = config.offlineMt.binaryPath || '';
+
+    syncContextControls();
 
     // Load Foundry Local model selector
     const foundryModel = config.foundryLocal?.model || '';
@@ -229,6 +234,10 @@ function normalizeTranslationConfig(translation) {
         enableOfflineMt: true,
         allowMockFallback: true,
         enableContextAware: true,
+        contextLevel: 'memoryAndRecent',
+        contextRecentCount: 3,
+        contextBudgetPercent: 15,
+        contextSummaryCooldownMs: 5000,
         foundryLocal: {
             model: null,
             timeoutMs: 30000,
@@ -244,12 +253,24 @@ function normalizeTranslationConfig(translation) {
         return defaultConfig;
     }
 
+    const enableContextAware = translation.enableContextAware ?? defaultConfig.enableContextAware;
+    let contextLevel = translation.contextLevel ?? defaultConfig.contextLevel;
+    if (!enableContextAware) {
+        contextLevel = 'off';
+    } else if (contextLevel === 'off') {
+        contextLevel = defaultConfig.contextLevel;
+    }
+
     return {
         enableFoundryLocal: translation.enableFoundryLocal ?? defaultConfig.enableFoundryLocal,
         enableWindowsAi: translation.enableWindowsAi ?? defaultConfig.enableWindowsAi,
         enableOfflineMt: translation.enableOfflineMt ?? defaultConfig.enableOfflineMt,
         allowMockFallback: translation.allowMockFallback ?? defaultConfig.allowMockFallback,
-        enableContextAware: translation.enableContextAware ?? defaultConfig.enableContextAware,
+        enableContextAware,
+        contextLevel,
+        contextRecentCount: translation.contextRecentCount ?? defaultConfig.contextRecentCount,
+        contextBudgetPercent: translation.contextBudgetPercent ?? defaultConfig.contextBudgetPercent,
+        contextSummaryCooldownMs: translation.contextSummaryCooldownMs ?? defaultConfig.contextSummaryCooldownMs,
         foundryLocal: {
             model: translation.foundryLocal?.model ?? defaultConfig.foundryLocal.model,
             timeoutMs: translation.foundryLocal?.timeoutMs ?? defaultConfig.foundryLocal.timeoutMs,
@@ -260,6 +281,30 @@ function normalizeTranslationConfig(translation) {
             maxChunkChars: translation.offlineMt?.maxChunkChars ?? defaultConfig.offlineMt.maxChunkChars,
         },
     };
+}
+
+function syncContextControls() {
+    const level = document.getElementById('context-level')?.value;
+    const disabled = level === 'off';
+    const recent = document.getElementById('context-recent-count');
+    const budget = document.getElementById('context-budget-percent');
+    const cooldown = document.getElementById('context-summary-cooldown-ms');
+    if (recent) {
+        recent.disabled = level !== 'memoryAndRecent';
+    }
+    if (budget) {
+        budget.disabled = disabled;
+    }
+    if (cooldown) {
+        cooldown.disabled = disabled;
+    }
+}
+
+function clampInt(value, min, max, fallback) {
+    if (!Number.isFinite(value)) {
+        return fallback;
+    }
+    return Math.min(Math.max(value, min), max);
 }
 
 /**
@@ -274,7 +319,29 @@ async function saveSettings() {
     translationConfig.enableWindowsAi = document.getElementById('toggle-windows-ai').checked;
     translationConfig.enableOfflineMt = document.getElementById('toggle-offline-mt').checked;
     translationConfig.allowMockFallback = document.getElementById('toggle-mock-fallback').checked;
-    translationConfig.enableContextAware = document.getElementById('toggle-context-aware').checked;
+
+    const contextLevel = document.getElementById('context-level').value;
+    translationConfig.contextLevel = contextLevel;
+    translationConfig.enableContextAware = contextLevel !== 'off';
+    translationConfig.contextRecentCount = clampInt(
+        parseInt(document.getElementById('context-recent-count').value),
+        0,
+        10,
+        3,
+    );
+    translationConfig.contextBudgetPercent = clampInt(
+        parseInt(document.getElementById('context-budget-percent').value),
+        5,
+        30,
+        15,
+    );
+    translationConfig.contextSummaryCooldownMs = clampInt(
+        parseInt(document.getElementById('context-summary-cooldown-ms').value),
+        0,
+        120000,
+        5000,
+    );
+    syncContextControls();
     translationConfig.foundryLocal.model = foundryModel.length > 0 ? foundryModel : null;
     translationConfig.offlineMt.binaryPath = offlineMtPath.length > 0 ? offlineMtPath : null;
 
@@ -418,9 +485,22 @@ function setupEventListeners() {
         scheduleAutoSave();
     });
 
-    // Auto-save when translation toggles change
-    document.getElementById('toggle-context-aware').addEventListener('change', () => {
-        console.log('Context memory toggled, auto-saving...');
+    // Auto-save when context controls change
+    document.getElementById('context-level').addEventListener('change', () => {
+        syncContextControls();
+        console.log('Context level changed, auto-saving...');
+        scheduleAutoSave();
+    });
+    document.getElementById('context-recent-count').addEventListener('change', () => {
+        console.log('Context recent count changed, auto-saving...');
+        scheduleAutoSave();
+    });
+    document.getElementById('context-budget-percent').addEventListener('change', () => {
+        console.log('Context budget percent changed, auto-saving...');
+        scheduleAutoSave();
+    });
+    document.getElementById('context-summary-cooldown-ms').addEventListener('change', () => {
+        console.log('Context summary cooldown changed, auto-saving...');
         scheduleAutoSave();
     });
     document.getElementById('toggle-foundry-local').addEventListener('change', () => {

@@ -131,15 +131,19 @@ impl TranslationContext {
 
     /// Build the context prompt to prepend to translation requests
     pub fn build_context_prompt(&self) -> Option<String> {
-        self.build_prompt(true)
+        self.build_context_prompt_with_recent_limit(3)
+    }
+
+    pub fn build_context_prompt_with_recent_limit(&self, recent_limit: usize) -> Option<String> {
+        self.build_prompt(true, recent_limit)
     }
 
     /// Build a memory-only prompt (excludes recent history).
     pub fn build_memory_prompt(&self) -> Option<String> {
-        self.build_prompt(false)
+        self.build_prompt(false, 0)
     }
 
-    fn build_prompt(&self, include_recent: bool) -> Option<String> {
+    fn build_prompt(&self, include_recent: bool, recent_limit: usize) -> Option<String> {
         if !self.enabled {
             return None;
         }
@@ -172,8 +176,8 @@ impl TranslationContext {
         }
 
         if include_recent {
-            // Add recent history (try to include up to 3 entries, but stop at the token budget).
-            let recent_count = 3.min(self.history.len());
+            // Add recent history (try to include up to `recent_limit` entries, but stop at the token budget).
+            let recent_count = recent_limit.min(self.history.len());
             if recent_count > 0 {
                 let recent: Vec<_> = self.history.iter().rev().take(recent_count).collect();
                 let mut selected = Vec::new();

@@ -92,6 +92,16 @@ Default order:
 
 You can configure backend feature flags under `translation` in config.
 
+#### Context-Aware Controls (Foundry Local only)
+
+| Setting | Description | Default |
+|---------|-------------|---------|
+| `translation.enableContextAware` | Master on/off switch | `true` |
+| `translation.contextLevel` | `off` / `memoryOnly` / `memoryAndRecent` | `memoryAndRecent` |
+| `translation.contextRecentCount` | How many recent pairs to include when `memoryAndRecent` | `3` |
+| `translation.contextBudgetPercent` | Context token budget as % of model window | `15` |
+| `translation.contextSummaryCooldownMs` | Minimum time between summary runs | `5000` |
+
 #### Offline MT (translateLocally) Setup
 
 1) Install `translateLocally` on your machine (no auto-download in the app).

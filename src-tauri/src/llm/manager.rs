@@ -2,7 +2,7 @@
 // MANAGER.RS - Translation Backend Selection + Fallback
 // =============================================================================
 
-use crate::config::TranslationConfig;
+use crate::config::{ContextLevel, TranslationConfig};
 use crate::llm::{
     BackendId, BackendInfo, FoundryLocalBackend, LlmError, MockBackend, OfflineMtBackend,
     PhiSilica, ReadyState, TranslationContext, TranslationDiagnostics, TranslationDiagnosticsState,
@@ -58,9 +58,15 @@ impl TranslationManager {
 
         // Initialize context with auto-detected budget
         let context_budget = Self::detect_context_budget(&config);
-        let context = TranslationContext::new(context_budget, config.enable_context_aware);
-        let context_tier = if config.enable_context_aware {
-            CONTEXT_TIER_FULL
+        let context_enabled =
+            config.enable_context_aware && config.context_level != ContextLevel::Off;
+        let context = TranslationContext::new(context_budget, context_enabled);
+        let context_tier = if context_enabled {
+            match config.context_level {
+                ContextLevel::Off => CONTEXT_TIER_NONE,
+                ContextLevel::MemoryOnly => CONTEXT_TIER_MEMORY_ONLY,
+                ContextLevel::MemoryAndRecent => CONTEXT_TIER_FULL,
+            }
         } else {
             CONTEXT_TIER_NONE
         };
@@ -81,9 +87,14 @@ impl TranslationManager {
         if config.enable_foundry_local {
             if let Some(ref model) = config.foundry_local.model {
                 if let Some(window) = FoundryLocalBackend::get_model_context_window(model) {
-                    // Use 15% of context window for translation context
-                    let budget = (window as f32 * 0.15) as usize;
-                    debug!("Context budget from model {}: {} tokens", model, budget);
+                    let percent = (config.context_budget_percent.clamp(5, 30) as f32) / 100.0;
+                    let budget = (window as f32 * percent) as usize;
+                    debug!(
+                        "Context budget from model {}: {} tokens ({}%)",
+                        model,
+                        budget,
+                        (percent * 100.0).round()
+                    );
                     return budget.clamp(200, 2000);
                 }
             }
@@ -102,9 +113,15 @@ impl TranslationManager {
         diagnostics: Arc<Mutex<TranslationDiagnosticsState>>,
         backend_timeout_ms: u64,
     ) -> Self {
-        let context = TranslationContext::new(500, config.enable_context_aware);
-        let context_tier = if config.enable_context_aware {
-            CONTEXT_TIER_FULL
+        let context_enabled =
+            config.enable_context_aware && config.context_level != ContextLevel::Off;
+        let context = TranslationContext::new(500, context_enabled);
+        let context_tier = if context_enabled {
+            match config.context_level {
+                ContextLevel::Off => CONTEXT_TIER_NONE,
+                ContextLevel::MemoryOnly => CONTEXT_TIER_MEMORY_ONLY,
+                ContextLevel::MemoryAndRecent => CONTEXT_TIER_FULL,
+            }
         } else {
             CONTEXT_TIER_NONE
         };
@@ -191,11 +208,12 @@ impl TranslationManager {
             };
         }
 
-        let context_prompt = if self.config.enable_context_aware {
-            context_prompt.filter(|ctx| !ctx.trim().is_empty())
-        } else {
-            None
-        };
+        let context_prompt =
+            if self.config.enable_context_aware && self.config.context_level != ContextLevel::Off {
+                context_prompt.filter(|ctx| !ctx.trim().is_empty())
+            } else {
+                None
+            };
 
         let input_chars = text.chars().count();
         if input_chars > MAX_TRANSLATION_INPUT_CHARS {
@@ -629,12 +647,14 @@ impl TranslationManager {
 
     /// Get context prompt to enhance translation request
     pub fn get_context_prompt(&self) -> Option<String> {
-        if !self.config.enable_context_aware {
+        if !self.config.enable_context_aware || self.config.context_level == ContextLevel::Off {
             return None;
         }
 
         match self.context_tier.load(Ordering::SeqCst) {
-            CONTEXT_TIER_FULL => self.context_read().build_context_prompt(),
+            CONTEXT_TIER_FULL => self
+                .context_read()
+                .build_context_prompt_with_recent_limit(self.config.context_recent_count),
             CONTEXT_TIER_MEMORY_ONLY => self.context_read().build_memory_prompt(),
             _ => None,
         }
@@ -743,7 +763,7 @@ impl TranslationManager {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::{OfflineMtConfig, TranslationConfig};
+    use crate::config::{ContextLevel, OfflineMtConfig, TranslationConfig};
     use crate::llm::LlmError;
     use async_trait::async_trait;
 
@@ -797,6 +817,10 @@ mod tests {
             enable_offline_mt: true,
             allow_mock_fallback: true,
             enable_context_aware: true,
+            context_level: ContextLevel::MemoryAndRecent,
+            context_recent_count: 3,
+            context_budget_percent: 15,
+            context_summary_cooldown_ms: 5_000,
             foundry_local: crate::config::FoundryLocalConfig::default(),
             offline_mt: OfflineMtConfig::default(),
         }
