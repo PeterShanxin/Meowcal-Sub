@@ -7,7 +7,9 @@
 // This keeps the app responsive and lets the backend manager fall back cleanly.
 // =============================================================================
 
-use super::{BackendId, LlmError, ReadyState, TranslatorBackend, WindowsAiDiagnostics};
+use super::{
+    language_prompt_label, BackendId, LlmError, ReadyState, TranslatorBackend, WindowsAiDiagnostics,
+};
 use async_trait::async_trait;
 use std::time::Duration;
 use tracing::{debug, info, warn};
@@ -174,9 +176,11 @@ impl PhiSilica {
     }
 
     fn build_prompt(&self, text: &str, source_language: &str, target_language: &str) -> String {
+        let source_label = language_prompt_label(source_language);
+        let target_label = language_prompt_label(target_language);
         format!(
             "Translate from {} to {}. Output only the translated text:\n{}",
-            source_language, target_language, text
+            source_label, target_label, text
         )
     }
 }
