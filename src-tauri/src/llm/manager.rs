@@ -743,13 +743,21 @@ impl TranslationManager {
         match err {
             LlmError::ApiError(message) => {
                 let lower = message.to_ascii_lowercase();
-                lower.contains("failed to load from epcontext model")
-                    || lower.contains("qnn_backend_manager")
-                    || lower.contains("onnxruntime::qnn")
-                    || lower.contains("model is loading")
+                // Treat missing/permissioned ep_cache_context as non-retriable: it's unlikely to
+                // resolve within a subtitle frame budget and retries just add latency.
+                if lower.contains("ep_cache_context")
+                    && (lower.contains("does not exist") || lower.contains("not accessible"))
+                {
+                    return false;
+                }
+
+                lower.contains("model is loading")
                     || lower.contains("connection refused")
                     || lower.contains("connection reset")
                     || lower.contains("temporarily unavailable")
+                    || lower.contains("qnn_backend_manager")
+                    || lower.contains("onnxruntime::qnn")
+                    || lower.contains("failed to load from epcontext model")
             }
             _ => false,
         }
