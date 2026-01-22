@@ -186,7 +186,7 @@
                     Context-Aware Translation
                 </h4>
                 <p class="setting-hint">
-                    Remember names, detect genre, and use recent history for more consistent translations within a session.
+                    Uses a small rolling cache of recent OCR lines (source-only) to improve consistency and reduce drift within a session.
                     Only affects Foundry Local.
                 </p>
                 <div class="settings-group">
@@ -231,6 +231,54 @@
                         max="120000"
                         step="500"
                         value="5000"
+                    >
+                </div>
+                <div class="settings-group">
+                    <label class="setting-label" for="prompt-max-source-chars">Max Source Chars</label>
+                    <input
+                        type="number"
+                        id="prompt-max-source-chars"
+                        class="text-input"
+                        min="50"
+                        max="2000"
+                        step="10"
+                        value="300"
+                    >
+                </div>
+                <div class="settings-group">
+                    <label class="setting-label" for="prompt-max-context-chars">Max Context Chars</label>
+                    <input
+                        type="number"
+                        id="prompt-max-context-chars"
+                        class="text-input"
+                        min="0"
+                        max="5000"
+                        step="50"
+                        value="600"
+                    >
+                </div>
+                <div class="settings-group">
+                    <label class="setting-label" for="context-buffer-size">Context Buffer Size</label>
+                    <input
+                        type="number"
+                        id="context-buffer-size"
+                        class="text-input"
+                        min="1"
+                        max="50"
+                        step="1"
+                        value="12"
+                    >
+                </div>
+                <div class="settings-group">
+                    <label class="setting-label" for="context-reset-gap-ms">Context Reset Gap (ms)</label>
+                    <input
+                        type="number"
+                        id="context-reset-gap-ms"
+                        class="text-input"
+                        min="0"
+                        max="120000"
+                        step="500"
+                        value="6000"
                     >
                 </div>
             </div>

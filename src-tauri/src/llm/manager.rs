@@ -5,8 +5,8 @@
 use crate::config::{ContextLevel, TranslationConfig};
 use crate::llm::{
     BackendId, BackendInfo, FoundryLocalBackend, LlmError, MockBackend, OfflineMtBackend,
-    PhiSilica, ReadyState, TranslationContext, TranslationDiagnostics, TranslationDiagnosticsState,
-    TranslationOutcome, TranslatorBackend,
+    PhiSilica, PromptRouterOptions, ReadyState, TranslationContext, TranslationDiagnostics,
+    TranslationDiagnosticsState, TranslationOutcome, TranslatorBackend,
 };
 use std::sync::atomic::{AtomicU8, Ordering};
 use std::sync::{Arc, Mutex, RwLock};
@@ -321,7 +321,8 @@ impl TranslationManager {
                     .clamp(CONTEXT_TIER_NONE, CONTEXT_TIER_FULL);
 
                 let memory_only_prompt = if initial_tier >= CONTEXT_TIER_MEMORY_ONLY {
-                    self.context_read().build_memory_prompt()
+                    self.context_read()
+                        .build_memory_prompt(self.config.prompt_max_context_chars)
                 } else {
                     None
                 };
@@ -374,11 +375,16 @@ impl TranslationManager {
 
                         let result = timeout(
                             attempt_timeout,
-                            backend.translate_with_context(
+                            backend.translate_with_context_options(
                                 text,
                                 source_language,
                                 target_language,
                                 context_for_tier,
+                                Some(PromptRouterOptions {
+                                    enable_context: context_used,
+                                    max_context_chars: self.config.prompt_max_context_chars,
+                                    max_source_chars: self.config.prompt_max_source_chars,
+                                }),
                             ),
                         )
                         .await;
@@ -638,11 +644,19 @@ impl TranslationManager {
     }
 
     /// Record a successful translation in context
-    pub fn record_translation(&self, source: &str, translation: &str) {
+    pub fn record_ocr_line(&self, source_text: &str) {
         if !self.config.enable_context_aware {
             return;
         }
-        self.context_write().add_translation(source, translation);
+
+        let reset_gap = Duration::from_millis(self.config.context_reset_gap_ms as u64);
+        self.context_write().add_ocr_line(
+            source_text,
+            Instant::now(),
+            self.config.context_buffer_size,
+            self.config.prompt_max_source_chars,
+            reset_gap,
+        );
     }
 
     /// Get context prompt to enhance translation request
@@ -652,10 +666,13 @@ impl TranslationManager {
         }
 
         match self.context_tier.load(Ordering::SeqCst) {
-            CONTEXT_TIER_FULL => self
+            CONTEXT_TIER_FULL => self.context_read().build_context_prompt_with_recent_limit(
+                self.config.context_recent_count,
+                self.config.prompt_max_context_chars,
+            ),
+            CONTEXT_TIER_MEMORY_ONLY => self
                 .context_read()
-                .build_context_prompt_with_recent_limit(self.config.context_recent_count),
-            CONTEXT_TIER_MEMORY_ONLY => self.context_read().build_memory_prompt(),
+                .build_memory_prompt(self.config.prompt_max_context_chars),
             _ => None,
         }
     }
@@ -829,6 +846,10 @@ mod tests {
             context_recent_count: 3,
             context_budget_percent: 15,
             context_summary_cooldown_ms: 5_000,
+            prompt_max_source_chars: 300,
+            prompt_max_context_chars: 600,
+            context_buffer_size: 12,
+            context_reset_gap_ms: 6_000,
             foundry_local: crate::config::FoundryLocalConfig::default(),
             offline_mt: OfflineMtConfig::default(),
         }

@@ -13,6 +13,7 @@ mod manager;
 mod mock;
 mod offline_mt;
 mod phi_silica;
+mod prompt_router;
 
 pub use context::*;
 pub use foundry_local::*;
@@ -20,6 +21,7 @@ pub use manager::*;
 pub use mock::*;
 pub use offline_mt::*;
 pub use phi_silica::*;
+pub use prompt_router::*;
 
 use async_trait::async_trait;
 use serde::Serialize;
@@ -236,5 +238,21 @@ pub trait TranslatorBackend: Send + Sync {
     ) -> Result<String, LlmError> {
         let _ = context;
         self.translate(text, source_language, target_language).await
+    }
+
+    /// Translate text with context plus prompt-building options (used by subtitle prompt router).
+    ///
+    /// Default implementation ignores `options` and delegates to `translate_with_context()`.
+    async fn translate_with_context_options(
+        &self,
+        text: &str,
+        source_language: &str,
+        target_language: &str,
+        context: Option<&str>,
+        options: Option<PromptRouterOptions>,
+    ) -> Result<String, LlmError> {
+        let _ = options;
+        self.translate_with_context(text, source_language, target_language, context)
+            .await
     }
 }

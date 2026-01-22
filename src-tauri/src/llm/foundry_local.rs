@@ -3,7 +3,10 @@
 // =============================================================================
 
 use crate::config::FoundryLocalConfig;
-use crate::llm::{language_prompt_label, BackendId, LlmError, ReadyState, TranslatorBackend};
+use crate::llm::{
+    build_subtitle_translation_prompt, BackendId, LlmError, PromptRouterOptions, ReadyState,
+    TranslatorBackend,
+};
 use async_trait::async_trait;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
@@ -578,7 +581,7 @@ impl FoundryLocalBackend {
     /// Summarize translation history into a compact memory block
     pub async fn summarize_context(
         &self,
-        history: &[(String, String)], // (source, translation) pairs
+        history: &[String], // source-only subtitle lines
     ) -> Result<String, LlmError> {
         if history.is_empty() {
             return Ok(String::new());
@@ -598,18 +601,19 @@ impl FoundryLocalBackend {
         // Build history text
         let history_text: String = history
             .iter()
-            .map(|(src, trans)| format!("\"{}\" -> \"{}\"", src, trans))
+            .map(|line| format!("\"{}\"", line))
             .collect::<Vec<_>>()
             .join("\n");
 
-        let system_prompt = "You are a helpful assistant that extracts key information from subtitle translations. \
-            Given a list of subtitle translations, extract and summarize:\n\
-            1. Character names (original -> translated)\n\
+        let system_prompt =
+            "You are a helpful assistant that extracts key information from subtitle lines. \
+            Given a list of subtitle lines (source text only), extract and summarize:\n\
+            1. Character names / proper nouns (as they appear)\n\
             2. Genre/tone of the content\n\
-            3. Any recurring terms or proper nouns\n\n\
+            3. Any recurring terms\n\n\
             Be extremely concise. Output in this format:\n\
-            Genre: [detected genre]. Names: [name mappings]. Terms: [key terms]\n\
-            If you can't determine something, omit it. Maximum 100 words.";
+            Genre: [detected genre]. Names: [names]. Terms: [key terms]\n\
+            If you can't determine something, omit it. Maximum 80 words.";
 
         let request = ChatCompletionRequest {
             model,
@@ -620,7 +624,7 @@ impl FoundryLocalBackend {
                 },
                 ChatMessage {
                     role: "user".to_string(),
-                    content: format!("Summarize these subtitle translations:\n{}", history_text),
+                    content: format!("Summarize these subtitle lines:\n{}", history_text),
                 },
             ],
             temperature: 0.3,
@@ -811,6 +815,18 @@ impl TranslatorBackend for FoundryLocalBackend {
         target_language: &str,
         context: Option<&str>,
     ) -> Result<String, LlmError> {
+        self.translate_with_context_options(text, source_language, target_language, context, None)
+            .await
+    }
+
+    async fn translate_with_context_options(
+        &self,
+        text: &str,
+        source_language: &str,
+        target_language: &str,
+        context: Option<&str>,
+        options: Option<PromptRouterOptions>,
+    ) -> Result<String, LlmError> {
         if text.trim().is_empty() {
             return Ok(String::new());
         }
@@ -828,39 +844,33 @@ impl TranslatorBackend for FoundryLocalBackend {
         let preferred_namespace = self.preferred_api_namespace();
         let url = self.api_url_for(&base_url, preferred_namespace, "chat/completions");
 
-        let source_label = language_prompt_label(source_language);
-        let target_label = language_prompt_label(target_language);
-        let system_prompt = format!(
-            "You are a translator. Translate the following text from {} to {}. \
-             Output ONLY the translated text, nothing else. No explanations, no quotes, no formatting.",
-            source_label, target_label
+        let prompt_options = options.unwrap_or(PromptRouterOptions {
+            enable_context: context.is_some(),
+            max_context_chars: 600,
+            max_source_chars: 300,
+        });
+
+        let built = build_subtitle_translation_prompt(
+            text,
+            Some(source_language).filter(|value| !value.trim().is_empty()),
+            target_language,
+            context,
+            prompt_options,
         );
 
-        let mut messages = Vec::new();
-        messages.push(ChatMessage {
-            role: "system".to_string(),
-            content: system_prompt,
-        });
-
-        if let Some(ctx) = context.filter(|value| !value.trim().is_empty()) {
-            messages.push(ChatMessage {
-                role: "system".to_string(),
-                content: format!(
-                    "Session context for consistent subtitle translation (reference only; do NOT translate or repeat):\n{}",
-                    ctx.trim()
-                ),
-            });
-        }
-        messages.push(ChatMessage {
-            role: "user".to_string(),
-            content: text.to_string(),
-        });
+        let prompt = match built {
+            Some(built) => built.prompt,
+            None => return Ok(String::new()),
+        };
 
         let request = ChatCompletionRequest {
             model,
-            messages,
-            temperature: 0.3, // Low temperature for consistent translations
-            max_tokens: 2048,
+            messages: vec![ChatMessage {
+                role: "user".to_string(),
+                content: prompt,
+            }],
+            temperature: 0.2, // Lower temperature for subtitle consistency
+            max_tokens: 512,
         };
 
         debug!("Sending translation request to Foundry Local: {}", url);
@@ -948,6 +958,7 @@ impl TranslatorBackend for FoundryLocalBackend {
             .first()
             .map(|c| c.message.content.trim().to_string())
             .unwrap_or_default();
+        let translated = sanitize_subtitle_translation_output(&translated);
 
         debug!(
             "Foundry Local translated {} chars to {} chars",
@@ -963,6 +974,76 @@ impl TranslatorBackend for FoundryLocalBackend {
         );
 
         Ok(translated)
+    }
+}
+
+fn sanitize_subtitle_translation_output(output: &str) -> String {
+    let trimmed = output.trim();
+    if trimmed.is_empty() {
+        return String::new();
+    }
+
+    // Strip common wrapping quotes.
+    let trimmed = trimmed
+        .trim_matches('"')
+        .trim_matches('\'')
+        .trim_matches('“')
+        .trim_matches('”')
+        .trim_matches('`')
+        .trim();
+
+    // If the model returned a labelled response, strip the label and keep the content.
+    let mut collected: Vec<String> = Vec::new();
+    let mut started = false;
+    for raw_line in trimmed.lines() {
+        let line = raw_line.trim();
+        if line.is_empty() {
+            if started {
+                break;
+            }
+            continue;
+        }
+
+        let lower = line.to_ascii_lowercase();
+        let is_header = lower.starts_with("translation")
+            || lower.starts_with("translated")
+            || lower.starts_with("output")
+            || line.starts_with("翻译")
+            || line.starts_with("译文");
+        let is_expl = lower.starts_with("explanation")
+            || lower.starts_with("note")
+            || line.starts_with("解释")
+            || line.starts_with("说明");
+
+        if !started {
+            if is_header {
+                // Try to keep anything after a colon on the same line.
+                if let Some((_, rest)) = line.split_once(':') {
+                    let rest = rest.trim();
+                    if !rest.is_empty() {
+                        collected.push(rest.to_string());
+                        started = true;
+                    }
+                }
+                continue;
+            }
+            if is_expl {
+                continue;
+            }
+            started = true;
+        }
+
+        if started && is_expl {
+            break;
+        }
+
+        collected.push(line.to_string());
+    }
+
+    if collected.is_empty() {
+        trimmed.to_string()
+    } else {
+        collected.join("\n")
     }
 }
 
