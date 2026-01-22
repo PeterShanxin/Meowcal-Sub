@@ -129,6 +129,25 @@ pub struct TranslationConfig {
     #[serde(default = "default_context_summary_cooldown_ms")]
     pub context_summary_cooldown_ms: u32,
 
+    /// Hard cap for subtitle source text length (characters) sent to LLM prompt builder.
+    /// Keeps latency stable and prevents giant OCR blobs from spiking tokens.
+    #[serde(default = "default_prompt_max_source_chars")]
+    pub prompt_max_source_chars: usize,
+
+    /// Hard cap for context text length (characters) used for context-aware translation.
+    /// Newest lines are kept when trimming.
+    #[serde(default = "default_prompt_max_context_chars")]
+    pub prompt_max_context_chars: usize,
+
+    /// Rolling buffer size (number of OCR lines) kept for subtitle context.
+    #[serde(default = "default_context_buffer_size")]
+    pub context_buffer_size: usize,
+
+    /// Clear subtitle context after a long gap (ms) to reduce drift.
+    /// Set to 0 to disable gap-based resets.
+    #[serde(default = "default_context_reset_gap_ms")]
+    pub context_reset_gap_ms: u32,
+
     /// Foundry Local backend configuration
     #[serde(default)]
     pub foundry_local: FoundryLocalConfig,
@@ -160,6 +179,22 @@ fn default_context_summary_cooldown_ms() -> u32 {
     5_000
 }
 
+fn default_prompt_max_source_chars() -> usize {
+    300
+}
+
+fn default_prompt_max_context_chars() -> usize {
+    600
+}
+
+fn default_context_buffer_size() -> usize {
+    12
+}
+
+fn default_context_reset_gap_ms() -> u32 {
+    6_000
+}
+
 impl TranslationConfig {
     pub fn normalize(&mut self) {
         // Keep the legacy toggle and the new level consistent.
@@ -169,9 +204,13 @@ impl TranslationConfig {
             self.enable_context_aware = false;
         }
 
-        self.context_recent_count = self.context_recent_count.clamp(0, 10);
+        self.context_buffer_size = self.context_buffer_size.clamp(1, 50);
+        self.context_recent_count = self.context_recent_count.clamp(0, self.context_buffer_size);
         self.context_budget_percent = self.context_budget_percent.clamp(5, 30);
         self.context_summary_cooldown_ms = self.context_summary_cooldown_ms.clamp(0, 120_000);
+        self.prompt_max_source_chars = self.prompt_max_source_chars.clamp(50, 2_000);
+        self.prompt_max_context_chars = self.prompt_max_context_chars.clamp(0, 5_000);
+        self.context_reset_gap_ms = self.context_reset_gap_ms.clamp(0, 120_000);
     }
 }
 
@@ -207,7 +246,7 @@ pub struct OfflineMtConfig {
 }
 
 /// A rectangular region on the screen
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 pub struct CaptureRegion {
     /// X coordinate of the top-left corner
     pub x: i32,
@@ -386,6 +425,10 @@ impl Default for TranslationConfig {
             context_recent_count: default_context_recent_count(),
             context_budget_percent: default_context_budget_percent(),
             context_summary_cooldown_ms: default_context_summary_cooldown_ms(),
+            prompt_max_source_chars: default_prompt_max_source_chars(),
+            prompt_max_context_chars: default_prompt_max_context_chars(),
+            context_buffer_size: default_context_buffer_size(),
+            context_reset_gap_ms: default_context_reset_gap_ms(),
             foundry_local: FoundryLocalConfig::default(),
             offline_mt: OfflineMtConfig::default(),
         }
@@ -492,6 +535,10 @@ mod tests {
         assert_eq!(config.context_recent_count, 3);
         assert_eq!(config.context_budget_percent, 15);
         assert_eq!(config.context_summary_cooldown_ms, 5_000);
+        assert_eq!(config.prompt_max_source_chars, 300);
+        assert_eq!(config.prompt_max_context_chars, 600);
+        assert_eq!(config.context_buffer_size, 12);
+        assert_eq!(config.context_reset_gap_ms, 6_000);
     }
 
     #[test]

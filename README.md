@@ -98,9 +98,13 @@ You can configure backend feature flags under `translation` in config.
 |---------|-------------|---------|
 | `translation.enableContextAware` | Master on/off switch | `true` |
 | `translation.contextLevel` | `off` / `memoryOnly` / `memoryAndRecent` | `memoryAndRecent` |
-| `translation.contextRecentCount` | How many recent pairs to include when `memoryAndRecent` | `3` |
+| `translation.contextRecentCount` | How many recent lines to include when `memoryAndRecent` | `3` |
 | `translation.contextBudgetPercent` | Context token budget as % of model window | `15` |
 | `translation.contextSummaryCooldownMs` | Minimum time between summary runs | `5000` |
+| `translation.promptMaxSourceChars` | Max OCR chars sent to LLM prompt builder | `300` |
+| `translation.promptMaxContextChars` | Max context chars included in prompts | `600` |
+| `translation.contextBufferSize` | Rolling subtitle context buffer (lines) | `12` |
+| `translation.contextResetGapMs` | Clear context after idle gap | `6000` |
 
 #### Offline MT (translateLocally) Setup
 

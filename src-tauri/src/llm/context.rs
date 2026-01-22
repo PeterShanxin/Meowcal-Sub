@@ -28,10 +28,8 @@ const MEMORY_BUDGET_PERCENT: f32 = 0.35;
 /// A single translation history entry
 #[derive(Debug, Clone)]
 pub struct HistoryEntry {
-    /// Original OCR text
-    pub source: String,
-    /// Translated result
-    pub translation: String,
+    /// Original OCR text (store source only to avoid error propagation)
+    pub text: String,
     /// When this was captured
     pub timestamp: Instant,
     /// Estimated token count for this entry
@@ -43,7 +41,7 @@ pub struct HistoryEntry {
 pub struct TranslationContext {
     /// Compressed memory from LLM summarization (names, genre, key facts)
     memory: Option<String>,
-    /// Recent translation history (ring buffer, deduplicated)
+    /// Recent OCR history (ring buffer, deduplicated)
     history: VecDeque<HistoryEntry>,
     /// Hash of last OCR text for fast duplicate detection
     last_ocr_hash: Option<u64>,
@@ -63,7 +61,7 @@ impl TranslationContext {
         let budget = budget_tokens.clamp(MIN_TOKEN_BUDGET, MAX_TOKEN_BUDGET);
         Self {
             memory: None,
-            history: VecDeque::with_capacity(50),
+            history: VecDeque::with_capacity(12),
             last_ocr_hash: None,
             history_tokens: 0,
             budget_tokens: budget,
@@ -95,7 +93,25 @@ impl TranslationContext {
 
         // Check similarity with recent entries
         if let Some(last_entry) = self.history.back() {
-            if Self::text_similarity(&last_entry.source, ocr_text) > DEDUP_SIMILARITY_THRESHOLD {
+            let normalized_last = Self::normalize_for_dedup(&last_entry.text);
+            let normalized_current = Self::normalize_for_dedup(ocr_text);
+
+            // If OCR is progressively revealing more characters, treat it as a new line so we can
+            // translate the updated text (avoid skipping "superset" updates).
+            if normalized_current.contains(&normalized_last)
+                && normalized_current.chars().count() > normalized_last.chars().count()
+            {
+                return false;
+            }
+
+            // If OCR regressed (subset), consider it duplicate to avoid flicker.
+            if normalized_last.contains(&normalized_current)
+                && normalized_last.chars().count() > normalized_current.chars().count()
+            {
+                return true;
+            }
+
+            if Self::text_similarity(&last_entry.text, ocr_text) > DEDUP_SIMILARITY_THRESHOLD {
                 return true;
             }
         }
@@ -103,27 +119,95 @@ impl TranslationContext {
         false
     }
 
-    /// Add a translation to the history (call after successful translation)
-    pub fn add_translation(&mut self, source: &str, translation: &str) {
+    /// Record an OCR line into the rolling cache (call after OCR, before translation).
+    ///
+    /// Stores source-only (no translated output) to prevent error propagation.
+    pub fn add_ocr_line(
+        &mut self,
+        source_text: &str,
+        now: Instant,
+        max_entries: usize,
+        max_entry_chars: usize,
+        reset_gap: std::time::Duration,
+    ) {
         if !self.enabled {
             return;
         }
 
-        let token_estimate = Self::estimate_tokens(source) + Self::estimate_tokens(translation);
+        let cleaned = source_text.trim();
+        if cleaned.is_empty() {
+            return;
+        }
 
-        let entry = HistoryEntry {
-            source: source.to_string(),
-            translation: translation.to_string(),
-            timestamp: Instant::now(),
+        if !reset_gap.is_zero() {
+            if let Some(last) = self.history.back() {
+                if now.duration_since(last.timestamp) > reset_gap {
+                    self.reset();
+                }
+            }
+        }
+
+        let normalized_new = Self::normalize_for_dedup(cleaned);
+        if Self::is_noise_line(&normalized_new) {
+            return;
+        }
+
+        // De-jitter: update timestamp if duplicate-ish, and replace last entry if the new line is a strict superset.
+        if let Some(last_entry) = self.history.back_mut() {
+            let normalized_last = Self::normalize_for_dedup(&last_entry.text);
+
+            if normalized_new == normalized_last {
+                last_entry.timestamp = now;
+                self.last_ocr_hash = Some(Self::hash_text(&last_entry.text));
+                return;
+            }
+
+            if normalized_new.contains(&normalized_last)
+                && normalized_new.chars().count() > normalized_last.chars().count()
+            {
+                let clipped = Self::clip_chars(cleaned, max_entry_chars);
+                self.history_tokens = self
+                    .history_tokens
+                    .saturating_sub(last_entry.token_estimate);
+                last_entry.text = clipped;
+                last_entry.timestamp = now;
+                last_entry.token_estimate = Self::estimate_tokens(&last_entry.text);
+                self.history_tokens += last_entry.token_estimate;
+                self.last_ocr_hash = Some(Self::hash_text(&last_entry.text));
+                self.check_compression_threshold();
+                return;
+            }
+
+            if normalized_last.contains(&normalized_new)
+                && normalized_last.chars().count() > normalized_new.chars().count()
+            {
+                // OCR regression (lost characters): keep the longer previous line but refresh timestamp.
+                last_entry.timestamp = now;
+                self.last_ocr_hash = Some(Self::hash_text(&last_entry.text));
+                return;
+            }
+        }
+
+        let clipped = Self::clip_chars(cleaned, max_entry_chars);
+        let token_estimate = Self::estimate_tokens(&clipped);
+
+        while self.history.len() >= max_entries.max(1) {
+            if let Some(entry) = self.history.pop_front() {
+                self.history_tokens = self.history_tokens.saturating_sub(entry.token_estimate);
+            } else {
+                break;
+            }
+        }
+
+        self.history.push_back(HistoryEntry {
+            text: clipped,
+            timestamp: now,
             token_estimate,
-        };
+        });
+        self.history_tokens += token_estimate;
 
         // Update last OCR hash
-        self.last_ocr_hash = Some(Self::hash_text(source));
-
-        // Add to history
-        self.history.push_back(entry);
-        self.history_tokens += token_estimate;
+        self.last_ocr_hash = Some(Self::hash_text(cleaned));
 
         // Check if we need compression
         self.check_compression_threshold();
@@ -131,80 +215,94 @@ impl TranslationContext {
 
     /// Build the context prompt to prepend to translation requests
     pub fn build_context_prompt(&self) -> Option<String> {
-        self.build_context_prompt_with_recent_limit(3)
+        self.build_context_prompt_with_recent_limit(3, 600)
     }
 
-    pub fn build_context_prompt_with_recent_limit(&self, recent_limit: usize) -> Option<String> {
-        self.build_prompt(true, recent_limit)
+    pub fn build_context_prompt_with_recent_limit(
+        &self,
+        recent_limit: usize,
+        max_context_chars: usize,
+    ) -> Option<String> {
+        self.build_prompt(true, recent_limit, max_context_chars)
     }
 
     /// Build a memory-only prompt (excludes recent history).
-    pub fn build_memory_prompt(&self) -> Option<String> {
-        self.build_prompt(false, 0)
+    pub fn build_memory_prompt(&self, max_context_chars: usize) -> Option<String> {
+        self.build_prompt(false, 0, max_context_chars)
     }
 
-    fn build_prompt(&self, include_recent: bool, recent_limit: usize) -> Option<String> {
+    fn build_prompt(
+        &self,
+        include_recent: bool,
+        recent_limit: usize,
+        max_context_chars: usize,
+    ) -> Option<String> {
         if !self.enabled {
             return None;
         }
 
-        let budget = self.budget_tokens;
-        let mut tokens_used = 0usize;
-        let mut parts = Vec::new();
-
-        // Add memory if present (already hard-capped, but still ensure we fit).
-        if let Some(ref memory) = self.memory {
-            let memory_part = format!("[Context: {}]", memory.trim());
-            let memory_tokens = Self::estimate_tokens(&memory_part);
-            if memory_tokens <= budget {
-                parts.push(memory_part);
-                tokens_used = tokens_used.saturating_add(memory_tokens);
-            } else {
-                // Extremely defensive: if even the capped memory can't fit, truncate again.
-                let overhead_tokens = Self::estimate_tokens("[Context: ]");
-                let available = budget.saturating_sub(overhead_tokens);
-                let truncated = Self::truncate_to_token_budget(memory, available);
-                if !truncated.is_empty() {
-                    let candidate = format!("[Context: {}]", truncated);
-                    let candidate_tokens = Self::estimate_tokens(&candidate);
-                    if candidate_tokens <= budget {
-                        parts.push(candidate);
-                        tokens_used = tokens_used.saturating_add(candidate_tokens);
-                    }
-                }
-            }
+        if max_context_chars == 0 {
+            return None;
         }
 
+        let memory_line = self
+            .memory
+            .as_ref()
+            .map(|value| value.trim())
+            .filter(|value| !value.is_empty())
+            .map(|value| value.to_string());
+
+        let mut recent_lines: Vec<String> = Vec::new();
         if include_recent {
-            // Add recent history (try to include up to `recent_limit` entries, but stop at the token budget).
             let recent_count = recent_limit.min(self.history.len());
             if recent_count > 0 {
-                let recent: Vec<_> = self.history.iter().rev().take(recent_count).collect();
-                let mut selected = Vec::new();
-                let mut best_block: Option<String> = None;
-
-                for entry in recent.into_iter().rev() {
-                    selected.push(format!("{} -> {}", entry.source, entry.translation));
-                    let candidate = format!("[Recent: {}]", selected.join(" | "));
-                    let candidate_tokens = Self::estimate_tokens(&candidate);
-                    if tokens_used.saturating_add(candidate_tokens) <= budget {
-                        best_block = Some(candidate);
-                    } else {
-                        selected.pop();
-                        break;
-                    }
-                }
-
-                if let Some(block) = best_block {
-                    parts.push(block);
-                }
+                recent_lines = self
+                    .history
+                    .iter()
+                    .rev()
+                    .take(recent_count)
+                    .collect::<Vec<_>>()
+                    .into_iter()
+                    .rev()
+                    .map(|entry| entry.text.clone())
+                    .collect();
             }
         }
 
-        if parts.is_empty() {
+        let mut memory_lines: Vec<String> = Vec::new();
+        if let Some(line) = memory_line {
+            memory_lines.push(line);
+        }
+
+        // Enforce max_context_chars by dropping oldest recent lines first.
+        loop {
+            let total_chars = Self::joined_char_count(&memory_lines, &recent_lines);
+            if total_chars <= max_context_chars {
+                break;
+            }
+
+            if !recent_lines.is_empty() {
+                recent_lines.remove(0);
+                continue;
+            }
+
+            if !memory_lines.is_empty() {
+                let available = max_context_chars;
+                memory_lines[0] = Self::clip_chars(&memory_lines[0], available);
+                break;
+            }
+
+            break;
+        }
+
+        let mut lines = Vec::new();
+        lines.extend(memory_lines);
+        lines.extend(recent_lines);
+
+        if lines.is_empty() {
             None
         } else {
-            Some(parts.join(" "))
+            Some(lines.join("\n"))
         }
     }
 
@@ -332,6 +430,75 @@ impl TranslationContext {
         self.needs_compression = false;
     }
 
+    fn joined_char_count(memory_lines: &[String], recent_lines: &[String]) -> usize {
+        let mut total = 0usize;
+        let mut line_count = 0usize;
+        for line in memory_lines.iter().chain(recent_lines.iter()) {
+            let chars = line.chars().count();
+            if chars == 0 {
+                continue;
+            }
+            if line_count > 0 {
+                total += 1; // newline
+            }
+            total += chars;
+            line_count += 1;
+        }
+        total
+    }
+
+    fn clip_chars(text: &str, max_chars: usize) -> String {
+        if max_chars == 0 {
+            return String::new();
+        }
+
+        if text.chars().count() <= max_chars {
+            return text.to_string();
+        }
+
+        text.chars().take(max_chars).collect::<String>()
+    }
+
+    fn normalize_for_dedup(text: &str) -> String {
+        let collapsed = text
+            .split_whitespace()
+            .filter(|chunk| !chunk.is_empty())
+            .collect::<Vec<_>>()
+            .join(" ");
+        let trimmed = collapsed.trim();
+        trimmed
+            .trim_end_matches(|ch: char| Self::is_trailing_punct(ch))
+            .to_string()
+    }
+
+    fn is_trailing_punct(ch: char) -> bool {
+        matches!(
+            ch,
+            '.' | '!'
+                | '?'
+                | ','
+                | ';'
+                | ':'
+                | '。'
+                | '！'
+                | '？'
+                | '，'
+                | '；'
+                | '：'
+                | '…'
+                | '、'
+                | '·'
+        )
+    }
+
+    fn is_noise_line(text: &str) -> bool {
+        let significant = text
+            .chars()
+            .filter(|ch| ch.is_alphanumeric() || Self::is_cjk(*ch))
+            .count();
+        significant < 2
+    }
+
     /// Simple hash for duplicate detection
     fn hash_text(text: &str) -> u64 {
         let normalized = text.trim().to_lowercase();
@@ -452,6 +619,7 @@ impl TranslationContext {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::time::Duration;
 
     #[test]
     fn test_new_context() {
@@ -470,7 +638,13 @@ mod tests {
         assert!(!ctx.is_duplicate("Hello world"));
 
         // Add it to history
-        ctx.add_translation("Hello world", "Hola mundo");
+        ctx.add_ocr_line(
+            "Hello world",
+            Instant::now(),
+            12,
+            300,
+            Duration::from_secs(10),
+        );
 
         // Same text should be duplicate
         assert!(ctx.is_duplicate("Hello world"));
@@ -490,12 +664,15 @@ mod tests {
         assert!(ctx.build_context_prompt().is_none());
 
         // Add some history
-        ctx.add_translation("Hello", "Hola");
-        ctx.add_translation("World", "Mundo");
+        let now = Instant::now();
+        ctx.add_ocr_line("Hello", now, 12, 300, Duration::from_secs(10));
+        ctx.add_ocr_line("World", now, 12, 300, Duration::from_secs(10));
 
         let prompt = ctx.build_context_prompt();
         assert!(prompt.is_some());
-        assert!(prompt.unwrap().contains("Recent:"));
+        let prompt = prompt.unwrap();
+        assert!(prompt.contains("Hello"));
+        assert!(prompt.contains("World"));
     }
 
     #[test]
@@ -504,7 +681,7 @@ mod tests {
 
         // When disabled, nothing should accumulate
         assert!(!ctx.is_duplicate("Hello"));
-        ctx.add_translation("Hello", "Hola");
+        ctx.add_ocr_line("Hello", Instant::now(), 12, 300, Duration::from_secs(10));
         assert!(ctx.history.is_empty());
         assert!(ctx.build_context_prompt().is_none());
     }
@@ -513,11 +690,11 @@ mod tests {
     fn test_memory_prompt_excludes_recent() {
         let mut ctx = TranslationContext::new(500, true);
         ctx.set_memory("Genre: drama. Names: X->Y".to_string());
-        ctx.add_translation("Hello", "Hola");
+        ctx.add_ocr_line("Hello", Instant::now(), 12, 300, Duration::from_secs(10));
 
-        let prompt = ctx.build_memory_prompt().unwrap();
-        assert!(prompt.contains("Context:"));
-        assert!(!prompt.contains("Recent:"));
+        let prompt = ctx.build_memory_prompt(600).unwrap();
+        assert!(prompt.contains("Genre:"));
+        assert!(!prompt.contains("Hello"));
     }
 
     #[test]
@@ -544,13 +721,17 @@ mod tests {
 
     #[test]
     fn test_compression_threshold() {
-        let mut ctx = TranslationContext::new(100, true);
+        // Budget is clamped to MIN_TOKEN_BUDGET (200), so ensure we exceed the threshold.
+        let mut ctx = TranslationContext::new(200, true);
 
         // Add entries until we hit threshold
-        for i in 0..20 {
-            ctx.add_translation(
+        for i in 0..40 {
+            ctx.add_ocr_line(
                 &format!("Source text number {}", i),
-                &format!("Translation number {}", i),
+                Instant::now(),
+                100,
+                300,
+                Duration::from_secs(10),
             );
         }
 

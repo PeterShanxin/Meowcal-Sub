@@ -198,6 +198,10 @@ function applyTranslationSettings(translation) {
     document.getElementById('context-recent-count').value = config.contextRecentCount;
     document.getElementById('context-budget-percent').value = config.contextBudgetPercent;
     document.getElementById('context-summary-cooldown-ms').value = config.contextSummaryCooldownMs;
+    document.getElementById('prompt-max-source-chars').value = config.promptMaxSourceChars;
+    document.getElementById('prompt-max-context-chars').value = config.promptMaxContextChars;
+    document.getElementById('context-buffer-size').value = config.contextBufferSize;
+    document.getElementById('context-reset-gap-ms').value = config.contextResetGapMs;
     document.getElementById('offline-mt-path').value = config.offlineMt.binaryPath || '';
 
     syncContextControls();
@@ -238,6 +242,10 @@ function normalizeTranslationConfig(translation) {
         contextRecentCount: 3,
         contextBudgetPercent: 15,
         contextSummaryCooldownMs: 5000,
+        promptMaxSourceChars: 300,
+        promptMaxContextChars: 600,
+        contextBufferSize: 12,
+        contextResetGapMs: 6000,
         foundryLocal: {
             model: null,
             timeoutMs: 30000,
@@ -271,6 +279,10 @@ function normalizeTranslationConfig(translation) {
         contextRecentCount: translation.contextRecentCount ?? defaultConfig.contextRecentCount,
         contextBudgetPercent: translation.contextBudgetPercent ?? defaultConfig.contextBudgetPercent,
         contextSummaryCooldownMs: translation.contextSummaryCooldownMs ?? defaultConfig.contextSummaryCooldownMs,
+        promptMaxSourceChars: translation.promptMaxSourceChars ?? defaultConfig.promptMaxSourceChars,
+        promptMaxContextChars: translation.promptMaxContextChars ?? defaultConfig.promptMaxContextChars,
+        contextBufferSize: translation.contextBufferSize ?? defaultConfig.contextBufferSize,
+        contextResetGapMs: translation.contextResetGapMs ?? defaultConfig.contextResetGapMs,
         foundryLocal: {
             model: translation.foundryLocal?.model ?? defaultConfig.foundryLocal.model,
             timeoutMs: translation.foundryLocal?.timeoutMs ?? defaultConfig.foundryLocal.timeoutMs,
@@ -289,6 +301,9 @@ function syncContextControls() {
     const recent = document.getElementById('context-recent-count');
     const budget = document.getElementById('context-budget-percent');
     const cooldown = document.getElementById('context-summary-cooldown-ms');
+    const maxContext = document.getElementById('prompt-max-context-chars');
+    const bufferSize = document.getElementById('context-buffer-size');
+    const resetGap = document.getElementById('context-reset-gap-ms');
     if (recent) {
         recent.disabled = level !== 'memoryAndRecent';
     }
@@ -297,6 +312,15 @@ function syncContextControls() {
     }
     if (cooldown) {
         cooldown.disabled = disabled;
+    }
+    if (maxContext) {
+        maxContext.disabled = disabled;
+    }
+    if (bufferSize) {
+        bufferSize.disabled = disabled;
+    }
+    if (resetGap) {
+        resetGap.disabled = disabled;
     }
 }
 
@@ -340,6 +364,30 @@ async function saveSettings() {
         0,
         120000,
         5000,
+    );
+    translationConfig.promptMaxSourceChars = clampInt(
+        parseInt(document.getElementById('prompt-max-source-chars').value),
+        50,
+        2000,
+        300,
+    );
+    translationConfig.promptMaxContextChars = clampInt(
+        parseInt(document.getElementById('prompt-max-context-chars').value),
+        0,
+        5000,
+        600,
+    );
+    translationConfig.contextBufferSize = clampInt(
+        parseInt(document.getElementById('context-buffer-size').value),
+        1,
+        50,
+        12,
+    );
+    translationConfig.contextResetGapMs = clampInt(
+        parseInt(document.getElementById('context-reset-gap-ms').value),
+        0,
+        120000,
+        6000,
     );
     syncContextControls();
     translationConfig.foundryLocal.model = foundryModel.length > 0 ? foundryModel : null;
@@ -501,6 +549,22 @@ function setupEventListeners() {
     });
     document.getElementById('context-summary-cooldown-ms').addEventListener('change', () => {
         console.log('Context summary cooldown changed, auto-saving...');
+        scheduleAutoSave();
+    });
+    document.getElementById('prompt-max-source-chars').addEventListener('change', () => {
+        console.log('Prompt max source chars changed, auto-saving...');
+        scheduleAutoSave();
+    });
+    document.getElementById('prompt-max-context-chars').addEventListener('change', () => {
+        console.log('Prompt max context chars changed, auto-saving...');
+        scheduleAutoSave();
+    });
+    document.getElementById('context-buffer-size').addEventListener('change', () => {
+        console.log('Context buffer size changed, auto-saving...');
+        scheduleAutoSave();
+    });
+    document.getElementById('context-reset-gap-ms').addEventListener('change', () => {
+        console.log('Context reset gap changed, auto-saving...');
         scheduleAutoSave();
     });
     document.getElementById('toggle-foundry-local').addEventListener('change', () => {

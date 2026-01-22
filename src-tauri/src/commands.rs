@@ -974,6 +974,7 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
         let mut last_attempt_at = Instant::now()
             .checked_sub(Duration::from_millis(MOCK_RETRY_COOLDOWN_MS))
             .unwrap_or_else(Instant::now);
+        let mut last_capture_region: Option<CaptureRegion> = None;
 
         // Track if we've already notified about fallback
         let mut fallback_notified = false;
@@ -1039,6 +1040,23 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
                     }
                 }
             };
+
+            if last_capture_region
+                .map(|prev| prev != current_capture_region)
+                .unwrap_or(false)
+            {
+                debug!("Capture region changed, resetting subtitle context");
+                translation_manager.reset_context();
+                last_text.clear();
+                last_backend_used = BackendId::Mock;
+                last_attempt_at = Instant::now()
+                    .checked_sub(Duration::from_millis(MOCK_RETRY_COOLDOWN_MS))
+                    .unwrap_or_else(Instant::now);
+                // Keep this monotonic: resetting to 0 can allow old summarization tasks to
+                // accidentally validate again once the counter reaches the same value.
+                context_generation.fetch_add(1, Ordering::SeqCst);
+            }
+            last_capture_region = Some(current_capture_region);
 
             debug!("📸 Capturing region: {:?}", current_capture_region);
 
@@ -1173,12 +1191,22 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
             }
 
             let current_text = ocr_result.text.trim().to_string();
+            let significant_chars = current_text
+                .chars()
+                .filter(|ch| ch.is_alphanumeric())
+                .count();
+            if significant_chars < 2 {
+                debug!("Noise/very short text detected, skipping");
+                tokio::time::sleep(Duration::from_millis(interval_ms as u64)).await;
+                continue;
+            }
 
             let now = Instant::now();
             let is_exact_duplicate = current_text == last_text;
             if is_exact_duplicate {
                 if last_backend_used != BackendId::Mock {
                     debug!("Duplicate text detected, skipping");
+                    translation_manager.record_ocr_line(&current_text);
                     tokio::time::sleep(Duration::from_millis(interval_ms as u64)).await;
                     continue;
                 }
@@ -1189,6 +1217,7 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
                     < Duration::from_millis(MOCK_RETRY_COOLDOWN_MS)
                 {
                     debug!("Duplicate text (mock cooldown), skipping");
+                    translation_manager.record_ocr_line(&current_text);
                     tokio::time::sleep(Duration::from_millis(interval_ms as u64)).await;
                     continue;
                 }
@@ -1196,6 +1225,7 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
 
             if context_enabled && translation_manager.is_duplicate(&current_text) {
                 debug!("Duplicate text detected (context dedup), skipping");
+                translation_manager.record_ocr_line(&current_text);
                 tokio::time::sleep(Duration::from_millis(interval_ms as u64)).await;
                 continue;
             }
@@ -1208,6 +1238,10 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
             // Step 3: Translate via backend manager with fallback
             // Get context prompt if available
             let context_prompt = translation_manager.get_context_prompt();
+
+            // Update subtitle context cache AFTER building the context prompt so we don't include
+            // the current OCR line in the "recent lines" block (it will be translated separately).
+            translation_manager.record_ocr_line(&current_text);
 
             let outcome = translation_manager
                 .translate_with_context(
@@ -1229,10 +1263,6 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
                 break;
             }
 
-            // Record successful translation in context (avoid polluting history with passthrough output)
-            if backend_used != BackendId::Mock {
-                translation_manager.record_translation(&current_text, &translated);
-            }
             last_backend_used = backend_used;
 
             // Check if context needs compression (async, don't block).
@@ -1289,9 +1319,9 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
                             return;
                         }
 
-                        let history_pairs: Vec<(String, String)> = history_entries
+                        let history_lines: Vec<String> = history_entries
                             .iter()
-                            .map(|entry| (entry.source.clone(), entry.translation.clone()))
+                            .map(|entry| entry.text.clone())
                             .collect();
 
                         // Use a fresh backend instance for each summarization run to ensure a clean prompt
@@ -1309,7 +1339,7 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
                             if *stop_rx_for_summary.borrow() {
                                 return;
                             }
-                            match backend.summarize_context(&history_pairs).await {
+                            match backend.summarize_context(&history_lines).await {
                                 Ok(summary) if !summary.trim().is_empty() => {
                                     manager.update_context_memory(summary);
                                     return;
