@@ -6,6 +6,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Meowcal-Sub is a local LLM-powered subtitle translation app for Windows, built with Tauri 2.0 (Rust backend + vanilla HTML/CSS/JS frontend). It captures any screen region, performs OCR, translates via local LLM backends (like Foundry Local), and displays subtitles in a floating overlay. All processing runs locally for privacy.
 
+Key features include context-aware translation (with memory + recent subtitle context), hardware-accelerated screen capture (Windows.Graphics.Capture API), and automatic backend fallback chain.
+
 ## Build & Development Commands
 
 ```powershell
@@ -26,6 +28,17 @@ cargo test      # Run tests
 cargo clippy    # Lint
 cargo fmt       # Format
 ```
+
+**Environment Variables:**
+- `CARGO_TARGET_DIR` - Set to avoid OneDrive file locking (e.g., `D:\cargo-build`)
+- `MEOWCAL_LOG_DIR` - Override log directory (default: `%APPDATA%\com.meowcal.sub\logs`)
+- `MEOWCAL_LOG_FILTER` or `RUST_LOG` - Override log filter (default: `meowcal_sub=debug,translation_io=info,tauri=info,axum=info`)
+
+**Logs:**
+- Location: `%APPDATA%\com.meowcal.sub\logs\meowcal-sub_<timestamp>.log`
+- Format: Per-session log files with full timestamp (e.g., `meowcal-sub_2025-01-23_14-30-45.log`)
+- Retention: 7 days (auto-cleanup on startup)
+- Level: DEBUG for meowcal_sub, INFO for most dependencies
 
 ## Browser Dev Mode (for AI Agents)
 
@@ -63,21 +76,32 @@ npm run dev:browser   # Static frontend on localhost:3000
 
 | Module | Purpose |
 |--------|---------|
-| `main.rs` | Entry point, tray icon setup, logging config |
+| `main.rs` | Entry point, tray icon setup, logging config (supports `--http-only` for browser dev mode) |
 | `commands.rs` | Tauri IPC commands (JS ↔ Rust bridge) |
 | `config.rs` | Settings structs & JSON persistence to APPDATA |
-| `http_server.rs` | HTTP API for browser dev mode (Axum) |
-| `capture/` | Screen capture: `graphics_capture.rs` (primary, HW-accelerated) + `win32.rs` (GDI fallback) |
-| `ocr/` | Windows.Media.Ocr WinRT bindings |
-| `llm/` | Translation backends with auto-fallback chain |
+| `http_server.rs` | Axum HTTP server for browser dev mode (REST API) |
+| `lib.rs` | Library exports for commands and config |
+| `capture/` | Screen capture: `graphics_capture.rs` (primary, HW-accelerated D3D11) + `win32.rs` (GDI fallback) + `d3d.rs` (Direct3D helpers) |
+| `ocr/` | Windows.Media.Ocr WinRT bindings (`windows_ocr.rs`) |
+| `llm/` | Translation system: `manager.rs` (orchestrator), `foundry_local.rs`, `offline_mt.rs`, `phi_silica.rs`, `context.rs` (context-aware memory), `prompt_router.rs` (dynamic prompt selection) |
 | `overlay/` | Floating subtitle window management |
 
 ### Translation Backend Fallback Chain
 
-1. **Foundry Local** (primary) - OpenAI-compatible local LLM endpoint
-2. **Offline MT** - translateLocally binary wrapper
-3. **Windows AI** - Copilot Runtime (experimental, placeholder)
+1. **Foundry Local** (primary) - OpenAI-compatible local LLM endpoint with context-aware translation
+   - Supports memory context (summarized history) + recent subtitles
+   - Dynamic prompt routing based on content characteristics
+   - Configurable context budget (% of model window) and summarization cooldown
+2. **Offline MT** - translateLocally binary wrapper (local ONNX models)
+3. **Windows AI** - Phi Silica via Windows.AI.LanguageModel (experimental)
 4. **Passthrough** - Returns OCR text if all else fails
+
+**Context-Aware Translation (Foundry Local only):**
+The app maintains a rolling context buffer of recent subtitles and periodically summarizes them into long-term memory. This context is injected into translation prompts to improve consistency and handle references. Key components:
+- `context.rs` - Manages context buffer, memory summaries, and token budget
+- `prompt_router.rs` - Selects prompts based on source text characteristics
+- Context levels: `off`, `memoryOnly`, `memoryAndRecent`
+- Automatic context reset after idle gaps (configurable via `contextResetGapMs`)
 
 ### Frontend (src/)
 
@@ -86,7 +110,16 @@ Three-window model:
 - `selector.html` - Full-screen transparent area selection
 - `overlay.html` - Floating subtitle display
 
-Uses vanilla JS with `invoke()` for Tauri IPC. No framework.
+**Frontend Scripts (src/scripts/):**
+- `main.js` - Settings window logic
+- `selector.js` - Area selection UI
+- `overlay.js` - Subtitle display logic
+- `tauri-bridge.js` - Unified API bridge that auto-detects Tauri vs browser mode
+  - In Tauri mode: uses `window.__TAURI__.invoke()`
+  - In browser mode: makes HTTP requests to `localhost:3001/api/*`
+- `settings.js` - Settings management utilities
+
+Uses vanilla JS with no npm dependencies. All Tauri IPC goes through `tauri-bridge.js` for browser dev mode compatibility.
 
 ## Coding Conventions
 
@@ -98,18 +131,18 @@ Uses vanilla JS with `invoke()` for Tauri IPC. No framework.
 
 ## Claude Code Skills
 
-Custom slash commands available in `.claude/commands/`:
+Custom slash commands available in `.claude/skills/`:
 
 | Command | Purpose |
 |---------|---------|
 | `/dev` | Unified orchestrator - auto-routes to PM, UI, Tech, Fix, or Review workflow based on request |
-| `/pm` | PRD & requirements clarification |
-| `/ui` | UI spec & image generation prompts |
-| `/tech` | Architecture & implementation planning |
-| `/fix` | Bug diagnosis, fixes, tests, refactoring |
-| `/review` | Release gate review (P0/P1/P2 findings) |
+| `/pm` | PRD & requirements clarification (gold-pm workflow) |
+| `/ui` | UI spec & image generation prompts (ui-designer workflow) |
+| `/tech` | Architecture & implementation planning (prd-tech-lead workflow) |
+| `/fix` | Bug diagnosis, fixes, tests, refactoring (a-plus-fixer workflow) |
+| `/review` | Release gate review (picky-reviewer workflow with P0/P1/P2 findings) |
 
-The `/dev` command supports chaining workflows (e.g., PM → UI → Tech) with HANDOFF.v1 structured output.
+The `/dev` command supports chaining workflows (e.g., PM → UI → Tech) with HANDOFF.v1 structured output. Each skill is a subdirectory containing `SKILL.md` with the skill definition.
 
 ## Debugging
 
@@ -133,8 +166,13 @@ Common error codes: `not_supported`, `not_ready`, `not_available`, `timeout`, `b
 App settings persist to `%APPDATA%\com.meowcal.sub\config.json`. Key settings:
 - Source/target languages
 - Capture interval (ms)
-- Overlay appearance
-- Translation backend flags
+- Overlay appearance (font, colors, positioning)
+- Translation backend configuration:
+  - Foundry Local endpoint URL
+  - Context-aware settings (`enableContextAware`, `contextLevel`, `contextRecentCount`, `contextBudgetPercent`, etc.)
+  - Offline MT binary path
+  - Feature flags for each backend
+  - Timeouts and retry behavior
 
 ## Platform Requirements
 
