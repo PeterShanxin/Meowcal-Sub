@@ -82,7 +82,6 @@ fn main() {
     // Check for --http-only flag (browser dev mode)
     let args: Vec<String> = std::env::args().collect();
     let http_only_mode = args.iter().any(|arg| arg == "--http-only");
-
     // --- Step 1: Set up logging ---
     if http_only_mode {
         // Log to console in HTTP-only mode for easier debugging
@@ -152,6 +151,7 @@ fn main() {
             commands::get_capture_region,
             commands::open_area_selector,
             commands::close_area_selector,
+            commands::get_selector_snapshot,
             commands::start_translation,
             commands::stop_translation,
             commands::is_translation_running,
@@ -171,12 +171,13 @@ fn main() {
             commands::prepare_foundry_local,
             // Overlay commands
             commands::set_overlay_click_through,
+            commands::set_overlay_window_clip,
         ])
         .plugin(tauri_plugin_opener::init())
         // Register our app state (shared across all commands)
         .manage(AppState::default())
         // Set up the system tray icon
-        .setup(|app| {
+        .setup(move |app| {
             info!("Setting up system tray...");
 
             // Load persisted config

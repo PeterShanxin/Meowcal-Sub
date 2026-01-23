@@ -231,6 +231,7 @@ function scheduleFadeOut() {
     fadeTimer = setTimeout(() => {
         if (!overlayState.isOverlayActive && !overlayState.isDragging && !overlayState.isResizing) {
             captureFrame.classList.add('faded');
+            scheduleWindowClipUpdate();
         }
     }, 4000);
 }
@@ -241,6 +242,7 @@ function showCaptureFrame() {
     const captureFrame = document.getElementById('capture-frame');
     if (captureFrame) {
         captureFrame.classList.remove('faded');
+        scheduleWindowClipUpdate();
     }
 }
 
@@ -250,6 +252,24 @@ function showCaptureFrame() {
 
 async function initOverlay() {
     console.log('🔧 Initializing overlay...');
+
+    // Force transparent background via WebView2 API (workaround for Tauri 2.0 transparency issues)
+    // On Windows 8+, alpha=0 creates true transparency
+    try {
+        const currentWebview = window.__TAURI__.webview.getCurrentWebview();
+        await currentWebview.setBackgroundColor([0, 0, 0, 0]);
+        console.log('✅ Set overlay webview background to transparent');
+    } catch (e) {
+        console.warn('Could not set transparent background via webview API:', e);
+        // Fallback: try window API (WebviewWindow combines window + webview)
+        try {
+            const currentWindow = window.__TAURI__.window.getCurrentWindow();
+            await currentWindow.setBackgroundColor([0, 0, 0, 0]);
+            console.log('✅ Set overlay window background to transparent (fallback)');
+        } catch (e2) {
+            console.warn('Could not set transparent background:', e2);
+        }
+    }
 
     const captureFrame = document.getElementById('capture-frame');
     const subtitleContainer = document.getElementById('subtitle-container');
@@ -318,6 +338,7 @@ function setupHoverDetection(captureFrame, subtitleContainer) {
     const onEnterInteractiveArea = () => {
         setOverlayActive(true);
         showCaptureFrame();
+        scheduleWindowClipUpdate();
     };
 
     const onLeaveInteractiveArea = () => {
@@ -325,6 +346,7 @@ function setupHoverDetection(captureFrame, subtitleContainer) {
             setOverlayActive(false);
             scheduleFadeOut();
         }
+        scheduleWindowClipUpdate();
     };
 
     // Capture frame hover
@@ -437,6 +459,7 @@ function handleResize(e) {
 
     updateCaptureFrame(captureFrame, overlayState.region);
     updateSubtitlePosition(subtitleContainer, overlayState.region);
+    scheduleWindowClipUpdate();
 
     // Update debug display
     const debugRegion = document.getElementById('debug-region');
@@ -511,6 +534,7 @@ function handleDrag(e) {
 
     updateCaptureFrame(captureFrame, overlayState.region);
     updateSubtitlePosition(subtitleContainer, overlayState.region);
+    scheduleWindowClipUpdate();
 
     // Update debug display
     const debugRegion = document.getElementById('debug-region');
@@ -569,6 +593,7 @@ async function setupEventListeners(elements) {
                 overlayState.region = region;
                 updateCaptureFrame(captureFrame, region);
                 updateSubtitlePosition(subtitleContainer, region);
+                scheduleWindowClipUpdate();
 
                 if (debugRegion) {
                     debugRegion.textContent = `Region: (${region.x}, ${region.y}) ${region.width}x${region.height}`;
@@ -609,6 +634,7 @@ async function setupEventListeners(elements) {
                         overlayState.region = region;
                         updateCaptureFrame(captureFrame, region);
                         updateSubtitlePosition(subtitleContainer, region);
+                        scheduleWindowClipUpdate();
                         if (debugRegion) {
                             debugRegion.textContent = `Region: (${region.x}, ${region.y}) ${region.width}x${region.height}`;
                         }
@@ -620,6 +646,7 @@ async function setupEventListeners(elements) {
                 captureFrame.classList.remove('hidden');
                 captureFrame.classList.add('visible');
                 captureFrame.classList.remove('faded');
+                scheduleWindowClipUpdate();
 
                 // Start fade timer (frame fades after inactivity)
                 scheduleFadeOut();
@@ -632,6 +659,7 @@ async function setupEventListeners(elements) {
                 captureFrame.classList.remove('faded');
                 subtitleContainer.classList.add('hidden');
                 subtitleContainer.classList.remove('visible');
+                scheduleWindowClipUpdate();
 
                 // Clear fade timer
                 if (fadeTimer) clearTimeout(fadeTimer);
@@ -691,6 +719,7 @@ function updateSubtitleText(textElement, newText, container) {
     if (!newText || newText.trim() === '') {
         container.classList.add('hidden');
         container.classList.remove('visible');
+        scheduleWindowClipUpdate();
         return;
     }
 
@@ -704,6 +733,100 @@ function updateSubtitleText(textElement, newText, container) {
 
     container.classList.remove('hidden');
     container.classList.add('visible');
+    scheduleWindowClipUpdate();
+}
+
+// =============================================================================
+// WINDOW REGION CLIPPING (Windows transparency workaround)
+// =============================================================================
+
+// On some Windows/WebView2 versions, transparent webview backgrounds regress to opaque grey.
+// We work around this by telling Rust to set a non-rectangular window region so only the
+// visible UI (frame ring + subtitle box) is part of the overlay window.
+let clipUpdateLoopRunning = false;
+let clipUpdateLoopUntilMs = 0;
+
+function scheduleWindowClipUpdate() {
+    // Many overlay elements (capture frame + subtitle container) animate position/size
+    // with CSS transitions. If we only set the window region once, those transitions can
+    // get clipped mid-animation. To keep things looking smooth, update the window region
+    // for a short period after any change.
+    clipUpdateLoopUntilMs = Date.now() + 350;
+    if (clipUpdateLoopRunning) return;
+
+    clipUpdateLoopRunning = true;
+    requestAnimationFrame(runWindowClipUpdateLoop);
+}
+
+async function updateOverlayWindowClip() {
+    if (!window.__TAURI__?.core?.invoke) return;
+
+    const captureFrame = document.getElementById('capture-frame');
+    const subtitleContainer = document.getElementById('subtitle-container');
+
+    const frameVisible = captureFrame &&
+        captureFrame.classList.contains('visible') &&
+        !captureFrame.classList.contains('faded');
+
+    const frameRegion = frameVisible && overlayState.region ? overlayState.region : null;
+
+    let subtitleBounds = null;
+    if (subtitleContainer && subtitleContainer.classList.contains('visible') && !subtitleContainer.classList.contains('hidden')) {
+        const rect = subtitleContainer.getBoundingClientRect();
+        subtitleBounds = {
+            x: Math.round(rect.left),
+            y: Math.round(rect.top),
+            width: Math.round(rect.width),
+            height: Math.round(rect.height),
+        };
+    }
+
+    try {
+        // IMPORTANT: DOM coordinates are in CSS pixels (logical units).
+        // Win32 window regions (SetWindowRgn) use device pixels, so we pass the window
+        // scale factor and let Rust convert everything to physical pixels.
+        const scaleFactor = await getScaleFactor();
+
+        // Resize handles extend outside the capture-frame box (negative offsets).
+        // If we don't include them in the window region, they'll be clipped and resizing breaks.
+        let handleBounds = null;
+        if (frameVisible && captureFrame) {
+            const handles = captureFrame.querySelectorAll('.resize-handle');
+            const bounds = [];
+            handles.forEach((handle) => {
+                // Only include handles when they're actually visible.
+                const opacity = parseFloat(getComputedStyle(handle).opacity || '0');
+                if (opacity < 0.05) return;
+
+                const rect = handle.getBoundingClientRect();
+                bounds.push({
+                    x: Math.round(rect.left),
+                    y: Math.round(rect.top),
+                    width: Math.round(rect.width),
+                    height: Math.round(rect.height),
+                });
+            });
+            if (bounds.length > 0) {
+                handleBounds = bounds;
+            }
+        }
+
+        await window.__TAURI__.core.invoke('set_overlay_window_clip', { frameRegion, subtitleBounds, handleBounds, scaleFactor });
+    } catch (e) {
+        // Ignore - this is a best-effort platform workaround.
+    }
+}
+
+async function runWindowClipUpdateLoop() {
+    try {
+        await updateOverlayWindowClip();
+    } finally {
+        if (Date.now() < clipUpdateLoopUntilMs) {
+            requestAnimationFrame(runWindowClipUpdateLoop);
+        } else {
+            clipUpdateLoopRunning = false;
+        }
+    }
 }
 
 // =============================================================================

@@ -30,6 +30,7 @@ let actionButtons = null;
 let confirmBtn = null;
 let retryBtn = null;
 let cancelBtn = null;
+let desktopSnapshot = null;
 
 // =============================================================================
 // INITIALIZATION
@@ -37,6 +38,24 @@ let cancelBtn = null;
 
 document.addEventListener('DOMContentLoaded', async () => {
     console.log('📐 Selector window loaded');
+
+    // Force transparent background via WebView2 API (workaround for Tauri 2.0 transparency issues)
+    // On Windows 8+, alpha=0 creates true transparency
+    try {
+        const currentWebview = window.__TAURI__.webview.getCurrentWebview();
+        await currentWebview.setBackgroundColor([0, 0, 0, 0]);
+        console.log('✅ Set webview background to transparent');
+    } catch (e) {
+        console.warn('Could not set transparent background via webview API:', e);
+        // Fallback: try window API (WebviewWindow combines window + webview)
+        try {
+            const currentWindow = window.__TAURI__.window.getCurrentWindow();
+            await currentWindow.setBackgroundColor([0, 0, 0, 0]);
+            console.log('✅ Set window background to transparent (fallback)');
+        } catch (e2) {
+            console.warn('Could not set transparent background:', e2);
+        }
+    }
 
     // Get DOM elements
     selectionBox = document.getElementById('selection-box');
@@ -46,11 +65,17 @@ document.addEventListener('DOMContentLoaded', async () => {
     confirmBtn = document.getElementById('confirm-btn');
     retryBtn = document.getElementById('retry-btn');
     cancelBtn = document.getElementById('cancel-btn');
+    desktopSnapshot = document.getElementById('desktop-snapshot');
 
     if (!selectionBox || !dimensionsDisplay || !instructions) {
         console.error('Failed to find required DOM elements');
         return;
     }
+
+    // Load the latest background snapshot (if available).
+    // This is a workaround for transparency regressions: instead of relying on a truly transparent
+    // webview, we render a screenshot behind the selection UI.
+    await setupSelectorSnapshotBackground();
 
     // Set up event listeners
     setupEventListeners();
@@ -68,6 +93,40 @@ document.addEventListener('DOMContentLoaded', async () => {
     document.body.focus();
     document.body.setAttribute('tabindex', '0');
 });
+
+// =============================================================================
+// DESKTOP SNAPSHOT BACKGROUND (TRANSPARENCY WORKAROUND)
+// =============================================================================
+
+async function setupSelectorSnapshotBackground() {
+    if (!window.__TAURI__?.core?.invoke || !desktopSnapshot) return;
+
+    // 1) Listen for new snapshots (when the selector is opened again without a reload).
+    try {
+        if (window.__TAURI__?.event?.listen) {
+            await window.__TAURI__.event.listen('selector-background-snapshot', (event) => {
+                applySelectorSnapshot(event.payload);
+            });
+        }
+    } catch (e) {
+        console.warn('Failed to listen for selector background snapshot events:', e);
+    }
+
+    // 2) Pull the most recent snapshot stored by the backend (covers first-load case).
+    try {
+        const snapshot = await window.__TAURI__.core.invoke('get_selector_snapshot');
+        applySelectorSnapshot(snapshot);
+    } catch (e) {
+        console.warn('Failed to load selector background snapshot:', e);
+    }
+}
+
+function applySelectorSnapshot(snapshot) {
+    if (!desktopSnapshot) return;
+    if (!snapshot?.dataUrl) return;
+
+    desktopSnapshot.src = snapshot.dataUrl;
+}
 
 // =============================================================================
 // EVENT LISTENERS

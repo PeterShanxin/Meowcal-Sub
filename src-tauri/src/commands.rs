@@ -55,6 +55,14 @@ pub struct AppState {
     pub stop_signal: Mutex<Option<watch::Sender<bool>>>,
     /// Diagnostics for translation backends
     pub translation_diagnostics: Arc<Mutex<TranslationDiagnosticsState>>,
+
+    /// Latest "desktop snapshot" for the area selector window.
+    ///
+    /// Why we need this:
+    /// - On some Windows/WebView2 versions, transparent webviews regress to opaque grey/black.
+    /// - The selector window is supposed to be fullscreen transparent so the user can see the desktop.
+    /// - As a fallback, we capture a screenshot *before* showing the selector and render it as an image.
+    pub selector_snapshot: Mutex<Option<SelectorSnapshot>>,
 }
 
 impl Default for AppState {
@@ -66,6 +74,7 @@ impl Default for AppState {
             capture_scale_factor: Mutex::new(1.0),
             stop_signal: Mutex::new(None),
             translation_diagnostics: Arc::new(Mutex::new(TranslationDiagnosticsState::default())),
+            selector_snapshot: Mutex::new(None),
         }
     }
 }
@@ -675,14 +684,107 @@ pub fn get_capture_region(state: State<'_, AppState>) -> Option<CaptureRegion> {
     *region
 }
 
+/// A full-screen "desktop snapshot" for the area selector background.
+///
+/// This is a workaround for transparency regressions: instead of relying on the webview
+/// to be truly transparent, we render a screenshot behind the selection UI.
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SelectorSnapshot {
+    /// `data:image/png;base64,...`
+    pub data_url: String,
+    /// Snapshot width in physical pixels.
+    pub width: i32,
+    /// Snapshot height in physical pixels.
+    pub height: i32,
+}
+
 /// Open the area selector overlay window
 ///
 /// Called from JavaScript: `await invoke('open_area_selector');`
 #[tauri::command]
-pub async fn open_area_selector(app: AppHandle) -> Result<(), String> {
+pub async fn open_area_selector(app: AppHandle, state: State<'_, AppState>) -> Result<(), String> {
     info!("Opening area selector...");
 
     if let Some(window) = app.get_webview_window("selector") {
+        // Capture a background snapshot BEFORE showing the selector window.
+        // If we capture after showing, the screenshot will include the selector UI itself.
+        //
+        // This is best-effort: if capture fails, we still show the selector (it will just be grey).
+        match async_runtime::spawn_blocking(|| -> Result<(SelectorSnapshot, bool), String> {
+            use base64::Engine;
+
+            // 1) Capture the primary screen in physical pixels.
+            let (width, height) = capture::get_screen_dimensions();
+            if width <= 0 || height <= 0 {
+                return Err(format!("Invalid screen dimensions: {}x{}", width, height));
+            }
+
+            let region = CaptureRegion::new(0, 0, width, height);
+            let (capture, used_fallback) =
+                capture::smart_capture(&region).map_err(|e| format!("{}", e))?;
+
+            // 2) Convert BGRA -> RGBA (swap red/blue channels).
+            // Our capture backends return BGRA to match Windows APIs.
+            let mut rgba = capture.data;
+            for px in rgba.chunks_exact_mut(4) {
+                px.swap(0, 2);
+            }
+
+            // 3) Encode to PNG.
+            let mut png_bytes = Vec::new();
+            {
+                let mut encoder = png::Encoder::new(&mut png_bytes, capture.width, capture.height);
+                encoder.set_color(png::ColorType::Rgba);
+                encoder.set_depth(png::BitDepth::Eight);
+
+                let mut writer = encoder
+                    .write_header()
+                    .map_err(|e| format!("PNG header write failed: {}", e))?;
+
+                writer
+                    .write_image_data(&rgba)
+                    .map_err(|e| format!("PNG encoding failed: {}", e))?;
+            }
+
+            // 4) Base64 encode for the webview (<img src="data:...">).
+            let b64 = base64::engine::general_purpose::STANDARD.encode(&png_bytes);
+            let data_url = format!("data:image/png;base64,{}", b64);
+
+            Ok((
+                SelectorSnapshot {
+                    data_url,
+                    width,
+                    height,
+                },
+                used_fallback,
+            ))
+        })
+        .await
+        {
+            Ok(Ok((snapshot, used_fallback))) => {
+                if used_fallback {
+                    warn!("Area selector snapshot: Graphics Capture failed, used GDI fallback");
+                } else {
+                    info!("Area selector snapshot: captured via Graphics Capture");
+                }
+
+                // Store for the selector window to pull on load (and for subsequent opens).
+                *state.selector_snapshot.lock().unwrap() = Some(snapshot.clone());
+
+                // Also push it as an event (helps if the selector window is already loaded).
+                let _ = window.emit("selector-background-snapshot", snapshot);
+            }
+            Ok(Err(e)) => {
+                warn!("Area selector snapshot capture failed: {}", e);
+                *state.selector_snapshot.lock().unwrap() = None;
+            }
+            Err(join_err) => {
+                warn!("Area selector snapshot task failed: {}", join_err);
+                *state.selector_snapshot.lock().unwrap() = None;
+            }
+        }
+
         window.show().map_err(|e| e.to_string())?;
         window.set_focus().map_err(|e| e.to_string())?;
         info!("✅ Area selector opened!");
@@ -693,15 +795,25 @@ pub async fn open_area_selector(app: AppHandle) -> Result<(), String> {
     Ok(())
 }
 
+/// Get the most recent selector background snapshot (if available).
+///
+/// Called from JavaScript (selector window): `const snap = await invoke('get_selector_snapshot');`
+#[tauri::command]
+pub fn get_selector_snapshot(state: State<'_, AppState>) -> Option<SelectorSnapshot> {
+    state.selector_snapshot.lock().unwrap().clone()
+}
+
 /// Close the area selector overlay window
 ///
 /// Called from JavaScript: `await invoke('close_area_selector');`
 #[tauri::command]
-pub async fn close_area_selector(app: AppHandle) -> Result<(), String> {
+pub async fn close_area_selector(app: AppHandle, state: State<'_, AppState>) -> Result<(), String> {
     info!("Closing area selector...");
 
     if let Some(window) = app.get_webview_window("selector") {
         window.hide().map_err(|e| e.to_string())?;
+        // Drop the snapshot to avoid holding a huge base64 string in memory.
+        *state.selector_snapshot.lock().unwrap() = None;
         info!("✅ Area selector closed!");
     } else {
         return Err("Selector window not found".to_string());
@@ -1469,6 +1581,192 @@ pub fn set_overlay_click_through(app: AppHandle, ignore: bool) -> Result<(), Str
     window
         .set_ignore_cursor_events(ignore)
         .map_err(|e| format!("Failed to set cursor events: {}", e))?;
+
+    Ok(())
+}
+
+/// Update the overlay window region so it only contains the visible UI elements.
+///
+/// This is a workaround for WebView2 transparency regressions on Windows:
+/// - We make the overlay window non-rectangular (border ring + subtitle box)
+/// - The capture region area becomes a "hole" (not part of the window), so the
+///   underlying desktop/video remains visible even if the webview background is opaque.
+///
+/// Called from JavaScript (overlay window):
+/// `invoke('set_overlay_window_clip', { frameRegion, subtitleBounds, handleBounds, scaleFactor })`
+#[tauri::command]
+pub fn set_overlay_window_clip(
+    app: AppHandle,
+    frame_region: Option<CaptureRegion>,
+    subtitle_bounds: Option<CaptureRegion>,
+    handle_bounds: Option<Vec<CaptureRegion>>,
+    scale_factor: f64,
+) -> Result<(), String> {
+    let window = app
+        .get_webview_window("overlay")
+        .ok_or("Overlay window not found")?;
+
+    #[cfg(windows)]
+    {
+        use raw_window_handle::HasWindowHandle;
+        use windows::Win32::Foundation::HWND;
+        use windows::Win32::Graphics::Gdi::{
+            CombineRgn, CreateRectRgn, CreateRoundRectRgn, SetWindowRgn, RGN_DIFF, RGN_OR,
+        };
+
+        // The frontend sends coordinates in CSS pixels (logical units).
+        // Win32 regions operate in device pixels, so we convert using the window scale factor.
+        //
+        // NOTE: This does not perfectly handle multi-monitor setups where different monitors have
+        // different DPI scales, but it fixes the common single-monitor case.
+        let scale_factor = if scale_factor > 0.0 { scale_factor } else { 1.0 };
+
+        let handle = window
+            .window_handle()
+            .map_err(|e| format!("Failed to get window handle: {}", e))?;
+
+        let raw_handle = handle.as_raw();
+        let hwnd = match raw_handle {
+            raw_window_handle::RawWindowHandle::Win32(win32) => {
+                HWND(win32.hwnd.get() as *mut _)
+            }
+            _ => return Err("Overlay window is not a Win32 window".to_string()),
+        };
+
+        // Build the region we want the overlay to occupy (in device pixels).
+        // The frontend provides CSS pixel coordinates + a DPI scale factor; we convert before creating regions.
+        let mut region_to_set = None;
+
+        unsafe {
+            // 1) Frame ring region (outer rect minus inner rect)
+            if let Some(region) = frame_region {
+                let region = region.scaled(scale_factor);
+                let border_px = (2.0 * scale_factor).round().max(1.0) as i32;
+                let radius_px = (8.0 * scale_factor).round().max(0.0) as i32;
+
+                let x1 = region.x;
+                let y1 = region.y;
+                let x2 = region.x + region.width;
+                let y2 = region.y + region.height;
+
+                // Outer rounded rectangle.
+                let outer = CreateRoundRectRgn(
+                    x1,
+                    y1,
+                    x2,
+                    y2,
+                    radius_px * 2,
+                    radius_px * 2,
+                );
+                if outer.is_invalid() {
+                    return Err("CreateRoundRectRgn (outer) failed".to_string());
+                }
+
+                // Inner rounded rectangle to subtract (creates a ring).
+                let inner_x1 = x1 + border_px;
+                let inner_y1 = y1 + border_px;
+                let inner_x2 = x2 - border_px;
+                let inner_y2 = y2 - border_px;
+
+                if inner_x2 > inner_x1 && inner_y2 > inner_y1 {
+                    let inner_radius = (radius_px - border_px).max(0);
+                    let inner = CreateRoundRectRgn(
+                        inner_x1,
+                        inner_y1,
+                        inner_x2,
+                        inner_y2,
+                        inner_radius * 2,
+                        inner_radius * 2,
+                    );
+                    if inner.is_invalid() {
+                        // Fallback to a rectangular inner region.
+                        let inner = CreateRectRgn(inner_x1, inner_y1, inner_x2, inner_y2);
+                        if inner.is_invalid() {
+                            return Err("CreateRectRgn (inner fallback) failed".to_string());
+                        }
+                        let _ = CombineRgn(Some(outer), Some(outer), Some(inner), RGN_DIFF);
+                        let _ = windows::Win32::Graphics::Gdi::DeleteObject(inner.into());
+                    } else {
+                        let _ = CombineRgn(Some(outer), Some(outer), Some(inner), RGN_DIFF);
+                        let _ = windows::Win32::Graphics::Gdi::DeleteObject(inner.into());
+                    }
+                }
+
+                region_to_set = Some(outer);
+            }
+
+            // 2) Subtitle bounds region (union)
+            if let Some(bounds) = subtitle_bounds {
+                let bounds = bounds.scaled(scale_factor);
+                let subtitle_radius_px = (8.0 * scale_factor).round().max(0.0) as i32;
+                let rgn = CreateRoundRectRgn(
+                    bounds.x,
+                    bounds.y,
+                    bounds.x + bounds.width,
+                    bounds.y + bounds.height,
+                    subtitle_radius_px * 2,
+                    subtitle_radius_px * 2,
+                );
+                if rgn.is_invalid() {
+                    return Err("CreateRoundRectRgn (subtitle) failed".to_string());
+                }
+
+                match region_to_set {
+                    Some(existing) => {
+                        let _ = CombineRgn(Some(existing), Some(existing), Some(rgn), RGN_OR);
+                        let _ = windows::Win32::Graphics::Gdi::DeleteObject(rgn.into());
+                    }
+                    None => {
+                        region_to_set = Some(rgn);
+                    }
+                }
+            }
+
+            // 3) Resize handle regions (union)
+            //
+            // The resize handles are positioned with negative offsets in CSS, so they can extend
+            // outside the capture region's bounding box. If we don't include them, they get clipped
+            // by the non-rectangular window region and resizing becomes impossible.
+            if let Some(handles) = handle_bounds {
+                for handle in handles {
+                    let handle = handle.scaled(scale_factor);
+
+                    let right = handle.x + handle.width;
+                    let bottom = handle.y + handle.height;
+                    if right <= handle.x || bottom <= handle.y {
+                        continue;
+                    }
+
+                    let rgn = CreateRectRgn(handle.x, handle.y, right, bottom);
+                    if rgn.is_invalid() {
+                        continue;
+                    }
+
+                    match region_to_set {
+                        Some(existing) => {
+                            let _ = CombineRgn(Some(existing), Some(existing), Some(rgn), RGN_OR);
+                            let _ = windows::Win32::Graphics::Gdi::DeleteObject(rgn.into());
+                        }
+                        None => {
+                            region_to_set = Some(rgn);
+                        }
+                    }
+                }
+            }
+
+            // If nothing is visible, clear the region (restore rectangular window).
+            // Passing None removes the region.
+            match region_to_set {
+                Some(rgn) => {
+                    SetWindowRgn(hwnd, Some(rgn), true);
+                    // DO NOT delete `rgn` after SetWindowRgn succeeds; the system owns it now.
+                }
+                None => {
+                    SetWindowRgn(hwnd, None, true);
+                }
+            }
+        }
+    }
 
     Ok(())
 }
