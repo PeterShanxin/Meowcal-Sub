@@ -92,6 +92,28 @@ public partial class App : Application
                     }
                     break;
 
+                case "Subtitle.Update":
+                    Debug.WriteLine("[App] Handling Subtitle.Update");
+                    if (message.Payload != null)
+                    {
+                        var payloadJson = message.Payload.Value.GetRawText();
+                        var payload = JsonSerializer.Deserialize<SubtitleUpdatePayload>(payloadJson);
+                        if (payload != null)
+                        {
+                            _overlayWindow?.UpdateSubtitle(
+                                payload.SourceText ?? "",
+                                payload.Text,
+                                "unknown" // Backend info not in payload
+                            );
+                        }
+                    }
+                    break;
+
+                case "Subtitle.Clear":
+                    Debug.WriteLine("[App] Handling Subtitle.Clear");
+                    _overlayWindow?.ClearSubtitle();
+                    break;
+
                 default:
                     Debug.WriteLine($"[App] Unknown message type: {message.Type}");
                     break;

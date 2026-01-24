@@ -21,7 +21,7 @@ public sealed partial class FrameOverlayWindow : Window
 {
     private AppWindow? _appWindow;
     private Region? _currentRegion;
-    private OverlaySettings? _currentSettings;
+    private OverlaySettings _settings = new(); // Use default settings if not yet synced
     private Compositor? _compositor;
     private SpriteVisual? _borderVisual;
 
@@ -99,18 +99,91 @@ public sealed partial class FrameOverlayWindow : Window
     /// <param name="settings">New overlay settings</param>
     public void UpdateSettings(OverlaySettings settings)
     {
-        _currentSettings = settings;
+        _settings = settings;
 
         Debug.WriteLine($"[FrameOverlayWindow] Settings updated: " +
                        $"Font={settings.FontFamily} {settings.FontSize}pt, " +
                        $"Colors=({settings.TextColor}, {settings.BackgroundColor}), " +
                        $"Border={settings.BorderColor} {settings.BorderWidth}px");
 
-        // Redraw border with new settings if region is set
+        // Apply font settings to subtitle text
+        SubtitleText.FontSize = settings.FontSize;
+        SubtitleText.FontFamily = new Microsoft.UI.Xaml.Media.FontFamily(settings.FontFamily);
+
+        // Apply text color
+        var textColor = ParseColor(settings.TextColor);
+        SubtitleText.Foreground = new Microsoft.UI.Xaml.Media.SolidColorBrush(textColor);
+
+        // Reposition subtitle panel if region is set
         if (_currentRegion != null)
         {
+            PositionSubtitlePanel();
             DrawBorderRing();
         }
+    }
+
+    /// <summary>
+    /// Update subtitle text and show the panel.
+    /// </summary>
+    /// <param name="original">Original OCR text (currently unused)</param>
+    /// <param name="translated">Translated subtitle text to display</param>
+    /// <param name="backendUsed">Translation backend name (currently unused)</param>
+    public void UpdateSubtitle(string original, string translated, string backendUsed)
+    {
+        Debug.WriteLine($"[FrameOverlayWindow] UpdateSubtitle: translated='{translated}', backend={backendUsed}");
+
+        // Set subtitle text and show panel
+        SubtitleText.Text = translated;
+        SubtitlePanel.Visibility = Visibility.Visible;
+
+        // Position panel below capture region
+        PositionSubtitlePanel();
+    }
+
+    /// <summary>
+    /// Clear subtitle text and hide the panel.
+    /// </summary>
+    public void ClearSubtitle()
+    {
+        Debug.WriteLine("[FrameOverlayWindow] ClearSubtitle");
+        SubtitlePanel.Visibility = Visibility.Collapsed;
+    }
+
+    /// <summary>
+    /// Position the subtitle panel below the capture region with configured offset.
+    /// </summary>
+    private void PositionSubtitlePanel()
+    {
+        if (_currentRegion == null)
+        {
+            Debug.WriteLine("[FrameOverlayWindow] Cannot position subtitle panel: no region set");
+            return;
+        }
+
+        // Get virtual screen offset
+        var (screenX, screenY, _, _) = WindowHelper.GetVirtualScreenBounds();
+
+        // Calculate panel position (window-relative coordinates)
+        var x = _currentRegion.X - screenX;
+        var y = _currentRegion.Y - screenY + _currentRegion.Height + _settings.OffsetY;
+
+        // Set position via margin (HorizontalAlignment=Left, VerticalAlignment=Top)
+        SubtitlePanel.Margin = new Thickness(x, y, 0, 0);
+
+        // Set max width (0 = match capture region width)
+        SubtitlePanel.MaxWidth = _settings.MaxWidth > 0 ? _settings.MaxWidth : _currentRegion.Width;
+
+        Debug.WriteLine($"[FrameOverlayWindow] Positioned subtitle panel: ({x}, {y}), maxWidth={SubtitlePanel.MaxWidth}");
+    }
+
+    /// <summary>
+    /// Handle settings button click.
+    /// </summary>
+    private async void SettingsButton_Click(object sender, RoutedEventArgs e)
+    {
+        Debug.WriteLine("[FrameOverlayWindow] Settings button clicked");
+        // TODO: Send message to backend to open settings window
+        await System.Threading.Tasks.Task.CompletedTask;
     }
 
     /// <summary>
@@ -126,8 +199,8 @@ public sealed partial class FrameOverlayWindow : Window
             _borderVisual = null;
         }
 
-        // Clear border if no region or no settings
-        if (_currentRegion == null || _currentSettings == null || _compositor == null)
+        // Clear border if no region or compositor
+        if (_currentRegion == null || _compositor == null)
         {
             ElementCompositionPreview.SetElementChildVisual(OverlayCanvas, null);
             Debug.WriteLine("[FrameOverlayWindow] Border cleared");
@@ -135,8 +208,8 @@ public sealed partial class FrameOverlayWindow : Window
         }
 
         // Get border parameters
-        var borderWidth = _currentSettings.BorderWidth;
-        var borderColor = ParseColor(_currentSettings.BorderColor);
+        var borderWidth = _settings.BorderWidth;
+        var borderColor = ParseColor(_settings.BorderColor);
 
         // Convert region from physical (virtual screen) to window-relative coordinates
         var (screenX, screenY, _, _) = WindowHelper.GetVirtualScreenBounds();

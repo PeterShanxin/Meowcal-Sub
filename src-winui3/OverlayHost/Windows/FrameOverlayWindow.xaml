@@ -10,5 +10,46 @@
     <Grid x:Name="RootGrid" Background="Transparent">
         <!-- Canvas for overlay content (region borders, etc.) -->
         <Canvas x:Name="OverlayCanvas" />
+
+        <!-- Subtitle panel with acrylic background (positioned below capture region) -->
+        <Grid x:Name="SubtitlePanel"
+              HorizontalAlignment="Left"
+              VerticalAlignment="Top"
+              Visibility="Collapsed">
+            <Border CornerRadius="8" Padding="16,12">
+                <Border.Background>
+                    <AcrylicBrush TintColor="Black"
+                                  TintOpacity="0.7"
+                                  FallbackColor="#B3000000" />
+                </Border.Background>
+
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+
+                    <!-- Translated subtitle text -->
+                    <TextBlock x:Name="SubtitleText"
+                               Grid.Column="0"
+                               TextWrapping="Wrap"
+                               Foreground="White"
+                               FontSize="24"
+                               FontFamily="Segoe UI"
+                               VerticalAlignment="Center"/>
+
+                    <!-- Settings button -->
+                    <Button x:Name="SettingsButton"
+                            Grid.Column="1"
+                            Content="⚙"
+                            FontSize="20"
+                            Background="Transparent"
+                            BorderThickness="0"
+                            Margin="12,0,0,0"
+                            VerticalAlignment="Center"
+                            Click="SettingsButton_Click"/>
+                </Grid>
+            </Border>
+        </Grid>
     </Grid>
 </Window>
