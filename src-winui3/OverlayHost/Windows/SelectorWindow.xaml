@@ -1,0 +1,75 @@
+<Window
+    x:Class="OverlayHost.Windows.SelectorWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d">
+
+    <!--
+        Fullscreen selector window for area capture selection.
+        Covers entire virtual screen with dimmed overlay and rubber-band selection.
+    -->
+
+    <Grid x:Name="RootGrid" Background="#80000000" PointerPressed="OnPointerPressed" PointerMoved="OnPointerMoved" PointerReleased="OnPointerReleased">
+
+        <!-- Selection rectangle (rubber-band) -->
+        <Border x:Name="SelectionBorder"
+                BorderBrush="#00A8FF"
+                BorderThickness="2"
+                Visibility="Collapsed"
+                IsHitTestVisible="False">
+        </Border>
+
+        <!-- Dimension readout (shows WxH during selection) -->
+        <Border x:Name="DimensionReadout"
+                Background="#E0000000"
+                CornerRadius="4"
+                Padding="8,4"
+                Visibility="Collapsed"
+                IsHitTestVisible="False">
+            <TextBlock x:Name="DimensionText"
+                       Foreground="White"
+                       FontSize="14"
+                       FontFamily="Consolas"/>
+        </Border>
+
+        <!-- Action buttons (Confirm/Redraw/Cancel) -->
+        <StackPanel x:Name="ActionButtons"
+                    Orientation="Horizontal"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Bottom"
+                    Margin="0,0,0,40"
+                    Spacing="12"
+                    Visibility="Collapsed">
+
+            <Button x:Name="ConfirmButton"
+                    Content="Confirm"
+                    Click="ConfirmButton_Click"
+                    Background="#00A8FF"
+                    Foreground="White"
+                    Padding="24,8"
+                    FontSize="14"
+                    CornerRadius="4"/>
+
+            <Button x:Name="RedrawButton"
+                    Content="Redraw"
+                    Click="RedrawButton_Click"
+                    Background="#666666"
+                    Foreground="White"
+                    Padding="24,8"
+                    FontSize="14"
+                    CornerRadius="4"/>
+
+            <Button x:Name="CancelButton"
+                    Content="Cancel"
+                    Click="CancelButton_Click"
+                    Background="#CC3333"
+                    Foreground="White"
+                    Padding="24,8"
+                    FontSize="14"
+                    CornerRadius="4"/>
+        </StackPanel>
+
+    </Grid>
+</Window>
