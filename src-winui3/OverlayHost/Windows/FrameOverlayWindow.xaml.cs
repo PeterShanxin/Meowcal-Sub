@@ -25,6 +25,11 @@ public sealed partial class FrameOverlayWindow : Window
     private Compositor? _compositor;
     private SpriteVisual? _borderVisual;
 
+    /// <summary>
+    /// Event raised when user clicks settings button in overlay.
+    /// </summary>
+    public event EventHandler? SettingsRequested;
+
     public FrameOverlayWindow()
     {
         InitializeComponent();
@@ -114,6 +119,9 @@ public sealed partial class FrameOverlayWindow : Window
         var textColor = ParseColor(settings.TextColor);
         SubtitleText.Foreground = new Microsoft.UI.Xaml.Media.SolidColorBrush(textColor);
 
+        // Note: Background color is set in XAML and cannot be easily changed at runtime with AcrylicBrush.
+        // The default rgba(0,0,0,0.7) matches the hardcoded TintColor="Black" TintOpacity="0.7" in XAML.
+
         // Reposition subtitle panel if region is set
         if (_currentRegion != null)
         {
@@ -125,9 +133,9 @@ public sealed partial class FrameOverlayWindow : Window
     /// <summary>
     /// Update subtitle text and show the panel.
     /// </summary>
-    /// <param name="original">Original OCR text (currently unused)</param>
+    /// <param name="original">Original OCR text (currently unused, reserved for future tooltip/debugging display)</param>
     /// <param name="translated">Translated subtitle text to display</param>
-    /// <param name="backendUsed">Translation backend name (currently unused)</param>
+    /// <param name="backendUsed">Translation backend identifier (currently unused, reserved for future backend badge)</param>
     public void UpdateSubtitle(string original, string translated, string backendUsed)
     {
         Debug.WriteLine($"[FrameOverlayWindow] UpdateSubtitle: translated='{translated}', backend={backendUsed}");
@@ -178,6 +186,7 @@ public sealed partial class FrameOverlayWindow : Window
 
     /// <summary>
     /// Handle settings button click.
+    /// Send message to backend to open settings window.
     /// </summary>
     private async void SettingsButton_Click(object sender, RoutedEventArgs e)
     {
@@ -185,7 +194,9 @@ public sealed partial class FrameOverlayWindow : Window
         {
             Debug.WriteLine("[FrameOverlayWindow] Settings button clicked");
 
-            // TODO: Send message to backend to open settings
+            // Raise event to notify App to send IPC message
+            SettingsRequested?.Invoke(this, EventArgs.Empty);
+
             await System.Threading.Tasks.Task.CompletedTask; // Placeholder for future async work
         }
         catch (Exception ex)

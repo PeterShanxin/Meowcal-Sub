@@ -34,6 +34,7 @@ public partial class App : Application
 
             // Create overlay window (hidden initially)
             _overlayWindow = new FrameOverlayWindow();
+            _overlayWindow.SettingsRequested += OnSettingsRequested;
 
             // Create selector window
             _selectorWindow = new SelectorWindow();
@@ -121,7 +122,7 @@ public partial class App : Application
                             _overlayWindow?.UpdateSubtitle(
                                 payload.SourceText ?? "",
                                 payload.Text,
-                                "unknown" // Backend info not in payload
+                                "" // Backend info not in payload (reserved for future use)
                             );
                         }
                     }
@@ -207,6 +208,33 @@ public partial class App : Application
         catch (Exception ex)
         {
             Debug.WriteLine($"[App] Error in OnSelectionCancelled: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// Handle settings request from overlay window.
+    /// Send IPC message to backend to open settings.
+    /// </summary>
+    private async void OnSettingsRequested(object? sender, EventArgs e)
+    {
+        try
+        {
+            Debug.WriteLine("[App] Settings requested from overlay");
+
+            if (_ipcService != null)
+            {
+                var message = IpcMessage.Create("Overlay.SettingsRequested", new { });
+                await _ipcService.SendMessageAsync(message);
+                Debug.WriteLine("[App] Sent Overlay.SettingsRequested to backend");
+            }
+            else
+            {
+                Debug.WriteLine("[App] WARNING: IPC service not available, cannot send settings request");
+            }
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"[App] Error in OnSettingsRequested: {ex.Message}");
         }
     }
 }
