@@ -181,9 +181,17 @@ public sealed partial class FrameOverlayWindow : Window
     /// </summary>
     private async void SettingsButton_Click(object sender, RoutedEventArgs e)
     {
-        Debug.WriteLine("[FrameOverlayWindow] Settings button clicked");
-        // TODO: Send message to backend to open settings window
-        await System.Threading.Tasks.Task.CompletedTask;
+        try
+        {
+            Debug.WriteLine("[FrameOverlayWindow] Settings button clicked");
+
+            // TODO: Send message to backend to open settings
+            await System.Threading.Tasks.Task.CompletedTask; // Placeholder for future async work
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"[FrameOverlayWindow] Error in SettingsButton_Click: {ex.Message}");
+        }
     }
 
     /// <summary>

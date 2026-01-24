@@ -39,14 +39,15 @@ public static class CoordinateConverter
     private const double DEFAULT_DPI = 96.0; // 100% scaling
 
     /// <summary>
-    /// Get DPI scale factor for a specific point on screen.
+    /// Get DPI scale factor for a point on screen.
+    /// NOTE: Coordinates must be in PHYSICAL PIXELS (virtual screen space).
     /// </summary>
-    /// <param name="x">X coordinate in logical pixels</param>
-    /// <param name="y">Y coordinate in logical pixels</param>
+    /// <param name="physicalX">X coordinate in physical pixels</param>
+    /// <param name="physicalY">Y coordinate in physical pixels</param>
     /// <returns>Scale factor (1.0 = 100%, 1.5 = 150%, 2.0 = 200%)</returns>
-    public static double GetDpiScaleForPoint(int x, int y)
+    public static double GetDpiScaleForPoint(int physicalX, int physicalY)
     {
-        var point = new POINT { x = x, y = y };
+        var point = new POINT { x = physicalX, y = physicalY };
         IntPtr hMonitor = MonitorFromPoint(point, MONITOR_DEFAULTTONEAREST);
 
         if (hMonitor == IntPtr.Zero)
@@ -76,10 +77,16 @@ public static class CoordinateConverter
     /// <returns>Region in physical pixels</returns>
     public static Region LogicalToPhysical(int logicalX, int logicalY, int logicalWidth, int logicalHeight)
     {
-        // Get DPI scale for the center point of the region
-        int centerX = logicalX + logicalWidth / 2;
-        int centerY = logicalY + logicalHeight / 2;
-        double scale = GetDpiScaleForPoint(centerX, centerY);
+        if (logicalWidth <= 0 || logicalHeight <= 0)
+        {
+            throw new ArgumentException($"Invalid dimensions: {logicalWidth}x{logicalHeight}. Width and height must be positive.");
+        }
+
+        // Estimate physical center point for DPI detection (rough conversion at 1.0 scale)
+        // This is okay because we're just finding which monitor, not doing precise conversion
+        int estimatedPhysicalX = logicalX + logicalWidth / 2;
+        int estimatedPhysicalY = logicalY + logicalHeight / 2;
+        double scale = GetDpiScaleForPoint(estimatedPhysicalX, estimatedPhysicalY);
 
         // Convert to physical pixels by multiplying by scale
         return new Region

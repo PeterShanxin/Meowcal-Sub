@@ -21,24 +21,35 @@ public partial class App : Application
 
     protected override async void OnLaunched(LaunchActivatedEventArgs args)
     {
-        // Create overlay window (initially hidden)
-        _overlayWindow = new FrameOverlayWindow();
-        Debug.WriteLine("[App] Created FrameOverlayWindow");
+        try
+        {
+            Debug.WriteLine("[App] OverlayHost launched");
 
-        // Create selector window (initially hidden)
-        _selectorWindow = new SelectorWindow();
-        _selectorWindow.SelectionConfirmed += OnSelectionConfirmed;
-        _selectorWindow.SelectionCancelled += OnSelectionCancelled;
-        Debug.WriteLine("[App] Created SelectorWindow");
+            // Initialize IPC service
+            _ipcService = new IpcService();
+            _ipcService.ConnectionStateChanged += OnConnectionStateChanged;
+            _ipcService.MessageReceived += OnMessageReceived;
 
-        // Initialize IPC service
-        _ipcService = new IpcService();
-        _ipcService.ConnectionStateChanged += OnConnectionStateChanged;
-        _ipcService.MessageReceived += OnMessageReceived;
+            await _ipcService.StartAsync();
 
-        await _ipcService.StartAsync();
+            // Create overlay window (hidden initially)
+            _overlayWindow = new FrameOverlayWindow();
 
-        Debug.WriteLine($"[OverlayHost] App launched at {DateTime.Now}");
+            // Create selector window
+            _selectorWindow = new SelectorWindow();
+            _selectorWindow.SelectionConfirmed += OnSelectionConfirmed;
+            _selectorWindow.SelectionCancelled += OnSelectionCancelled;
+
+            Debug.WriteLine("[App] OverlayHost initialized successfully");
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"[App] CRITICAL: Failed to initialize OverlayHost: {ex.Message}");
+            Debug.WriteLine($"[App] Stack trace: {ex.StackTrace}");
+            // Application cannot function without proper initialization
+            // Let it terminate rather than continue in broken state
+            throw;
+        }
     }
 
     private void OnConnectionStateChanged(object? sender, bool isConnected)
@@ -142,23 +153,30 @@ public partial class App : Application
     /// </summary>
     private async void OnSelectionConfirmed(object? sender, Region region)
     {
-        Debug.WriteLine($"[App] Selection confirmed: ({region.X}, {region.Y}) {region.Width}x{region.Height}");
-
-        if (_ipcService == null)
+        try
         {
-            Debug.WriteLine("[App] WARNING: IPC service not available, cannot send selector result");
-            return;
+            Debug.WriteLine($"[App] Selection confirmed: ({region.X}, {region.Y}) {region.Width}x{region.Height}");
+
+            if (_ipcService == null)
+            {
+                Debug.WriteLine("[App] WARNING: IPC service not available, cannot send selector result");
+                return;
+            }
+
+            // Send Selector.Result message with physical coordinates
+            var message = IpcMessage.Create("Selector.Result", new SelectorResultPayload
+            {
+                Region = region,
+                Cancelled = false
+            });
+
+            await _ipcService.SendMessageAsync(message);
+            Debug.WriteLine("[App] Sent Selector.Result to backend");
         }
-
-        // Send Selector.Result message with physical coordinates
-        var message = IpcMessage.Create("Selector.Result", new SelectorResultPayload
+        catch (Exception ex)
         {
-            Region = region,
-            Cancelled = false
-        });
-
-        await _ipcService.SendMessageAsync(message);
-        Debug.WriteLine("[App] Sent Selector.Result to backend");
+            Debug.WriteLine($"[App] Error in OnSelectionConfirmed: {ex.Message}");
+        }
     }
 
     /// <summary>
@@ -166,22 +184,29 @@ public partial class App : Application
     /// </summary>
     private async void OnSelectionCancelled(object? sender, EventArgs e)
     {
-        Debug.WriteLine("[App] Selection cancelled");
-
-        if (_ipcService == null)
+        try
         {
-            Debug.WriteLine("[App] WARNING: IPC service not available, cannot send cancellation");
-            return;
+            Debug.WriteLine("[App] Selection cancelled");
+
+            if (_ipcService == null)
+            {
+                Debug.WriteLine("[App] WARNING: IPC service not available, cannot send cancellation");
+                return;
+            }
+
+            // Send Selector.Cancelled message
+            var message = IpcMessage.Create("Selector.Cancelled", new SelectorResultPayload
+            {
+                Region = null,
+                Cancelled = true
+            });
+
+            await _ipcService.SendMessageAsync(message);
+            Debug.WriteLine("[App] Sent Selector.Cancelled to backend");
         }
-
-        // Send Selector.Cancelled message
-        var message = IpcMessage.Create("Selector.Cancelled", new SelectorResultPayload
+        catch (Exception ex)
         {
-            Region = null,
-            Cancelled = true
-        });
-
-        await _ipcService.SendMessageAsync(message);
-        Debug.WriteLine("[App] Sent Selector.Cancelled to backend");
+            Debug.WriteLine($"[App] Error in OnSelectionCancelled: {ex.Message}");
+        }
     }
 }

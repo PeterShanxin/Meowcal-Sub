@@ -19,6 +19,13 @@ namespace OverlayHost.Windows;
 /// </summary>
 public sealed partial class SelectorWindow : Window
 {
+    // Constants for dimension readout positioning
+    private const double READOUT_PADDING = 8.0;
+    private const double READOUT_ESTIMATED_WIDTH = 100.0;
+    private const double READOUT_ESTIMATED_HEIGHT = 30.0;
+    private const double READOUT_MIN_DISTANCE_FROM_EDGE = 40.0;
+    private const int MIN_SELECTION_SIZE = 10; // Minimum 10x10 pixels
+
     // Selection state
     private bool _isSelecting = false;
     private bool _selectionComplete = false;
@@ -97,7 +104,10 @@ public sealed partial class SelectorWindow : Window
         Debug.WriteLine($"[SelectorWindow] Selection started at ({_startX:F0}, {_startY:F0})");
 
         // Capture pointer for smooth dragging
-        RootGrid.CapturePointer(e.Pointer);
+        if (!RootGrid.CapturePointer(e.Pointer))
+        {
+            Debug.WriteLine("[SelectorWindow] Warning: Failed to capture pointer");
+        }
     }
 
     /// <summary>
@@ -160,17 +170,18 @@ public sealed partial class SelectorWindow : Window
         DimensionText.Text = $"{width:F0} × {height:F0}";
         DimensionReadout.Visibility = Visibility.Visible;
 
-        // Position dimension readout near cursor (offset to avoid overlap)
-        double readoutLeft = _currentX + 10;
-        double readoutTop = _currentY + 10;
+        // Position dimension readout to the right of selection, with boundary checks
+        double readoutX = left + width + READOUT_PADDING;
+        double readoutY = top;
 
-        // Keep readout within window bounds (with margin)
-        if (readoutLeft + 100 > RootGrid.ActualWidth)
-            readoutLeft = _currentX - 110;
-        if (readoutTop + 30 > RootGrid.ActualHeight)
-            readoutTop = _currentY - 40;
+        // If readout would go off-screen right, position it to the left instead
+        var (_, _, screenWidth, screenHeight) = WindowHelper.GetVirtualScreenBounds();
+        if (readoutX + READOUT_ESTIMATED_WIDTH > screenWidth - READOUT_MIN_DISTANCE_FROM_EDGE)
+        {
+            readoutX = Math.Max(0, left - READOUT_ESTIMATED_WIDTH - READOUT_PADDING);
+        }
 
-        DimensionReadout.Margin = new Thickness(readoutLeft, readoutTop, 0, 0);
+        DimensionReadout.Margin = new Thickness(readoutX, readoutY, 0, 0);
     }
 
     /// <summary>
@@ -199,7 +210,17 @@ public sealed partial class SelectorWindow : Window
     {
         var logicalRegion = GetSelectionLogicalRegion();
         if (logicalRegion == null)
+        {
+            Debug.WriteLine("[SelectorWindow] No selection to confirm");
             return;
+        }
+
+        // Validate minimum size
+        if (logicalRegion.Value.Width < MIN_SELECTION_SIZE || logicalRegion.Value.Height < MIN_SELECTION_SIZE)
+        {
+            Debug.WriteLine($"[SelectorWindow] Selection too small: {logicalRegion.Value.Width}x{logicalRegion.Value.Height} (minimum {MIN_SELECTION_SIZE}x{MIN_SELECTION_SIZE})");
+            return;
+        }
 
         // Extract coordinates from logical region
         int logicalX = (int)Math.Round(logicalRegion.Value.X);
