@@ -17,13 +17,23 @@ namespace OverlayHost.Windows;
 /// Borderless, transparent, topmost overlay window covering the entire virtual screen.
 /// Used to display capture region borders and overlay UI.
 /// </summary>
-public sealed partial class FrameOverlayWindow : Window
+public sealed partial class FrameOverlayWindow : Window, IDisposable
 {
     private AppWindow? _appWindow;
     private Region? _currentRegion;
     private OverlaySettings _settings = new(); // Use default settings if not yet synced
     private Compositor? _compositor;
     private SpriteVisual? _borderVisual;
+
+    // Composition objects for border rendering (tracked for proper disposal)
+    private CompositionRoundedRectangleGeometry? _rectangleGeometry;
+    private CompositionSpriteShape? _rectangleShape;
+    private ContainerVisual? _surfaceVisual;
+    private CompositionVisualSurface? _visualSurface;
+    private CompositionSurfaceBrush? _surfaceBrush;
+    private DropShadow? _dropShadow;
+
+    private bool _disposed = false;
 
     /// <summary>
     /// Event raised when user clicks settings button in overlay.
@@ -211,12 +221,23 @@ public sealed partial class FrameOverlayWindow : Window
     /// </summary>
     private void DrawBorderRing()
     {
-        // Dispose existing border visual
-        if (_borderVisual != null)
-        {
-            _borderVisual.Dispose();
-            _borderVisual = null;
-        }
+        // Dispose existing composition objects to prevent memory leaks
+        _rectangleGeometry?.Dispose();
+        _rectangleShape?.Dispose();
+        _surfaceVisual?.Dispose();
+        _visualSurface?.Dispose();
+        _surfaceBrush?.Dispose();
+        _dropShadow?.Dispose();
+        _borderVisual?.Dispose();
+
+        // Clear references
+        _rectangleGeometry = null;
+        _rectangleShape = null;
+        _surfaceVisual = null;
+        _visualSurface = null;
+        _surfaceBrush = null;
+        _dropShadow = null;
+        _borderVisual = null;
 
         // Clear border if no region or compositor
         if (_currentRegion == null || _compositor == null)
@@ -285,8 +306,16 @@ public sealed partial class FrameOverlayWindow : Window
 
         spriteVisual.Shadow = dropShadow;
 
-        // Attach to overlay canvas
+        // Store composition objects for proper disposal
+        _rectangleGeometry = rectangleGeometry;
+        _rectangleShape = rectangleShape;
+        _surfaceVisual = surfaceVisual;
+        _visualSurface = visualSurface;
+        _surfaceBrush = surfaceBrush;
+        _dropShadow = dropShadow;
         _borderVisual = spriteVisual;
+
+        // Attach to overlay canvas
         ElementCompositionPreview.SetElementChildVisual(OverlayCanvas, _borderVisual);
 
         Debug.WriteLine($"[FrameOverlayWindow] Border rendered successfully");
@@ -340,5 +369,38 @@ public sealed partial class FrameOverlayWindow : Window
             Debug.WriteLine($"[FrameOverlayWindow] Failed to parse color '{colorString}': {ex.Message}. Using default cyan.");
             return Color.FromArgb(255, 0, 168, 255); // Default to cyan
         }
+    }
+
+    /// <summary>
+    /// Dispose of composition resources to prevent memory leaks.
+    /// </summary>
+    public void Dispose()
+    {
+        if (_disposed) return;
+        _disposed = true;
+
+        Debug.WriteLine("[FrameOverlayWindow] Disposing composition resources");
+
+        // Dispose composition objects
+        _rectangleGeometry?.Dispose();
+        _rectangleShape?.Dispose();
+        _surfaceVisual?.Dispose();
+        _visualSurface?.Dispose();
+        _surfaceBrush?.Dispose();
+        _dropShadow?.Dispose();
+        _borderVisual?.Dispose();
+
+        // Clear references
+        _rectangleGeometry = null;
+        _rectangleShape = null;
+        _surfaceVisual = null;
+        _visualSurface = null;
+        _surfaceBrush = null;
+        _dropShadow = null;
+        _borderVisual = null;
+
+        // Note: Compositor doesn't need disposal - it's owned by WinUI framework
+
+        Debug.WriteLine("[FrameOverlayWindow] Disposed");
     }
 }

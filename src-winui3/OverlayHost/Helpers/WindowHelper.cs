@@ -19,11 +19,21 @@ public static class WindowHelper
     #endregion
 
     #region Win32 P/Invoke
-    [DllImport("user32.dll")]
-    private static extern IntPtr GetWindowLongPtr(IntPtr hWnd, int nIndex);
+    // Architecture-aware P/Invoke for GetWindowLong/SetWindowLong
+    // On x64, must use GetWindowLongPtr/SetWindowLongPtr with IntPtr return type
+    // On x86, use GetWindowLong/SetWindowLong with int return type
 
-    [DllImport("user32.dll")]
-    private static extern IntPtr SetWindowLongPtr(IntPtr hWnd, int nIndex, IntPtr dwNewLong);
+    [DllImport("user32.dll", EntryPoint = "GetWindowLongPtr", SetLastError = true)]
+    private static extern IntPtr GetWindowLongPtr64(IntPtr hWnd, int nIndex);
+
+    [DllImport("user32.dll", EntryPoint = "GetWindowLong", SetLastError = true)]
+    private static extern int GetWindowLong32(IntPtr hWnd, int nIndex);
+
+    [DllImport("user32.dll", EntryPoint = "SetWindowLongPtr", SetLastError = true)]
+    private static extern IntPtr SetWindowLongPtr64(IntPtr hWnd, int nIndex, IntPtr dwNewLong);
+
+    [DllImport("user32.dll", EntryPoint = "SetWindowLong", SetLastError = true)]
+    private static extern int SetWindowLong32(IntPtr hWnd, int nIndex, int dwNewLong);
 
     [DllImport("user32.dll")]
     private static extern int GetSystemMetrics(int nIndex);
@@ -32,6 +42,28 @@ public static class WindowHelper
     private const int SM_YVIRTUALSCREEN = 77;
     private const int SM_CXVIRTUALSCREEN = 78;
     private const int SM_CYVIRTUALSCREEN = 79;
+
+    /// <summary>
+    /// Architecture-aware wrapper for GetWindowLong/GetWindowLongPtr.
+    /// </summary>
+    private static IntPtr GetWindowLongPtr(IntPtr hWnd, int nIndex)
+    {
+        if (IntPtr.Size == 8) // 64-bit
+            return GetWindowLongPtr64(hWnd, nIndex);
+        else // 32-bit
+            return new IntPtr(GetWindowLong32(hWnd, nIndex));
+    }
+
+    /// <summary>
+    /// Architecture-aware wrapper for SetWindowLong/SetWindowLongPtr.
+    /// </summary>
+    private static IntPtr SetWindowLongPtr(IntPtr hWnd, int nIndex, IntPtr dwNewLong)
+    {
+        if (IntPtr.Size == 8) // 64-bit
+            return SetWindowLongPtr64(hWnd, nIndex, dwNewLong);
+        else // 32-bit
+            return new IntPtr(SetWindowLong32(hWnd, nIndex, dwNewLong.ToInt32()));
+    }
     #endregion
 
     /// <summary>
@@ -53,7 +85,7 @@ public static class WindowHelper
 
         // Add overlay styles: layered (for transparency), transparent (click-through),
         // topmost (always on top), toolwindow (no taskbar button)
-        exStyle = new IntPtr(exStyle.ToInt64() | WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_TOPMOST | WS_EX_TOOLWINDOW);
+        exStyle = new IntPtr(exStyle.ToInt64() | (long)(WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_TOPMOST | WS_EX_TOOLWINDOW));
 
         SetWindowLongPtr(hwnd, GWL_EXSTYLE, exStyle);
     }
@@ -67,7 +99,7 @@ public static class WindowHelper
         IntPtr exStyle = GetWindowLongPtr(hwnd, GWL_EXSTYLE);
 
         // Remove transparent flag to allow interaction
-        exStyle = new IntPtr(exStyle.ToInt64() & ~WS_EX_TRANSPARENT);
+        exStyle = new IntPtr(exStyle.ToInt64() & ~(long)WS_EX_TRANSPARENT);
 
         SetWindowLongPtr(hwnd, GWL_EXSTYLE, exStyle);
     }
@@ -81,7 +113,7 @@ public static class WindowHelper
         IntPtr exStyle = GetWindowLongPtr(hwnd, GWL_EXSTYLE);
 
         // Add transparent flag to pass through clicks
-        exStyle = new IntPtr(exStyle.ToInt64() | WS_EX_TRANSPARENT);
+        exStyle = new IntPtr(exStyle.ToInt64() | (long)WS_EX_TRANSPARENT);
 
         SetWindowLongPtr(hwnd, GWL_EXSTYLE, exStyle);
     }
