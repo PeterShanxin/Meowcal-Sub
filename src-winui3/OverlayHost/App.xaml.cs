@@ -1,13 +1,17 @@
 using Microsoft.UI.Xaml;
 using System;
 using System.Diagnostics;
+using System.Text.Json;
 using OverlayHost.Services;
+using OverlayHost.Windows;
+using OverlayHost.Models;
 
 namespace OverlayHost;
 
 public partial class App : Application
 {
     private IpcService? _ipcService;
+    private FrameOverlayWindow? _overlayWindow;
 
     public App()
     {
@@ -16,25 +20,16 @@ public partial class App : Application
 
     protected override async void OnLaunched(LaunchActivatedEventArgs args)
     {
+        // Create overlay window (initially hidden)
+        _overlayWindow = new FrameOverlayWindow();
+        Debug.WriteLine("[App] Created FrameOverlayWindow");
+
         // Initialize IPC service
         _ipcService = new IpcService();
         _ipcService.ConnectionStateChanged += OnConnectionStateChanged;
         _ipcService.MessageReceived += OnMessageReceived;
 
         await _ipcService.StartAsync();
-
-        // For now, just show a debug window to verify app launches
-        var debugWindow = new Window
-        {
-            Title = "OverlayHost Debug",
-            Content = new Microsoft.UI.Xaml.Controls.TextBlock
-            {
-                Text = "OverlayHost is running. Check debug output for IPC connection status.",
-                HorizontalAlignment = HorizontalAlignment.Center,
-                VerticalAlignment = VerticalAlignment.Center
-            }
-        };
-        debugWindow.Activate();
 
         Debug.WriteLine($"[OverlayHost] App launched at {DateTime.Now}");
     }
@@ -44,9 +39,67 @@ public partial class App : Application
         Debug.WriteLine($"[App] IPC connection state: {(isConnected ? "Connected ✅" : "Disconnected ❌")}");
     }
 
-    private void OnMessageReceived(object? sender, Models.IpcMessage message)
+    private void OnMessageReceived(object? sender, IpcMessage message)
     {
         Debug.WriteLine($"[App] Received message: {message.Type}");
-        // TODO: Route messages to appropriate handlers
+
+        // Route messages via UI thread dispatcher
+        _overlayWindow?.DispatcherQueue.TryEnqueue(() =>
+        {
+            HandleMessage(message);
+        });
+    }
+
+    /// <summary>
+    /// Handle incoming IPC messages and route to appropriate handlers.
+    /// </summary>
+    private void HandleMessage(IpcMessage message)
+    {
+        try
+        {
+            switch (message.Type)
+            {
+                case "Overlay.Show":
+                    Debug.WriteLine("[App] Handling Overlay.Show");
+                    _overlayWindow?.Show();
+                    break;
+
+                case "Overlay.Hide":
+                    Debug.WriteLine("[App] Handling Overlay.Hide");
+                    _overlayWindow?.Hide();
+                    break;
+
+                case "Overlay.SetRegion":
+                    Debug.WriteLine("[App] Handling Overlay.SetRegion");
+                    if (message.Payload != null)
+                    {
+                        var payloadJson = message.Payload.Value.GetRawText();
+                        var region = JsonSerializer.Deserialize<Region>(payloadJson);
+                        _overlayWindow?.SetRegion(region);
+                    }
+                    break;
+
+                case "Settings.Sync":
+                    Debug.WriteLine("[App] Handling Settings.Sync");
+                    if (message.Payload != null)
+                    {
+                        var payloadJson = message.Payload.Value.GetRawText();
+                        var settings = JsonSerializer.Deserialize<OverlaySettings>(payloadJson);
+                        if (settings != null)
+                        {
+                            _overlayWindow?.UpdateSettings(settings);
+                        }
+                    }
+                    break;
+
+                default:
+                    Debug.WriteLine($"[App] Unknown message type: {message.Type}");
+                    break;
+            }
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"[App] Error handling message {message.Type}: {ex.Message}");
+        }
     }
 }
