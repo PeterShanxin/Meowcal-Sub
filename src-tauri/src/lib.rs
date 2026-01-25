@@ -31,6 +31,9 @@ pub mod commands;
 /// HTTP server for browser dev mode
 pub mod http_server;
 
+/// IPC (Inter-Process Communication) with WinUI3 OverlayHost
+pub mod ipc;
+
 // =============================================================================
 // RE-EXPORTS
 // =============================================================================

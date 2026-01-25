@@ -22,6 +22,7 @@ use crate::llm::{
 };
 use crate::ocr::WindowsOcr;
 use crate::overlay;
+use crate::ipc::{IpcMessage, IpcServer, SetRegionPayload, RegionData, SubtitleUpdatePayload};
 use reqwest::Client;
 use serde::Serialize;
 use std::path::PathBuf;
@@ -33,6 +34,19 @@ use tauri_plugin_opener::OpenerExt;
 use tokio::fs;
 use tokio::sync::watch;
 use tracing::{debug, info, warn};
+
+// =============================================================================
+// IPC HELPER
+// =============================================================================
+
+/// Send a message to OverlayHost via IPC
+async fn send_overlay_message(app: &AppHandle, message: IpcMessage) {
+    if let Some(ipc_server) = app.try_state::<Arc<IpcServer>>() {
+        ipc_server.send(message).await;
+    } else {
+        warn!("⚠️ IPC server not initialized, cannot send message");
+    }
+}
 
 // =============================================================================
 // APP STATE
@@ -1027,13 +1041,28 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
         interval_ms, target_language
     );
 
-    // Show the overlay and send the capture region to it
+    // Show the overlay and send the capture region to it (legacy WebView overlay)
     if let Err(e) = overlay::show_overlay(&app) {
         warn!("⚠️ Failed to show overlay: {}", e);
     }
     if let Err(e) = overlay::update_overlay_region(&app, &region) {
         warn!("⚠️ Failed to update overlay region: {}", e);
     }
+
+    // Send messages to WinUI3 OverlayHost
+    send_overlay_message(
+        &app,
+        IpcMessage::new("Overlay.Show")
+    ).await;
+
+    // Send initial region if set
+    let payload = SetRegionPayload {
+        region: RegionData::from(&region),
+    };
+    send_overlay_message(
+        &app,
+        IpcMessage::with_payload("Overlay.SetRegion", payload)
+    ).await;
 
     // Initialize translation backend manager
     let diagnostics = state.translation_diagnostics.clone();
@@ -1502,16 +1531,29 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
                 .as_millis() as u64;
 
             let payload = TranslationPayload {
-                original: current_text,
-                translated,
+                original: current_text.clone(),
+                translated: translated.clone(),
                 backend_used: backend_used.as_str().to_string(),
-                warnings,
+                warnings: warnings.clone(),
                 timestamp,
             };
 
             if let Err(e) = app.emit("translation-update", payload) {
                 warn!("⚠️ Failed to emit event: {}", e);
             }
+
+            // Send subtitle update to WinUI3 OverlayHost
+            let subtitle_payload = SubtitleUpdatePayload {
+                original: current_text,
+                translated,
+                timestamp,
+                backend_used: backend_used.as_str().to_string(),
+            };
+
+            send_overlay_message(
+                &app,
+                IpcMessage::with_payload("Subtitle.Update", subtitle_payload)
+            ).await;
 
             // Wait for next iteration
             tokio::time::sleep(Duration::from_millis(interval_ms as u64)).await;
