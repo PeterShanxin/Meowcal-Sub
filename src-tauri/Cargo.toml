@@ -123,6 +123,10 @@ chrono = "0.4"              # Date/time for per-session log filenames
 # Allows us to use async functions in traits (Rust-specific thing)
 async-trait = "0.1"
 
+# --- IPC (Named Pipes for OverlayHost communication) ---
+uuid = { version = "1.6", features = ["v4", "serde"] }
+interprocess = { version = "2.2", features = ["tokio"] }
+
 # --- HTTP Server (for browser dev mode) ---
 # Axum is a lightweight async web framework for exposing APIs
 axum = "0.8"
