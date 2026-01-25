@@ -1597,7 +1597,7 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
 ///
 /// Called from JavaScript: `await invoke('stop_translation');`
 #[tauri::command]
-pub fn stop_translation(state: State<'_, AppState>, app: AppHandle) -> Result<(), String> {
+pub async fn stop_translation(state: State<'_, AppState>, app: AppHandle) -> Result<(), String> {
     info!("Stopping translation...");
 
     // Send the stop signal
@@ -1618,9 +1618,15 @@ pub fn stop_translation(state: State<'_, AppState>, app: AppHandle) -> Result<()
     // Close the capture session
     capture::close_capture_session();
 
-    // Hide the overlay
+    // Send hide message to WinUI3 OverlayHost
+    send_overlay_message(
+        &app,
+        IpcMessage::new("Overlay.Hide")
+    ).await;
+
+    // Hide legacy WebView overlay (for backward compatibility)
     if let Err(e) = overlay::hide_overlay(&app) {
-        warn!("⚠️ Failed to hide overlay: {}", e);
+        warn!("⚠️ Failed to hide legacy overlay: {}", e);
     }
 
     info!("✅ Translation stopped!");
