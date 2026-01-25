@@ -77,6 +77,13 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
+    "resources": [
+      "resources/OverlayHost.exe",
+      "resources/*.dll"
+    ],
+    "externalBin": [
+      "resources/OverlayHost.exe"
+    ],
     "windows": {
       "certificateThumbprint": null,
       "digestAlgorithm": "sha256",
