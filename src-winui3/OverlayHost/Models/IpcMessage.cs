@@ -95,16 +95,22 @@ public record SubtitleUpdatePayload
 public record SelectorResultPayload
 {
     /// <summary>
-    /// Selected region (null if selection was cancelled)
+    /// Selected region in physical coordinates
     /// </summary>
-    [JsonPropertyName("region")]
-    public Region? Region { get; init; }
+    [JsonPropertyName("regionPhysical")]
+    public required Region RegionPhysical { get; init; }
 
     /// <summary>
-    /// Whether selection was cancelled
+    /// Source monitor ID (optional)
     /// </summary>
-    [JsonPropertyName("cancelled")]
-    public bool Cancelled { get; init; }
+    [JsonPropertyName("sourceMonitor")]
+    public string? SourceMonitor { get; init; }
+
+    /// <summary>
+    /// DPI scale factor
+    /// </summary>
+    [JsonPropertyName("dpi")]
+    public double Dpi { get; init; }
 }
 
 /// <summary>
@@ -112,8 +118,8 @@ public record SelectorResultPayload
 /// </summary>
 public record SettingsSyncPayload
 {
-    [JsonPropertyName("settings")]
-    public required OverlaySettings Settings { get; init; }
+    [JsonPropertyName("overlay")]
+    public required OverlaySettings Overlay { get; init; }
 }
 
 /// <summary>

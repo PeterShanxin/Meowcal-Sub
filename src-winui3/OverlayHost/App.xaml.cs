@@ -102,11 +102,10 @@ public partial class App : Application
                     Debug.WriteLine("[App] Handling Settings.Sync");
                     if (message.Payload != null)
                     {
-                        var payloadJson = message.Payload.Value.GetRawText();
-                        var settings = JsonSerializer.Deserialize<OverlaySettings>(payloadJson);
-                        if (settings != null)
+                        var settingsPayload = message.GetPayload<SettingsSyncPayload>();
+                        if (settingsPayload != null)
                         {
-                            _overlayWindow?.UpdateSettings(settings);
+                            _overlayWindow?.UpdateSettings(settingsPayload.Overlay);
                         }
                     }
                     break;
@@ -164,11 +163,17 @@ public partial class App : Application
                 return;
             }
 
+            // Get DPI scale for the region center point
+            int centerX = region.X + region.Width / 2;
+            int centerY = region.Y + region.Height / 2;
+            double dpiScale = CoordinateConverter.GetDpiScaleForPoint(centerX, centerY);
+
             // Send Selector.Result message with physical coordinates
             var message = IpcMessage.Create("Selector.Result", new SelectorResultPayload
             {
-                Region = region,
-                Cancelled = false
+                RegionPhysical = region,
+                SourceMonitor = null, // TODO: Get actual monitor ID
+                Dpi = dpiScale
             });
 
             await _ipcService.SendMessageAsync(message);
@@ -195,12 +200,11 @@ public partial class App : Application
                 return;
             }
 
-            // Send Selector.Cancelled message
-            var message = IpcMessage.Create("Selector.Cancelled", new SelectorResultPayload
+            // Send Selector.Cancelled message (no payload needed)
+            var message = new IpcMessage
             {
-                Region = null,
-                Cancelled = true
-            });
+                Type = "Selector.Cancelled"
+            };
 
             await _ipcService.SendMessageAsync(message);
             Debug.WriteLine("[App] Sent Selector.Cancelled to backend");

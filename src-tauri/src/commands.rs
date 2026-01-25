@@ -22,7 +22,7 @@ use crate::llm::{
 };
 use crate::ocr::WindowsOcr;
 use crate::overlay;
-use crate::ipc::{IpcMessage, IpcServer, SetRegionPayload, RegionData, SubtitleUpdatePayload};
+use crate::ipc::{IpcMessage, IpcServer, SetRegionPayload, RegionData, SubtitleUpdatePayload, SettingsSyncPayload, OverlaySettingsData};
 use reqwest::Client;
 use serde::Serialize;
 use std::path::PathBuf;
@@ -717,7 +717,20 @@ pub struct SelectorSnapshot {
 ///
 /// Called from JavaScript: `await invoke('open_area_selector');`
 #[tauri::command]
-pub async fn open_area_selector(app: AppHandle, state: State<'_, AppState>) -> Result<(), String> {
+pub async fn open_area_selector(app: AppHandle) -> Result<(), String> {
+    info!("🎯 Opening area selector via OverlayHost");
+
+    send_overlay_message(
+        &app,
+        IpcMessage::new("Region.RequestOpenSelector")
+    ).await;
+
+    Ok(())
+}
+
+/// Legacy area selector (kept for fallback if WinUI3 is not available)
+#[allow(dead_code)]
+async fn open_area_selector_legacy(app: AppHandle, state: State<'_, AppState>) -> Result<(), String> {
     info!("Opening area selector...");
 
     if let Some(window) = app.get_webview_window("selector") {
@@ -1062,6 +1075,18 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
     send_overlay_message(
         &app,
         IpcMessage::with_payload("Overlay.SetRegion", payload)
+    ).await;
+
+    // Send initial settings to overlay
+    let settings_payload = {
+        let config = state.config.lock().unwrap();
+        SettingsSyncPayload {
+            overlay: OverlaySettingsData::from(&config.overlay),
+        }
+    };
+    send_overlay_message(
+        &app,
+        IpcMessage::with_payload("Settings.Sync", settings_payload)
     ).await;
 
     // Initialize translation backend manager
@@ -1544,10 +1569,10 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
 
             // Send subtitle update to WinUI3 OverlayHost
             let subtitle_payload = SubtitleUpdatePayload {
-                original: current_text,
-                translated,
-                timestamp,
-                backend_used: backend_used.as_str().to_string(),
+                text: translated.clone(),
+                source_text: current_text.clone(),
+                timestamp: timestamp.to_string(),
+                backend_used: Some(backend_used.as_str().to_string()),
             };
 
             send_overlay_message(

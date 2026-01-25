@@ -39,6 +39,7 @@ public static class WindowHelper
     private static extern int GetSystemMetrics(int nIndex);
 
     [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool GetCursorPos(out POINT lpPoint);
 
     [StructLayout(LayoutKind.Sequential)]
@@ -144,10 +145,14 @@ public static class WindowHelper
 
     /// <summary>
     /// Get the current cursor position in screen coordinates.
+    /// NOTE: Uses Win32 API as WinRT alternative is not available in WindowsAppSDK 1.6.x.
     /// </summary>
     public static global::Windows.Foundation.Point GetCursorPosition()
     {
-        GetCursorPos(out POINT point);
-        return new global::Windows.Foundation.Point(point.X, point.Y);
+        if (GetCursorPos(out POINT point))
+        {
+            return new global::Windows.Foundation.Point(point.X, point.Y);
+        }
+        return new global::Windows.Foundation.Point(0, 0);
     }
 }

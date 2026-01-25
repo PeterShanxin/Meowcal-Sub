@@ -71,10 +71,11 @@ impl From<&crate::config::CaptureRegion> for RegionData {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SubtitleUpdatePayload {
-    pub original: String,
-    pub translated: String,
-    pub timestamp: u64,
-    pub backend_used: String,
+    pub text: String,
+    pub source_text: String,
+    pub timestamp: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub backend_used: Option<String>,
 }
 
 /// Payload for Settings.Sync
