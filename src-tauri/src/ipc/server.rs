@@ -1,6 +1,5 @@
 use std::io::{BufRead, BufReader, Write};
-use std::sync::Arc;
-use tokio::sync::Mutex;
+use std::sync::{Arc, Mutex};
 use tracing::{debug, error, info, warn};
 
 use super::protocol::IpcMessage;
@@ -63,7 +62,7 @@ impl IpcServer {
 
                     // Store send half for later use
                     {
-                        let mut client = self.client.lock().await;
+                        let mut client = self.client.lock().unwrap();
                         *client = Some(send_half);
                     }
 
@@ -128,18 +127,14 @@ impl IpcServer {
         }
 
         // Clear client connection on disconnect
-        tokio::task::block_in_place(|| {
-            tokio::runtime::Handle::current().block_on(async {
-                let mut client = client_ref.lock().await;
-                *client = None;
-            });
-        });
+        let mut client = client_ref.lock().unwrap();
+        *client = None;
     }
 
     /// Send message to OverlayHost
     #[cfg(windows)]
     pub async fn send(&self, message: IpcMessage) {
-        let mut client = self.client.lock().await;
+        let mut client = self.client.lock().unwrap();
 
         if let Some(send_half) = client.as_mut() {
             let json = match serde_json::to_string(&message) {

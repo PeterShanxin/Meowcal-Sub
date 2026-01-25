@@ -33,11 +33,19 @@ use meowcal_sub::commands::{self, AppState};
 use meowcal_sub::config::load_config;
 use meowcal_sub::http_server;
 use meowcal_sub::ipc::{IpcServer, IpcMessage};
-use std::process::Command;
-use std::sync::Arc;
+use std::process::{Child, Command};
+use std::sync::{Arc, Mutex};
+use std::path::PathBuf;
 
 const LOG_RETENTION_DAYS: u64 = 7;
 const DEFAULT_LOG_FILTER: &str = "meowcal_sub=debug,translation_io=info,tauri=info,axum=info,tower_http=info,hyper=warn,hyper_util=warn,reqwest=warn";
+
+// =============================================================================
+// OVERLAY HOST PROCESS MANAGEMENT
+// =============================================================================
+
+/// Managed state for tracking the OverlayHost child process
+struct OverlayHostProcess(Arc<Mutex<Option<Child>>>);
 
 fn resolve_log_filter() -> EnvFilter {
     let custom = std::env::var("MEOWCAL_LOG_FILTER").ok();
@@ -270,40 +278,56 @@ fn main() {
             }
 
             // --- Spawn OverlayHost.exe ---
-            let overlay_host_path = if cfg!(debug_assertions) {
-                // Development: use debug build
-                std::env::current_exe()
-                    .unwrap()
-                    .parent()
-                    .unwrap()
-                    .parent()
-                    .unwrap()
-                    .parent()
-                    .unwrap()
-                    .join("src-winui3")
-                    .join("OverlayHost")
-                    .join("bin")
-                    .join("Debug")
-                    .join("net9.0-windows10.0.22621.0")
-                    .join("win-x64")
-                    .join("OverlayHost.exe")
-            } else {
-                // Production: OverlayHost.exe should be in same dir
-                std::env::current_exe()
-                    .unwrap()
-                    .parent()
-                    .unwrap()
-                    .join("OverlayHost.exe")
-            };
+            let overlay_host_path_result = (|| -> Result<PathBuf, String> {
+                let exe = std::env::current_exe()
+                    .map_err(|e| format!("Failed to get current exe path: {}", e))?;
 
-            if overlay_host_path.exists() {
-                info!("🚀 Spawning OverlayHost from: {:?}", overlay_host_path);
-                match Command::new(&overlay_host_path).spawn() {
-                    Ok(_) => info!("✅ OverlayHost spawned"),
-                    Err(e) => warn!("⚠️ Failed to spawn OverlayHost: {}", e),
+                let path = if cfg!(debug_assertions) {
+                    // Development: use debug build
+                    exe.parent()
+                        .and_then(|p| p.parent())  // bin/
+                        .and_then(|p| p.parent())  // Debug/
+                        .and_then(|p| p.parent())  // net9.0-windows10.0.22621.0/
+                        .ok_or("Failed to traverse parent directories")?
+                        .join("src-winui3")
+                        .join("OverlayHost")
+                        .join("bin")
+                        .join("Debug")
+                        .join("net9.0-windows10.0.22621.0")
+                        .join("win-x64")
+                        .join("OverlayHost.exe")
+                } else {
+                    // Production: OverlayHost.exe should be in same dir
+                    exe.parent()
+                        .ok_or("Failed to get exe parent directory")?
+                        .join("OverlayHost.exe")
+                };
+
+                Ok(path)
+            })();
+
+            match overlay_host_path_result {
+                Ok(overlay_host_path) if overlay_host_path.exists() => {
+                    info!("🚀 Spawning OverlayHost from: {:?}", overlay_host_path);
+                    match Command::new(&overlay_host_path).spawn() {
+                        Ok(child) => {
+                            info!("✅ OverlayHost spawned (PID: {})", child.id());
+                            app.manage(OverlayHostProcess(Arc::new(Mutex::new(Some(child)))));
+                        }
+                        Err(e) => {
+                            warn!("⚠️ Failed to spawn OverlayHost: {}", e);
+                            app.manage(OverlayHostProcess(Arc::new(Mutex::new(None))));
+                        }
+                    }
                 }
-            } else {
-                warn!("⚠️ OverlayHost.exe not found at {:?}", overlay_host_path);
+                Ok(overlay_host_path) => {
+                    warn!("⚠️ OverlayHost.exe not found at {:?}", overlay_host_path);
+                    app.manage(OverlayHostProcess(Arc::new(Mutex::new(None))));
+                }
+                Err(e) => {
+                    warn!("⚠️ Failed to resolve OverlayHost path: {}", e);
+                    app.manage(OverlayHostProcess(Arc::new(Mutex::new(None))));
+                }
             }
 
             // --- Start IPC server ---
@@ -387,6 +411,17 @@ fn main() {
 
             info!("✅ System tray set up successfully!");
             Ok(())
+        })
+        // Add cleanup on window close
+        .on_window_event(|window, event| {
+            if matches!(event, tauri::WindowEvent::Destroyed) {
+                if let Some(overlay_process) = window.try_state::<OverlayHostProcess>() {
+                    if let Some(mut child) = overlay_process.0.lock().unwrap().take() {
+                        let _ = child.kill();
+                        info!("🛑 Killed OverlayHost process");
+                    }
+                }
+            }
         })
         // Run the app!
         .run(tauri::generate_context!())
