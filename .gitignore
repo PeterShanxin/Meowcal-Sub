@@ -16,6 +16,10 @@ Cargo.lock
 
 # --- Tauri ---
 src-tauri/icons/icon.png.bak
+src-tauri/resources/
+
+# --- WinUI3 OverlayHost build artifacts ---
+nul
 
 # --- Node.js ---
 node_modules/
