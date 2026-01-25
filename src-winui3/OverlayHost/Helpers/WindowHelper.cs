@@ -38,6 +38,16 @@ public static class WindowHelper
     [DllImport("user32.dll")]
     private static extern int GetSystemMetrics(int nIndex);
 
+    [DllImport("user32.dll")]
+    private static extern bool GetCursorPos(out POINT lpPoint);
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct POINT
+    {
+        public int X;
+        public int Y;
+    }
+
     private const int SM_XVIRTUALSCREEN = 76;
     private const int SM_YVIRTUALSCREEN = 77;
     private const int SM_CXVIRTUALSCREEN = 78;
@@ -130,5 +140,14 @@ public static class WindowHelper
         int height = GetSystemMetrics(SM_CYVIRTUALSCREEN);
 
         return (x, y, width, height);
+    }
+
+    /// <summary>
+    /// Get the current cursor position in screen coordinates.
+    /// </summary>
+    public static global::Windows.Foundation.Point GetCursorPosition()
+    {
+        GetCursorPos(out POINT point);
+        return new global::Windows.Foundation.Point(point.X, point.Y);
     }
 }

@@ -35,6 +35,10 @@ public sealed partial class FrameOverlayWindow : Window, IDisposable
 
     private bool _disposed = false;
 
+    // Hover detection for selective click-through behavior
+    private bool _isInteractive = false;
+    private DispatcherTimer? _hoverCheckTimer;
+
     /// <summary>
     /// Event raised when user clicks settings button in overlay.
     /// </summary>
@@ -58,6 +62,9 @@ public sealed partial class FrameOverlayWindow : Window, IDisposable
 
         // Initialize compositor for border rendering
         _compositor = ElementCompositionPreview.GetElementVisual(RootGrid).Compositor;
+
+        // Setup hover detection for selective click-through
+        SetupHoverDetection();
 
         Debug.WriteLine($"[FrameOverlayWindow] Created overlay covering virtual screen: ({x}, {y}, {width}x{height})");
     }
@@ -372,6 +379,90 @@ public sealed partial class FrameOverlayWindow : Window, IDisposable
     }
 
     /// <summary>
+    /// Setup periodic mouse position checking for selective click-through behavior.
+    /// </summary>
+    private void SetupHoverDetection()
+    {
+        // Check mouse position periodically to toggle click-through
+        _hoverCheckTimer = new DispatcherTimer
+        {
+            Interval = TimeSpan.FromMilliseconds(100)
+        };
+        _hoverCheckTimer.Tick += CheckMouseHover;
+        _hoverCheckTimer.Start();
+    }
+
+    /// <summary>
+    /// Check if mouse is over interactive elements and toggle click-through accordingly.
+    /// </summary>
+    private void CheckMouseHover(object? sender, object e)
+    {
+        // Get mouse position in screen coordinates
+        var mousePos = WindowHelper.GetCursorPosition();
+
+        // Check if mouse is over interactive elements
+        bool shouldBeInteractive = IsMouseOverInteractiveElement(mousePos);
+
+        if (shouldBeInteractive != _isInteractive)
+        {
+            _isInteractive = shouldBeInteractive;
+
+            if (_isInteractive)
+            {
+                WindowHelper.MakeInteractive(this);
+                Debug.WriteLine("[FrameOverlay] ✋ Interactive mode");
+            }
+            else
+            {
+                WindowHelper.MakeClickThrough(this);
+                Debug.WriteLine("[FrameOverlay] 👻 Click-through mode");
+            }
+        }
+    }
+
+    /// <summary>
+    /// Check if mouse position is over an interactive element (border or subtitle panel).
+    /// </summary>
+    /// <param name="mousePos">Mouse position in screen coordinates</param>
+    /// <returns>True if mouse is over an interactive element</returns>
+    private bool IsMouseOverInteractiveElement(global::Windows.Foundation.Point mousePos)
+    {
+        // No interactive elements if no region is set
+        if (_currentRegion == null) return false;
+
+        // Border region (with some padding for resize handles)
+        var borderMargin = 10;
+        var borderRect = new global::Windows.Foundation.Rect(
+            _currentRegion.X - borderMargin,
+            _currentRegion.Y - borderMargin,
+            _currentRegion.Width + borderMargin * 2,
+            _currentRegion.Height + borderMargin * 2
+        );
+
+        if (borderRect.Contains(mousePos))
+            return true;
+
+        // Subtitle panel region (only if visible)
+        if (SubtitlePanel.Visibility == Visibility.Visible)
+        {
+            var (screenX, screenY, _, _) = WindowHelper.GetVirtualScreenBounds();
+            var subtitleX = _currentRegion.X;
+            var subtitleY = _currentRegion.Y + _currentRegion.Height + _settings.OffsetY;
+            var subtitleRect = new global::Windows.Foundation.Rect(
+                subtitleX,
+                subtitleY,
+                SubtitlePanel.ActualWidth,
+                SubtitlePanel.ActualHeight
+            );
+
+            if (subtitleRect.Contains(mousePos))
+                return true;
+        }
+
+        return false;
+    }
+
+    /// <summary>
     /// Dispose of composition resources to prevent memory leaks.
     /// </summary>
     public void Dispose()
@@ -380,6 +471,14 @@ public sealed partial class FrameOverlayWindow : Window, IDisposable
         _disposed = true;
 
         Debug.WriteLine("[FrameOverlayWindow] Disposing composition resources");
+
+        // Stop hover detection timer
+        if (_hoverCheckTimer != null)
+        {
+            _hoverCheckTimer.Stop();
+            _hoverCheckTimer.Tick -= CheckMouseHover;
+            _hoverCheckTimer = null;
+        }
 
         // Dispose composition objects
         _rectangleGeometry?.Dispose();
