@@ -39,6 +39,11 @@ public sealed partial class FrameOverlayWindow : Window, IDisposable
     private bool _isInteractive = false;
     private DispatcherTimer? _hoverCheckTimer;
 
+    // Auto-fade behavior
+    private DispatcherTimer? _autoFadeTimer;
+    private bool _isFaded = false;
+    private DateTime _lastInteractionTime = DateTime.Now;
+
     /// <summary>
     /// Event raised when user clicks settings button in overlay.
     /// </summary>
@@ -65,6 +70,9 @@ public sealed partial class FrameOverlayWindow : Window, IDisposable
 
         // Setup hover detection for selective click-through
         SetupHoverDetection();
+
+        // Setup auto-fade behavior
+        SetupAutoFade();
 
         Debug.WriteLine($"[FrameOverlayWindow] Created overlay covering virtual screen: ({x}, {y}, {width}x{height})");
     }
@@ -155,6 +163,8 @@ public sealed partial class FrameOverlayWindow : Window, IDisposable
     /// <param name="backendUsed">Translation backend identifier (currently unused, reserved for future backend badge)</param>
     public void UpdateSubtitle(string original, string translated, string backendUsed)
     {
+        _lastInteractionTime = DateTime.Now; // Reset fade timer on new subtitle
+
         Debug.WriteLine($"[FrameOverlayWindow] UpdateSubtitle: translated='{translated}', backend={backendUsed}");
 
         // Set subtitle text and show panel
@@ -393,15 +403,107 @@ public sealed partial class FrameOverlayWindow : Window, IDisposable
     }
 
     /// <summary>
+    /// Setup auto-fade timer to fade overlay to 30% opacity after inactivity.
+    /// </summary>
+    private void SetupAutoFade()
+    {
+        _autoFadeTimer = new DispatcherTimer
+        {
+            Interval = TimeSpan.FromMilliseconds(500) // Check every 500ms
+        };
+        _autoFadeTimer.Tick += CheckAutoFade;
+        _autoFadeTimer.Start();
+    }
+
+    /// <summary>
+    /// Check if overlay should fade based on idle time.
+    /// </summary>
+    private void CheckAutoFade(object? sender, object e)
+    {
+        var idleTime = DateTime.Now - _lastInteractionTime;
+        var timeoutMs = _settings.AutoFadeTimeoutMs;
+
+        if (idleTime.TotalMilliseconds > timeoutMs && !_isFaded)
+        {
+            // Fade out
+            FadeOut();
+        }
+        else if (idleTime.TotalMilliseconds <= timeoutMs && _isFaded)
+        {
+            // Fade in
+            FadeIn();
+        }
+    }
+
+    /// <summary>
+    /// Fade overlay to 30% opacity with smooth animation.
+    /// </summary>
+    private void FadeOut()
+    {
+        _isFaded = true;
+
+        // Animate opacity to 0.3
+        var storyboard = new Microsoft.UI.Xaml.Media.Animation.Storyboard();
+        var fadeAnimation = new Microsoft.UI.Xaml.Media.Animation.DoubleAnimation
+        {
+            To = 0.3,
+            Duration = new Duration(TimeSpan.FromMilliseconds(300)),
+            EasingFunction = new Microsoft.UI.Xaml.Media.Animation.CubicEase { EasingMode = Microsoft.UI.Xaml.Media.Animation.EasingMode.EaseOut }
+        };
+
+        Microsoft.UI.Xaml.Media.Animation.Storyboard.SetTarget(fadeAnimation, RootGrid);
+        Microsoft.UI.Xaml.Media.Animation.Storyboard.SetTargetProperty(fadeAnimation, "Opacity");
+        storyboard.Children.Add(fadeAnimation);
+        storyboard.Begin();
+
+        Debug.WriteLine("[FrameOverlay] 🌑 Faded out");
+    }
+
+    /// <summary>
+    /// Restore overlay to full opacity with smooth animation.
+    /// </summary>
+    private void FadeIn()
+    {
+        _isFaded = false;
+
+        // Animate opacity to 1.0
+        var storyboard = new Microsoft.UI.Xaml.Media.Animation.Storyboard();
+        var fadeAnimation = new Microsoft.UI.Xaml.Media.Animation.DoubleAnimation
+        {
+            To = 1.0,
+            Duration = new Duration(TimeSpan.FromMilliseconds(200)),
+            EasingFunction = new Microsoft.UI.Xaml.Media.Animation.CubicEase { EasingMode = Microsoft.UI.Xaml.Media.Animation.EasingMode.EaseOut }
+        };
+
+        Microsoft.UI.Xaml.Media.Animation.Storyboard.SetTarget(fadeAnimation, RootGrid);
+        Microsoft.UI.Xaml.Media.Animation.Storyboard.SetTargetProperty(fadeAnimation, "Opacity");
+        storyboard.Children.Add(fadeAnimation);
+        storyboard.Begin();
+
+        Debug.WriteLine("[FrameOverlay] 🌕 Faded in");
+    }
+
+    /// <summary>
     /// Check if mouse is over interactive elements and toggle click-through accordingly.
     /// </summary>
     private void CheckMouseHover(object? sender, object e)
     {
         // Get mouse position in screen coordinates
+        // NOTE: Spec violation acknowledged - using Win32 GetCursorPos instead of WinRT API
+        // The specified WinRT API (InputPointerSource.GetForIsland) does not exist in WindowsAppSDK 1.6.x:
+        // - ContentIslandEnvironment.AppWindowId returns WindowId, not ContentIsland
+        // - No MainContentIsland property exists on ContentIslandEnvironment
+        // - PointerPoint.GetCurrentPoint is not a static method
+        // Win32 API is the only reliable cross-platform way to get cursor position in WinUI 3.
         var mousePos = WindowHelper.GetCursorPosition();
 
         // Check if mouse is over interactive elements
         bool shouldBeInteractive = IsMouseOverInteractiveElement(mousePos);
+
+        if (shouldBeInteractive)
+        {
+            _lastInteractionTime = DateTime.Now; // Reset fade timer on hover
+        }
 
         if (shouldBeInteractive != _isInteractive)
         {
@@ -478,6 +580,14 @@ public sealed partial class FrameOverlayWindow : Window, IDisposable
             _hoverCheckTimer.Stop();
             _hoverCheckTimer.Tick -= CheckMouseHover;
             _hoverCheckTimer = null;
+        }
+
+        // Stop auto-fade timer
+        if (_autoFadeTimer != null)
+        {
+            _autoFadeTimer.Stop();
+            _autoFadeTimer.Tick -= CheckAutoFade;
+            _autoFadeTimer = null;
         }
 
         // Dispose composition objects
