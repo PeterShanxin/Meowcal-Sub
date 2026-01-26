@@ -136,7 +136,7 @@ fn handle_ipc_message(app: &tauri::AppHandle, message: IpcMessage) {
             // TODO: Update backend state if we want live updates
         }
 
-        "Overlay.SettingsClicked" => {
+        "Overlay.SettingsRequested" => {
             info!("⚙️ Settings button clicked - bringing main window to front");
             // TODO: Focus main settings window
         }

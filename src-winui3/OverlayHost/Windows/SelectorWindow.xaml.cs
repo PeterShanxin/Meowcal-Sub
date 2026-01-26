@@ -36,6 +36,8 @@ public sealed partial class SelectorWindow : Window
 
     // Window management
     private AppWindow? _appWindow;
+    private int _virtualScreenX;
+    private int _virtualScreenY;
 
     // Events
     public event EventHandler<Region>? SelectionConfirmed;
@@ -55,6 +57,8 @@ public sealed partial class SelectorWindow : Window
 
         // Position window to cover entire virtual screen
         var (x, y, width, height) = WindowHelper.GetVirtualScreenBounds();
+        _virtualScreenX = x;
+        _virtualScreenY = y;
         _appWindow.MoveAndResize(new RectInt32(x, y, width, height));
 
         // Make window topmost but interactive (not click-through)
@@ -228,13 +232,20 @@ public sealed partial class SelectorWindow : Window
         int logicalWidth = (int)Math.Round(logicalRegion.Value.Width);
         int logicalHeight = (int)Math.Round(logicalRegion.Value.Height);
 
+        // Add virtual screen origin offset (for multi-monitor setups)
+        // The selection coordinates are window-relative, but the window is positioned
+        // at the virtual screen origin, which may be negative (e.g., left monitor at -1920)
+        logicalX += _virtualScreenX;
+        logicalY += _virtualScreenY;
+
         // Convert to physical pixels (screen capture coordinates)
         var physicalRegion = CoordinateConverter.LogicalToPhysical(
             logicalX, logicalY, logicalWidth, logicalHeight
         );
 
         Debug.WriteLine($"[SelectorWindow] Confirmed selection:");
-        Debug.WriteLine($"  Logical: ({logicalX}, {logicalY}) {logicalWidth}x{logicalHeight}");
+        Debug.WriteLine($"  Window-relative logical: ({logicalX - _virtualScreenX}, {logicalY - _virtualScreenY}) {logicalWidth}x{logicalHeight}");
+        Debug.WriteLine($"  Screen-space logical: ({logicalX}, {logicalY}) {logicalWidth}x{logicalHeight}");
         Debug.WriteLine($"  Physical: ({physicalRegion.X}, {physicalRegion.Y}) {physicalRegion.Width}x{physicalRegion.Height}");
 
         // Raise event with physical coordinates
