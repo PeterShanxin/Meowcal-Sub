@@ -4,6 +4,7 @@
 
 # --- Personal/Development ---
 todo/
+.worktrees/
 .claude/settings.local.json
 
 # --- Rust / Cargo ---
