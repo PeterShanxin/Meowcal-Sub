@@ -47,6 +47,17 @@ const DEFAULT_LOG_FILTER: &str = "meowcal_sub=debug,translation_io=info,tauri=in
 /// Managed state for tracking the OverlayHost child process
 struct OverlayHostProcess(Arc<Mutex<Option<Child>>>);
 
+/// Get the appropriate runtime identifier for the current architecture.
+/// Used to locate OverlayHost.exe in the correct architecture-specific folder.
+#[allow(dead_code)]
+fn get_runtime_id() -> &'static str {
+    if cfg!(target_arch = "aarch64") {
+        "win-arm64"
+    } else {
+        "win-x64"
+    }
+}
+
 fn resolve_log_filter() -> EnvFilter {
     let custom = std::env::var("MEOWCAL_LOG_FILTER").ok();
     let rust_log = std::env::var("RUST_LOG").ok();
@@ -283,21 +294,16 @@ fn main() {
                     .map_err(|e| format!("Failed to get current exe path: {}", e))?;
 
                 let path = if cfg!(debug_assertions) {
-                    // Development: use debug build
-                    exe.parent()
-                        .and_then(|p| p.parent())  // bin/
-                        .and_then(|p| p.parent())  // Debug/
-                        .and_then(|p| p.parent())  // net9.0-windows10.0.22621.0/
-                        .ok_or("Failed to traverse parent directories")?
-                        .join("src-winui3")
-                        .join("OverlayHost")
-                        .join("bin")
-                        .join("Debug")
-                        .join("net9.0-windows10.0.22621.0")
-                        .join("win-x64")
+                    // Development: use resources folder in src-tauri/ which is populated
+                    // by build-overlayhost.ps1. Use current_dir since CARGO_TARGET_DIR
+                    // may be outside the project directory.
+                    std::env::current_dir()
+                        .map_err(|e| format!("Failed to get current directory: {}", e))?
+                        .join("src-tauri")
+                        .join("resources")
                         .join("OverlayHost.exe")
                 } else {
-                    // Production: OverlayHost.exe should be in same dir
+                    // Production: OverlayHost.exe should be in same dir (bundled by Tauri)
                     exe.parent()
                         .ok_or("Failed to get exe parent directory")?
                         .join("OverlayHost.exe")
@@ -339,7 +345,7 @@ fn main() {
             let ipc_server = Arc::new(IpcServer::new(ipc_handler));
             let ipc_server_clone = ipc_server.clone();
 
-            tokio::spawn(async move {
+            tauri::async_runtime::spawn(async move {
                 ipc_server_clone.start().await;
             });
 

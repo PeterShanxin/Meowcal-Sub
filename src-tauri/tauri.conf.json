@@ -79,10 +79,8 @@
     ],
     "resources": [
       "resources/OverlayHost.exe",
-      "resources/*.dll"
-    ],
-    "externalBin": [
-      "resources/OverlayHost.exe"
+      "resources/*.dll",
+      "resources/*.pri"
     ],
     "windows": {
       "certificateThumbprint": null,
