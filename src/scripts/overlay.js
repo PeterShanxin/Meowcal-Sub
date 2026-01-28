@@ -659,6 +659,13 @@ async function setupEventListeners(elements) {
                 captureFrame.classList.remove('faded');
                 subtitleContainer.classList.add('hidden');
                 subtitleContainer.classList.remove('visible');
+
+                // Reset cached subtitle text so restarting translation shows the first line even
+                // if it's identical to the previous session.
+                overlayState.currentText = '';
+                if (subtitleText) {
+                    subtitleText.textContent = '';
+                }
                 scheduleWindowClipUpdate();
 
                 // Clear fade timer

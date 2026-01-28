@@ -58,6 +58,17 @@ fn get_runtime_id() -> &'static str {
     }
 }
 
+fn env_truthy(name: &str) -> bool {
+    std::env::var(name)
+        .map(|v| {
+            matches!(
+                v.trim().to_ascii_lowercase().as_str(),
+                "1" | "true" | "yes" | "on"
+            )
+        })
+        .unwrap_or(false)
+}
+
 fn resolve_log_filter() -> EnvFilter {
     let custom = std::env::var("MEOWCAL_LOG_FILTER").ok();
     let rust_log = std::env::var("RUST_LOG").ok();
@@ -288,78 +299,92 @@ fn main() {
                 }
             }
 
-            // --- Spawn OverlayHost.exe ---
-            let mut overlay_candidates: Vec<PathBuf> = Vec::new();
+            // --- Spawn OverlayHost.exe + start IPC server (WinUI features) ---
+            //
+            // Premium legacy selector/overlay is the default now. The WinUI OverlayHost can still be
+            // enabled for experimentation via env vars.
+            let use_winui_selector = env_truthy("MEOWCAL_USE_WINUI_SELECTOR");
+            let use_winui_overlay = env_truthy("MEOWCAL_USE_WINUI_OVERLAY");
+            let should_spawn_overlay_host = use_winui_selector || use_winui_overlay;
 
-            if let Ok(resource_dir) = app.path().resource_dir() {
-                overlay_candidates.push(resource_dir.join("OverlayHost.exe"));
-            }
+            if should_spawn_overlay_host {
+                let mut overlay_candidates: Vec<PathBuf> = Vec::new();
 
-            if let Ok(current_dir) = std::env::current_dir() {
-                if current_dir
-                    .file_name()
-                    .and_then(|name| name.to_str())
-                    .is_some_and(|name| name.eq_ignore_ascii_case("src-tauri"))
-                {
-                    overlay_candidates.push(current_dir.join("resources").join("OverlayHost.exe"));
+                if let Ok(resource_dir) = app.path().resource_dir() {
+                    overlay_candidates.push(resource_dir.join("OverlayHost.exe"));
                 }
-                overlay_candidates.push(
-                    current_dir
-                        .join("src-tauri")
-                        .join("resources")
-                        .join("OverlayHost.exe"),
-                );
-            }
 
-            if let Ok(exe) = std::env::current_exe() {
-                if let Some(parent) = exe.parent() {
-                    overlay_candidates.push(parent.join("OverlayHost.exe"));
+                if let Ok(current_dir) = std::env::current_dir() {
+                    if current_dir
+                        .file_name()
+                        .and_then(|name| name.to_str())
+                        .is_some_and(|name| name.eq_ignore_ascii_case("src-tauri"))
+                    {
+                        overlay_candidates.push(current_dir.join("resources").join("OverlayHost.exe"));
+                    }
+                    overlay_candidates.push(
+                        current_dir
+                            .join("src-tauri")
+                            .join("resources")
+                            .join("OverlayHost.exe"),
+                    );
                 }
-            }
 
-            let overlay_host_path = overlay_candidates
-                .iter()
-                .find(|candidate| candidate.exists())
-                .cloned();
-
-            match overlay_host_path {
-                Some(overlay_host_path) => {
-                    info!("🚀 Spawning OverlayHost from: {:?}", overlay_host_path);
-                    match Command::new(&overlay_host_path).spawn() {
-                        Ok(child) => {
-                            info!("✅ OverlayHost spawned (PID: {})", child.id());
-                            app.manage(OverlayHostProcess(Arc::new(Mutex::new(Some(child)))));
-                        }
-                        Err(e) => {
-                            warn!("⚠️ Failed to spawn OverlayHost: {}", e);
-                            app.manage(OverlayHostProcess(Arc::new(Mutex::new(None))));
-                        }
+                if let Ok(exe) = std::env::current_exe() {
+                    if let Some(parent) = exe.parent() {
+                        overlay_candidates.push(parent.join("OverlayHost.exe"));
                     }
                 }
-                None => {
-                    warn!(
-                        "⚠️ OverlayHost.exe not found. Tried: {:?}",
-                        overlay_candidates
-                    );
-                    app.manage(OverlayHostProcess(Arc::new(Mutex::new(None))));
+
+                let overlay_host_path = overlay_candidates
+                    .iter()
+                    .find(|candidate| candidate.exists())
+                    .cloned();
+
+                match overlay_host_path {
+                    Some(overlay_host_path) => {
+                        info!("🚀 Spawning OverlayHost from: {:?}", overlay_host_path);
+                        match Command::new(&overlay_host_path).spawn() {
+                            Ok(child) => {
+                                info!("✅ OverlayHost spawned (PID: {})", child.id());
+                                app.manage(OverlayHostProcess(Arc::new(Mutex::new(Some(child)))));
+                            }
+                            Err(e) => {
+                                warn!("⚠️ Failed to spawn OverlayHost: {}", e);
+                                app.manage(OverlayHostProcess(Arc::new(Mutex::new(None))));
+                            }
+                        }
+                    }
+                    None => {
+                        warn!(
+                            "⚠️ OverlayHost.exe not found. Tried: {:?}",
+                            overlay_candidates
+                        );
+                        app.manage(OverlayHostProcess(Arc::new(Mutex::new(None))));
+                    }
                 }
+
+                // --- Start IPC server ---
+                let app_handle = app.handle().clone();
+                let ipc_handler = Arc::new(move |message: IpcMessage| {
+                    handle_ipc_message(&app_handle, message);
+                });
+
+                let ipc_server = Arc::new(IpcServer::new(ipc_handler));
+                let ipc_server_clone = ipc_server.clone();
+
+                tauri::async_runtime::spawn(async move {
+                    ipc_server_clone.start().await;
+                });
+
+                // Store IPC server in app state
+                app.manage(ipc_server);
+            } else {
+                info!(
+                    "Skipping OverlayHost + IPC server (premium legacy). Set MEOWCAL_USE_WINUI_SELECTOR=1 or MEOWCAL_USE_WINUI_OVERLAY=1 to enable."
+                );
+                app.manage(OverlayHostProcess(Arc::new(Mutex::new(None))));
             }
-
-            // --- Start IPC server ---
-            let app_handle = app.handle().clone();
-            let ipc_handler = Arc::new(move |message: IpcMessage| {
-                handle_ipc_message(&app_handle, message);
-            });
-
-            let ipc_server = Arc::new(IpcServer::new(ipc_handler));
-            let ipc_server_clone = ipc_server.clone();
-
-            tauri::async_runtime::spawn(async move {
-                ipc_server_clone.start().await;
-            });
-
-            // Store IPC server in app state
-            app.manage(ipc_server);
 
             // Create menu items for the tray
             let show_item = MenuItem::with_id(app, "show", "Show Window", true, None::<&str>)?;
