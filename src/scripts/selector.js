@@ -468,20 +468,49 @@ async function confirmSelection() {
         console.warn('Failed to read scale factor, defaulting to 1:', e);
     }
 
+    // The selector tracks the region in screen coordinates (MouseEvent.screenX/Y), which matches
+    // what the backend capture expects (logical/CSS pixels + a DPI scale factor).
+    //
+    // Add a small padding so OCR isn't overly sensitive to "tight" selections.
+    const winLeft = Math.round(window.screenX || 0);
+    const winTop = Math.round(window.screenY || 0);
+    const winRight = winLeft + Math.round(window.innerWidth || 0);
+    const winBottom = winTop + Math.round(window.innerHeight || 0);
+
+    const rawX = Math.round(state.region.x);
+    const rawY = Math.round(state.region.y);
+    const rawW = Math.round(state.region.width);
+    const rawH = Math.round(state.region.height);
+
+    let x1 = rawX;
+    let y1 = rawY;
+    let x2 = rawX + Math.max(1, rawW);
+    let y2 = rawY + Math.max(1, rawH);
+
+    const padX = 8;
+    const padY = 10;
+    x1 -= padX;
+    y1 -= padY;
+    x2 += padX;
+    y2 += padY;
+
+    // Clamp to selector window bounds (screen coords).
+    x1 = Math.max(winLeft, x1);
+    y1 = Math.max(winTop, y1);
+    x2 = Math.min(winRight, x2);
+    y2 = Math.min(winBottom, y2);
+
+    // Clamp to non-negative for common single-monitor configs (Graphics Capture validation).
+    x1 = Math.max(0, x1);
+    y1 = Math.max(0, y1);
+
     const regionData = {
-        // Clamp to window bounds to avoid rounding pushing us slightly out-of-range
-        // (e.g. x = -1) which breaks Graphics Capture validation on the Rust side.
-        x: Math.max(0, Math.round(state.region.x)),
-        y: Math.max(0, Math.round(state.region.y)),
-        width: Math.max(1, Math.round(state.region.width)),
-        height: Math.max(1, Math.round(state.region.height)),
+        x: x1,
+        y: y1,
+        width: Math.max(1, x2 - x1),
+        height: Math.max(1, y2 - y1),
         scaleFactor: scaleFactor,
     };
-
-    // Ensure the region doesn't exceed the selector window bounds.
-    // This helps keep the capture region within screen limits after DPI scaling.
-    regionData.width = Math.max(1, Math.min(regionData.width, window.innerWidth - regionData.x));
-    regionData.height = Math.max(1, Math.min(regionData.height, window.innerHeight - regionData.y));
 
     console.log('Confirming region:', regionData);
 
