@@ -39,8 +39,25 @@ use tracing::{debug, info, warn};
 // IPC HELPER
 // =============================================================================
 
+fn env_truthy(name: &str) -> bool {
+    std::env::var(name)
+        .map(|v| {
+            matches!(
+                v.trim().to_ascii_lowercase().as_str(),
+                "1" | "true" | "yes" | "on"
+            )
+        })
+        .unwrap_or(false)
+}
+
 /// Send a message to OverlayHost via IPC
 async fn send_overlay_message(app: &AppHandle, message: IpcMessage) {
+    // Premium legacy is the default. The WinUI overlay is still experimental and can be
+    // opaque/black on some systems, so keep it opt-in for now.
+    if !env_truthy("MEOWCAL_USE_WINUI_OVERLAY") {
+        return;
+    }
+
     if let Some(ipc_server) = app.try_state::<Arc<IpcServer>>() {
         ipc_server.send(message).await;
     } else {
@@ -737,14 +754,7 @@ pub async fn open_area_selector(app: AppHandle, state: State<'_, AppState>) -> R
     // desktop-snapshot background and correct DPI mapping.
     //
     // WinUI selector is kept as an opt-in experiment for future work.
-    let prefer_winui = std::env::var("MEOWCAL_USE_WINUI_SELECTOR")
-        .map(|v| {
-            matches!(
-                v.trim().to_ascii_lowercase().as_str(),
-                "1" | "true" | "yes" | "on"
-            )
-        })
-        .unwrap_or(false);
+    let prefer_winui = env_truthy("MEOWCAL_USE_WINUI_SELECTOR");
 
     if prefer_winui {
         info!("🎯 Opening area selector via OverlayHost (opt-in)");
