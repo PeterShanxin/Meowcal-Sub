@@ -24,9 +24,14 @@ npx tauri build
 
 **Rust commands** (run from `src-tauri/`):
 ```powershell
-cargo test      # Run tests
-cargo clippy    # Lint
-cargo fmt       # Format
+cargo test                          # Run all tests (unit + integration)
+cargo test --lib                    # Unit tests only
+cargo test --test integration_ipc   # Integration tests only
+cargo test config::tests            # Run tests in a specific module
+cargo test --lib -- --nocapture     # Show println/tracing output
+cargo clippy -- -D warnings         # Lint (CI treats warnings as errors)
+cargo fmt --check                   # Check formatting (CI runs this)
+cargo fmt                           # Auto-format
 ```
 
 **Environment Variables:**
@@ -34,11 +39,18 @@ cargo fmt       # Format
 - `MEOWCAL_LOG_DIR` - Override log directory (default: `%APPDATA%\com.meowcal.sub\logs`)
 - `MEOWCAL_LOG_FILTER` or `RUST_LOG` - Override log filter (default: `meowcal_sub=debug,translation_io=info,tauri=info,axum=info`)
 
-**Logs:**
-- Location: `%APPDATA%\com.meowcal.sub\logs\meowcal-sub_<timestamp>.log`
-- Format: Per-session log files with full timestamp (e.g., `meowcal-sub_2025-01-23_14-30-45.log`)
-- Retention: 7 days (auto-cleanup on startup)
-- Level: DEBUG for meowcal_sub, INFO for most dependencies
+**Logs:** `%APPDATA%\com.meowcal.sub\logs\meowcal-sub_<timestamp>.log` — per-session files, 7-day retention, DEBUG for meowcal_sub / INFO for dependencies.
+
+## CI Pipeline
+
+GitHub Actions workflow (`.github/workflows/test.yml`) runs on every PR and push to `main`. Both jobs use `windows-latest` (required by Windows API dependencies).
+
+| Job | What it runs |
+|-----|-------------|
+| **Lint & Format** | `cargo fmt --check` + `cargo clippy -- -D warnings` |
+| **Tests** | `cargo test --lib` + `cargo test --test integration_ipc` |
+
+A GitHub ruleset enforces that both checks must pass before a PR can merge to `main`. Repo admins can bypass for direct pushes.
 
 ## Browser Dev Mode (for AI Agents)
 
@@ -123,54 +135,19 @@ Uses vanilla JS with no npm dependencies. All Tauri IPC goes through `tauri-brid
 
 ## Coding Conventions
 
-- **Logging**: Use `tracing` crate (`info!`, `debug!`, `warn!`) - logs to `%APPDATA%\\com.meowcal.sub\\logs\\meowcal-sub_<timestamp>.log` (override with `MEOWCAL_LOG_DIR`)
+- **Logging**: Use `tracing` crate (`info!`, `debug!`, `warn!`)
 - **Comments**: Heavy inline comments for beginner-friendliness
 - **Errors**: Use `thiserror` for custom error types
 - **Async**: `tokio` runtime for async operations
-- **Frontend IPC**: `window.__TAURI__` API, no npm dependencies
-
-## Claude Code Skills & Superpowers
-
-**Built-in Superpowers** (invoked automatically by Claude):
-- `brainstorming` - Explores requirements before implementation
-- `writing-plans` - Creates implementation plans
-- `systematic-debugging` - Bug diagnosis and fixes
-- `test-driven-development` - TDD workflow
-- `requesting-code-review` - Pre-merge verification
-- `receiving-code-review` - Handle review feedback
-- `verification-before-completion` - Pre-commit verification
-- `executing-plans` - Execute implementation plans
-- `using-git-worktrees` - Isolated workspace management
-
-**Custom Skills** (available in `.claude/skills/`):
-
-| Command | Purpose | Source |
-|---------|---------|--------|
-| `/ui` | UI spec & image generation prompts | Custom |
-| `/pdf` | PDF manipulation, form extraction, document generation | [Anthropic Skills](https://github.com/anthropics/skills) |
-| `/docx` | Word document creation and editing | [Anthropic Skills](https://github.com/anthropics/skills) |
-| `/webapp-testing` | Web app testing with Playwright (useful for browser dev mode) | [Anthropic Skills](https://github.com/anthropics/skills) |
-| `/mcp-builder` | Create MCP servers to integrate external services | [Anthropic Skills](https://github.com/anthropics/skills) |
-| `/skill-creator` | Create new custom skills | [Anthropic Skills](https://github.com/anthropics/skills) |
-
-Each skill is a subdirectory containing `SKILL.md` with the skill definition.
+- **Frontend IPC**: All calls go through `tauri-bridge.js`, no npm dependencies
 
 ## Debugging
 
-- **Backend logs**: `%APPDATA%\\com.meowcal.sub\\logs\\meowcal-sub_<timestamp>.log` (DEBUG level; override with `MEOWCAL_LOG_DIR`)
+- **Backend logs**: See Logs entry under Build & Development Commands
 - **Frontend logs**: Browser DevTools (Ctrl+Shift+I in dev mode)
-- **Translation diagnostics**: `get_translation_diagnostics` command shows backend availability
+- **Translation diagnostics**: `get_translation_diagnostics` Tauri command shows backend availability
 
 Common error codes: `not_supported`, `not_ready`, `not_available`, `timeout`, `backend_not_registered`
-
-## Key Dependencies
-
-- `tauri` v2 with `tray-icon` feature
-- `windows` v0.61 (WinRT/Win32 bindings)
-- `tokio` v1 (async runtime)
-- `reqwest` with native-tls (HTTP client)
-- `axum` + `tower-http` (HTTP server for browser dev mode)
-- `tracing` + `tracing-appender` (logging)
 
 ## Configuration
 
