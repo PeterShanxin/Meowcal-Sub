@@ -25,16 +25,27 @@ use tauri::{
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
     Manager, PhysicalPosition, PhysicalSize,
 };
-use tracing::info;
+use tracing::{info, warn};
 use tracing_subscriber::{EnvFilter, FmtSubscriber};
 
 // Import our custom modules
 use meowcal_sub::commands::{self, AppState};
 use meowcal_sub::config::load_config;
 use meowcal_sub::http_server;
+use meowcal_sub::ipc::{IpcServer, IpcMessage};
+use std::process::{Child, Command};
+use std::sync::{Arc, Mutex};
+use std::path::PathBuf;
 
 const LOG_RETENTION_DAYS: u64 = 7;
 const DEFAULT_LOG_FILTER: &str = "meowcal_sub=debug,translation_io=info,tauri=info,axum=info,tower_http=info,hyper=warn,hyper_util=warn,reqwest=warn";
+
+// =============================================================================
+// OVERLAY HOST PROCESS MANAGEMENT
+// =============================================================================
+
+/// Managed state for tracking the OverlayHost child process
+struct OverlayHostProcess(Arc<Mutex<Option<Child>>>);
 
 fn resolve_log_filter() -> EnvFilter {
     let custom = std::env::var("MEOWCAL_LOG_FILTER").ok();
@@ -72,6 +83,68 @@ fn resolve_log_dir() -> std::path::PathBuf {
     }
 
     std::path::PathBuf::from("logs")
+}
+
+// =============================================================================
+// IPC MESSAGE HANDLER
+// =============================================================================
+
+/// Handle IPC messages from OverlayHost
+fn handle_ipc_message(app: &tauri::AppHandle, message: IpcMessage) {
+    info!("📨 IPC message received: {}", message.message_type);
+
+    match message.message_type.as_str() {
+        "Selector.Result" => {
+            // Parse selector result and update capture region
+            if let Some(payload) = message.payload {
+                if let Ok(result) = serde_json::from_value::<meowcal_sub::ipc::SelectorResultPayload>(payload) {
+                    info!("✅ Selector result: ({},{}) {}x{} @ {}% DPI",
+                        result.region_physical.x,
+                        result.region_physical.y,
+                        result.region_physical.width,
+                        result.region_physical.height,
+                        (result.dpi / 96.0) * 100.0
+                    );
+
+                    // Update backend state with new region
+                    let state: tauri::State<AppState> = app.state();
+                    let new_region = meowcal_sub::config::CaptureRegion {
+                        x: result.region_physical.x,
+                        y: result.region_physical.y,
+                        width: result.region_physical.width,
+                        height: result.region_physical.height,
+                    };
+
+                    *state.capture_region.lock().unwrap() = Some(new_region.clone());
+
+                    // Save to config
+                    {
+                        let mut config = state.config.lock().unwrap();
+                        config.last_capture_region = Some(new_region);
+                        let _ = meowcal_sub::config::save_config(app, &config);
+                    }
+                }
+            }
+        }
+
+        "Selector.Cancelled" => {
+            info!("❌ Area selection cancelled");
+        }
+
+        "Region.Updated" => {
+            info!("📍 Region updated by user (drag/resize)");
+            // TODO: Update backend state if we want live updates
+        }
+
+        "Overlay.SettingsClicked" | "Overlay.SettingsRequested" => {
+            info!("⚙️ Settings button clicked - bringing main window to front");
+            // TODO: Focus main settings window
+        }
+
+        _ => {
+            warn!("⚠️ Unknown IPC message type: {}", message.message_type);
+        }
+    }
 }
 
 // =============================================================================
@@ -204,6 +277,75 @@ fn main() {
                 }
             }
 
+            // --- Spawn OverlayHost.exe ---
+            let overlay_host_path_result = (|| -> Result<PathBuf, String> {
+                let exe = std::env::current_exe()
+                    .map_err(|e| format!("Failed to get current exe path: {}", e))?;
+
+                let path = if cfg!(debug_assertions) {
+                    // Development: use debug build
+                    exe.parent()
+                        .and_then(|p| p.parent())  // bin/
+                        .and_then(|p| p.parent())  // Debug/
+                        .and_then(|p| p.parent())  // net9.0-windows10.0.22621.0/
+                        .ok_or("Failed to traverse parent directories")?
+                        .join("src-winui3")
+                        .join("OverlayHost")
+                        .join("bin")
+                        .join("Debug")
+                        .join("net9.0-windows10.0.22621.0")
+                        .join("win-x64")
+                        .join("OverlayHost.exe")
+                } else {
+                    // Production: OverlayHost.exe should be in same dir
+                    exe.parent()
+                        .ok_or("Failed to get exe parent directory")?
+                        .join("OverlayHost.exe")
+                };
+
+                Ok(path)
+            })();
+
+            match overlay_host_path_result {
+                Ok(overlay_host_path) if overlay_host_path.exists() => {
+                    info!("🚀 Spawning OverlayHost from: {:?}", overlay_host_path);
+                    match Command::new(&overlay_host_path).spawn() {
+                        Ok(child) => {
+                            info!("✅ OverlayHost spawned (PID: {})", child.id());
+                            app.manage(OverlayHostProcess(Arc::new(Mutex::new(Some(child)))));
+                        }
+                        Err(e) => {
+                            warn!("⚠️ Failed to spawn OverlayHost: {}", e);
+                            app.manage(OverlayHostProcess(Arc::new(Mutex::new(None))));
+                        }
+                    }
+                }
+                Ok(overlay_host_path) => {
+                    warn!("⚠️ OverlayHost.exe not found at {:?}", overlay_host_path);
+                    app.manage(OverlayHostProcess(Arc::new(Mutex::new(None))));
+                }
+                Err(e) => {
+                    warn!("⚠️ Failed to resolve OverlayHost path: {}", e);
+                    app.manage(OverlayHostProcess(Arc::new(Mutex::new(None))));
+                }
+            }
+
+            // --- Start IPC server ---
+            let app_handle = app.handle().clone();
+            let ipc_handler = Arc::new(move |message: IpcMessage| {
+                handle_ipc_message(&app_handle, message);
+            });
+
+            let ipc_server = Arc::new(IpcServer::new(ipc_handler));
+            let ipc_server_clone = ipc_server.clone();
+
+            tokio::spawn(async move {
+                ipc_server_clone.start().await;
+            });
+
+            // Store IPC server in app state
+            app.manage(ipc_server);
+
             // Create menu items for the tray
             let show_item = MenuItem::with_id(app, "show", "Show Window", true, None::<&str>)?;
             let select_area_item =
@@ -269,6 +411,17 @@ fn main() {
 
             info!("✅ System tray set up successfully!");
             Ok(())
+        })
+        // Add cleanup on window close
+        .on_window_event(|window, event| {
+            if matches!(event, tauri::WindowEvent::Destroyed) {
+                if let Some(overlay_process) = window.try_state::<OverlayHostProcess>() {
+                    if let Some(mut child) = overlay_process.0.lock().unwrap().take() {
+                        let _ = child.kill();
+                        info!("🛑 Killed OverlayHost process");
+                    }
+                }
+            }
         })
         // Run the app!
         .run(tauri::generate_context!())

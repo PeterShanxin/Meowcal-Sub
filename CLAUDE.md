@@ -129,20 +129,31 @@ Uses vanilla JS with no npm dependencies. All Tauri IPC goes through `tauri-brid
 - **Async**: `tokio` runtime for async operations
 - **Frontend IPC**: `window.__TAURI__` API, no npm dependencies
 
-## Claude Code Skills
+## Claude Code Skills & Superpowers
 
-Custom slash commands available in `.claude/skills/`:
+**Built-in Superpowers** (invoked automatically by Claude):
+- `brainstorming` - Explores requirements before implementation
+- `writing-plans` - Creates implementation plans
+- `systematic-debugging` - Bug diagnosis and fixes
+- `test-driven-development` - TDD workflow
+- `requesting-code-review` - Pre-merge verification
+- `receiving-code-review` - Handle review feedback
+- `verification-before-completion` - Pre-commit verification
+- `executing-plans` - Execute implementation plans
+- `using-git-worktrees` - Isolated workspace management
 
-| Command | Purpose |
-|---------|---------|
-| `/dev` | Unified orchestrator - auto-routes to PM, UI, Tech, Fix, or Review workflow based on request |
-| `/pm` | PRD & requirements clarification (gold-pm workflow) |
-| `/ui` | UI spec & image generation prompts (ui-designer workflow) |
-| `/tech` | Architecture & implementation planning (prd-tech-lead workflow) |
-| `/fix` | Bug diagnosis, fixes, tests, refactoring (a-plus-fixer workflow) |
-| `/review` | Release gate review (picky-reviewer workflow with P0/P1/P2 findings) |
+**Custom Skills** (available in `.claude/skills/`):
 
-The `/dev` command supports chaining workflows (e.g., PM → UI → Tech) with HANDOFF.v1 structured output. Each skill is a subdirectory containing `SKILL.md` with the skill definition.
+| Command | Purpose | Source |
+|---------|---------|--------|
+| `/ui` | UI spec & image generation prompts | Custom |
+| `/pdf` | PDF manipulation, form extraction, document generation | [Anthropic Skills](https://github.com/anthropics/skills) |
+| `/docx` | Word document creation and editing | [Anthropic Skills](https://github.com/anthropics/skills) |
+| `/webapp-testing` | Web app testing with Playwright (useful for browser dev mode) | [Anthropic Skills](https://github.com/anthropics/skills) |
+| `/mcp-builder` | Create MCP servers to integrate external services | [Anthropic Skills](https://github.com/anthropics/skills) |
+| `/skill-creator` | Create new custom skills | [Anthropic Skills](https://github.com/anthropics/skills) |
+
+Each skill is a subdirectory containing `SKILL.md` with the skill definition.
 
 ## Debugging
 

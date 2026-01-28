@@ -23,6 +23,9 @@ license = "MIT"
 # Enable Windows AI (Phi Silica) bindings when available.
 windows_ai = []
 
+# Enable Windows-specific E2E tests
+test-windows = []
+
 # =============================================================================
 # DEPENDENCIES
 # =============================================================================
@@ -123,6 +126,10 @@ chrono = "0.4"              # Date/time for per-session log filenames
 # Allows us to use async functions in traits (Rust-specific thing)
 async-trait = "0.1"
 
+# --- IPC (Named Pipes for OverlayHost communication) ---
+uuid = { version = "1.6", features = ["v4", "serde"] }
+interprocess = { version = "2.2", features = ["tokio"] }
+
 # --- HTTP Server (for browser dev mode) ---
 # Axum is a lightweight async web framework for exposing APIs
 axum = "0.8"
@@ -142,7 +149,17 @@ tauri-build = { version = "2", features = [] }
 # These are only used when running tests (cargo test)
 
 [dev-dependencies]
-tokio-test = "0.4"         # Testing utilities for async code
+# Testing utilities for async code
+tokio-test = "0.4"
+
+# Mocking framework for unit tests
+mockall = "0.14"
+
+# Property-based testing (optional)
+proptest = "1.9"
+
+# HTTP server testing utilities
+axum-test = "18.0"
 
 # =============================================================================
 # PROFILE SETTINGS

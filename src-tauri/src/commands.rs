@@ -22,6 +22,7 @@ use crate::llm::{
 };
 use crate::ocr::WindowsOcr;
 use crate::overlay;
+use crate::ipc::{IpcMessage, IpcServer, SetRegionPayload, RegionData, SubtitleUpdatePayload, SettingsSyncPayload, OverlaySettingsData};
 use reqwest::Client;
 use serde::Serialize;
 use std::path::PathBuf;
@@ -33,6 +34,19 @@ use tauri_plugin_opener::OpenerExt;
 use tokio::fs;
 use tokio::sync::watch;
 use tracing::{debug, info, warn};
+
+// =============================================================================
+// IPC HELPER
+// =============================================================================
+
+/// Send a message to OverlayHost via IPC
+async fn send_overlay_message(app: &AppHandle, message: IpcMessage) {
+    if let Some(ipc_server) = app.try_state::<Arc<IpcServer>>() {
+        ipc_server.send(message).await;
+    } else {
+        warn!("⚠️ IPC server not initialized, cannot send message");
+    }
+}
 
 // =============================================================================
 // APP STATE
@@ -703,7 +717,20 @@ pub struct SelectorSnapshot {
 ///
 /// Called from JavaScript: `await invoke('open_area_selector');`
 #[tauri::command]
-pub async fn open_area_selector(app: AppHandle, state: State<'_, AppState>) -> Result<(), String> {
+pub async fn open_area_selector(app: AppHandle) -> Result<(), String> {
+    info!("🎯 Opening area selector via OverlayHost");
+
+    send_overlay_message(
+        &app,
+        IpcMessage::new("Region.RequestOpenSelector")
+    ).await;
+
+    Ok(())
+}
+
+/// Legacy area selector (kept for fallback if WinUI3 is not available)
+#[allow(dead_code)]
+async fn open_area_selector_legacy(app: AppHandle, state: State<'_, AppState>) -> Result<(), String> {
     info!("Opening area selector...");
 
     if let Some(window) = app.get_webview_window("selector") {
@@ -1027,13 +1054,40 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
         interval_ms, target_language
     );
 
-    // Show the overlay and send the capture region to it
+    // Show the overlay and send the capture region to it (legacy WebView overlay)
     if let Err(e) = overlay::show_overlay(&app) {
         warn!("⚠️ Failed to show overlay: {}", e);
     }
     if let Err(e) = overlay::update_overlay_region(&app, &region) {
         warn!("⚠️ Failed to update overlay region: {}", e);
     }
+
+    // Send messages to WinUI3 OverlayHost
+    send_overlay_message(
+        &app,
+        IpcMessage::new("Overlay.Show")
+    ).await;
+
+    // Send initial region if set
+    let payload = SetRegionPayload {
+        region: RegionData::from(&region),
+    };
+    send_overlay_message(
+        &app,
+        IpcMessage::with_payload("Overlay.SetRegion", payload)
+    ).await;
+
+    // Send initial settings to overlay
+    let settings_payload = {
+        let config = state.config.lock().unwrap();
+        SettingsSyncPayload {
+            overlay: OverlaySettingsData::from(&config.overlay),
+        }
+    };
+    send_overlay_message(
+        &app,
+        IpcMessage::with_payload("Settings.Sync", settings_payload)
+    ).await;
 
     // Initialize translation backend manager
     let diagnostics = state.translation_diagnostics.clone();
@@ -1502,16 +1556,29 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
                 .as_millis() as u64;
 
             let payload = TranslationPayload {
-                original: current_text,
-                translated,
+                original: current_text.clone(),
+                translated: translated.clone(),
                 backend_used: backend_used.as_str().to_string(),
-                warnings,
+                warnings: warnings.clone(),
                 timestamp,
             };
 
             if let Err(e) = app.emit("translation-update", payload) {
                 warn!("⚠️ Failed to emit event: {}", e);
             }
+
+            // Send subtitle update to WinUI3 OverlayHost
+            let subtitle_payload = SubtitleUpdatePayload {
+                text: translated.clone(),
+                source_text: current_text.clone(),
+                timestamp: timestamp.to_string(),
+                backend_used: Some(backend_used.as_str().to_string()),
+            };
+
+            send_overlay_message(
+                &app,
+                IpcMessage::with_payload("Subtitle.Update", subtitle_payload)
+            ).await;
 
             // Wait for next iteration
             tokio::time::sleep(Duration::from_millis(interval_ms as u64)).await;
@@ -1530,7 +1597,7 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
 ///
 /// Called from JavaScript: `await invoke('stop_translation');`
 #[tauri::command]
-pub fn stop_translation(state: State<'_, AppState>, app: AppHandle) -> Result<(), String> {
+pub async fn stop_translation(state: State<'_, AppState>, app: AppHandle) -> Result<(), String> {
     info!("Stopping translation...");
 
     // Send the stop signal
@@ -1551,9 +1618,15 @@ pub fn stop_translation(state: State<'_, AppState>, app: AppHandle) -> Result<()
     // Close the capture session
     capture::close_capture_session();
 
-    // Hide the overlay
+    // Send hide message to WinUI3 OverlayHost
+    send_overlay_message(
+        &app,
+        IpcMessage::new("Overlay.Hide")
+    ).await;
+
+    // Hide legacy WebView overlay (for backward compatibility)
     if let Err(e) = overlay::hide_overlay(&app) {
-        warn!("⚠️ Failed to hide overlay: {}", e);
+        warn!("⚠️ Failed to hide legacy overlay: {}", e);
     }
 
     info!("✅ Translation stopped!");
