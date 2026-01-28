@@ -77,6 +77,28 @@ public static class CoordinateConverter
     /// <returns>Region in physical pixels</returns>
     public static Region LogicalToPhysical(int logicalX, int logicalY, int logicalWidth, int logicalHeight)
     {
+        return LogicalToPhysical(logicalX, logicalY, logicalWidth, logicalHeight, 0, 0);
+    }
+
+    /// <summary>
+    /// Convert logical coordinates (WinUI) to physical pixels (screen capture),
+    /// applying a physical-space origin offset (e.g., virtual screen origin).
+    /// </summary>
+    /// <param name="logicalX">X position in logical pixels</param>
+    /// <param name="logicalY">Y position in logical pixels</param>
+    /// <param name="logicalWidth">Width in logical pixels</param>
+    /// <param name="logicalHeight">Height in logical pixels</param>
+    /// <param name="originPhysicalX">Origin X in physical pixels</param>
+    /// <param name="originPhysicalY">Origin Y in physical pixels</param>
+    /// <returns>Region in physical pixels</returns>
+    public static Region LogicalToPhysical(
+        int logicalX,
+        int logicalY,
+        int logicalWidth,
+        int logicalHeight,
+        int originPhysicalX,
+        int originPhysicalY)
+    {
         if (logicalWidth <= 0 || logicalHeight <= 0)
         {
             throw new ArgumentException($"Invalid dimensions: {logicalWidth}x{logicalHeight}. Width and height must be positive.");
@@ -84,15 +106,15 @@ public static class CoordinateConverter
 
         // Estimate physical center point for DPI detection (rough conversion at 1.0 scale)
         // This is okay because we're just finding which monitor, not doing precise conversion
-        int estimatedPhysicalX = logicalX + logicalWidth / 2;
-        int estimatedPhysicalY = logicalY + logicalHeight / 2;
+        int estimatedPhysicalX = originPhysicalX + logicalX + logicalWidth / 2;
+        int estimatedPhysicalY = originPhysicalY + logicalY + logicalHeight / 2;
         double scale = GetDpiScaleForPoint(estimatedPhysicalX, estimatedPhysicalY);
 
         // Convert to physical pixels by multiplying by scale
         return new Region
         {
-            X = (int)Math.Round(logicalX * scale),
-            Y = (int)Math.Round(logicalY * scale),
+            X = originPhysicalX + (int)Math.Round(logicalX * scale),
+            Y = originPhysicalY + (int)Math.Round(logicalY * scale),
             Width = (int)Math.Round(logicalWidth * scale),
             Height = (int)Math.Round(logicalHeight * scale),
             CoordSpace = "physical"

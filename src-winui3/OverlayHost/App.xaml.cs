@@ -92,6 +92,9 @@ public partial class App : Application
                     Debug.WriteLine("[App] Handling Overlay.SetRegion");
                     if (message.Payload != null)
                     {
+                        var payloadJson = message.Payload.Value.GetRawText();
+                        var region = JsonSerializer.Deserialize<Region>(payloadJson);
+                        _overlayWindow?.SetRegion(region);
                         var payload = message.GetPayload<SetRegionPayload>();
                         if (payload != null)
                         {
