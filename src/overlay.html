@@ -35,6 +35,11 @@
     
     <!-- Subtitle display area -->
     <div id="subtitle-container" class="subtitle-container hidden">
+        <!-- Lightweight status / fallback hint (shown only when useful) -->
+        <div id="subtitle-hint" class="subtitle-hint" aria-live="polite">
+            <span class="hint-dot" aria-hidden="true"></span>
+            <span id="subtitle-hint-text"></span>
+        </div>
         <div id="subtitle-text" class="subtitle-text"></div>
         <!-- Settings gear button (top-right corner of subtitle container) -->
         <button id="settings-button" class="settings-button" title="Overlay Settings">

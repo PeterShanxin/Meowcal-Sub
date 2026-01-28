@@ -46,6 +46,7 @@ const overlayState = {
 let clickThroughMonitor = null;
 let clickThroughBusy = false;
 let fadeTimer = null;
+let subtitleHintHideTimer = null;
 
 // =============================================================================
 // INTERACTION MANAGEMENT (Smart click-through)
@@ -273,6 +274,8 @@ async function initOverlay() {
 
     const captureFrame = document.getElementById('capture-frame');
     const subtitleContainer = document.getElementById('subtitle-container');
+    const subtitleHint = document.getElementById('subtitle-hint');
+    const subtitleHintText = document.getElementById('subtitle-hint-text');
     const subtitleText = document.getElementById('subtitle-text');
     const debugRegion = document.getElementById('debug-region');
     const debugStatus = document.getElementById('debug-status');
@@ -302,6 +305,8 @@ async function initOverlay() {
     await setupEventListeners({
         captureFrame,
         subtitleContainer,
+        subtitleHint,
+        subtitleHintText,
         subtitleText,
         debugRegion,
         debugStatus,
@@ -580,7 +585,15 @@ async function saveRegionToBackend() {
 // =============================================================================
 
 async function setupEventListeners(elements) {
-    const { captureFrame, subtitleContainer, subtitleText, debugRegion, debugStatus } = elements;
+    const {
+        captureFrame,
+        subtitleContainer,
+        subtitleHint,
+        subtitleHintText,
+        subtitleText,
+        debugRegion,
+        debugStatus,
+    } = elements;
 
     try {
         // Region updates
@@ -606,6 +619,21 @@ async function setupEventListeners(elements) {
             const { translated, timestamp, backendUsed, warnings } = event.payload;
             console.log('🌐 Translation:', translated);
             updateSubtitleText(subtitleText, translated, subtitleContainer);
+            updateSubtitleHint(
+                subtitleHint,
+                subtitleHintText,
+                backendUsed,
+                warnings,
+                subtitleContainer
+            );
+
+            // Reposition using the real subtitle container height (hint can change size).
+            requestAnimationFrame(() => {
+                if (overlayState.region) {
+                    updateSubtitlePosition(subtitleContainer, overlayState.region);
+                    scheduleWindowClipUpdate();
+                }
+            });
             if (debugStatus) {
                 const time = new Date(timestamp).toLocaleTimeString();
                 const backend = backendUsed || 'unknown';
@@ -660,6 +688,9 @@ async function setupEventListeners(elements) {
                 subtitleContainer.classList.add('hidden');
                 subtitleContainer.classList.remove('visible');
 
+                // Hide hint (if any)
+                clearSubtitleHint(subtitleHint, subtitleHintText);
+
                 // Reset cached subtitle text so restarting translation shows the first line even
                 // if it's identical to the previous session.
                 overlayState.currentText = '';
@@ -701,7 +732,13 @@ function updateSubtitlePosition(container, region) {
 
     const padding = 10;
     const screenHeight = window.innerHeight;
-    const estimatedSubtitleHeight = overlayState.fontSize * 1.4 + 24;
+    // Prefer measured height when visible (includes hint row), fallback to a conservative estimate.
+    const measured = container.classList.contains('visible')
+        ? Math.round(container.getBoundingClientRect().height)
+        : 0;
+    const estimatedSubtitleHeight = measured > 0
+        ? measured
+        : Math.round(overlayState.fontSize * 1.4 + 54);
 
     const spaceBelow = screenHeight - (region.y + region.height + padding);
     const spaceAbove = region.y - padding;
@@ -741,6 +778,158 @@ function updateSubtitleText(textElement, newText, container) {
     container.classList.remove('hidden');
     container.classList.add('visible');
     scheduleWindowClipUpdate();
+}
+
+// =============================================================================
+// TRANSLATION HINTS (backend/fallback/errors)
+// =============================================================================
+
+function backendDisplayName(id) {
+    switch ((id || '').toLowerCase()) {
+        case 'foundry_local': return 'Foundry Local';
+        case 'offline_mt': return 'Offline MT';
+        case 'windows_ai': return 'Windows AI';
+        case 'mock': return 'OCR';
+        default: return id || 'Unknown';
+    }
+}
+
+function summarizeFoundryWarning(warning) {
+    const raw = (warning || '').toString();
+    const lower = raw.toLowerCase();
+
+    // Known structured warnings emitted by TranslationManager
+    if (lower.includes('recovered_after_retry')) return { text: 'Recovered after retry', severity: 'ok', blocking: false };
+    if (lower.includes('context_degraded')) return { text: 'Reduced context for speed', severity: 'warn', blocking: false };
+
+    // Errors/timeouts
+    if (lower.includes('timeout')) return { text: 'Timeout', severity: 'warn', blocking: true };
+    if (lower.includes('model not available') || lower.includes('no model available')) {
+        return { text: 'Model not running', severity: 'warn', blocking: true };
+    }
+    if (lower.includes('request failed') || lower.includes('error sending request')) {
+        return { text: 'Request failed', severity: 'error', blocking: true };
+    }
+
+    // Fallback: keep it short and avoid leaking URLs into the overlay.
+    let cleaned = raw.replace(/^foundry_local:\s*/i, '');
+    cleaned = cleaned.replace(/^api error:\s*/i, '');
+    cleaned = cleaned.replace(/https?:\/\/\S+/gi, '').trim();
+    cleaned = cleaned.replace(/\s+/g, ' ');
+    if (cleaned.length > 90) cleaned = cleaned.slice(0, 87) + '…';
+    return { text: cleaned || 'Error', severity: 'error', blocking: true };
+}
+
+function summarizeGenericWarning(warning) {
+    let cleaned = (warning || '').toString().trim();
+    cleaned = cleaned.replace(/https?:\/\/\S+/gi, '').trim();
+    cleaned = cleaned.replace(/\s+/g, ' ');
+    if (cleaned.length > 90) cleaned = cleaned.slice(0, 87) + '…';
+    return cleaned;
+}
+
+function clearSubtitleHint(hintEl, hintTextEl) {
+    if (subtitleHintHideTimer) {
+        clearTimeout(subtitleHintHideTimer);
+        subtitleHintHideTimer = null;
+    }
+
+    if (!hintEl) return;
+    hintEl.classList.remove('visible', 'hint-warn', 'hint-error', 'hint-ok');
+    if (hintTextEl) hintTextEl.textContent = '';
+}
+
+function setSubtitleHint(hintEl, hintTextEl, text, severity, persist) {
+    if (!hintEl || !hintTextEl) return;
+
+    if (!text) {
+        clearSubtitleHint(hintEl, hintTextEl);
+        return;
+    }
+
+    if (subtitleHintHideTimer) {
+        clearTimeout(subtitleHintHideTimer);
+        subtitleHintHideTimer = null;
+    }
+
+    hintTextEl.textContent = text;
+    hintEl.classList.add('visible');
+    hintEl.classList.remove('hint-warn', 'hint-error', 'hint-ok');
+
+    const sev = (severity || 'warn').toLowerCase();
+    if (sev === 'ok') hintEl.classList.add('hint-ok');
+    else if (sev === 'error') hintEl.classList.add('hint-error');
+    else hintEl.classList.add('hint-warn');
+
+    if (!persist) {
+        subtitleHintHideTimer = setTimeout(() => {
+            clearSubtitleHint(hintEl, hintTextEl);
+        }, 4000);
+    }
+}
+
+function updateSubtitleHint(hintEl, hintTextEl, backendUsed, warnings, subtitleContainer) {
+    const backendId = (backendUsed || '').toString().toLowerCase();
+    const list = Array.isArray(warnings) ? warnings.filter(w => typeof w === 'string') : [];
+
+    const foundryWarnings = list.filter(w => w.toLowerCase().startsWith('foundry_local:'));
+    const foundryBlocking = foundryWarnings.find(w => {
+        const lower = w.toLowerCase();
+        return !lower.includes('recovered_after_retry') && !lower.includes('context_degraded');
+    });
+    const hadFoundryProblem = Boolean(foundryBlocking);
+
+    // Prefer a Foundry warning (if present) as the "cause" line.
+    const primaryFoundry = foundryWarnings[0];
+    const primaryNonMock = list.find(w => !w.toLowerCase().startsWith('mock:'));
+
+    if (backendId === 'foundry_local') {
+        // Keep overlay clean when everything is OK.
+        if (list.length === 0) {
+            clearSubtitleHint(hintEl, hintTextEl);
+            return;
+        }
+
+        const summary = primaryFoundry ? summarizeFoundryWarning(primaryFoundry) : null;
+        if (!summary || !summary.text) {
+            clearSubtitleHint(hintEl, hintTextEl);
+            return;
+        }
+
+        setSubtitleHint(
+            hintEl,
+            hintTextEl,
+            `${backendDisplayName(backendId)} · ${summary.text}`,
+            summary.severity,
+            false
+        );
+        return;
+    }
+
+    // Any non-Foundry backend can be "primary" or "fallback" depending on user settings.
+    const labelPrefix = hadFoundryProblem ? 'Fallback' : 'Backend';
+    const backendLabel = backendDisplayName(backendId);
+
+    let severity = 'warn';
+    let cause = '';
+
+    if (primaryFoundry) {
+        const summary = summarizeFoundryWarning(primaryFoundry);
+        severity = summary.severity;
+        cause = `Foundry ${summary.text}`.trim();
+    } else if (primaryNonMock) {
+        cause = summarizeGenericWarning(primaryNonMock);
+    }
+
+    // For OCR fallback, keep the wording obvious.
+    const base = backendId === 'mock'
+        ? (hadFoundryProblem ? 'Fallback: OCR' : 'OCR (no translation backend)')
+        : `${labelPrefix}: ${backendLabel}`;
+
+    const text = cause ? `${base} · ${cause}` : base;
+
+    // Persist when not using Foundry so the user understands why the translation looks "untranslated".
+    setSubtitleHint(hintEl, hintTextEl, text, severity, true);
 }
 
 // =============================================================================
