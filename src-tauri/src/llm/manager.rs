@@ -366,8 +366,12 @@ impl TranslationManager {
                             break;
                         }
 
-                        // Soft timeout for contextful attempts so we can fall back quickly.
-                        let attempt_timeout = if tier > CONTEXT_TIER_NONE {
+                        // Soft timeout only when we *actually* include context.
+                        //
+                        // When `context_for_tier` is None (common on first run), applying the soft
+                        // timeout causes unnecessary fallbacks to "mock" even though the overall
+                        // Foundry timeout is higher.
+                        let attempt_timeout = if context_used {
                             remaining_total.min(Duration::from_millis(DEFAULT_BACKEND_TIMEOUT_MS))
                         } else {
                             remaining_total

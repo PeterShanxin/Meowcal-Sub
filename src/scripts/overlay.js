@@ -770,6 +770,7 @@ async function updateOverlayWindowClip() {
 
     const captureFrame = document.getElementById('capture-frame');
     const subtitleContainer = document.getElementById('subtitle-container');
+    const debugInfo = document.getElementById('debug-info');
 
     const frameVisible = captureFrame &&
         captureFrame.classList.contains('visible') &&
@@ -796,10 +797,9 @@ async function updateOverlayWindowClip() {
 
         // Resize handles extend outside the capture-frame box (negative offsets).
         // If we don't include them in the window region, they'll be clipped and resizing breaks.
-        let handleBounds = null;
+        const bounds = [];
         if (frameVisible && captureFrame) {
             const handles = captureFrame.querySelectorAll('.resize-handle');
-            const bounds = [];
             handles.forEach((handle) => {
                 // Only include handles when they're actually visible.
                 const opacity = parseFloat(getComputedStyle(handle).opacity || '0');
@@ -813,10 +813,25 @@ async function updateOverlayWindowClip() {
                     height: Math.round(rect.height),
                 });
             });
-            if (bounds.length > 0) {
-                handleBounds = bounds;
+        }
+
+        // Keep the bottom-right diagnostics panel visible when window clipping is enabled.
+        // Otherwise it gets clipped out by the Win32 SetWindowRgn workaround.
+        if (debugInfo) {
+            const style = getComputedStyle(debugInfo);
+            const opacity = parseFloat(style.opacity || '0');
+            if (style.display !== 'none' && opacity > 0.05) {
+                const rect = debugInfo.getBoundingClientRect();
+                bounds.push({
+                    x: Math.round(rect.left),
+                    y: Math.round(rect.top),
+                    width: Math.round(rect.width),
+                    height: Math.round(rect.height),
+                });
             }
         }
+
+        const handleBounds = bounds.length > 0 ? bounds : null;
 
         await window.__TAURI__.core.invoke('set_overlay_window_clip', { frameRegion, subtitleBounds, handleBounds, scaleFactor });
     } catch (e) {
