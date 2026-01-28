@@ -228,13 +228,18 @@ public sealed partial class SelectorWindow : Window
         int logicalWidth = (int)Math.Round(logicalRegion.Value.Width);
         int logicalHeight = (int)Math.Round(logicalRegion.Value.Height);
 
+        // Selector window is positioned at the virtual-screen origin.
+        // Add that origin before converting to physical pixels so multi-monitor offsets are preserved.
+        var (virtualX, virtualY, _, _) = WindowHelper.GetVirtualScreenBounds();
+
         // Convert to physical pixels (screen capture coordinates)
         var physicalRegion = CoordinateConverter.LogicalToPhysical(
-            logicalX, logicalY, logicalWidth, logicalHeight
+            logicalX, logicalY, logicalWidth, logicalHeight, virtualX, virtualY
         );
 
         Debug.WriteLine($"[SelectorWindow] Confirmed selection:");
         Debug.WriteLine($"  Logical: ({logicalX}, {logicalY}) {logicalWidth}x{logicalHeight}");
+        Debug.WriteLine($"  Virtual origin: ({virtualX}, {virtualY})");
         Debug.WriteLine($"  Physical: ({physicalRegion.X}, {physicalRegion.Y}) {physicalRegion.Width}x{physicalRegion.Height}");
 
         // Raise event with physical coordinates
