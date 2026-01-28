@@ -1,11 +1,18 @@
-use std::io::{BufRead, BufReader, Write};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
+
 use tracing::{debug, error, info, warn};
 
 use super::protocol::IpcMessage;
 
 #[cfg(windows)]
-use interprocess::os::windows::named_pipe::{PipeListenerOptions, PipeMode, pipe_mode};
+use interprocess::os::windows::named_pipe::{pipe_mode, PipeListenerOptions, PipeMode};
+#[cfg(windows)]
+use interprocess::os::windows::named_pipe::tokio::PipeListenerOptionsExt;
+#[cfg(windows)]
+use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+#[cfg(windows)]
+use tokio::sync::mpsc;
 
 #[cfg(windows)]
 const PIPE_NAME: &str = r"\\.\pipe\meowcal-sub";
@@ -16,12 +23,21 @@ const PIPE_NAME: &str = "@meowcal-sub";
 pub type IpcMessageHandler = Arc<dyn Fn(IpcMessage) + Send + Sync>;
 
 #[cfg(windows)]
-type SendHalf = interprocess::os::windows::named_pipe::SendPipeStream<pipe_mode::Bytes>;
+#[derive(Clone)]
+struct ConnectedClient {
+    id: u64,
+    tx: mpsc::UnboundedSender<IpcMessage>,
+}
 
 pub struct IpcServer {
     handler: IpcMessageHandler,
+
+    // We only ever have one OverlayHost, but we still guard against overlapping reconnects.
     #[cfg(windows)]
-    client: Arc<Mutex<Option<SendHalf>>>,
+    client: Arc<Mutex<Option<ConnectedClient>>>,
+    #[cfg(windows)]
+    next_client_id: AtomicU64,
+
     #[cfg(not(windows))]
     client: Arc<Mutex<Option<()>>>,
 }
@@ -30,8 +46,25 @@ impl IpcServer {
     pub fn new(handler: IpcMessageHandler) -> Self {
         Self {
             handler,
+            #[cfg(windows)]
+            client: Arc::new(Mutex::new(None)),
+            #[cfg(windows)]
+            next_client_id: AtomicU64::new(1),
+            #[cfg(not(windows))]
             client: Arc::new(Mutex::new(None)),
         }
+    }
+
+    /// Returns true if OverlayHost is currently connected.
+    pub fn is_connected(&self) -> bool {
+        let client = match self.client.lock() {
+            Ok(guard) => guard,
+            Err(poisoned) => {
+                warn!("⚠️ IPC client mutex poisoned; recovering");
+                poisoned.into_inner()
+            }
+        };
+        client.is_some()
     }
 
     /// Start the IPC server
@@ -42,7 +75,8 @@ impl IpcServer {
         let listener = match PipeListenerOptions::new()
             .path(PIPE_NAME)
             .mode(PipeMode::Bytes)
-            .create() {
+            .create_tokio_duplex::<pipe_mode::Bytes>()
+        {
             Ok(l) => l,
             Err(e) => {
                 error!("❌ Failed to create pipe server: {}", e);
@@ -53,29 +87,36 @@ impl IpcServer {
         info!("✅ IPC server listening for connections");
 
         loop {
-            match listener.accept() {
+            match listener.accept().await {
                 Ok(stream) => {
-                    info!("🔗 OverlayHost connected");
+                    let client_id = self.next_client_id.fetch_add(1, Ordering::SeqCst);
+                    info!("🔗 OverlayHost connected (client #{})", client_id);
 
-                    // Split the stream into recv and send halves
-                    let (recv_half, send_half) = stream.split();
-
-                    // Store send half for later use
+                    let (tx, rx) = mpsc::unbounded_channel::<IpcMessage>();
                     {
-                        let mut client = self.client.lock().unwrap();
-                        *client = Some(send_half);
+                        let mut client = match self.client.lock() {
+                            Ok(guard) => guard,
+                            Err(poisoned) => {
+                                warn!("⚠️ IPC client mutex poisoned; recovering");
+                                poisoned.into_inner()
+                            }
+                        };
+                        *client = Some(ConnectedClient {
+                            id: client_id,
+                            tx: tx.clone(),
+                        });
                     }
 
-                    // Handle this client in a blocking task
-                    let handler = self.handler.clone();
-                    let client_ref = self.client.clone();
+                    let handler = Arc::clone(&self.handler);
+                    let client_ref = Arc::clone(&self.client);
 
-                    tokio::task::spawn_blocking(move || {
-                        Self::handle_client(recv_half, handler, client_ref);
+                    tokio::spawn(async move {
+                        Self::handle_client(client_id, stream, handler, client_ref, rx).await;
                     });
                 }
                 Err(e) => {
                     error!("Failed to accept connection: {}", e);
+                    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
                 }
             }
         }
@@ -87,80 +128,146 @@ impl IpcServer {
     }
 
     #[cfg(windows)]
-    fn handle_client(
-        recv_half: interprocess::os::windows::named_pipe::RecvPipeStream<pipe_mode::Bytes>,
+    async fn handle_client(
+        client_id: u64,
+        stream: interprocess::os::windows::named_pipe::tokio::DuplexPipeStream<pipe_mode::Bytes>,
         handler: IpcMessageHandler,
-        client_ref: Arc<Mutex<Option<SendHalf>>>,
+        client_ref: Arc<Mutex<Option<ConnectedClient>>>,
+        mut rx: mpsc::UnboundedReceiver<IpcMessage>,
     ) {
-        // Use BufReader for line-based reading
+        let (recv_half, mut send_half) = stream.split();
         let mut reader = BufReader::new(recv_half);
         let mut line = String::new();
 
         loop {
-            line.clear();
-            match reader.read_line(&mut line) {
-                Ok(0) => {
-                    info!("OverlayHost disconnected (EOF)");
-                    break;
-                }
-                Ok(_) => {
-                    let trimmed = line.trim();
-                    if trimmed.is_empty() {
-                        continue;
-                    }
+            tokio::select! {
+                read_res = reader.read_line(&mut line) => {
+                    match read_res {
+                        Ok(0) => {
+                            info!("OverlayHost disconnected (EOF) (client #{})", client_id);
+                            break;
+                        }
+                        Ok(_) => {
+                            let trimmed = line.trim().to_string();
+                            line.clear();
+                            if trimmed.is_empty() {
+                                continue;
+                            }
 
-                    match serde_json::from_str::<IpcMessage>(trimmed) {
-                        Ok(message) => {
-                            debug!("← Received from OverlayHost: {}", message.message_type);
-                            handler(message);
+                            match serde_json::from_str::<IpcMessage>(&trimmed) {
+                                Ok(message) => {
+                                    debug!(
+                                        "← Received from OverlayHost: {} (client #{})",
+                                        message.message_type,
+                                        client_id
+                                    );
+                                    handler(message);
+                                }
+                                Err(e) => {
+                                    warn!("Failed to parse IPC message '{}': {}", trimmed, e);
+                                }
+                            }
                         }
                         Err(e) => {
-                            warn!("Failed to parse IPC message '{}': {}", trimmed, e);
+                            info!("OverlayHost disconnected: {} (client #{})", e, client_id);
+                            break;
                         }
                     }
                 }
-                Err(e) => {
-                    info!("OverlayHost disconnected: {}", e);
-                    break;
+
+                maybe_msg = rx.recv() => {
+                    let Some(message) = maybe_msg else {
+                        // Sender dropped (probably replaced by a newer connection).
+                        break;
+                    };
+
+                    let message_type = message.message_type.clone();
+                    match serde_json::to_string(&message) {
+                        Ok(json) => {
+                            let data = format!("{}\n", json);
+                            if let Err(e) = send_half.write_all(data.as_bytes()).await {
+                                error!(
+                                    "❌ Failed to send to OverlayHost: {} (client #{})",
+                                    e, client_id
+                                );
+                                break;
+                            }
+                            if let Err(e) = send_half.flush().await {
+                                error!(
+                                    "❌ Failed to flush to OverlayHost: {} (client #{})",
+                                    e, client_id
+                                );
+                                break;
+                            }
+                            debug!("→ Sent to OverlayHost: {} (client #{})", message_type, client_id);
+                        }
+                        Err(e) => {
+                            error!("Failed to serialize message '{}': {}", message_type, e);
+                        }
+                    }
                 }
             }
         }
 
-        // Clear client connection on disconnect
-        let mut client = client_ref.lock().unwrap();
-        *client = None;
+        // Clear client connection on disconnect, but only if we're still the active client.
+        let mut client = match client_ref.lock() {
+            Ok(guard) => guard,
+            Err(poisoned) => {
+                warn!("⚠️ IPC client mutex poisoned; recovering");
+                poisoned.into_inner()
+            }
+        };
+
+        if client.as_ref().is_some_and(|c| c.id == client_id) {
+            *client = None;
+        }
     }
 
     /// Send message to OverlayHost
     #[cfg(windows)]
-    pub async fn send(&self, message: IpcMessage) {
-        let mut client = self.client.lock().unwrap();
-
-        if let Some(send_half) = client.as_mut() {
-            let json = match serde_json::to_string(&message) {
-                Ok(j) => j,
-                Err(e) => {
-                    error!("Failed to serialize message: {}", e);
-                    return;
+    pub async fn send(&self, message: IpcMessage) -> bool {
+        let (client_id, sender) = {
+            let client = match self.client.lock() {
+                Ok(guard) => guard,
+                Err(poisoned) => {
+                    warn!("⚠️ IPC client mutex poisoned; recovering");
+                    poisoned.into_inner()
                 }
             };
-
-            let data = format!("{}\n", json);
-
-            if let Err(e) = send_half.write_all(data.as_bytes()) {
-                error!("❌ Failed to send to OverlayHost: {}", e);
-            } else if let Err(e) = send_half.flush() {
-                error!("❌ Failed to flush to OverlayHost: {}", e);
-            } else {
-                debug!("→ Sent to OverlayHost: {}", message.message_type);
+            match client.as_ref() {
+                Some(c) => (Some(c.id), Some(c.tx.clone())),
+                None => (None, None),
             }
-        } else {
-            warn!("⚠️ Cannot send message: OverlayHost not connected");
+        };
+
+        match (client_id, sender) {
+            (Some(client_id), Some(sender)) => {
+                if sender.send(message).is_err() {
+                    warn!("⚠️ Failed to queue IPC message (client #{})", client_id);
+                    let mut client = match self.client.lock() {
+                        Ok(guard) => guard,
+                        Err(poisoned) => {
+                            warn!("⚠️ IPC client mutex poisoned; recovering");
+                            poisoned.into_inner()
+                        }
+                    };
+                    if client.as_ref().is_some_and(|c| c.id == client_id) {
+                        *client = None;
+                    }
+                    return false;
+                }
+                true
+            }
+            _ => {
+                warn!("⚠️ Cannot send message: OverlayHost not connected");
+                false
+            }
         }
     }
 
     #[cfg(not(windows))]
-    pub async fn send(&self, _message: IpcMessage) {
+    pub async fn send(&self, _message: IpcMessage) -> bool {
         warn!("IPC send is only supported on Windows");
+        false
     }
 }

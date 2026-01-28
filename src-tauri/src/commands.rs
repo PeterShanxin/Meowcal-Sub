@@ -713,19 +713,58 @@ pub struct SelectorSnapshot {
     pub height: i32,
 }
 
+/// Result from `open_area_selector` so the UI can show whether we used WinUI OverlayHost
+/// or fell back to the legacy webview selector.
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum AreaSelectorMode {
+    Winui,
+    Legacy,
+}
+
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OpenAreaSelectorResult {
+    pub mode: AreaSelectorMode,
+}
+
 /// Open the area selector overlay window
 ///
 /// Called from JavaScript: `await invoke('open_area_selector');`
 #[tauri::command]
-pub async fn open_area_selector(app: AppHandle) -> Result<(), String> {
+pub async fn open_area_selector(app: AppHandle, state: State<'_, AppState>) -> Result<OpenAreaSelectorResult, String> {
     info!("🎯 Opening area selector via OverlayHost");
 
-    send_overlay_message(
-        &app,
-        IpcMessage::new("Region.RequestOpenSelector")
-    ).await;
+    if let Some(ipc_server) = app.try_state::<Arc<IpcServer>>() {
+        // On startup, the WinUI OverlayHost can take a moment to launch and connect.
+        // Wait briefly so the first click is more likely to use WinUI instead of the legacy UI.
+        const WAIT_MS: u64 = 2500;
+        const STEP_MS: u64 = 50;
+        let message = IpcMessage::new("Region.RequestOpenSelector");
 
-    Ok(())
+        let mut waited = 0u64;
+        while waited <= WAIT_MS {
+            if ipc_server.is_connected() {
+                if ipc_server.send(message.clone()).await {
+                    return Ok(OpenAreaSelectorResult {
+                        mode: AreaSelectorMode::Winui,
+                    });
+                }
+            }
+
+            tokio::time::sleep(Duration::from_millis(STEP_MS)).await;
+            waited = waited.saturating_add(STEP_MS);
+        }
+
+        warn!("⚠️ OverlayHost not connected; falling back to legacy selector");
+    } else {
+        warn!("⚠️ IPC server not initialized; falling back to legacy selector");
+    }
+
+    open_area_selector_legacy(app, state).await?;
+    Ok(OpenAreaSelectorResult {
+        mode: AreaSelectorMode::Legacy,
+    })
 }
 
 /// Legacy area selector (kept for fallback if WinUI3 is not available)

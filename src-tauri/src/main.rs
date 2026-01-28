@@ -289,31 +289,41 @@ fn main() {
             }
 
             // --- Spawn OverlayHost.exe ---
-            let overlay_host_path_result = (|| -> Result<PathBuf, String> {
-                let exe = std::env::current_exe()
-                    .map_err(|e| format!("Failed to get current exe path: {}", e))?;
+            let mut overlay_candidates: Vec<PathBuf> = Vec::new();
 
-                let path = if cfg!(debug_assertions) {
-                    // Development: use resources folder in src-tauri/ which is populated
-                    // by build-overlayhost.ps1. Use current_dir since CARGO_TARGET_DIR
-                    // may be outside the project directory.
-                    std::env::current_dir()
-                        .map_err(|e| format!("Failed to get current directory: {}", e))?
+            if let Ok(resource_dir) = app.path().resource_dir() {
+                overlay_candidates.push(resource_dir.join("OverlayHost.exe"));
+            }
+
+            if let Ok(current_dir) = std::env::current_dir() {
+                if current_dir
+                    .file_name()
+                    .and_then(|name| name.to_str())
+                    .is_some_and(|name| name.eq_ignore_ascii_case("src-tauri"))
+                {
+                    overlay_candidates.push(current_dir.join("resources").join("OverlayHost.exe"));
+                }
+                overlay_candidates.push(
+                    current_dir
                         .join("src-tauri")
                         .join("resources")
-                        .join("OverlayHost.exe")
-                } else {
-                    // Production: OverlayHost.exe should be in same dir (bundled by Tauri)
-                    exe.parent()
-                        .ok_or("Failed to get exe parent directory")?
-                        .join("OverlayHost.exe")
-                };
+                        .join("OverlayHost.exe"),
+                );
+            }
 
-                Ok(path)
-            })();
+            if let Ok(exe) = std::env::current_exe() {
+                if let Some(parent) = exe.parent() {
+                    overlay_candidates.push(parent.join("OverlayHost.exe"));
+                }
+            }
 
-            match overlay_host_path_result {
-                Ok(overlay_host_path) if overlay_host_path.exists() => {
+            let overlay_host_path = overlay_candidates
+                .iter()
+                .find(|candidate| candidate.exists())
+                .cloned();
+
+            match overlay_host_path {
+                Some(overlay_host_path) => {
                     info!("🚀 Spawning OverlayHost from: {:?}", overlay_host_path);
                     match Command::new(&overlay_host_path).spawn() {
                         Ok(child) => {
@@ -326,12 +336,11 @@ fn main() {
                         }
                     }
                 }
-                Ok(overlay_host_path) => {
-                    warn!("⚠️ OverlayHost.exe not found at {:?}", overlay_host_path);
-                    app.manage(OverlayHostProcess(Arc::new(Mutex::new(None))));
-                }
-                Err(e) => {
-                    warn!("⚠️ Failed to resolve OverlayHost path: {}", e);
+                None => {
+                    warn!(
+                        "⚠️ OverlayHost.exe not found. Tried: {:?}",
+                        overlay_candidates
+                    );
                     app.manage(OverlayHostProcess(Arc::new(Mutex::new(None))));
                 }
             }
