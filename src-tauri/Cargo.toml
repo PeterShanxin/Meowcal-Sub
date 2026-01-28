@@ -23,6 +23,9 @@ license = "MIT"
 # Enable Windows AI (Phi Silica) bindings when available.
 windows_ai = []
 
+# Enable Windows-specific E2E tests
+test-windows = []
+
 # =============================================================================
 # DEPENDENCIES
 # =============================================================================
@@ -146,7 +149,17 @@ tauri-build = { version = "2", features = [] }
 # These are only used when running tests (cargo test)
 
 [dev-dependencies]
-tokio-test = "0.4"         # Testing utilities for async code
+# Testing utilities for async code
+tokio-test = "0.4"
+
+# Mocking framework for unit tests
+mockall = "0.14"
+
+# Property-based testing (optional)
+proptest = "1.9"
+
+# HTTP server testing utilities
+axum-test = "18.0"
 
 # =============================================================================
 # PROFILE SETTINGS

@@ -95,6 +95,11 @@ public partial class App : Application
                         var payloadJson = message.Payload.Value.GetRawText();
                         var region = JsonSerializer.Deserialize<Region>(payloadJson);
                         _overlayWindow?.SetRegion(region);
+                        var payload = message.GetPayload<SetRegionPayload>();
+                        if (payload != null)
+                        {
+                            _overlayWindow?.SetRegion(payload.Region);
+                        }
                     }
                     break;
 
