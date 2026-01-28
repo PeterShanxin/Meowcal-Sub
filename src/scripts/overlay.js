@@ -48,6 +48,23 @@ let clickThroughBusy = false;
 let fadeTimer = null;
 let subtitleHintHideTimer = null;
 
+// Fade duration for "start/stop translation" show/hide transitions.
+// Keep this short to avoid delaying stop/start responsiveness.
+const OVERLAY_VISIBILITY_FADE_MS = 220;
+
+function syncFrameScaleTokens(scaleFactor) {
+    // Keep the frame border aligned to device pixels at fractional DPI (e.g. 125%),
+    // which reduces jaggy/blurred edges compared to a fixed CSS pixel border.
+    const sf = (typeof scaleFactor === 'number' && scaleFactor > 0) ? scaleFactor : 1;
+    const borderPx = Math.max(1, Math.round(2 * sf));   // physical px
+    const radiusPx = Math.max(0, Math.round(8 * sf));   // physical px
+    const borderCss = borderPx / sf;
+    const radiusCss = radiusPx / sf;
+
+    document.documentElement.style.setProperty('--frame-border', `${borderCss}px`);
+    document.documentElement.style.setProperty('--frame-radius', `${radiusCss}px`);
+}
+
 // =============================================================================
 // INTERACTION MANAGEMENT (Smart click-through)
 // =============================================================================
@@ -80,6 +97,7 @@ async function refreshScaleFactor() {
         const scaleFactor = await currentWindow.scaleFactor();
         overlayState.scaleFactor = scaleFactor;
         overlayState.scaleFactorUpdatedAt = Date.now();
+        syncFrameScaleTokens(scaleFactor);
         return scaleFactor;
     } catch (e) {
         console.warn('Failed to read scale factor:', e);
@@ -655,6 +673,8 @@ async function setupEventListeners(elements) {
                 await refreshScaleFactor();
                 // Ensure the capture frame is visible immediately (it may still be faded from a previous session)
                 showCaptureFrame();
+                captureFrame.classList.remove('exiting');
+                subtitleContainer.classList.remove('exiting');
                 // Fetch region and show
                 try {
                     const region = await window.__TAURI__.core.invoke('get_capture_region');
@@ -674,6 +694,8 @@ async function setupEventListeners(elements) {
                 captureFrame.classList.remove('hidden');
                 captureFrame.classList.add('visible');
                 captureFrame.classList.remove('faded');
+                captureFrame.classList.add('entering');
+                requestAnimationFrame(() => captureFrame.classList.remove('entering'));
                 scheduleWindowClipUpdate();
 
                 // Start fade timer (frame fades after inactivity)
@@ -681,12 +703,19 @@ async function setupEventListeners(elements) {
                 startClickThroughMonitor();
                 await setOverlayClickThrough(true);
             } else {
-                // Hide everything
-                captureFrame.classList.add('hidden');
-                captureFrame.classList.remove('visible');
+                // Fade everything out (Rust will hide the window after a short delay).
+                // Keep `visible` during the fade so the Win32 window region stays clipped.
+                captureFrame.classList.remove('entering');
                 captureFrame.classList.remove('faded');
-                subtitleContainer.classList.add('hidden');
-                subtitleContainer.classList.remove('visible');
+                captureFrame.classList.remove('hidden');
+                captureFrame.classList.add('visible');
+                captureFrame.classList.add('exiting');
+
+                if (subtitleContainer.classList.contains('visible')) {
+                    subtitleContainer.classList.add('exiting');
+                }
+
+                scheduleWindowClipUpdate();
 
                 // Hide hint (if any)
                 clearSubtitleHint(subtitleHint, subtitleHintText);
@@ -697,11 +726,20 @@ async function setupEventListeners(elements) {
                 if (subtitleText) {
                     subtitleText.textContent = '';
                 }
-                scheduleWindowClipUpdate();
 
                 // Clear fade timer
                 if (fadeTimer) clearTimeout(fadeTimer);
                 stopClickThroughMonitor();
+                await setOverlayClickThrough(true);
+
+                // Final cleanup after the fade (best effort).
+                setTimeout(() => {
+                    captureFrame.classList.add('hidden');
+                    captureFrame.classList.remove('visible', 'exiting', 'faded');
+
+                    subtitleContainer.classList.add('hidden');
+                    subtitleContainer.classList.remove('visible', 'exiting');
+                }, OVERLAY_VISIBILITY_FADE_MS);
             }
         });
 
@@ -722,9 +760,6 @@ function updateCaptureFrame(frame, region) {
     frame.style.top = `${region.y}px`;
     frame.style.width = `${region.width}px`;
     frame.style.height = `${region.height}px`;
-
-    frame.classList.remove('hidden');
-    frame.classList.add('visible');
 }
 
 function updateSubtitlePosition(container, region) {

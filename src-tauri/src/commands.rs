@@ -218,6 +218,8 @@ const CONTEXT_SUMMARY_MAX_RETRIES: usize = 3;
 const CONTEXT_SUMMARY_RETRY_DELAY_MS: u64 = 500;
 const CONTEXT_SUMMARY_STABILITY_DELAY_MS: u64 = 900;
 const MOCK_RETRY_COOLDOWN_MS: u64 = 2500;
+// Keep in sync with `OVERLAY_VISIBILITY_FADE_MS` in `src/scripts/overlay.js`.
+const OVERLAY_HIDE_FADE_MS: u64 = 220;
 
 /// Open the translateLocally download page in the default browser.
 #[tauri::command]
@@ -1693,9 +1695,18 @@ pub async fn stop_translation(state: State<'_, AppState>, app: AppHandle) -> Res
         IpcMessage::new("Overlay.Hide")
     ).await;
 
-    // Hide legacy WebView overlay (for backward compatibility)
-    if let Err(e) = overlay::hide_overlay(&app) {
-        warn!("⚠️ Failed to hide legacy overlay: {}", e);
+    // Fade out legacy WebView overlay before hiding the window (premium UX).
+    //
+    // We emit the visibility event first so the frontend can animate while the window
+    // is still visible. After a short delay, we hide the window for real.
+    let _ = app.emit("overlay-visibility", false);
+    tokio::time::sleep(Duration::from_millis(OVERLAY_HIDE_FADE_MS)).await;
+    if let Some(window) = app.get_webview_window("overlay") {
+        if let Err(e) = window.hide() {
+            warn!("⚠️ Failed to hide legacy overlay window: {}", e);
+        }
+    } else {
+        warn!("⚠️ Overlay window not found");
     }
 
     info!("✅ Translation stopped!");
