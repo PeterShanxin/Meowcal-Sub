@@ -1433,6 +1433,7 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
 
             let now = Instant::now();
             let is_exact_duplicate = current_text == last_text;
+            let mut force_retry_duplicate = false;
             if is_exact_duplicate {
                 if last_backend_used != BackendId::Mock {
                     debug!("Duplicate text detected, skipping");
@@ -1451,9 +1452,13 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
                     tokio::time::sleep(Duration::from_millis(interval_ms as u64)).await;
                     continue;
                 }
+
+                // Cooldown expired: allow a retry even if context dedup would normally skip this
+                // line (otherwise we can get stuck in mock mode until OCR text changes).
+                force_retry_duplicate = true;
             }
 
-            if context_enabled && translation_manager.is_duplicate(&current_text) {
+            if !force_retry_duplicate && context_enabled && translation_manager.is_duplicate(&current_text) {
                 debug!("Duplicate text detected (context dedup), skipping");
                 translation_manager.record_ocr_line(&current_text);
                 tokio::time::sleep(Duration::from_millis(interval_ms as u64)).await;
