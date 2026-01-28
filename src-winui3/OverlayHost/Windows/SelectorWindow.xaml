@@ -11,7 +11,33 @@
         Covers entire virtual screen with dimmed overlay and rubber-band selection.
     -->
 
-    <Grid x:Name="RootGrid" Background="#80000000" PointerPressed="OnPointerPressed" PointerMoved="OnPointerMoved" PointerReleased="OnPointerReleased">
+    <Grid x:Name="RootGrid"
+          Background="#55000000"
+          PointerPressed="OnPointerPressed"
+          PointerMoved="OnPointerMoved"
+          PointerReleased="OnPointerReleased">
+
+        <Grid.KeyboardAccelerators>
+            <KeyboardAccelerator Key="Escape" Invoked="EscapeAccelerator_Invoked"/>
+        </Grid.KeyboardAccelerators>
+
+        <!-- Simple on-screen help so it's obvious the selector is waiting for input -->
+        <Border x:Name="HelpPanel"
+                Background="#E0000000"
+                CornerRadius="8"
+                Padding="14,10"
+                HorizontalAlignment="Center"
+                VerticalAlignment="Top"
+                Margin="0,24,0,0"
+                IsHitTestVisible="False">
+            <TextBlock Foreground="White"
+                       FontSize="14"
+                       FontFamily="Segoe UI">
+                <Run Text="Click and drag to select a region. "/>
+                <Run Text="Esc"/>
+                <Run Text=" to cancel."/>
+            </TextBlock>
+        </Border>
 
         <!-- Selection rectangle (rubber-band) -->
         <Border x:Name="SelectionBorder"
@@ -41,7 +67,7 @@
                     VerticalAlignment="Bottom"
                     Margin="0,0,0,40"
                     Spacing="12"
-                    Visibility="Collapsed">
+                    Visibility="Visible">
 
             <Button x:Name="ConfirmButton"
                     Content="Confirm"

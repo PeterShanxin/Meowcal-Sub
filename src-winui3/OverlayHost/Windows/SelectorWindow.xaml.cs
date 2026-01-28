@@ -57,8 +57,10 @@ public sealed partial class SelectorWindow : Window
         var (x, y, width, height) = WindowHelper.GetVirtualScreenBounds();
         _appWindow.MoveAndResize(new RectInt32(x, y, width, height));
 
-        // Make window topmost but interactive (not click-through)
-        WindowHelper.MakeInteractive(this);
+        // Ensure the selector is a topmost toolwindow (no taskbar button) but still interactive.
+        // We do this with Win32 styles because AppWindow APIs don't cover all desired behavior.
+        WindowHelper.MakeTransparentOverlay(this); // sets TOPMOST + TOOLWINDOW (but click-through)
+        WindowHelper.MakeInteractive(this);        // remove click-through (WS_EX_TRANSPARENT)
 
         Debug.WriteLine($"[SelectorWindow] Initialized, covering virtual screen: ({x}, {y}) {width}x{height}");
     }
@@ -82,7 +84,15 @@ public sealed partial class SelectorWindow : Window
         _selectionComplete = false;
         SelectionBorder.Visibility = Visibility.Collapsed;
         DimensionReadout.Visibility = Visibility.Collapsed;
-        ActionButtons.Visibility = Visibility.Collapsed;
+        HelpPanel.Visibility = Visibility.Visible;
+
+        // Keep buttons visible so the user always has a way out (Cancel), but only enable
+        // Confirm/Redraw after a valid selection is made.
+        ActionButtons.Visibility = Visibility.Visible;
+        ConfirmButton.IsEnabled = false;
+        ConfirmButton.Opacity = 0.6;
+        RedrawButton.IsEnabled = false;
+        RedrawButton.Opacity = 0.6;
         Debug.WriteLine("[SelectorWindow] Selection reset");
     }
 
@@ -93,7 +103,15 @@ public sealed partial class SelectorWindow : Window
     /// </summary>
     private void OnPointerPressed(object sender, PointerRoutedEventArgs e)
     {
+        // Right-click cancels immediately (helps if keyboard focus is flaky).
         var point = e.GetCurrentPoint(RootGrid);
+        if (point.Properties.IsRightButtonPressed)
+        {
+            Debug.WriteLine("[SelectorWindow] Right-click cancel");
+            CancelSelection();
+            return;
+        }
+
         _startX = point.Position.X;
         _startY = point.Position.Y;
         _currentX = _startX;
@@ -139,8 +157,12 @@ public sealed partial class SelectorWindow : Window
         // Release pointer capture
         RootGrid.ReleasePointerCaptures();
 
-        // Show action buttons
-        ActionButtons.Visibility = Visibility.Visible;
+        // Enable action buttons now that a selection exists
+        HelpPanel.Visibility = Visibility.Collapsed;
+        ConfirmButton.IsEnabled = true;
+        ConfirmButton.Opacity = 1.0;
+        RedrawButton.IsEnabled = true;
+        RedrawButton.Opacity = 1.0;
 
         var width = Math.Abs(_currentX - _startX);
         var height = Math.Abs(_currentY - _startY);
@@ -148,6 +170,20 @@ public sealed partial class SelectorWindow : Window
     }
 
     #endregion
+
+    private void EscapeAccelerator_Invoked(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args)
+    {
+        Debug.WriteLine("[SelectorWindow] Esc cancel");
+        CancelSelection();
+        args.Handled = true;
+    }
+
+    private void CancelSelection()
+    {
+        SelectionCancelled?.Invoke(this, EventArgs.Empty);
+        _appWindow?.Hide();
+        ResetSelection();
+    }
 
     /// <summary>
     /// Update selection rectangle and dimension readout visuals.
@@ -265,8 +301,7 @@ public sealed partial class SelectorWindow : Window
     private void CancelButton_Click(object sender, RoutedEventArgs e)
     {
         Debug.WriteLine("[SelectorWindow] Selection cancelled");
-        SelectionCancelled?.Invoke(this, EventArgs.Empty);
-        _appWindow?.Hide();
+        CancelSelection();
     }
 
     #endregion
