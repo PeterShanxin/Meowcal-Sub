@@ -591,11 +591,15 @@ let resizeHandle = null;
 let dragStartX = 0;
 let dragStartY = 0;
 let dragRegionStart = null;
+let dragResizeListenersAttached = false;
 
 /**
  * Set up drag and resize handlers after selection is complete
  */
 function setupDragAndResize() {
+    if (dragResizeListenersAttached) return;
+    dragResizeListenersAttached = true;
+
     // Handle resize handle mouse down
     const handles = selectionBox.querySelectorAll('.resize-handle');
     handles.forEach(handle => {
