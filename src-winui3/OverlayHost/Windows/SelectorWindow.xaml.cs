@@ -222,19 +222,25 @@ public sealed partial class SelectorWindow : Window
             return;
         }
 
-        // Extract coordinates from logical region
+        // Extract coordinates from logical region (window-relative)
         int logicalX = (int)Math.Round(logicalRegion.Value.X);
         int logicalY = (int)Math.Round(logicalRegion.Value.Y);
         int logicalWidth = (int)Math.Round(logicalRegion.Value.Width);
         int logicalHeight = (int)Math.Round(logicalRegion.Value.Height);
 
+        // Offset by virtual screen origin so coordinates are screen-relative
+        var (screenX, screenY, _, _) = WindowHelper.GetVirtualScreenBounds();
+        int screenLogicalX = logicalX + screenX;
+        int screenLogicalY = logicalY + screenY;
+
         // Convert to physical pixels (screen capture coordinates)
         var physicalRegion = CoordinateConverter.LogicalToPhysical(
-            logicalX, logicalY, logicalWidth, logicalHeight
+            screenLogicalX, screenLogicalY, logicalWidth, logicalHeight
         );
 
         Debug.WriteLine($"[SelectorWindow] Confirmed selection:");
-        Debug.WriteLine($"  Logical: ({logicalX}, {logicalY}) {logicalWidth}x{logicalHeight}");
+        Debug.WriteLine($"  Logical (window): ({logicalX}, {logicalY}) {logicalWidth}x{logicalHeight}");
+        Debug.WriteLine($"  Logical (screen): ({screenLogicalX}, {screenLogicalY}) {logicalWidth}x{logicalHeight}");
         Debug.WriteLine($"  Physical: ({physicalRegion.X}, {physicalRegion.Y}) {physicalRegion.Width}x{physicalRegion.Height}");
 
         // Raise event with physical coordinates
