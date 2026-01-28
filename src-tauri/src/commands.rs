@@ -733,32 +733,47 @@ pub struct OpenAreaSelectorResult {
 /// Called from JavaScript: `await invoke('open_area_selector');`
 #[tauri::command]
 pub async fn open_area_selector(app: AppHandle, state: State<'_, AppState>) -> Result<OpenAreaSelectorResult, String> {
-    info!("🎯 Opening area selector via OverlayHost");
+    // We currently prefer the "legacy" webview-based selector because it has a stable
+    // desktop-snapshot background and correct DPI mapping.
+    //
+    // WinUI selector is kept as an opt-in experiment for future work.
+    let prefer_winui = std::env::var("MEOWCAL_USE_WINUI_SELECTOR")
+        .map(|v| {
+            matches!(
+                v.trim().to_ascii_lowercase().as_str(),
+                "1" | "true" | "yes" | "on"
+            )
+        })
+        .unwrap_or(false);
 
-    if let Some(ipc_server) = app.try_state::<Arc<IpcServer>>() {
-        // On startup, the WinUI OverlayHost can take a moment to launch and connect.
-        // Wait briefly so the first click is more likely to use WinUI instead of the legacy UI.
-        const WAIT_MS: u64 = 2500;
-        const STEP_MS: u64 = 50;
-        let message = IpcMessage::new("Region.RequestOpenSelector");
+    if prefer_winui {
+        info!("🎯 Opening area selector via OverlayHost (opt-in)");
 
-        let mut waited = 0u64;
-        while waited <= WAIT_MS {
-            if ipc_server.is_connected() {
-                if ipc_server.send(message.clone()).await {
-                    return Ok(OpenAreaSelectorResult {
-                        mode: AreaSelectorMode::Winui,
-                    });
+        if let Some(ipc_server) = app.try_state::<Arc<IpcServer>>() {
+            // On startup, the WinUI OverlayHost can take a moment to launch and connect.
+            // Wait briefly so the first click is more likely to use WinUI instead of the legacy UI.
+            const WAIT_MS: u64 = 2500;
+            const STEP_MS: u64 = 50;
+            let message = IpcMessage::new("Region.RequestOpenSelector");
+
+            let mut waited = 0u64;
+            while waited <= WAIT_MS {
+                if ipc_server.is_connected() {
+                    if ipc_server.send(message.clone()).await {
+                        return Ok(OpenAreaSelectorResult {
+                            mode: AreaSelectorMode::Winui,
+                        });
+                    }
                 }
+
+                tokio::time::sleep(Duration::from_millis(STEP_MS)).await;
+                waited = waited.saturating_add(STEP_MS);
             }
 
-            tokio::time::sleep(Duration::from_millis(STEP_MS)).await;
-            waited = waited.saturating_add(STEP_MS);
+            warn!("⚠️ OverlayHost not connected; falling back to legacy selector");
+        } else {
+            warn!("⚠️ IPC server not initialized; falling back to legacy selector");
         }
-
-        warn!("⚠️ OverlayHost not connected; falling back to legacy selector");
-    } else {
-        warn!("⚠️ IPC server not initialized; falling back to legacy selector");
     }
 
     open_area_selector_legacy(app, state).await?;

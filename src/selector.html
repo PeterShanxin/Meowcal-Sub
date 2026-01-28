@@ -17,13 +17,19 @@
     <!-- Desktop snapshot background (workaround for WebView2 transparency regressions) -->
     <img class="desktop-snapshot" id="desktop-snapshot" alt="" />
 
-    <!-- Semi-transparent overlay covering the entire screen -->
-    <div class="overlay" id="overlay"></div>
+    <!-- Dim overlay segments (creates a "hole" around the selection) -->
+    <div class="overlay-segment overlay-top" id="overlay-top"></div>
+    <div class="overlay-segment overlay-left" id="overlay-left"></div>
+    <div class="overlay-segment overlay-right" id="overlay-right"></div>
+    <div class="overlay-segment overlay-bottom" id="overlay-bottom"></div>
 
     <!-- Instruction banner at the top -->
     <div class="instructions" id="instructions">
         <span class="icon">📐</span>
-        <span class="text">Click and drag to select the subtitle area</span>
+        <span class="text">
+            Drag to select the subtitle area
+            <span class="hint">Enter to confirm · Esc/right-click to cancel · Drag/resize to adjust</span>
+        </span>
         <button class="cancel-btn" id="cancel-btn" title="Cancel (ESC)">✕ Cancel</button>
     </div>
 

@@ -31,6 +31,10 @@ let confirmBtn = null;
 let retryBtn = null;
 let cancelBtn = null;
 let desktopSnapshot = null;
+let overlayTop = null;
+let overlayLeft = null;
+let overlayRight = null;
+let overlayBottom = null;
 
 // =============================================================================
 // INITIALIZATION
@@ -66,6 +70,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     retryBtn = document.getElementById('retry-btn');
     cancelBtn = document.getElementById('cancel-btn');
     desktopSnapshot = document.getElementById('desktop-snapshot');
+    overlayTop = document.getElementById('overlay-top');
+    overlayLeft = document.getElementById('overlay-left');
+    overlayRight = document.getElementById('overlay-right');
+    overlayBottom = document.getElementById('overlay-bottom');
 
     if (!selectionBox || !dimensionsDisplay || !instructions) {
         console.error('Failed to find required DOM elements');
@@ -79,6 +87,12 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // Set up event listeners
     setupEventListeners();
+
+    // Dim the entire screen until the user makes a selection.
+    dimOverlayFull();
+
+    // If a region is already set, preload it so the user can tweak it quickly.
+    await restoreExistingSelection();
 
     // Ensure window has focus for keyboard events
     try {
@@ -129,6 +143,64 @@ function applySelectorSnapshot(snapshot) {
 }
 
 // =============================================================================
+// PREMIUM DIM OVERLAY ("HOLE" AROUND SELECTION)
+// =============================================================================
+
+function dimOverlayFull() {
+    if (!overlayTop || !overlayLeft || !overlayRight || !overlayBottom) return;
+
+    overlayTop.style.top = '0px';
+    overlayTop.style.left = '0px';
+    overlayTop.style.width = '100%';
+    overlayTop.style.height = '100%';
+
+    // Collapse the other segments to avoid seams.
+    overlayLeft.style.width = '0px';
+    overlayLeft.style.height = '0px';
+    overlayRight.style.width = '0px';
+    overlayRight.style.height = '0px';
+    overlayBottom.style.width = '0px';
+    overlayBottom.style.height = '0px';
+}
+
+function dimOverlayWithHole(left, top, width, height) {
+    if (!overlayTop || !overlayLeft || !overlayRight || !overlayBottom) return;
+
+    // Clamp to viewport bounds (defensive against negative coords).
+    const clampedLeft = Math.max(0, Math.min(left, window.innerWidth));
+    const clampedTop = Math.max(0, Math.min(top, window.innerHeight));
+    const clampedRight = Math.max(clampedLeft, Math.min(left + width, window.innerWidth));
+    const clampedBottom = Math.max(clampedTop, Math.min(top + height, window.innerHeight));
+
+    const holeWidth = Math.max(0, clampedRight - clampedLeft);
+    const holeHeight = Math.max(0, clampedBottom - clampedTop);
+
+    // Top segment
+    overlayTop.style.top = '0px';
+    overlayTop.style.left = '0px';
+    overlayTop.style.width = '100%';
+    overlayTop.style.height = `${clampedTop}px`;
+
+    // Bottom segment
+    overlayBottom.style.top = `${clampedTop + holeHeight}px`;
+    overlayBottom.style.left = '0px';
+    overlayBottom.style.width = '100%';
+    overlayBottom.style.height = `${Math.max(0, window.innerHeight - (clampedTop + holeHeight))}px`;
+
+    // Left segment
+    overlayLeft.style.top = `${clampedTop}px`;
+    overlayLeft.style.left = '0px';
+    overlayLeft.style.width = `${clampedLeft}px`;
+    overlayLeft.style.height = `${holeHeight}px`;
+
+    // Right segment
+    overlayRight.style.top = `${clampedTop}px`;
+    overlayRight.style.left = `${clampedLeft + holeWidth}px`;
+    overlayRight.style.width = `${Math.max(0, window.innerWidth - (clampedLeft + holeWidth))}px`;
+    overlayRight.style.height = `${holeHeight}px`;
+}
+
+// =============================================================================
 // EVENT LISTENERS
 // =============================================================================
 
@@ -141,6 +213,12 @@ function setupEventListeners() {
     // Keyboard events - multiple targets for reliability
     document.addEventListener('keydown', handleKeyDown, true);
     window.addEventListener('keydown', handleKeyDown, true);
+
+    // Right-click cancels (common in region selectors)
+    document.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+        cancelSelection();
+    });
 
     // Button click events
     if (cancelBtn) {
@@ -168,6 +246,42 @@ function setupEventListeners() {
     }
 
     console.log('Event listeners set up');
+}
+
+// =============================================================================
+// EXISTING REGION PRELOAD
+// =============================================================================
+
+async function restoreExistingSelection() {
+    if (!window.__TAURI__?.core?.invoke) return;
+    if (!selectionBox || !instructions) return;
+
+    try {
+        const existing = await window.__TAURI__.core.invoke('get_capture_region');
+        if (!existing) return;
+        if (!Number.isFinite(existing.width) || existing.width <= 0) return;
+        if (!Number.isFinite(existing.height) || existing.height <= 0) return;
+
+        state.isSelecting = false;
+        state.hasSelection = true;
+        state.region = { ...existing };
+        state.startX = existing.x;
+        state.startY = existing.y;
+        state.currentX = existing.x + existing.width;
+        state.currentY = existing.y + existing.height;
+
+        selectionBox.classList.add('active', 'has-selection');
+        updateSelectionBox();
+        showActionButtons();
+        setupDragAndResize();
+
+        document.body.classList.add('selection-ready');
+        instructions.style.opacity = '0.4';
+
+        console.log('Preloaded existing region:', existing);
+    } catch (e) {
+        console.warn('Failed to restore existing selection:', e);
+    }
 }
 
 // =============================================================================
@@ -300,6 +414,9 @@ function updateSelectionBox() {
     selectionBox.style.width = `${region.width}px`;
     selectionBox.style.height = `${region.height}px`;
 
+    // Dim outside the selection for a "snipping tool" feel
+    dimOverlayWithHole(left, top, region.width, region.height);
+
     // Update dimensions display
     dimensionsDisplay.textContent = `${region.width} × ${region.height}`;
 
@@ -411,6 +528,7 @@ function resetSelection() {
     // Reset visual state
     document.body.classList.remove('selection-ready');
     instructions.style.opacity = '1';
+    dimOverlayFull();
 }
 
 async function cancelSelection() {

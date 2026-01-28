@@ -628,12 +628,10 @@ async function handleSelectArea() {
         const result = await TauriBridge.invoke('open_area_selector');
         console.log('Selector window opened:', result);
 
-        // If we fell back to the legacy selector, tell the user explicitly.
-        // (WinUI OverlayHost issues otherwise look like "nothing happened".)
         if (result && result.mode === 'legacy') {
-            showToast('Using legacy selector (WinUI OverlayHost not connected)', 'warning');
+            showToast('Premium legacy selector opened', 'success');
         } else if (result && result.mode === 'winui') {
-            showToast('WinUI selector opened (drag to select, Esc/right-click to cancel)', 'success');
+            showToast('WinUI selector opened (experimental)', 'warning');
         }
 
         // Start polling for region changes (fallback in case events don't work)
