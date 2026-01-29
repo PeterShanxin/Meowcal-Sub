@@ -119,6 +119,54 @@ pub enum ReadyState {
     Error,
 }
 
+/// Foundry Local-specific status phases (more granular than generic ReadyState).
+///
+/// These phases provide detailed insight into Foundry Local's operational state,
+/// distinguishing between installation issues, service state, model availability,
+/// and warmup status (especially important for NPU models).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum FoundryLocalPhase {
+    /// Foundry CLI not found on the system
+    NotInstalled,
+    /// Foundry CLI exists but service is not running
+    NotRunning,
+    /// Service running but no models are cached
+    NoModels,
+    /// Service up and model known, but chat probe times out (warmup in progress)
+    Preparing,
+    /// Chat probe succeeds - ready for translation
+    Ready,
+    /// An error occurred during status check
+    Error,
+}
+
+impl FoundryLocalPhase {
+    /// Convert to the generic ReadyState for backward compatibility
+    pub fn to_ready_state(&self) -> ReadyState {
+        match self {
+            FoundryLocalPhase::Ready => ReadyState::Ready,
+            FoundryLocalPhase::NotInstalled => ReadyState::NotSupported,
+            FoundryLocalPhase::NotRunning
+            | FoundryLocalPhase::NoModels
+            | FoundryLocalPhase::Preparing => ReadyState::NotReady,
+            FoundryLocalPhase::Error => ReadyState::Error,
+        }
+    }
+
+    /// Get a human-readable label for UI display
+    pub fn label(&self) -> &'static str {
+        match self {
+            FoundryLocalPhase::NotInstalled => "Not Installed",
+            FoundryLocalPhase::NotRunning => "Not Running",
+            FoundryLocalPhase::NoModels => "No Models",
+            FoundryLocalPhase::Preparing => "Preparing",
+            FoundryLocalPhase::Ready => "Ready",
+            FoundryLocalPhase::Error => "Error",
+        }
+    }
+}
+
 /// Backend status for frontend/diagnostics
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -128,6 +176,9 @@ pub struct BackendInfo {
     pub available: bool,
     pub ready_state: ReadyState,
     pub notes: String,
+    /// Optional granular phase (currently only used by Foundry Local)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub phase: Option<FoundryLocalPhase>,
 }
 
 /// Result returned by translation manager

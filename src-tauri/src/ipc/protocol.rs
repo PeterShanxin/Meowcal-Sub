@@ -107,7 +107,7 @@ impl From<&crate::config::OverlayConfig> for OverlaySettingsData {
             background_color: config.background_color.clone(),
             offset_y: config.offset_y,
             max_width: config.max_width,
-            auto_fade_timeout_ms: 3000, // Default
+            auto_fade_timeout_ms: 3000,          // Default
             border_color: "#00A8FF".to_string(), // Default accent color
             border_width: 3,
         }

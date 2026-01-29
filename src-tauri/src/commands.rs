@@ -15,14 +15,17 @@
 
 use crate::capture;
 use crate::config::{save_config, AppConfig, CaptureRegion};
+use crate::ipc::{
+    IpcMessage, IpcServer, OverlaySettingsData, RegionData, SetRegionPayload, SettingsSyncPayload,
+    SubtitleUpdatePayload,
+};
 use crate::llm::{
-    BackendId, BackendInfo, FoundryLocalBackend, OfflineMtBackend, PhiSilica,
+    BackendId, BackendInfo, FoundryLocalBackend, FoundryLocalPhase, OfflineMtBackend, PhiSilica,
     TranslationDiagnostics, TranslationDiagnosticsState, TranslationManager, TranslationOutcome,
     TranslatorBackend, WindowsAiDiagnostics,
 };
 use crate::ocr::WindowsOcr;
 use crate::overlay;
-use crate::ipc::{IpcMessage, IpcServer, SetRegionPayload, RegionData, SubtitleUpdatePayload, SettingsSyncPayload, OverlaySettingsData};
 use reqwest::Client;
 use serde::Serialize;
 use std::path::PathBuf;
@@ -352,9 +355,11 @@ pub struct FoundryLocalStatus {
     pub service_url: Option<String>,
     pub models: Vec<String>,
     pub notes: String,
+    /// Granular Foundry Local phase (e.g. notInstalled, notRunning, noModels, preparing, ready).
+    pub phase: FoundryLocalPhase,
 }
 
-/// Get the status of Foundry Local service
+/// Get the status of Foundry Local service (fast, no probe)
 #[tauri::command]
 pub async fn get_foundry_local_status(
     state: State<'_, AppState>,
@@ -364,7 +369,7 @@ pub async fn get_foundry_local_status(
         guard.translation.foundry_local.clone()
     };
 
-    async_runtime::spawn_blocking(move || build_foundry_local_status(config))
+    async_runtime::spawn_blocking(move || build_foundry_local_status_no_probe(config))
         .await
         .map_err(|err| {
             let message = format!("Foundry Local status task failed: {}", err);
@@ -386,34 +391,153 @@ pub async fn list_foundry_local_models(state: State<'_, AppState>) -> Result<Vec
     backend.list_models().await.map_err(|e| e.to_string())
 }
 
-/// Refresh Foundry Local service status (re-detect service)
+/// Refresh Foundry Local service status (re-detect service + fast probe)
 #[tauri::command]
 pub async fn refresh_foundry_local_status(
     state: State<'_, AppState>,
 ) -> Result<FoundryLocalStatus, String> {
-    get_foundry_local_status(state).await
-}
+    use crate::llm::FAST_PROBE_TIMEOUT_MS;
 
-/// Prepare Foundry Local (attempt to start service and refresh status)
-#[tauri::command]
-pub async fn prepare_foundry_local(
-    state: State<'_, AppState>,
-) -> Result<FoundryLocalStatus, String> {
     let config = {
         let guard = state.config.lock().unwrap();
         guard.translation.foundry_local.clone()
     };
 
-    async_runtime::spawn_blocking(move || build_foundry_local_status(config))
-        .await
-        .map_err(|err| {
-            let message = format!("Foundry Local prepare task failed: {}", err);
-            warn!("{}", message);
-            message
-        })
+    // Build basic status synchronously
+    let (backend, service_url, service_running, models, notes) = async_runtime::spawn_blocking({
+        let config = config.clone();
+        move || {
+            let backend = FoundryLocalBackend::new(config);
+            backend.refresh_service_status();
+            let service_url = FoundryLocalBackend::get_service_url_from_cli();
+            let service_running = service_url.is_some();
+            let models = if service_running {
+                FoundryLocalBackend::get_cached_models_from_cli()
+            } else {
+                Vec::new()
+            };
+            let notes = backend.notes();
+            (backend, service_url, service_running, models, notes)
+        }
+    })
+    .await
+    .map_err(|err| format!("Foundry Local status task failed: {}", err))?;
+
+    // If service running with models, perform fast probe
+    let phase = if service_running && !models.is_empty() {
+        // Check probe cache first
+        if backend.is_probe_cache_valid() {
+            debug!("Foundry Local probe cache valid, returning ready");
+            FoundryLocalPhase::Ready
+        } else {
+            // Run fast probe
+            debug!(
+                "Running fast Foundry Local probe ({}ms timeout)",
+                FAST_PROBE_TIMEOUT_MS
+            );
+            match backend.probe_chat_completions(FAST_PROBE_TIMEOUT_MS).await {
+                Ok(true) => {
+                    info!("Foundry Local fast probe succeeded");
+                    FoundryLocalPhase::Ready
+                }
+                Ok(false) => {
+                    info!("Foundry Local fast probe timed out (model preparing)");
+                    FoundryLocalPhase::Preparing
+                }
+                Err(e) => {
+                    warn!("Foundry Local fast probe failed: {}", e);
+                    FoundryLocalPhase::Error
+                }
+            }
+        }
+    } else {
+        // Determine phase without probe
+        backend.phase()
+    };
+
+    Ok(FoundryLocalStatus {
+        service_running,
+        service_url,
+        models,
+        notes,
+        phase,
+    })
 }
 
-fn build_foundry_local_status(config: crate::config::FoundryLocalConfig) -> FoundryLocalStatus {
+/// Prepare Foundry Local (attempt to start service + slow warmup probe)
+#[tauri::command]
+pub async fn prepare_foundry_local(
+    state: State<'_, AppState>,
+) -> Result<FoundryLocalStatus, String> {
+    use crate::llm::SLOW_PROBE_TIMEOUT_MS;
+
+    let config = {
+        let guard = state.config.lock().unwrap();
+        guard.translation.foundry_local.clone()
+    };
+
+    // Build basic status synchronously (this will attempt to start service if needed)
+    let (backend, service_url, service_running, models, mut notes) =
+        async_runtime::spawn_blocking({
+            let config = config.clone();
+            move || {
+                let backend = FoundryLocalBackend::new(config);
+                backend.ensure_service_running();
+                let service_url = FoundryLocalBackend::get_service_url_from_cli();
+                let service_running = service_url.is_some();
+                let models = if service_running {
+                    FoundryLocalBackend::get_cached_models_from_cli()
+                } else {
+                    Vec::new()
+                };
+                let notes = backend.notes();
+                (backend, service_url, service_running, models, notes)
+            }
+        })
+        .await
+        .map_err(|err| format!("Foundry Local prepare task failed: {}", err))?;
+
+    // If service running with models, perform slow warmup probe
+    let phase = if service_running && !models.is_empty() {
+        info!(
+            "Starting Foundry Local warmup probe ({}ms timeout)",
+            SLOW_PROBE_TIMEOUT_MS
+        );
+        match backend.probe_chat_completions(SLOW_PROBE_TIMEOUT_MS).await {
+            Ok(true) => {
+                info!("Foundry Local warmup probe succeeded");
+                notes = format!("{} Warmup complete.", notes);
+                FoundryLocalPhase::Ready
+            }
+            Ok(false) => {
+                info!("Foundry Local warmup probe timed out (model still warming up)");
+                notes = format!("{} Model still warming up.", notes);
+                FoundryLocalPhase::Preparing
+            }
+            Err(e) => {
+                warn!("Foundry Local warmup probe failed: {}", e);
+                notes = format!("{} Probe error: {}", notes, e);
+                FoundryLocalPhase::Error
+            }
+        }
+    } else {
+        // Determine phase without probe
+        backend.phase()
+    };
+
+    Ok(FoundryLocalStatus {
+        service_running,
+        service_url,
+        models,
+        notes,
+        phase,
+    })
+}
+
+/// Build Foundry Local status without performing a network probe (fast initial load).
+fn build_foundry_local_status_no_probe(
+    config: crate::config::FoundryLocalConfig,
+) -> FoundryLocalStatus {
     let backend = FoundryLocalBackend::new(config);
     backend.refresh_service_status();
     let service_url = FoundryLocalBackend::get_service_url_from_cli();
@@ -426,11 +550,15 @@ fn build_foundry_local_status(config: crate::config::FoundryLocalConfig) -> Foun
         Vec::new()
     };
 
+    // Determine phase without probe
+    let phase = backend.phase();
+
     FoundryLocalStatus {
         service_running,
         service_url,
         models,
         notes: backend.notes(),
+        phase,
     }
 }
 fn build_translate_locally_download_info(
@@ -751,7 +879,10 @@ pub struct OpenAreaSelectorResult {
 ///
 /// Called from JavaScript: `await invoke('open_area_selector');`
 #[tauri::command]
-pub async fn open_area_selector(app: AppHandle, state: State<'_, AppState>) -> Result<OpenAreaSelectorResult, String> {
+pub async fn open_area_selector(
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> Result<OpenAreaSelectorResult, String> {
     // We currently prefer the "legacy" webview-based selector because it has a stable
     // desktop-snapshot background and correct DPI mapping.
     //
@@ -770,12 +901,10 @@ pub async fn open_area_selector(app: AppHandle, state: State<'_, AppState>) -> R
 
             let mut waited = 0u64;
             while waited <= WAIT_MS {
-                if ipc_server.is_connected() {
-                    if ipc_server.send(message.clone()).await {
-                        return Ok(OpenAreaSelectorResult {
-                            mode: AreaSelectorMode::Winui,
-                        });
-                    }
+                if ipc_server.is_connected() && ipc_server.send(message.clone()).await {
+                    return Ok(OpenAreaSelectorResult {
+                        mode: AreaSelectorMode::Winui,
+                    });
                 }
 
                 tokio::time::sleep(Duration::from_millis(STEP_MS)).await;
@@ -796,7 +925,10 @@ pub async fn open_area_selector(app: AppHandle, state: State<'_, AppState>) -> R
 
 /// Legacy area selector (kept for fallback if WinUI3 is not available)
 #[allow(dead_code)]
-async fn open_area_selector_legacy(app: AppHandle, state: State<'_, AppState>) -> Result<(), String> {
+async fn open_area_selector_legacy(
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
     info!("Opening area selector...");
 
     if let Some(window) = app.get_webview_window("selector") {
@@ -1129,19 +1261,13 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
     }
 
     // Send messages to WinUI3 OverlayHost
-    send_overlay_message(
-        &app,
-        IpcMessage::new("Overlay.Show")
-    ).await;
+    send_overlay_message(&app, IpcMessage::new("Overlay.Show")).await;
 
     // Send initial region if set
     let payload = SetRegionPayload {
         region: RegionData::from(&region),
     };
-    send_overlay_message(
-        &app,
-        IpcMessage::with_payload("Overlay.SetRegion", payload)
-    ).await;
+    send_overlay_message(&app, IpcMessage::with_payload("Overlay.SetRegion", payload)).await;
 
     // Send initial settings to overlay
     let settings_payload = {
@@ -1152,8 +1278,9 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
     };
     send_overlay_message(
         &app,
-        IpcMessage::with_payload("Settings.Sync", settings_payload)
-    ).await;
+        IpcMessage::with_payload("Settings.Sync", settings_payload),
+    )
+    .await;
 
     // Initialize translation backend manager
     let diagnostics = state.translation_diagnostics.clone();
@@ -1460,7 +1587,10 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
                 force_retry_duplicate = true;
             }
 
-            if !force_retry_duplicate && context_enabled && translation_manager.is_duplicate(&current_text) {
+            if !force_retry_duplicate
+                && context_enabled
+                && translation_manager.is_duplicate(&current_text)
+            {
                 debug!("Duplicate text detected (context dedup), skipping");
                 translation_manager.record_ocr_line(&current_text);
                 tokio::time::sleep(Duration::from_millis(interval_ms as u64)).await;
@@ -1648,8 +1778,9 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
 
             send_overlay_message(
                 &app,
-                IpcMessage::with_payload("Subtitle.Update", subtitle_payload)
-            ).await;
+                IpcMessage::with_payload("Subtitle.Update", subtitle_payload),
+            )
+            .await;
 
             // Wait for next iteration
             tokio::time::sleep(Duration::from_millis(interval_ms as u64)).await;
@@ -1690,10 +1821,7 @@ pub async fn stop_translation(state: State<'_, AppState>, app: AppHandle) -> Res
     capture::close_capture_session();
 
     // Send hide message to WinUI3 OverlayHost
-    send_overlay_message(
-        &app,
-        IpcMessage::new("Overlay.Hide")
-    ).await;
+    send_overlay_message(&app, IpcMessage::new("Overlay.Hide")).await;
 
     // Fade out legacy WebView overlay before hiding the window (premium UX).
     //
@@ -1772,7 +1900,11 @@ pub fn set_overlay_window_clip(
         //
         // NOTE: This does not perfectly handle multi-monitor setups where different monitors have
         // different DPI scales, but it fixes the common single-monitor case.
-        let scale_factor = if scale_factor > 0.0 { scale_factor } else { 1.0 };
+        let scale_factor = if scale_factor > 0.0 {
+            scale_factor
+        } else {
+            1.0
+        };
 
         let handle = window
             .window_handle()
@@ -1780,9 +1912,7 @@ pub fn set_overlay_window_clip(
 
         let raw_handle = handle.as_raw();
         let hwnd = match raw_handle {
-            raw_window_handle::RawWindowHandle::Win32(win32) => {
-                HWND(win32.hwnd.get() as *mut _)
-            }
+            raw_window_handle::RawWindowHandle::Win32(win32) => HWND(win32.hwnd.get() as *mut _),
             _ => return Err("Overlay window is not a Win32 window".to_string()),
         };
 
@@ -1803,14 +1933,7 @@ pub fn set_overlay_window_clip(
                 let y2 = region.y + region.height;
 
                 // Outer rounded rectangle.
-                let outer = CreateRoundRectRgn(
-                    x1,
-                    y1,
-                    x2,
-                    y2,
-                    radius_px * 2,
-                    radius_px * 2,
-                );
+                let outer = CreateRoundRectRgn(x1, y1, x2, y2, radius_px * 2, radius_px * 2);
                 if outer.is_invalid() {
                     return Err("CreateRoundRectRgn (outer) failed".to_string());
                 }

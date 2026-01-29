@@ -25,8 +25,8 @@ use tracing::info;
 
 use crate::config::{AppConfig, CaptureRegion};
 use crate::llm::{
-    BackendId, BackendInfo, FoundryLocalBackend, OfflineMtBackend, PhiSilica, ReadyState,
-    TranslationDiagnostics, TranslationDiagnosticsState, TranslatorBackend,
+    BackendId, BackendInfo, FoundryLocalBackend, FoundryLocalPhase, OfflineMtBackend, PhiSilica,
+    ReadyState, TranslationDiagnostics, TranslationDiagnosticsState, TranslatorBackend,
 };
 
 // =============================================================================
@@ -120,6 +120,8 @@ pub struct FoundryLocalStatus {
     pub service_url: Option<String>,
     pub models: Vec<String>,
     pub notes: String,
+    /// Granular Foundry Local phase (e.g. notInstalled, notRunning, noModels, preparing, ready).
+    pub phase: FoundryLocalPhase,
 }
 
 #[derive(Serialize)]
@@ -201,12 +203,14 @@ async fn get_translation_diagnostics(State(state): State<HttpAppState>) -> impl 
         let foundry = FoundryLocalBackend::new(config.translation.foundry_local.clone());
         // Refresh to detect service URL and populate notes correctly
         foundry.refresh_service_status();
+        let phase = foundry.phase();
         backends.push(BackendInfo {
             id: BackendId::FoundryLocal,
             name: "Foundry Local".to_string(),
             available: foundry.is_available(),
             ready_state: foundry.ready_state(),
             notes: foundry.notes(),
+            phase: Some(phase),
         });
     }
 
@@ -219,6 +223,7 @@ async fn get_translation_diagnostics(State(state): State<HttpAppState>) -> impl 
             available: true,
             ready_state: offline.ready_state(),
             notes: offline.notes(),
+            phase: None,
         });
     }
 
@@ -231,6 +236,7 @@ async fn get_translation_diagnostics(State(state): State<HttpAppState>) -> impl 
             available: true,
             ready_state: phi.ready_state(),
             notes: phi.notes(),
+            phase: None,
         });
     }
 
@@ -242,6 +248,7 @@ async fn get_translation_diagnostics(State(state): State<HttpAppState>) -> impl 
             available: true,
             ready_state: ReadyState::Ready,
             notes: "Returns original text without translation".to_string(),
+            phase: None,
         });
     }
 
@@ -283,11 +290,25 @@ async fn get_foundry_local_status(State(state): State<HttpAppState>) -> impl Int
         Vec::new()
     };
 
+    // In browser mode, probe isn't practical (no async blocking context),
+    // so return "preparing" when service is running with models
+    let phase = if !FoundryLocalBackend::is_cli_available() {
+        FoundryLocalPhase::NotInstalled
+    } else if !service_running {
+        FoundryLocalPhase::NotRunning
+    } else if models.is_empty() {
+        FoundryLocalPhase::NoModels
+    } else {
+        // Can't probe in browser mode, assume preparing
+        FoundryLocalPhase::Preparing
+    };
+
     Json(FoundryLocalStatus {
         service_running,
         service_url,
         models,
         notes: backend.notes(),
+        phase,
     })
 }
 
@@ -296,7 +317,7 @@ async fn prepare_foundry_local(State(state): State<HttpAppState>) -> impl IntoRe
     let config = state.config.lock().unwrap().clone();
     let backend = FoundryLocalBackend::new(config.translation.foundry_local);
 
-    backend.refresh_service_status();
+    backend.ensure_service_running();
 
     let service_url = FoundryLocalBackend::get_service_url_from_cli();
     let service_running = service_url.is_some();
@@ -306,11 +327,24 @@ async fn prepare_foundry_local(State(state): State<HttpAppState>) -> impl IntoRe
         Vec::new()
     };
 
+    // In browser mode, probe isn't practical, so return "preparing" when service is running with models
+    let phase = if !FoundryLocalBackend::is_cli_available() {
+        FoundryLocalPhase::NotInstalled
+    } else if !service_running {
+        FoundryLocalPhase::NotRunning
+    } else if models.is_empty() {
+        FoundryLocalPhase::NoModels
+    } else {
+        // Can't probe in browser mode, assume preparing
+        FoundryLocalPhase::Preparing
+    };
+
     Json(FoundryLocalStatus {
         service_running,
         service_url,
         models,
         notes: backend.notes(),
+        phase,
     })
 }
 

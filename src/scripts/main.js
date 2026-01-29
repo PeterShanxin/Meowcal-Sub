@@ -513,7 +513,7 @@ function setupEventListeners() {
 
     // Backend diagnostics refresh
     document.getElementById('btn-refresh-backends')
-        .addEventListener('click', refreshTranslationDiagnostics);
+        .addEventListener('click', () => refreshTranslationDiagnostics({ probeFoundry: true }));
     document.getElementById('btn-prepare-foundry')
         .addEventListener('click', handlePrepareFoundryLocal);
 
@@ -774,12 +774,26 @@ async function setupTranslationUpdateListener() {
  * Refresh backend diagnostics and update UI
  */
 async function refreshTranslationDiagnostics() {
+    const arg0 = arguments.length > 0 ? arguments[0] : null;
+    const opts = arg0 && typeof arg0 === 'object' ? arg0 : {};
+    const probeFoundry = opts.probeFoundry === true;
+
     const container = document.getElementById('backend-status');
     if (!container) {
         return;
     }
 
     try {
+        // Optional fast "ready to talk" probe for Foundry Local. Only runs on explicit user action
+        // (Refresh button), so we don't accidentally warm up models on startup/background refreshes.
+        if (probeFoundry && document.getElementById('toggle-foundry-local')?.checked) {
+            try {
+                await TauriBridge.invoke('refresh_foundry_local_status');
+            } catch (e) {
+                console.warn('Foundry Local fast probe failed:', e);
+            }
+        }
+
         const diagnostics = await TauriBridge.invoke('get_translation_diagnostics');
         updateBackendStatusUI(diagnostics);
         await autoDetectOfflineMtPath();
@@ -793,7 +807,7 @@ async function refreshTranslationDiagnostics() {
 }
 
 /**
- * Attempt to prepare Foundry Local (start service if needed)
+ * Attempt to prepare Foundry Local (start service + warmup probe)
  */
 async function handlePrepareFoundryLocal() {
     const button = document.getElementById('btn-prepare-foundry');
@@ -803,24 +817,58 @@ async function handlePrepareFoundryLocal() {
 
     button.disabled = true;
     const originalLabel = button.textContent;
-    button.textContent = 'Preparing...';
+    button.textContent = 'Warming up...';
+
+    // Show immediate visual feedback - update status to "Preparing"
+    const statusEl = document.getElementById('foundry-status');
+    if (statusEl) {
+        const preparingInfo = formatFoundryPhase('preparing');
+        statusEl.innerHTML = `
+            <span class="status-pill ${preparingInfo.className}">● ${preparingInfo.label.toUpperCase()}</span>
+            <span class="status-text">Warming up model...</span>
+        `;
+    }
 
     try {
         const status = await TauriBridge.invoke('prepare_foundry_local');
         await refreshTranslationDiagnostics();
 
-        if (status?.serviceRunning) {
-            if (status.models && status.models.length > 0) {
-                showToast('Foundry Local is running', 'success');
-            } else {
+        // Handle response based on phase
+        const phase = status?.phase || 'error';
+        switch (phase) {
+            case 'ready':
+                showToast('Foundry Local ready!', 'success');
+                break;
+            case 'preparing':
+                showToast('Foundry Local still warming up. Try again shortly.', 'warning');
+                break;
+            case 'noModels':
+            case 'nomodels':
                 showToast('Foundry Local started. No models cached yet.', 'warning');
-            }
-            await loadFoundryLocalModels();
-        } else {
-            const note = status?.notes ||
-                'Foundry Local not available. Install via: winget install Microsoft.FoundryLocal';
-            showToast(note, 'warning');
+                break;
+            case 'notRunning':
+            case 'notrunning':
+                showToast('Could not start Foundry Local service.', 'error');
+                break;
+            case 'notInstalled':
+            case 'notinstalled':
+                showToast('Foundry Local not installed. Run: winget install Microsoft.FoundryLocal', 'warning');
+                break;
+            case 'error':
+                const note = status?.notes || 'Foundry Local error';
+                showToast(note, 'error');
+                break;
+            default:
+                if (status?.serviceRunning) {
+                    showToast('Foundry Local is running', 'success');
+                } else {
+                    const note = status?.notes ||
+                        'Foundry Local not available. Install via: winget install Microsoft.FoundryLocal';
+                    showToast(note, 'warning');
+                }
         }
+
+        await loadFoundryLocalModels();
     } catch (error) {
         console.error('Failed to prepare Foundry Local:', error);
         const message = error?.message ? error.message : String(error);
@@ -854,6 +902,33 @@ function formatReadyState(readyState) {
             return { label: 'Not Ready', className: 'not-ready' };
         case 'notSupported':
             return { label: 'Not Supported', className: 'not-supported' };
+        case 'error':
+            return { label: 'Error', className: 'error' };
+        default:
+            return { label: 'Unknown', className: 'error' };
+    }
+}
+
+/**
+ * Format Foundry Local phase into display info
+ * @param {string} phase - The phase from backend: notInstalled, notRunning, noModels, preparing, ready, error
+ * @returns {{ label: string, className: string }}
+ */
+function formatFoundryPhase(phase) {
+    switch (phase) {
+        case 'ready':
+            return { label: 'Ready', className: 'ready' };
+        case 'preparing':
+            return { label: 'Preparing', className: 'preparing' };
+        case 'notRunning':
+        case 'notrunning':
+            return { label: 'Not Running', className: 'not-ready' };
+        case 'noModels':
+        case 'nomodels':
+            return { label: 'No Models', className: 'not-ready' };
+        case 'notInstalled':
+        case 'notinstalled':
+            return { label: 'Not Installed', className: 'not-supported' };
         case 'error':
             return { label: 'Error', className: 'error' };
         default:
@@ -939,12 +1014,18 @@ function updateFoundryStatusInline(diagnostics) {
         return;
     }
 
-    let readyState = foundry.readyState;
-    if (!foundry.available && readyState === 'ready') {
-        readyState = 'notReady';
+    // Prefer phase field if available (more granular), fall back to readyState
+    let statusInfo;
+    if (foundry.phase) {
+        statusInfo = formatFoundryPhase(foundry.phase);
+    } else {
+        let readyState = foundry.readyState;
+        if (!foundry.available && readyState === 'ready') {
+            readyState = 'notReady';
+        }
+        statusInfo = formatReadyState(readyState);
     }
 
-    const statusInfo = formatReadyState(readyState);
     const statusClass = statusInfo.className;
     const pill = `<span class="status-pill ${statusClass}">● ${statusInfo.label.toUpperCase()}</span>`;
 

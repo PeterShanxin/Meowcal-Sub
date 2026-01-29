@@ -211,6 +211,18 @@
     border: 1px solid rgba(16, 124, 16, 0.3);
 }
 
+.status-pill.preparing {
+    background: rgba(0, 120, 212, 0.15);
+    color: #4da3ff;
+    border: 1px solid rgba(0, 120, 212, 0.3);
+    animation: pulse-preparing 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse-preparing {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.6; }
+}
+
 .status-pill.not-ready {
     background: rgba(255, 140, 0, 0.15);
     color: #ff9800;

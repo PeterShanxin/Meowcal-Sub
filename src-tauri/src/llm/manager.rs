@@ -157,12 +157,24 @@ impl TranslationManager {
                     };
                 }
 
+                // Add phase for Foundry Local (fast check, no probe)
+                let phase = if backend.id() == BackendId::FoundryLocal && enabled {
+                    // Safe downcast to get phase - we know it's a FoundryLocalBackend
+                    // Use phase() which doesn't perform a network probe
+                    let foundry = FoundryLocalBackend::new(self.config.foundry_local.clone());
+                    foundry.refresh_service_status();
+                    Some(foundry.phase())
+                } else {
+                    None
+                };
+
                 BackendInfo {
                     id: backend.id(),
                     name: backend.name().to_string(),
                     available,
                     ready_state,
                     notes,
+                    phase,
                 }
             })
             .collect()

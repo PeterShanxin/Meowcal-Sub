@@ -32,10 +32,10 @@ use tracing_subscriber::{EnvFilter, FmtSubscriber};
 use meowcal_sub::commands::{self, AppState};
 use meowcal_sub::config::load_config;
 use meowcal_sub::http_server;
-use meowcal_sub::ipc::{IpcServer, IpcMessage};
+use meowcal_sub::ipc::{IpcMessage, IpcServer};
+use std::path::PathBuf;
 use std::process::{Child, Command};
 use std::sync::{Arc, Mutex};
-use std::path::PathBuf;
 
 const LOG_RETENTION_DAYS: u64 = 7;
 const DEFAULT_LOG_FILTER: &str = "meowcal_sub=debug,translation_io=info,tauri=info,axum=info,tower_http=info,hyper=warn,hyper_util=warn,reqwest=warn";
@@ -119,8 +119,11 @@ fn handle_ipc_message(app: &tauri::AppHandle, message: IpcMessage) {
         "Selector.Result" => {
             // Parse selector result and update capture region
             if let Some(payload) = message.payload {
-                if let Ok(result) = serde_json::from_value::<meowcal_sub::ipc::SelectorResultPayload>(payload) {
-                    info!("✅ Selector result: ({},{}) {}x{} @ {}% DPI",
+                if let Ok(result) =
+                    serde_json::from_value::<meowcal_sub::ipc::SelectorResultPayload>(payload)
+                {
+                    info!(
+                        "✅ Selector result: ({},{}) {}x{} @ {}% DPI",
                         result.region_physical.x,
                         result.region_physical.y,
                         result.region_physical.width,
@@ -137,7 +140,7 @@ fn handle_ipc_message(app: &tauri::AppHandle, message: IpcMessage) {
                         height: result.region_physical.height,
                     };
 
-                    *state.capture_region.lock().unwrap() = Some(new_region.clone());
+                    *state.capture_region.lock().unwrap() = Some(new_region);
 
                     // Save to config
                     {
