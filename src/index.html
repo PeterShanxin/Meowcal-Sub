@@ -442,6 +442,32 @@
             </div>
         </div>
     </div>
+
+    <!-- Foundry Warmup Modal (shown when Foundry is enabled but not Ready on Start Translation) -->
+    <div class="modal hidden" id="foundry-warmup-modal" role="dialog" aria-modal="true">
+        <div class="modal-backdrop" id="foundry-warmup-backdrop"></div>
+        <div class="modal-content" role="document">
+            <div class="modal-header">
+                <h3>Foundry Local not ready</h3>
+            </div>
+            <div class="modal-body">
+                <div class="setting-hint" id="foundry-warmup-status">
+                    Checking Foundry Local...
+                </div>
+            </div>
+            <div class="modal-actions">
+                <button class="btn btn-outline btn-small" id="btn-foundry-warmup-cancel">
+                    Cancel
+                </button>
+                <button class="btn btn-outline btn-small" id="btn-foundry-fallback-start">
+                    Start with fallback
+                </button>
+                <button class="btn btn-primary btn-small" id="btn-foundry-warmup-start">
+                    Warm up Foundry &amp; start
+                </button>
+            </div>
+        </div>
+    </div>
     
     <!-- Scripts -->
     <!-- Load bridge first to set up unified API before other scripts run -->

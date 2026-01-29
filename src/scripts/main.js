@@ -636,6 +636,16 @@ function setupEventListeners() {
         .addEventListener('click', handleConfirmTranslateLocallyDownload);
     document.getElementById('download-option')
         .addEventListener('change', updateDownloadOptionNotes);
+
+    // Foundry warmup modal actions
+    document.getElementById('btn-foundry-warmup-cancel')
+        .addEventListener('click', closeFoundryWarmupModal);
+    document.getElementById('foundry-warmup-backdrop')
+        .addEventListener('click', closeFoundryWarmupModal);
+    document.getElementById('btn-foundry-warmup-start')
+        .addEventListener('click', handleWarmupFoundryAndStart);
+    document.getElementById('btn-foundry-fallback-start')
+        .addEventListener('click', handleStartWithFallbackNow);
 }
 
 // =============================================================================
@@ -1588,6 +1598,112 @@ function closeDownloadModal() {
     }
 }
 
+function openFoundryWarmupModal(status) {
+    const modal = document.getElementById('foundry-warmup-modal');
+    const body = document.getElementById('foundry-warmup-status');
+    if (!modal || !body) {
+        return;
+    }
+
+    const phase = (status?.phase || 'error').toString();
+    const phaseInfo = formatFoundryPhase(phase);
+    const selectedModel = status?.selectedModel ? status.selectedModel : '(auto)';
+    const lastError =
+        status?.probe?.result === 'error'
+            ? (status.probe.error || 'Unknown error')
+            : status?.probe?.result === 'timeout'
+                ? 'Probe timed out (model likely warming up).'
+                : '';
+
+    const installHint = !status?.cliAvailable
+        ? 'Install Foundry Local: winget install Microsoft.FoundryLocal'
+        : '';
+
+    const serviceHint = status?.cliAvailable && status?.serviceRunning !== true
+        ? 'Start the service with "Make Foundry Ready" (recommended) or: foundry service start'
+        : '';
+
+    const notes = status?.notes ? status.notes : 'Could not determine Foundry Local status.';
+
+    body.innerHTML = `
+        <div style="margin-bottom: 10px;">
+            Foundry Local is enabled, but the model is not ready yet.
+        </div>
+        <div style="margin-bottom: 10px;">
+            <span class="status-pill ${escapeHtml(phaseInfo.className)}">● ${escapeHtml(phaseInfo.label.toUpperCase())}</span>
+        </div>
+        <div class="setting-hint" style="margin-bottom: 10px;">
+            Selected model: ${escapeHtml(selectedModel)}
+        </div>
+        <div class="setting-hint" style="margin-bottom: 10px;">
+            ${escapeHtml(notes)}
+        </div>
+        ${lastError ? `<div class="setting-hint" style="color:#f44336;">Last error: ${escapeHtml(lastError)}</div>` : ''}
+        ${installHint ? `<div class="setting-hint" style="margin-top:10px;">${escapeHtml(installHint)}</div>` : ''}
+        ${serviceHint ? `<div class="setting-hint" style="margin-top:6px;">${escapeHtml(serviceHint)}</div>` : ''}
+    `;
+
+    // Reset modal buttons in case a previous warmup attempt disabled them.
+    const warmup = document.getElementById('btn-foundry-warmup-start');
+    const fallback = document.getElementById('btn-foundry-fallback-start');
+    const cancel = document.getElementById('btn-foundry-warmup-cancel');
+    if (warmup) warmup.disabled = false;
+    if (fallback) fallback.disabled = false;
+    if (cancel) cancel.disabled = false;
+
+    modal.classList.remove('hidden');
+}
+
+function closeFoundryWarmupModal() {
+    const modal = document.getElementById('foundry-warmup-modal');
+    if (modal) {
+        modal.classList.add('hidden');
+    }
+}
+
+async function handleWarmupFoundryAndStart() {
+    const warmup = document.getElementById('btn-foundry-warmup-start');
+    const fallback = document.getElementById('btn-foundry-fallback-start');
+    const cancel = document.getElementById('btn-foundry-warmup-cancel');
+    const body = document.getElementById('foundry-warmup-status');
+
+    if (warmup) warmup.disabled = true;
+    if (fallback) fallback.disabled = true;
+    if (cancel) cancel.disabled = true;
+    if (body) {
+        body.textContent = 'Warming up Foundry Local... (this can take a bit on first run)';
+    }
+
+    try {
+        const status = await TauriBridge.invoke('make_foundry_ready');
+        renderFoundryStatus(status);
+
+        if (status?.phase === 'ready') {
+            closeFoundryWarmupModal();
+            await startTranslationNow();
+            return;
+        }
+
+        // Still not ready - keep the modal open and show details + allow fallback.
+        openFoundryWarmupModal(status);
+    } catch (e) {
+        console.error('Foundry warmup failed:', e);
+        if (body) {
+            const message = e?.message ? e.message : String(e);
+            body.textContent = `Warmup failed: ${message}`;
+        }
+        if (fallback) fallback.disabled = false;
+        if (cancel) cancel.disabled = false;
+        if (warmup) warmup.disabled = false;
+    }
+}
+
+async function handleStartWithFallbackNow() {
+    closeFoundryWarmupModal();
+    showToast('Starting with fallback (Foundry not ready).', 'warning');
+    await startTranslationNow();
+}
+
 function renderWindowsAiDiagnostics(diagnostics) {
     const container = document.getElementById('windows-ai-diagnostics');
     if (!container) {
@@ -1769,11 +1885,9 @@ async function syncTranslationState() {
 // =============================================================================
 
 /**
- * Start translation
+ * Start translation (actual backend start)
  */
-async function handleStartTranslation() {
-    console.log('Starting translation...');
-
+async function startTranslationNow() {
     const startButton = document.getElementById('btn-start');
     const stopButton = document.getElementById('btn-stop');
 
@@ -1814,6 +1928,24 @@ async function handleStartTranslation() {
         updateStatus('ready', 'Ready');
         showToast('Failed to start: ' + error, 'error');
     }
+}
+
+/**
+ * Start translation (UX gate: if Foundry is enabled but not Ready, prompt user)
+ */
+async function handleStartTranslation() {
+    console.log('Start translation clicked');
+
+    const foundryEnabled = document.getElementById('toggle-foundry-local')?.checked === true;
+    if (foundryEnabled) {
+        const status = await refreshFoundryStatus({ probe: true, reason: 'start-translation' });
+        if (!status || status.phase !== 'ready') {
+            openFoundryWarmupModal(status);
+            return;
+        }
+    }
+
+    await startTranslationNow();
 }
 
 /**
