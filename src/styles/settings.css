@@ -218,6 +218,13 @@
     animation: pulse-preparing 1.5s ease-in-out infinite;
 }
 
+.status-pill.checking {
+    background: rgba(0, 120, 212, 0.12);
+    color: #7abaff;
+    border: 1px solid rgba(0, 120, 212, 0.25);
+    animation: pulse-preparing 1.2s ease-in-out infinite;
+}
+
 .status-pill.unchecked {
     background: rgba(138, 136, 134, 0.12);
     color: #c8c6c4;

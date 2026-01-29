@@ -34,6 +34,8 @@ const appState = {
     foundryAutoProbe: {
         inFlight: false,
         lastAttemptMs: 0,
+        timerId: null,
+        attempts: 0,
     },
 };
 
@@ -66,7 +68,7 @@ async function initializeApp() {
         await setupCaptureStatusListener();
 
         // Load backend diagnostics
-        await refreshTranslationDiagnostics();
+        await refreshTranslationDiagnostics({ autoProbeFoundry: true });
         // UX: automatically verify Foundry readiness if it is running, without requiring a click.
         // This is read-only (won't start the service); it just runs the fast probe when applicable.
         scheduleFoundryAutoProbe();
@@ -837,8 +839,10 @@ async function maybeAutoProbeFoundry(diagnostics) {
         return;
     }
 
-    // Only auto-probe when the service is up and models exist, but we haven't checked readiness yet.
-    if (foundry.phase !== 'unchecked') {
+    // Auto-probe when the service is up and models exist, but readiness isn't confirmed yet.
+    // We keep retrying while it's "unchecked" (never probed), "preparing" (timeouts), or "error"
+    // (transient service restart/port changes are common).
+    if (!['unchecked', 'preparing', 'error'].includes(foundry.phase)) {
         return;
     }
 
@@ -848,17 +852,47 @@ async function maybeAutoProbeFoundry(diagnostics) {
         return;
     }
     // Throttle to avoid repeated warm-ups on frequent UI refreshes/autosave.
-    if (now - state.lastAttemptMs < 30_000) {
+    const minDelayMs = foundry.phase === 'error' ? 15_000 : 6_000;
+    if (now - state.lastAttemptMs < minDelayMs) {
         return;
     }
 
     state.inFlight = true;
     state.lastAttemptMs = now;
+    state.attempts += 1;
 
     try {
+        const statusEl = document.getElementById('foundry-status');
+        if (statusEl) {
+            const checkingInfo = { label: 'Checking', className: 'checking' };
+            statusEl.innerHTML = `
+                <span class="status-pill ${checkingInfo.className}">● ${checkingInfo.label.toUpperCase()}</span>
+                <span class="status-text">Verifying model readiness...</span>
+            `;
+        }
+
         await TauriBridge.invoke('refresh_foundry_local_status');
         const refreshed = await TauriBridge.invoke('get_translation_diagnostics');
         updateBackendStatusUI(refreshed);
+
+        // Continue probing a few times while warming up; after that, stop and let the user choose.
+        const refreshedFoundry = refreshed?.backends?.find(b => b.id === 'foundryLocal');
+        if (refreshedFoundry?.phase && ['unchecked', 'preparing', 'error'].includes(refreshedFoundry.phase)) {
+            if (state.attempts < 12) {
+                if (state.timerId) {
+                    clearTimeout(state.timerId);
+                }
+                state.timerId = setTimeout(() => {
+                    void refreshTranslationDiagnostics({ autoProbeFoundry: true });
+                }, 8_000);
+            }
+        } else {
+            state.attempts = 0;
+            if (state.timerId) {
+                clearTimeout(state.timerId);
+                state.timerId = null;
+            }
+        }
     } catch (e) {
         console.warn('Foundry Local auto-probe failed:', e);
     } finally {
@@ -979,7 +1013,7 @@ function formatFoundryPhase(phase) {
         case 'ready':
             return { label: 'Ready', className: 'ready' };
         case 'unchecked':
-            return { label: 'Not Checked', className: 'unchecked' };
+            return { label: 'Checking', className: 'checking' };
         case 'preparing':
             return { label: 'Preparing', className: 'preparing' };
         case 'notRunning':
@@ -1105,13 +1139,6 @@ function updateFoundryStatusInline(diagnostics) {
     let notesText = foundry.notes || '';
     if (extra) {
         notesText = notesText ? `${notesText} ${extra}` : extra;
-    }
-
-    // UX hint: strict "Ready" requires a successful probe. If the service is running but not checked,
-    // guide the user to the buttons that perform probes.
-    if (foundry.phase === 'unchecked') {
-        const hint = 'Tip: click Refresh Status (2s) to check readiness, or Prepare Foundry (25s) to warm up the model.';
-        notesText = notesText ? `${notesText} ${hint}` : hint;
     }
 
     statusEl.innerHTML = `
