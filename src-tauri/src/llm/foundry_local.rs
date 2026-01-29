@@ -66,6 +66,29 @@ fn epoch_ms() -> u64 {
         .as_millis() as u64
 }
 
+/// Cached "ready to talk" probe result for the currently selected Foundry Local target
+/// (service URL + resolved model id).
+#[derive(Debug, Clone, Copy, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum FoundryProbeResult {
+    None,
+    Success,
+    Timeout,
+    Error,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FoundryProbeSnapshot {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub last_attempt_ms: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub last_success_ms: Option<u64>,
+    pub result: FoundryProbeResult,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+}
+
 /// Response from /v1/models endpoint
 #[derive(Debug, Deserialize)]
 struct ModelsResponse {
@@ -870,6 +893,47 @@ impl FoundryLocalBackend {
         Some((kind, age_ms, error))
     }
 
+    /// Get the currently selected model id (resolved) if available.
+    pub fn selected_model(&self) -> Option<String> {
+        self.get_model()
+    }
+
+    /// Get the last probe snapshot for the current (service URL + model) target.
+    pub fn probe_snapshot(&self) -> Option<FoundryProbeSnapshot> {
+        if !self.is_last_probe_for_current_target() {
+            return None;
+        }
+
+        let cache = probe_cache();
+        let attempt_ms = cache.last_attempt_ms.load(Ordering::SeqCst);
+        if attempt_ms == 0 {
+            return None;
+        }
+
+        let success_ms = cache.last_success_ms.load(Ordering::SeqCst);
+        let kind = cache.last_result.load(Ordering::SeqCst);
+        let error = cache
+            .last_error
+            .read()
+            .unwrap()
+            .clone()
+            .map(|value| value.chars().take(160).collect::<String>());
+
+        let result = match kind {
+            PROBE_RESULT_SUCCESS => FoundryProbeResult::Success,
+            PROBE_RESULT_TIMEOUT => FoundryProbeResult::Timeout,
+            PROBE_RESULT_ERROR => FoundryProbeResult::Error,
+            _ => FoundryProbeResult::None,
+        };
+
+        Some(FoundryProbeSnapshot {
+            last_attempt_ms: Some(attempt_ms),
+            last_success_ms: (success_ms > 0).then_some(success_ms),
+            result,
+            error,
+        })
+    }
+
     /// Probe chat completions endpoint with a minimal request.
     ///
     /// This sends a tiny chat request (max_tokens=1) to verify that the model
@@ -942,9 +1006,8 @@ impl FoundryLocalBackend {
                         }
                         Err(e) => {
                             debug!("Foundry Local probe error (fallback): {:?}", e);
-                            let msg = format!("Probe failed: {}", e);
-                            backend.record_probe_error(msg.clone());
-                            Err(LlmError::ApiError(msg))
+                            backend.record_probe_error(format!("{:?}", e));
+                            Err(LlmError::ApiError(format!("Probe failed: {}", e)))
                         }
                     }
                 }
@@ -962,9 +1025,8 @@ impl FoundryLocalBackend {
                 }
                 Err(e) => {
                     debug!("Foundry Local probe error: {:?}", e);
-                    let msg = format!("Probe failed: {}", e);
-                    backend.record_probe_error(msg.clone());
-                    Err(LlmError::ApiError(msg))
+                    backend.record_probe_error(format!("{:?}", e));
+                    Err(LlmError::ApiError(format!("Probe failed: {}", e)))
                 }
             }
         }

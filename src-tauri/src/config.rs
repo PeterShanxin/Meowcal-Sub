@@ -211,6 +211,15 @@ impl TranslationConfig {
         self.prompt_max_source_chars = self.prompt_max_source_chars.clamp(50, 2_000);
         self.prompt_max_context_chars = self.prompt_max_context_chars.clamp(0, 5_000);
         self.context_reset_gap_ms = self.context_reset_gap_ms.clamp(0, 120_000);
+
+        // Foundry Local can take a while to warm up (especially NPU models). Keep a sane
+        // minimum timeout even if an older config had a too-aggressive default.
+        self.foundry_local.timeout_ms = self.foundry_local.timeout_ms.clamp(2_000, 120_000);
+        if self.foundry_local.timeout_ms < 15_000 {
+            self.foundry_local.timeout_ms = 30_000;
+        }
+
+        self.offline_mt.timeout_ms = self.offline_mt.timeout_ms.clamp(1, 120_000);
     }
 }
 
@@ -439,7 +448,7 @@ impl Default for FoundryLocalConfig {
     fn default() -> Self {
         Self {
             model: None,
-            timeout_ms: 8000,
+            timeout_ms: 30_000,
         }
     }
 }

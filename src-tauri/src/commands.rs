@@ -351,12 +351,16 @@ pub fn get_windows_ai_diagnostics() -> WindowsAiDiagnostics {
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct FoundryLocalStatus {
+    pub cli_available: bool,
     pub service_running: bool,
     pub service_url: Option<String>,
     pub models: Vec<String>,
+    pub selected_model: Option<String>,
     pub notes: String,
     /// Granular Foundry Local phase (e.g. notInstalled, notRunning, noModels, preparing, ready).
     pub phase: FoundryLocalPhase,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub probe: Option<crate::llm::FoundryProbeSnapshot>,
 }
 
 /// Get the status of Foundry Local service (fast, no probe)
@@ -404,11 +408,13 @@ pub async fn refresh_foundry_local_status(
     };
 
     // Build basic status synchronously
-    let (backend, service_url, service_running, models, notes) = async_runtime::spawn_blocking({
+    let (backend, cli_available, service_url, service_running, models, notes) =
+        async_runtime::spawn_blocking({
         let config = config.clone();
         move || {
             let backend = FoundryLocalBackend::new(config);
             backend.refresh_service_status();
+            let cli_available = FoundryLocalBackend::is_cli_available();
             let service_url = FoundryLocalBackend::get_service_url_from_cli();
             let service_running = service_url.is_some();
             let models = if service_running {
@@ -417,7 +423,7 @@ pub async fn refresh_foundry_local_status(
                 Vec::new()
             };
             let notes = backend.notes();
-            (backend, service_url, service_running, models, notes)
+            (backend, cli_available, service_url, service_running, models, notes)
         }
     })
     .await
@@ -456,11 +462,14 @@ pub async fn refresh_foundry_local_status(
     };
 
     Ok(FoundryLocalStatus {
+        cli_available,
         service_running,
         service_url,
         models,
+        selected_model: backend.selected_model(),
         notes,
         phase,
+        probe: backend.probe_snapshot(),
     })
 }
 
@@ -477,12 +486,13 @@ pub async fn prepare_foundry_local(
     };
 
     // Build basic status synchronously (this will attempt to start service if needed)
-    let (backend, service_url, service_running, models, mut notes) =
+    let (backend, cli_available, service_url, service_running, models, mut notes) =
         async_runtime::spawn_blocking({
             let config = config.clone();
             move || {
                 let backend = FoundryLocalBackend::new(config);
                 backend.ensure_service_running();
+                let cli_available = FoundryLocalBackend::is_cli_available();
                 let service_url = FoundryLocalBackend::get_service_url_from_cli();
                 let service_running = service_url.is_some();
                 let models = if service_running {
@@ -491,7 +501,7 @@ pub async fn prepare_foundry_local(
                     Vec::new()
                 };
                 let notes = backend.notes();
-                (backend, service_url, service_running, models, notes)
+                (backend, cli_available, service_url, service_running, models, notes)
             }
         })
         .await
@@ -526,11 +536,145 @@ pub async fn prepare_foundry_local(
     };
 
     Ok(FoundryLocalStatus {
+        cli_available,
         service_running,
         service_url,
         models,
+        selected_model: backend.selected_model(),
         notes,
         phase,
+        probe: backend.probe_snapshot(),
+    })
+}
+
+/// Make Foundry Local ready (start service if needed + keep probing until ready or timeout).
+#[tauri::command]
+pub async fn make_foundry_ready(state: State<'_, AppState>) -> Result<FoundryLocalStatus, String> {
+    use crate::llm::{FAST_PROBE_TIMEOUT_MS, SLOW_PROBE_TIMEOUT_MS};
+
+    let config = {
+        let guard = state.config.lock().unwrap();
+        guard.translation.foundry_local.clone()
+    };
+    let configured_timeout_ms = config.timeout_ms as u64;
+    let steady_probe_timeout_ms = configured_timeout_ms.clamp(5_000, SLOW_PROBE_TIMEOUT_MS);
+
+    // Ensure service is running and gather baseline info.
+    let (backend, cli_available, mut service_url, mut service_running, mut models, mut notes) =
+        async_runtime::spawn_blocking({
+            let config = config.clone();
+            move || {
+                let backend = FoundryLocalBackend::new(config);
+                let cli_available = FoundryLocalBackend::is_cli_available();
+                if cli_available {
+                    backend.ensure_service_running();
+                }
+                backend.refresh_service_status();
+                let service_url = FoundryLocalBackend::get_service_url_from_cli();
+                let service_running = service_url.is_some();
+                let models = if service_running {
+                    FoundryLocalBackend::get_cached_models_from_cli()
+                } else {
+                    Vec::new()
+                };
+                let notes = backend.notes();
+                (
+                    backend,
+                    cli_available,
+                    service_url,
+                    service_running,
+                    models,
+                    notes,
+                )
+            }
+        })
+        .await
+        .map_err(|err| format!("Foundry Local make-ready task failed: {}", err))?;
+
+    // If we can't even reach the service or models yet, return the fast phase.
+    if !cli_available || !service_running || models.is_empty() {
+        let phase = backend.phase();
+        return Ok(FoundryLocalStatus {
+            cli_available,
+            service_running,
+            service_url,
+            models,
+            selected_model: backend.selected_model(),
+            notes,
+            phase,
+            probe: backend.probe_snapshot(),
+        });
+    }
+
+    // Keep probing for readiness. Fast probes are used between warmup attempts so we don't
+    // block for long on each iteration.
+    let started = Instant::now();
+    let max_total = Duration::from_secs(90);
+    let mut attempt = 0usize;
+    let mut phase = FoundryLocalPhase::Preparing;
+    let mut last_error: Option<String> = None;
+
+    while started.elapsed() < max_total {
+        attempt += 1;
+
+        let timeout_ms = if attempt == 1 {
+            SLOW_PROBE_TIMEOUT_MS
+        } else {
+            steady_probe_timeout_ms.max(FAST_PROBE_TIMEOUT_MS)
+        };
+
+        match backend.probe_chat_completions(timeout_ms).await {
+            Ok(true) => {
+                phase = FoundryLocalPhase::Ready;
+                notes = format!("{} Ready.", notes);
+                last_error = None;
+                break;
+            }
+            Ok(false) => {
+                phase = FoundryLocalPhase::Preparing;
+            }
+            Err(e) => {
+                phase = FoundryLocalPhase::Error;
+                last_error = Some(e.to_string());
+            }
+        }
+
+        // Refresh service URL and cached models in case Foundry restarted mid-warmup.
+        backend.refresh_service_status();
+        service_url = FoundryLocalBackend::get_service_url_from_cli();
+        service_running = service_url.is_some();
+        models = if service_running {
+            FoundryLocalBackend::get_cached_models_from_cli()
+        } else {
+            Vec::new()
+        };
+
+        // If the service vanished, stop trying - user needs to restart it.
+        if !service_running {
+            phase = FoundryLocalPhase::NotRunning;
+            break;
+        }
+
+        tokio::time::sleep(Duration::from_millis(1500)).await;
+    }
+
+    if phase != FoundryLocalPhase::Ready {
+        if let Some(err) = last_error {
+            notes = format!("{} Last error: {}", notes, err);
+        } else {
+            notes = format!("{} Still warming up. Try again shortly.", notes);
+        }
+    }
+
+    Ok(FoundryLocalStatus {
+        cli_available,
+        service_running,
+        service_url,
+        models,
+        selected_model: backend.selected_model(),
+        notes,
+        phase,
+        probe: backend.probe_snapshot(),
     })
 }
 
@@ -540,6 +684,7 @@ fn build_foundry_local_status_no_probe(
 ) -> FoundryLocalStatus {
     let backend = FoundryLocalBackend::new(config);
     backend.refresh_service_status();
+    let cli_available = FoundryLocalBackend::is_cli_available();
     let service_url = FoundryLocalBackend::get_service_url_from_cli();
     let service_running = service_url.is_some();
 
@@ -554,11 +699,14 @@ fn build_foundry_local_status_no_probe(
     let phase = backend.phase();
 
     FoundryLocalStatus {
+        cli_available,
         service_running,
         service_url,
         models,
+        selected_model: backend.selected_model(),
         notes: backend.notes(),
         phase,
+        probe: backend.probe_snapshot(),
     }
 }
 fn build_translate_locally_download_info(

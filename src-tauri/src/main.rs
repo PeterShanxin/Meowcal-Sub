@@ -267,6 +267,7 @@ fn main() {
             commands::list_foundry_local_models,
             commands::refresh_foundry_local_status,
             commands::prepare_foundry_local,
+            commands::make_foundry_ready,
             // Overlay commands
             commands::set_overlay_click_through,
             commands::set_overlay_window_clip,
