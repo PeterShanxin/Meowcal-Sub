@@ -34,15 +34,26 @@ const API_NAMESPACE_V1: u8 = 2;
 // FoundryLocalBackend values, so per-instance caches won't persist long enough.
 struct ProbeCache {
     last_success_ms: AtomicU64,
+    last_attempt_ms: AtomicU64,
+    last_result: AtomicU8,
+    last_error: RwLock<Option<String>>,
     last_model: RwLock<Option<String>>,
     last_service_url: RwLock<Option<String>>,
 }
 
 static PROBE_CACHE: OnceLock<ProbeCache> = OnceLock::new();
 
+const PROBE_RESULT_NONE: u8 = 0;
+const PROBE_RESULT_SUCCESS: u8 = 1;
+const PROBE_RESULT_TIMEOUT: u8 = 2;
+const PROBE_RESULT_ERROR: u8 = 3;
+
 fn probe_cache() -> &'static ProbeCache {
     PROBE_CACHE.get_or_init(|| ProbeCache {
         last_success_ms: AtomicU64::new(0),
+        last_attempt_ms: AtomicU64::new(0),
+        last_result: AtomicU8::new(PROBE_RESULT_NONE),
+        last_error: RwLock::new(None),
         last_model: RwLock::new(None),
         last_service_url: RwLock::new(None),
     })
@@ -766,6 +777,43 @@ impl FoundryLocalBackend {
 
         let cache = probe_cache();
         cache.last_success_ms.store(epoch_ms(), Ordering::SeqCst);
+        cache.last_attempt_ms.store(epoch_ms(), Ordering::SeqCst);
+        cache
+            .last_result
+            .store(PROBE_RESULT_SUCCESS, Ordering::SeqCst);
+        *cache.last_error.write().unwrap() = None;
+        *cache.last_service_url.write().unwrap() = Some(url);
+        *cache.last_model.write().unwrap() = Some(model);
+    }
+
+    fn record_probe_timeout(&self) {
+        let (Some(url), Some(model)) = (self.get_service_url(), self.get_model()) else {
+            self.invalidate_probe_cache();
+            return;
+        };
+
+        let cache = probe_cache();
+        cache.last_attempt_ms.store(epoch_ms(), Ordering::SeqCst);
+        cache
+            .last_result
+            .store(PROBE_RESULT_TIMEOUT, Ordering::SeqCst);
+        *cache.last_error.write().unwrap() = None;
+        *cache.last_service_url.write().unwrap() = Some(url);
+        *cache.last_model.write().unwrap() = Some(model);
+    }
+
+    fn record_probe_error(&self, message: String) {
+        let (Some(url), Some(model)) = (self.get_service_url(), self.get_model()) else {
+            self.invalidate_probe_cache();
+            return;
+        };
+
+        let cache = probe_cache();
+        cache.last_attempt_ms.store(epoch_ms(), Ordering::SeqCst);
+        cache
+            .last_result
+            .store(PROBE_RESULT_ERROR, Ordering::SeqCst);
+        *cache.last_error.write().unwrap() = Some(message);
         *cache.last_service_url.write().unwrap() = Some(url);
         *cache.last_model.write().unwrap() = Some(model);
     }
@@ -774,8 +822,52 @@ impl FoundryLocalBackend {
     pub fn invalidate_probe_cache(&self) {
         let cache = probe_cache();
         cache.last_success_ms.store(0, Ordering::SeqCst);
+        cache.last_attempt_ms.store(0, Ordering::SeqCst);
+        cache.last_result.store(PROBE_RESULT_NONE, Ordering::SeqCst);
+        *cache.last_error.write().unwrap() = None;
         *cache.last_service_url.write().unwrap() = None;
         *cache.last_model.write().unwrap() = None;
+    }
+
+    fn is_last_probe_for_current_target(&self) -> bool {
+        let cache = probe_cache();
+
+        let current_url = match self.get_service_url() {
+            Some(url) => url,
+            None => return false,
+        };
+        let current_model = match self.get_model() {
+            Some(model) => model,
+            None => return false,
+        };
+
+        let cached_url = cache.last_service_url.read().unwrap().clone();
+        let cached_model = cache.last_model.read().unwrap().clone();
+
+        cached_url.as_deref() == Some(current_url.as_str())
+            && cached_model.as_deref() == Some(current_model.as_str())
+    }
+
+    fn recent_probe_result_for_current_target(&self) -> Option<(u8, u64, Option<String>)> {
+        if !self.is_last_probe_for_current_target() {
+            return None;
+        }
+
+        let cache = probe_cache();
+        let attempt_ms = cache.last_attempt_ms.load(Ordering::SeqCst);
+        if attempt_ms == 0 {
+            return None;
+        }
+
+        // Only surface "Preparing/Error" for a short window; after that we go back to Unchecked.
+        let age_ms = epoch_ms().saturating_sub(attempt_ms);
+        if age_ms > 30_000 {
+            return None;
+        }
+
+        let kind = cache.last_result.load(Ordering::SeqCst);
+        let error = cache.last_error.read().unwrap().clone();
+        Some((kind, age_ms, error))
     }
 
     /// Probe chat completions endpoint with a minimal request.
@@ -786,6 +878,97 @@ impl FoundryLocalBackend {
     ///
     /// Returns Ok(true) on success, Ok(false) on timeout, Err on other errors.
     pub async fn probe_chat_completions(&self, timeout_ms: u64) -> Result<bool, LlmError> {
+        async fn attempt_probe(
+            backend: &FoundryLocalBackend,
+            probe_client: &Client,
+            base_url: &str,
+            request: &ChatCompletionRequest,
+            preferred_namespace: u8,
+            timeout_ms: u64,
+        ) -> Result<bool, LlmError> {
+            let url = backend.api_url_for(base_url, preferred_namespace, "chat/completions");
+            debug!(
+                "Probing Foundry Local chat completions (timeout={}ms): {}",
+                timeout_ms, url
+            );
+
+            let response = probe_client.post(&url).json(request).send().await;
+            match response {
+                Ok(resp) if resp.status().is_success() => {
+                    backend
+                        .api_namespace
+                        .store(preferred_namespace, Ordering::SeqCst);
+                    backend.record_probe_success();
+                    debug!("Foundry Local probe succeeded");
+                    Ok(true)
+                }
+                Ok(resp) if resp.status().as_u16() == 404 => {
+                    // Try fallback namespace
+                    let fallback_namespace = if preferred_namespace == API_NAMESPACE_OPENAI {
+                        API_NAMESPACE_V1
+                    } else {
+                        API_NAMESPACE_OPENAI
+                    };
+                    let fallback_url =
+                        backend.api_url_for(base_url, fallback_namespace, "chat/completions");
+                    debug!(
+                        "Foundry Local probe returned 404, trying fallback: {}",
+                        fallback_url
+                    );
+
+                    let fallback_response =
+                        probe_client.post(&fallback_url).json(request).send().await;
+
+                    match fallback_response {
+                        Ok(resp) if resp.status().is_success() => {
+                            backend
+                                .api_namespace
+                                .store(fallback_namespace, Ordering::SeqCst);
+                            backend.record_probe_success();
+                            debug!("Foundry Local probe succeeded (fallback namespace)");
+                            Ok(true)
+                        }
+                        Ok(resp) => {
+                            let status = resp.status();
+                            debug!("Foundry Local probe failed: HTTP {}", status);
+                            let msg = format!("Probe failed: HTTP {}", status);
+                            backend.record_probe_error(msg.clone());
+                            Err(LlmError::ApiError(msg))
+                        }
+                        Err(e) if e.is_timeout() => {
+                            debug!("Foundry Local probe timed out (fallback)");
+                            backend.record_probe_timeout();
+                            Ok(false) // Timeout = preparing
+                        }
+                        Err(e) => {
+                            debug!("Foundry Local probe error (fallback): {:?}", e);
+                            let msg = format!("Probe failed: {}", e);
+                            backend.record_probe_error(msg.clone());
+                            Err(LlmError::ApiError(msg))
+                        }
+                    }
+                }
+                Ok(resp) => {
+                    let status = resp.status();
+                    debug!("Foundry Local probe failed: HTTP {}", status);
+                    let msg = format!("Probe failed: HTTP {}", status);
+                    backend.record_probe_error(msg.clone());
+                    Err(LlmError::ApiError(msg))
+                }
+                Err(e) if e.is_timeout() => {
+                    debug!("Foundry Local probe timed out");
+                    backend.record_probe_timeout();
+                    Ok(false) // Timeout = preparing (model warming up)
+                }
+                Err(e) => {
+                    debug!("Foundry Local probe error: {:?}", e);
+                    let msg = format!("Probe failed: {}", e);
+                    backend.record_probe_error(msg.clone());
+                    Err(LlmError::ApiError(msg))
+                }
+            }
+        }
+
         let base_url = self
             .get_service_url()
             .ok_or_else(|| LlmError::ApiError("Foundry Local service not running".to_string()))?;
@@ -804,82 +987,46 @@ impl FoundryLocalBackend {
             max_tokens: 1,
         };
 
-        let preferred_namespace = self.preferred_api_namespace();
-        let url = self.api_url_for(&base_url, preferred_namespace, "chat/completions");
-
-        debug!(
-            "Probing Foundry Local chat completions (timeout={}ms): {}",
-            timeout_ms, url
-        );
-
-        // Create a client with the specified timeout
         let probe_client = Client::builder()
             .timeout(Duration::from_millis(timeout_ms))
             .build()
             .unwrap_or_default();
 
-        let response = probe_client.post(&url).json(&request).send().await;
-
-        match response {
-            Ok(resp) if resp.status().is_success() => {
-                self.api_namespace
-                    .store(preferred_namespace, Ordering::SeqCst);
-                self.record_probe_success();
-                debug!("Foundry Local probe succeeded");
-                Ok(true)
-            }
-            Ok(resp) if resp.status().as_u16() == 404 => {
-                // Try fallback namespace
-                let fallback_namespace = if preferred_namespace == API_NAMESPACE_OPENAI {
-                    API_NAMESPACE_V1
-                } else {
-                    API_NAMESPACE_OPENAI
-                };
-                let fallback_url =
-                    self.api_url_for(&base_url, fallback_namespace, "chat/completions");
-                debug!(
-                    "Foundry Local probe returned 404, trying fallback: {}",
-                    fallback_url
-                );
-
-                let fallback_response =
-                    probe_client.post(&fallback_url).json(&request).send().await;
-
-                match fallback_response {
-                    Ok(resp) if resp.status().is_success() => {
-                        self.api_namespace
-                            .store(fallback_namespace, Ordering::SeqCst);
-                        self.record_probe_success();
-                        debug!("Foundry Local probe succeeded (fallback namespace)");
-                        Ok(true)
-                    }
-                    Ok(resp) => {
-                        let status = resp.status();
-                        debug!("Foundry Local probe failed: HTTP {}", status);
-                        Err(LlmError::ApiError(format!("Probe failed: HTTP {}", status)))
-                    }
-                    Err(e) if e.is_timeout() => {
-                        debug!("Foundry Local probe timed out (fallback)");
-                        Ok(false) // Timeout = preparing
-                    }
-                    Err(e) => {
-                        debug!("Foundry Local probe error (fallback): {}", e);
-                        Err(LlmError::ApiError(format!("Probe failed: {}", e)))
+        let preferred_namespace = self.preferred_api_namespace();
+        match attempt_probe(
+            self,
+            &probe_client,
+            &base_url,
+            &request,
+            preferred_namespace,
+            timeout_ms,
+        )
+        .await
+        {
+            Ok(v) => Ok(v),
+            Err(err) => {
+                // Foundry Local can restart and change its port; retry once with a refreshed URL.
+                self.mark_service_unavailable();
+                self.refresh_service_status();
+                if let Some(refreshed_url) = self.get_service_url() {
+                    if refreshed_url != base_url {
+                        debug!(
+                            "Retrying Foundry Local probe after refreshing service URL: {} -> {}",
+                            base_url, refreshed_url
+                        );
+                        let retry_ns = self.preferred_api_namespace();
+                        return attempt_probe(
+                            self,
+                            &probe_client,
+                            &refreshed_url,
+                            &request,
+                            retry_ns,
+                            timeout_ms,
+                        )
+                        .await;
                     }
                 }
-            }
-            Ok(resp) => {
-                let status = resp.status();
-                debug!("Foundry Local probe failed: HTTP {}", status);
-                Err(LlmError::ApiError(format!("Probe failed: HTTP {}", status)))
-            }
-            Err(e) if e.is_timeout() => {
-                debug!("Foundry Local probe timed out");
-                Ok(false) // Timeout = preparing (model warming up)
-            }
-            Err(e) => {
-                debug!("Foundry Local probe error: {}", e);
-                Err(LlmError::ApiError(format!("Probe failed: {}", e)))
+                Err(err)
             }
         }
     }
@@ -929,6 +1076,15 @@ impl FoundryLocalBackend {
         // No probe performed - check cache
         if self.is_probe_cache_valid() {
             return FoundryLocalPhase::Ready;
+        }
+
+        // If we recently tried to probe and it timed out or errored, surface that.
+        if let Some((kind, _age_ms, _error)) = self.recent_probe_result_for_current_target() {
+            match kind {
+                PROBE_RESULT_TIMEOUT => return FoundryLocalPhase::Preparing,
+                PROBE_RESULT_ERROR => return FoundryLocalPhase::Error,
+                _ => {}
+            }
         }
 
         // Service running with models but no recent probe - not checked yet.
