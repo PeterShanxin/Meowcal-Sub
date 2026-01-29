@@ -267,6 +267,104 @@
     color: var(--color-text-secondary);
 }
 
+/* Foundry Local inline status (3-step ladder) */
+.foundry-steps {
+    display: grid;
+    gap: 10px;
+}
+
+.foundry-step {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+}
+
+.foundry-step-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 999px;
+    margin-top: 6px;
+    flex: 0 0 auto;
+    background: rgba(138, 136, 134, 0.2);
+    border: 1px solid rgba(138, 136, 134, 0.35);
+}
+
+.foundry-step.done .foundry-step-dot {
+    background: rgba(16, 124, 16, 0.75);
+    border-color: rgba(16, 124, 16, 0.55);
+    box-shadow: 0 0 0 4px rgba(16, 124, 16, 0.12);
+}
+
+.foundry-step.active .foundry-step-dot {
+    background: rgba(0, 120, 212, 0.75);
+    border-color: rgba(0, 120, 212, 0.55);
+    box-shadow: 0 0 0 4px rgba(0, 120, 212, 0.12);
+    animation: pulse-preparing 1.2s ease-in-out infinite;
+}
+
+.foundry-step.error .foundry-step-dot {
+    background: rgba(209, 52, 56, 0.8);
+    border-color: rgba(209, 52, 56, 0.6);
+    box-shadow: 0 0 0 4px rgba(209, 52, 56, 0.12);
+}
+
+.foundry-step-body {
+    min-width: 0;
+    flex: 1;
+}
+
+.foundry-step-title {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    font-size: var(--font-size-sm);
+    font-weight: 600;
+    color: var(--color-text-primary);
+}
+
+.foundry-step-desc {
+    margin-top: 2px;
+    font-size: var(--font-size-xs);
+    color: var(--color-text-secondary);
+    line-height: 1.35;
+    word-break: break-word;
+}
+
+.foundry-meta {
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px solid rgba(255, 255, 255, 0.06);
+    display: grid;
+    gap: 6px;
+    font-size: var(--font-size-xs);
+    color: var(--color-text-secondary);
+}
+
+.foundry-meta-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.foundry-meta-label {
+    flex: 0 0 auto;
+    color: var(--color-text-secondary);
+}
+
+.foundry-meta-value {
+    min-width: 0;
+    text-align: right;
+    color: var(--color-text-primary);
+    opacity: 0.9;
+    word-break: break-word;
+}
+
+.foundry-meta-row.error .foundry-meta-value {
+    color: #f44336;
+    opacity: 1;
+}
+
 /* Collapsible Sections */
 .settings-section {
     margin-bottom: var(--spacing-lg);

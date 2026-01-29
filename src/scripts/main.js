@@ -37,6 +37,9 @@ const appState = {
         timerId: null,
         attempts: 0,
     },
+    foundryStatus: {
+        last: null,
+    },
 };
 
 // =============================================================================
@@ -67,10 +70,11 @@ async function initializeApp() {
         // Set up listener for capture status (fallback/error notifications)
         await setupCaptureStatusListener();
 
-        // Load backend diagnostics
-        await refreshTranslationDiagnostics({ autoProbeFoundry: true });
-        // UX: automatically verify Foundry readiness if it is running, without requiring a click.
-        // This is read-only (won't start the service); it just runs the fast probe when applicable.
+        // Load backend diagnostics (fast snapshot)
+        await refreshTranslationDiagnostics();
+
+        // Paint Foundry Local status quickly, then auto-probe readiness in the background.
+        await refreshFoundryStatus({ probe: false, reason: 'startup' });
         scheduleFoundryAutoProbe();
 
         // Sync translation running state with backend
@@ -343,7 +347,9 @@ function clampInt(value, min, max, fallback) {
 /**
  * Save settings to Rust backend
  */
-async function saveSettings() {
+async function saveSettings(opts) {
+    const options = opts && typeof opts === 'object' ? opts : {};
+    const silent = options.silent === true;
     const translationConfig = normalizeTranslationConfig(appState.settings?.translation);
     const offlineMtPath = document.getElementById('offline-mt-path').value.trim();
     const foundryModel = document.getElementById('foundry-local-model').value.trim();
@@ -423,12 +429,19 @@ async function saveSettings() {
     try {
         await TauriBridge.invoke('save_settings', { settings });
         appState.settings = settings;
-        showToast('Settings saved!', 'success');
+        if (!silent) {
+            showToast('Settings saved!', 'success');
+        }
         console.log('Settings saved:', settings);
-        await refreshTranslationDiagnostics();
+        const refreshTask = refreshTranslationDiagnostics();
+        if (!silent) {
+            await refreshTask;
+        }
     } catch (error) {
         console.error('Failed to save settings:', error);
-        showToast('Failed to save settings', 'error');
+        if (!silent) {
+            showToast('Failed to save settings', 'error');
+        }
     }
 }
 
@@ -442,7 +455,7 @@ function scheduleAutoSave() {
 
     autoSaveTimer = setTimeout(async () => {
         autoSaveTimer = null;
-        await saveSettings();
+        await saveSettings({ silent: true });
     }, AUTO_SAVE_DELAY_MS);
 }
 
@@ -520,16 +533,17 @@ function setupEventListeners() {
         scheduleAutoSave();
     });
 
-    // Backend diagnostics refresh
-    document.getElementById('btn-refresh-backends')
-        .addEventListener('click', () => refreshTranslationDiagnostics({ probeFoundry: true, autoProbeFoundry: true }));
-    document.getElementById('btn-prepare-foundry')
-        .addEventListener('click', handlePrepareFoundryLocal);
+    // Foundry Local controls
+    document.getElementById('btn-foundry-refresh')
+        .addEventListener('click', handleFoundryRefresh);
+    document.getElementById('btn-foundry-make-ready')
+        .addEventListener('click', handleFoundryMakeReady);
 
-    // Auto-save when Foundry Local model changes so backend status matches selection
-    document.getElementById('foundry-local-model').addEventListener('change', () => {
-        console.log('Foundry Local model changed, auto-saving...');
-        scheduleAutoSave();
+    // Save model selection immediately (users expect this to persist across restarts)
+    document.getElementById('foundry-local-model').addEventListener('change', async () => {
+        console.log('Foundry Local model changed, saving...');
+        await saveSettings({ silent: true });
+        void refreshFoundryStatus({ probe: true, reason: 'model-change' });
     });
 
     // Auto-save when language settings change to ensure translation direction is persisted
@@ -579,6 +593,8 @@ function setupEventListeners() {
     document.getElementById('toggle-foundry-local').addEventListener('change', () => {
         console.log('Foundry Local toggled, auto-saving...');
         scheduleAutoSave();
+        void refreshFoundryStatus({ probe: false, reason: 'toggle' });
+        scheduleFoundryAutoProbe();
     });
     document.getElementById('toggle-windows-ai').addEventListener('change', () => {
         console.log('Windows AI toggled, auto-saving...');
@@ -783,27 +799,12 @@ async function setupTranslationUpdateListener() {
  * Refresh backend diagnostics and update UI
  */
 async function refreshTranslationDiagnostics() {
-    const arg0 = arguments.length > 0 ? arguments[0] : null;
-    const opts = arg0 && typeof arg0 === 'object' ? arg0 : {};
-    const probeFoundry = opts.probeFoundry === true;
-    const autoProbeFoundry = opts.autoProbeFoundry === true;
-
     const container = document.getElementById('backend-status');
     if (!container) {
         return;
     }
 
     try {
-        // Optional fast "ready to talk" probe for Foundry Local. Only runs on explicit user action
-        // (Refresh button), so we don't accidentally warm up models on startup/background refreshes.
-        if (probeFoundry && document.getElementById('toggle-foundry-local')?.checked) {
-            try {
-                await TauriBridge.invoke('refresh_foundry_local_status');
-            } catch (e) {
-                console.warn('Foundry Local fast probe failed:', e);
-            }
-        }
-
         const diagnostics = await TauriBridge.invoke('get_translation_diagnostics');
         updateBackendStatusUI(diagnostics);
         await autoDetectOfflineMtPath();
@@ -811,166 +812,363 @@ async function refreshTranslationDiagnostics() {
             await loadFoundryLocalModels();
         }
 
-        // Background auto-probe (fast) when Foundry is enabled + running but hasn't been checked yet.
-        // This keeps the UX "self-checking" while still avoiding auto-starting the service.
-        if (autoProbeFoundry) {
-            void maybeAutoProbeFoundry(diagnostics);
-        }
+        // Keep Foundry card (top priority backend) in sync with config/status changes.
+        void refreshFoundryStatus({ probe: false, reason: 'diagnostics' });
     } catch (error) {
         console.error('Failed to load backend diagnostics:', error);
         container.innerHTML = '<div class="backend-status-empty">Failed to load backend status.</div>';
     }
 }
 
-function scheduleFoundryAutoProbe() {
-    // Don't block startup; run shortly after initial diagnostics paint.
-    setTimeout(() => {
-        void refreshTranslationDiagnostics({ autoProbeFoundry: true });
-    }, 250);
+function escapeHtml(value) {
+    return (value ?? '')
+        .toString()
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/\"/g, '&quot;')
+        .replace(/'/g, '&#39;');
 }
 
-async function maybeAutoProbeFoundry(diagnostics) {
-    if (!document.getElementById('toggle-foundry-local')?.checked) {
+function formatAgeMs(ageMs) {
+    if (!Number.isFinite(ageMs) || ageMs < 0) {
+        return '--';
+    }
+    if (ageMs < 1000) {
+        return 'just now';
+    }
+    if (ageMs < 60_000) {
+        return `${Math.round(ageMs / 1000)}s ago`;
+    }
+    if (ageMs < 3_600_000) {
+        return `${Math.round(ageMs / 60_000)}m ago`;
+    }
+    return `${Math.round(ageMs / 3_600_000)}h ago`;
+}
+
+function formatEpochMsDelta(epochMs) {
+    if (!Number.isFinite(epochMs) || epochMs <= 0) {
+        return 'never';
+    }
+    return formatAgeMs(Date.now() - epochMs);
+}
+
+function renderFoundryStatus(status) {
+    const statusEl = document.getElementById('foundry-status');
+    if (!statusEl) {
         return;
     }
 
-    const foundry = diagnostics?.backends?.find(b => b.id === 'foundryLocal');
-    if (!foundry || !foundry.phase) {
+    if (!status) {
+        statusEl.innerHTML = '<span class="status-text">Foundry Local status unavailable.</span>';
         return;
     }
 
-    // Auto-probe when the service is up and models exist, but readiness isn't confirmed yet.
-    // We keep retrying while it's "unchecked" (never probed), "preparing" (timeouts), or "error"
-    // (transient service restart/port changes are common).
-    if (!['unchecked', 'preparing', 'error'].includes(foundry.phase)) {
+    appState.foundryStatus.last = status;
+
+    const enabled = document.getElementById('toggle-foundry-local')?.checked === true;
+    const phase = (status.phase || '').toString();
+
+    const installedOk = status.cliAvailable === true;
+    const serviceOk = status.serviceRunning === true;
+
+    const installedStepClass = installedOk ? 'done' : 'error';
+    const serviceStepClass = serviceOk ? 'done' : '';
+
+    let modelStepClass = '';
+    if (phase === 'ready') {
+        modelStepClass = 'done';
+    } else if (phase === 'preparing' || phase === 'unchecked') {
+        modelStepClass = 'active';
+    } else if (phase === 'error') {
+        modelStepClass = 'error';
+    }
+
+    const installedPill = installedOk
+        ? '<span class="status-pill ready">● OK</span>'
+        : '<span class="status-pill error">● MISSING</span>';
+
+    const servicePill = serviceOk
+        ? '<span class="status-pill ready">● RUNNING</span>'
+        : '<span class="status-pill not-ready">● STOPPED</span>';
+
+    const modelInfo = formatFoundryPhase(phase);
+    const modelPill = `<span class="status-pill ${modelInfo.className}">● ${modelInfo.label.toUpperCase()}</span>`;
+
+    const serviceDesc = serviceOk
+        ? `Service URL: ${escapeHtml(status.serviceUrl || '')}`
+        : installedOk
+            ? 'Service not running. Click "Make Foundry Ready" to start it.'
+            : 'Install Foundry Local first (recommended: winget install Microsoft.FoundryLocal).';
+
+    const modelDesc = escapeHtml(status.notes || '');
+
+    const selectedModel = status.selectedModel ? escapeHtml(status.selectedModel) : '--';
+
+    const lastAttemptMs = status.probe?.lastAttemptMs;
+    const lastChecked = formatEpochMsDelta(lastAttemptMs);
+
+    let lastError = '';
+    if (status.probe?.result === 'error') {
+        lastError = status.probe?.error || 'Unknown error';
+    } else if (status.probe?.result === 'timeout') {
+        lastError = 'Probe timed out (model likely warming up).';
+    }
+
+    const lastErrorRow = lastError
+        ? `
+            <div class="foundry-meta-row error">
+                <span class="foundry-meta-label">Last error</span>
+                <span class="foundry-meta-value" id="foundry-last-error">${escapeHtml(lastError)}</span>
+            </div>
+        `
+        : '';
+
+    const disabledNote = enabled
+        ? ''
+        : '<div class="foundry-step-desc">Foundry Local is currently disabled (toggle above).</div>';
+
+    statusEl.innerHTML = `
+        <div class="foundry-steps">
+            <div class="foundry-step ${installedStepClass}">
+                <div class="foundry-step-dot"></div>
+                <div class="foundry-step-body">
+                    <div class="foundry-step-title">
+                        <span>Installed</span>
+                        ${installedPill}
+                    </div>
+                    <div class="foundry-step-desc">${installedOk ? 'Foundry CLI detected.' : 'Foundry CLI not found.'}</div>
+                </div>
+            </div>
+            <div class="foundry-step ${serviceStepClass}">
+                <div class="foundry-step-dot"></div>
+                <div class="foundry-step-body">
+                    <div class="foundry-step-title">
+                        <span>Service running</span>
+                        ${servicePill}
+                    </div>
+                    <div class="foundry-step-desc">${serviceDesc}</div>
+                </div>
+            </div>
+            <div class="foundry-step ${modelStepClass}">
+                <div class="foundry-step-dot"></div>
+                <div class="foundry-step-body">
+                    <div class="foundry-step-title">
+                        <span>Model ready (probe)</span>
+                        ${modelPill}
+                    </div>
+                    <div class="foundry-step-desc">${modelDesc}</div>
+                    ${disabledNote}
+                </div>
+            </div>
+        </div>
+        <div class="foundry-meta">
+            <div class="foundry-meta-row">
+                <span class="foundry-meta-label">Selected model</span>
+                <span class="foundry-meta-value">${selectedModel}</span>
+            </div>
+            <div class="foundry-meta-row">
+                <span class="foundry-meta-label">Last checked</span>
+                <span class="foundry-meta-value" id="foundry-last-checked">${escapeHtml(lastChecked)}</span>
+            </div>
+            ${lastErrorRow}
+        </div>
+    `;
+}
+
+function renderFoundryStatusChecking(message) {
+    const statusEl = document.getElementById('foundry-status');
+    if (!statusEl) {
         return;
     }
 
-    const now = Date.now();
+    const text = message || 'Checking Foundry Local...';
+    statusEl.innerHTML = `
+        <div class="foundry-steps">
+            <div class="foundry-step active">
+                <div class="foundry-step-dot"></div>
+                <div class="foundry-step-body">
+                    <div class="foundry-step-title">
+                        <span>Checking</span>
+                        <span class="status-pill checking">● CHECKING</span>
+                    </div>
+                    <div class="foundry-step-desc">${escapeHtml(text)}</div>
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+function renderFoundryStatusError(error) {
+    const statusEl = document.getElementById('foundry-status');
+    if (!statusEl) {
+        return;
+    }
+
+    const message = error?.message ? error.message : String(error);
+    statusEl.innerHTML = `
+        <div class="foundry-steps">
+            <div class="foundry-step error">
+                <div class="foundry-step-dot"></div>
+                <div class="foundry-step-body">
+                    <div class="foundry-step-title">
+                        <span>Foundry Local</span>
+                        <span class="status-pill error">● ERROR</span>
+                    </div>
+                    <div class="foundry-step-desc">${escapeHtml(message)}</div>
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+async function refreshFoundryStatus(opts) {
+    const options = opts && typeof opts === 'object' ? opts : {};
+    const probe = options.probe === true;
+    const reason = (options.reason || '').toString();
+
+    const enabled = document.getElementById('toggle-foundry-local')?.checked === true;
+    if (probe && !enabled && reason === 'auto') {
+        return null;
+    }
+
     const state = appState.foundryAutoProbe;
     if (state.inFlight) {
-        return;
-    }
-    // Throttle to avoid repeated warm-ups on frequent UI refreshes/autosave.
-    const minDelayMs = foundry.phase === 'error' ? 15_000 : 6_000;
-    if (now - state.lastAttemptMs < minDelayMs) {
-        return;
+        return appState.foundryStatus.last;
     }
 
     state.inFlight = true;
-    state.lastAttemptMs = now;
-    state.attempts += 1;
-
     try {
-        const statusEl = document.getElementById('foundry-status');
-        if (statusEl) {
-            const checkingInfo = { label: 'Checking', className: 'checking' };
-            statusEl.innerHTML = `
-                <span class="status-pill ${checkingInfo.className}">● ${checkingInfo.label.toUpperCase()}</span>
-                <span class="status-text">Verifying model readiness...</span>
-            `;
+        if (probe) {
+            renderFoundryStatusChecking('Verifying model readiness...');
         }
 
-        await TauriBridge.invoke('refresh_foundry_local_status');
-        const refreshed = await TauriBridge.invoke('get_translation_diagnostics');
-        updateBackendStatusUI(refreshed);
+        const status = probe
+            ? await TauriBridge.invoke('refresh_foundry_local_status')
+            : await TauriBridge.invoke('get_foundry_local_status');
 
-        // Continue probing a few times while warming up; after that, stop and let the user choose.
-        const refreshedFoundry = refreshed?.backends?.find(b => b.id === 'foundryLocal');
-        if (refreshedFoundry?.phase && ['unchecked', 'preparing', 'error'].includes(refreshedFoundry.phase)) {
-            if (state.attempts < 12) {
-                if (state.timerId) {
-                    clearTimeout(state.timerId);
-                }
-                state.timerId = setTimeout(() => {
-                    void refreshTranslationDiagnostics({ autoProbeFoundry: true });
-                }, 8_000);
-            }
-        } else {
-            state.attempts = 0;
-            if (state.timerId) {
-                clearTimeout(state.timerId);
-                state.timerId = null;
-            }
-        }
+        renderFoundryStatus(status);
+        maybeAutoProbeFoundry(status);
+        return status;
     } catch (e) {
-        console.warn('Foundry Local auto-probe failed:', e);
+        console.warn('Foundry Local status refresh failed:', e);
+        renderFoundryStatusError(e);
+        return null;
     } finally {
         state.inFlight = false;
     }
 }
 
-/**
- * Attempt to prepare Foundry Local (start service + warmup probe)
- */
-async function handlePrepareFoundryLocal() {
-    const button = document.getElementById('btn-prepare-foundry');
+async function handleFoundryRefresh() {
+    const button = document.getElementById('btn-foundry-refresh');
     if (!button) {
         return;
     }
 
     button.disabled = true;
     const originalLabel = button.textContent;
-    button.textContent = 'Warming up...';
-
-    // Show immediate visual feedback - update status to "Preparing"
-    const statusEl = document.getElementById('foundry-status');
-    if (statusEl) {
-        const preparingInfo = formatFoundryPhase('preparing');
-        statusEl.innerHTML = `
-            <span class="status-pill ${preparingInfo.className}">● ${preparingInfo.label.toUpperCase()}</span>
-            <span class="status-text">Warming up model...</span>
-        `;
-    }
+    button.textContent = 'Refreshing...';
 
     try {
-        const status = await TauriBridge.invoke('prepare_foundry_local');
-        await refreshTranslationDiagnostics();
-
-        // Handle response based on phase
-        const phase = status?.phase || 'error';
-        switch (phase) {
-            case 'ready':
-                showToast('Foundry Local ready!', 'success');
-                break;
-            case 'preparing':
-                showToast('Foundry Local still warming up. Try again shortly.', 'warning');
-                break;
-            case 'noModels':
-            case 'nomodels':
-                showToast('Foundry Local started. No models cached yet.', 'warning');
-                break;
-            case 'notRunning':
-            case 'notrunning':
-                showToast('Could not start Foundry Local service.', 'error');
-                break;
-            case 'notInstalled':
-            case 'notinstalled':
-                showToast('Foundry Local not installed. Run: winget install Microsoft.FoundryLocal', 'warning');
-                break;
-            case 'error':
-                const note = status?.notes || 'Foundry Local error';
-                showToast(note, 'error');
-                break;
-            default:
-                if (status?.serviceRunning) {
-                    showToast('Foundry Local is running', 'success');
-                } else {
-                    const note = status?.notes ||
-                        'Foundry Local not available. Install via: winget install Microsoft.FoundryLocal';
-                    showToast(note, 'warning');
-                }
+        const status = await refreshFoundryStatus({ probe: true, reason: 'manual' });
+        void refreshTranslationDiagnostics();
+        if (status?.phase === 'ready') {
+            showToast('Foundry Local ready!', 'success');
         }
-
-        await loadFoundryLocalModels();
-    } catch (error) {
-        console.error('Failed to prepare Foundry Local:', error);
-        const message = error?.message ? error.message : String(error);
-        showToast(`Failed to prepare Foundry Local: ${message}`, 'error');
+    } catch (e) {
+        const message = e?.message ? e.message : String(e);
+        showToast(`Foundry refresh failed: ${message}`, 'error');
     } finally {
         button.disabled = false;
         button.textContent = originalLabel;
     }
+}
+
+async function handleFoundryMakeReady() {
+    const button = document.getElementById('btn-foundry-make-ready');
+    if (!button) {
+        return;
+    }
+
+    button.disabled = true;
+    const originalLabel = button.textContent;
+    button.textContent = 'Making ready...';
+
+    renderFoundryStatusChecking('Starting service (if needed) and warming up model...');
+
+    try {
+        const status = await TauriBridge.invoke('make_foundry_ready');
+        renderFoundryStatus(status);
+        void refreshTranslationDiagnostics();
+
+        if (status?.phase === 'ready') {
+            showToast('Foundry Local ready!', 'success');
+        } else if (status?.notes) {
+            showToast(status.notes, 'warning');
+        }
+
+        // The service may now expose more models; refresh the dropdown.
+        await loadFoundryLocalModels(status?.selectedModel || null);
+    } catch (e) {
+        console.error('Failed to make Foundry ready:', e);
+        const message = e?.message ? e.message : String(e);
+        showToast(`Make Foundry Ready failed: ${message}`, 'error');
+        renderFoundryStatusError(e);
+    } finally {
+        button.disabled = false;
+        button.textContent = originalLabel;
+    }
+}
+
+function scheduleFoundryAutoProbe() {
+    // Don't block startup; run shortly after initial diagnostics paint.
+    setTimeout(() => {
+        void refreshFoundryStatus({ probe: true, reason: 'auto' });
+    }, 300);
+}
+
+function maybeAutoProbeFoundry(status) {
+    const enabled = document.getElementById('toggle-foundry-local')?.checked === true;
+    if (!enabled) {
+        const state = appState.foundryAutoProbe;
+        state.attempts = 0;
+        if (state.timerId) {
+            clearTimeout(state.timerId);
+            state.timerId = null;
+        }
+        return;
+    }
+
+    if (!status || status.serviceRunning !== true || !Array.isArray(status.models) || status.models.length === 0) {
+        return;
+    }
+
+    const phase = (status.phase || '').toString();
+    if (!['unchecked', 'preparing', 'error'].includes(phase)) {
+        // Reset once we're in a stable state.
+        const state = appState.foundryAutoProbe;
+        state.attempts = 0;
+        if (state.timerId) {
+            clearTimeout(state.timerId);
+            state.timerId = null;
+        }
+        return;
+    }
+
+    const state = appState.foundryAutoProbe;
+    if (state.attempts >= 12) {
+        return;
+    }
+
+    const delayMs = phase === 'error' ? 15_000 : 8_000;
+    if (state.timerId) {
+        clearTimeout(state.timerId);
+    }
+    state.timerId = setTimeout(() => {
+        void refreshFoundryStatus({ probe: true, reason: 'auto' });
+    }, delayMs);
+    state.attempts += 1;
+    state.lastAttemptMs = Date.now();
 }
 
 function backendIdKey(id) {
@@ -1013,7 +1211,7 @@ function formatFoundryPhase(phase) {
         case 'ready':
             return { label: 'Ready', className: 'ready' };
         case 'unchecked':
-            return { label: 'Checking', className: 'checking' };
+            return { label: 'Not checked', className: 'unchecked' };
         case 'preparing':
             return { label: 'Preparing', className: 'preparing' };
         case 'notRunning':
@@ -1090,8 +1288,7 @@ function updateBackendStatusUI(diagnostics) {
         container.appendChild(row);
     });
 
-    // Update new UI elements
-    updateFoundryStatusInline(diagnostics);
+    // Update inline status cards
     updateOfflineMtStatusInline(diagnostics);
     updateWindowsAiStatusInline(diagnostics);
     updateStatusSummary(diagnostics);
