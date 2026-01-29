@@ -410,24 +410,31 @@ pub async fn refresh_foundry_local_status(
     // Build basic status synchronously
     let (backend, cli_available, service_url, service_running, models, notes) =
         async_runtime::spawn_blocking({
-        let config = config.clone();
-        move || {
-            let backend = FoundryLocalBackend::new(config);
-            backend.refresh_service_status();
-            let cli_available = FoundryLocalBackend::is_cli_available();
-            let service_url = FoundryLocalBackend::get_service_url_from_cli();
-            let service_running = service_url.is_some();
-            let models = if service_running {
-                FoundryLocalBackend::get_cached_models_from_cli()
-            } else {
-                Vec::new()
-            };
-            let notes = backend.notes();
-            (backend, cli_available, service_url, service_running, models, notes)
-        }
-    })
-    .await
-    .map_err(|err| format!("Foundry Local status task failed: {}", err))?;
+            let config = config.clone();
+            move || {
+                let backend = FoundryLocalBackend::new(config);
+                backend.refresh_service_status();
+                let cli_available = FoundryLocalBackend::is_cli_available();
+                let service_url = FoundryLocalBackend::get_service_url_from_cli();
+                let service_running = service_url.is_some();
+                let models = if service_running {
+                    FoundryLocalBackend::get_cached_models_from_cli()
+                } else {
+                    Vec::new()
+                };
+                let notes = backend.notes();
+                (
+                    backend,
+                    cli_available,
+                    service_url,
+                    service_running,
+                    models,
+                    notes,
+                )
+            }
+        })
+        .await
+        .map_err(|err| format!("Foundry Local status task failed: {}", err))?;
 
     // If service running with models, perform fast probe
     let phase = if service_running && !models.is_empty() {
@@ -501,7 +508,14 @@ pub async fn prepare_foundry_local(
                     Vec::new()
                 };
                 let notes = backend.notes();
-                (backend, cli_available, service_url, service_running, models, notes)
+                (
+                    backend,
+                    cli_available,
+                    service_url,
+                    service_running,
+                    models,
+                    notes,
+                )
             }
         })
         .await

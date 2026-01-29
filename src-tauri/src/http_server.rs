@@ -332,7 +332,14 @@ async fn refresh_foundry_local_status(State(state): State<HttpAppState>) -> impl
                     Vec::new()
                 };
                 let notes = backend.notes();
-                (backend, cli_available, service_url, service_running, models, notes)
+                (
+                    backend,
+                    cli_available,
+                    service_url,
+                    service_running,
+                    models,
+                    notes,
+                )
             }
         })
         .await
@@ -393,7 +400,14 @@ async fn prepare_foundry_local(State(state): State<HttpAppState>) -> impl IntoRe
                     Vec::new()
                 };
                 let notes = backend.notes();
-                (backend, cli_available, service_url, service_running, models, notes)
+                (
+                    backend,
+                    cli_available,
+                    service_url,
+                    service_running,
+                    models,
+                    notes,
+                )
             }
         })
         .await
@@ -681,7 +695,10 @@ pub fn create_router(state: HttpAppState) -> Router {
         // Foundry Local
         .route("/api/foundry-local/models", get(list_foundry_local_models))
         .route("/api/foundry-local/status", get(get_foundry_local_status))
-        .route("/api/foundry-local/refresh", post(refresh_foundry_local_status))
+        .route(
+            "/api/foundry-local/refresh",
+            post(refresh_foundry_local_status),
+        )
         .route("/api/foundry-local/prepare", post(prepare_foundry_local))
         .route("/api/foundry-local/make-ready", post(make_foundry_ready))
         // Windows AI
