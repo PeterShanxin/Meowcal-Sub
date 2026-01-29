@@ -31,6 +31,10 @@ const appState = {
     settings: null,
     systemInfo: null,
     downloadInfo: null,
+    foundryAutoProbe: {
+        inFlight: false,
+        lastAttemptMs: 0,
+    },
 };
 
 // =============================================================================
@@ -63,6 +67,9 @@ async function initializeApp() {
 
         // Load backend diagnostics
         await refreshTranslationDiagnostics();
+        // UX: automatically verify Foundry readiness if it is running, without requiring a click.
+        // This is read-only (won't start the service); it just runs the fast probe when applicable.
+        scheduleFoundryAutoProbe();
 
         // Sync translation running state with backend
         // This fixes button state mismatch when page reloads while translation is running
@@ -513,7 +520,7 @@ function setupEventListeners() {
 
     // Backend diagnostics refresh
     document.getElementById('btn-refresh-backends')
-        .addEventListener('click', () => refreshTranslationDiagnostics({ probeFoundry: true }));
+        .addEventListener('click', () => refreshTranslationDiagnostics({ probeFoundry: true, autoProbeFoundry: true }));
     document.getElementById('btn-prepare-foundry')
         .addEventListener('click', handlePrepareFoundryLocal);
 
@@ -777,6 +784,7 @@ async function refreshTranslationDiagnostics() {
     const arg0 = arguments.length > 0 ? arguments[0] : null;
     const opts = arg0 && typeof arg0 === 'object' ? arg0 : {};
     const probeFoundry = opts.probeFoundry === true;
+    const autoProbeFoundry = opts.autoProbeFoundry === true;
 
     const container = document.getElementById('backend-status');
     if (!container) {
@@ -800,9 +808,61 @@ async function refreshTranslationDiagnostics() {
         if (document.getElementById('toggle-foundry-local')?.checked) {
             await loadFoundryLocalModels();
         }
+
+        // Background auto-probe (fast) when Foundry is enabled + running but hasn't been checked yet.
+        // This keeps the UX "self-checking" while still avoiding auto-starting the service.
+        if (autoProbeFoundry) {
+            void maybeAutoProbeFoundry(diagnostics);
+        }
     } catch (error) {
         console.error('Failed to load backend diagnostics:', error);
         container.innerHTML = '<div class="backend-status-empty">Failed to load backend status.</div>';
+    }
+}
+
+function scheduleFoundryAutoProbe() {
+    // Don't block startup; run shortly after initial diagnostics paint.
+    setTimeout(() => {
+        void refreshTranslationDiagnostics({ autoProbeFoundry: true });
+    }, 250);
+}
+
+async function maybeAutoProbeFoundry(diagnostics) {
+    if (!document.getElementById('toggle-foundry-local')?.checked) {
+        return;
+    }
+
+    const foundry = diagnostics?.backends?.find(b => b.id === 'foundryLocal');
+    if (!foundry || !foundry.phase) {
+        return;
+    }
+
+    // Only auto-probe when the service is up and models exist, but we haven't checked readiness yet.
+    if (foundry.phase !== 'unchecked') {
+        return;
+    }
+
+    const now = Date.now();
+    const state = appState.foundryAutoProbe;
+    if (state.inFlight) {
+        return;
+    }
+    // Throttle to avoid repeated warm-ups on frequent UI refreshes/autosave.
+    if (now - state.lastAttemptMs < 30_000) {
+        return;
+    }
+
+    state.inFlight = true;
+    state.lastAttemptMs = now;
+
+    try {
+        await TauriBridge.invoke('refresh_foundry_local_status');
+        const refreshed = await TauriBridge.invoke('get_translation_diagnostics');
+        updateBackendStatusUI(refreshed);
+    } catch (e) {
+        console.warn('Foundry Local auto-probe failed:', e);
+    } finally {
+        state.inFlight = false;
     }
 }
 
