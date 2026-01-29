@@ -918,6 +918,8 @@ function formatFoundryPhase(phase) {
     switch (phase) {
         case 'ready':
             return { label: 'Ready', className: 'ready' };
+        case 'unchecked':
+            return { label: 'Not Checked', className: 'unchecked' };
         case 'preparing':
             return { label: 'Preparing', className: 'preparing' };
         case 'notRunning':
@@ -1043,6 +1045,13 @@ function updateFoundryStatusInline(diagnostics) {
     let notesText = foundry.notes || '';
     if (extra) {
         notesText = notesText ? `${notesText} ${extra}` : extra;
+    }
+
+    // UX hint: strict "Ready" requires a successful probe. If the service is running but not checked,
+    // guide the user to the buttons that perform probes.
+    if (foundry.phase === 'unchecked') {
+        const hint = 'Tip: click Refresh Status (2s) to check readiness, or Prepare Foundry (25s) to warm up the model.';
+        notesText = notesText ? `${notesText} ${hint}` : hint;
     }
 
     statusEl.innerHTML = `

@@ -133,6 +133,10 @@ pub enum FoundryLocalPhase {
     NotRunning,
     /// Service running but no models are cached
     NoModels,
+    /// Service running with models, but no recent "ready to talk" probe has succeeded yet.
+    ///
+    /// This is distinct from `Preparing` (which means we *did* probe but it timed out).
+    Unchecked,
     /// Service up and model known, but chat probe times out (warmup in progress)
     Preparing,
     /// Chat probe succeeds - ready for translation
@@ -149,6 +153,7 @@ impl FoundryLocalPhase {
             FoundryLocalPhase::NotInstalled => ReadyState::NotSupported,
             FoundryLocalPhase::NotRunning
             | FoundryLocalPhase::NoModels
+            | FoundryLocalPhase::Unchecked
             | FoundryLocalPhase::Preparing => ReadyState::NotReady,
             FoundryLocalPhase::Error => ReadyState::Error,
         }
@@ -160,6 +165,7 @@ impl FoundryLocalPhase {
             FoundryLocalPhase::NotInstalled => "Not Installed",
             FoundryLocalPhase::NotRunning => "Not Running",
             FoundryLocalPhase::NoModels => "No Models",
+            FoundryLocalPhase::Unchecked => "Not Checked",
             FoundryLocalPhase::Preparing => "Preparing",
             FoundryLocalPhase::Ready => "Ready",
             FoundryLocalPhase::Error => "Error",

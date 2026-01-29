@@ -931,9 +931,9 @@ impl FoundryLocalBackend {
             return FoundryLocalPhase::Ready;
         }
 
-        // Service running with models but no recent probe - assume preparing
+        // Service running with models but no recent probe - not checked yet.
         // (caller should perform a probe if they want accurate status)
-        FoundryLocalPhase::Preparing
+        FoundryLocalPhase::Unchecked
     }
 
     /// Get the current phase (performs CLI checks but no network probe).

@@ -299,8 +299,8 @@ async fn get_foundry_local_status(State(state): State<HttpAppState>) -> impl Int
     } else if models.is_empty() {
         FoundryLocalPhase::NoModels
     } else {
-        // Can't probe in browser mode, assume preparing
-        FoundryLocalPhase::Preparing
+        // Can't probe in browser mode (and we don't want to warm models implicitly).
+        FoundryLocalPhase::Unchecked
     };
 
     Json(FoundryLocalStatus {
@@ -335,8 +335,8 @@ async fn prepare_foundry_local(State(state): State<HttpAppState>) -> impl IntoRe
     } else if models.is_empty() {
         FoundryLocalPhase::NoModels
     } else {
-        // Can't probe in browser mode, assume preparing
-        FoundryLocalPhase::Preparing
+        // Can't probe in browser mode (and we don't want to warm models implicitly).
+        FoundryLocalPhase::Unchecked
     };
 
     Json(FoundryLocalStatus {
