@@ -413,6 +413,16 @@ impl FoundryLocalBackend {
         None
     }
 
+    fn is_thinking_model(model: &str) -> bool {
+        let lower = model.to_ascii_lowercase();
+        if lower.contains("reasoner") || lower.contains("reasoning") || lower.contains("thinking") {
+            return true;
+        }
+
+        // Common naming pattern: deepseek-r1-*
+        lower.split(['-', '_', ' ']).any(|segment| segment == "r1")
+    }
+
     fn auto_model_score(model: &str) -> u32 {
         let lower = model.to_ascii_lowercase();
 
@@ -463,6 +473,17 @@ impl FoundryLocalBackend {
             .any(|m| m.to_ascii_lowercase().contains("instruct"));
         if has_instruct {
             candidates.retain(|m| m.to_ascii_lowercase().contains("instruct"));
+        }
+
+        // Avoid reasoning/"thinking" models (e.g. DeepSeek R1) for real-time subtitle translation.
+        // If the user only has thinking models installed, fall back to them (better than nothing).
+        let non_thinking: Vec<&String> = candidates
+            .iter()
+            .copied()
+            .filter(|m| !Self::is_thinking_model(m))
+            .collect();
+        if !non_thinking.is_empty() {
+            candidates = non_thinking;
         }
 
         candidates

@@ -355,6 +355,9 @@ pub struct FoundryLocalStatus {
     pub service_running: bool,
     pub service_url: Option<String>,
     pub models: Vec<String>,
+    /// Model configured in settings (None = Auto).
+    pub configured_model: Option<String>,
+    /// Resolved model that will be used (if available).
     pub selected_model: Option<String>,
     pub notes: String,
     /// Granular Foundry Local phase (e.g. notInstalled, notRunning, noModels, preparing, ready).
@@ -406,6 +409,7 @@ pub async fn refresh_foundry_local_status(
         let guard = state.config.lock().unwrap();
         guard.translation.foundry_local.clone()
     };
+    let configured_model = config.model.clone();
 
     // Build basic status synchronously
     let (backend, cli_available, service_url, service_running, models, notes) =
@@ -473,6 +477,7 @@ pub async fn refresh_foundry_local_status(
         service_running,
         service_url,
         models,
+        configured_model,
         selected_model: backend.selected_model(),
         notes,
         phase,
@@ -491,6 +496,7 @@ pub async fn prepare_foundry_local(
         let guard = state.config.lock().unwrap();
         guard.translation.foundry_local.clone()
     };
+    let configured_model = config.model.clone();
 
     // Build basic status synchronously (this will attempt to start service if needed)
     let (backend, cli_available, service_url, service_running, models, mut notes) =
@@ -554,6 +560,7 @@ pub async fn prepare_foundry_local(
         service_running,
         service_url,
         models,
+        configured_model,
         selected_model: backend.selected_model(),
         notes,
         phase,
@@ -570,6 +577,7 @@ pub async fn make_foundry_ready(state: State<'_, AppState>) -> Result<FoundryLoc
         let guard = state.config.lock().unwrap();
         guard.translation.foundry_local.clone()
     };
+    let configured_model = config.model.clone();
     let configured_timeout_ms = config.timeout_ms as u64;
     let steady_probe_timeout_ms = configured_timeout_ms.clamp(5_000, SLOW_PROBE_TIMEOUT_MS);
 
@@ -687,6 +695,7 @@ pub async fn make_foundry_ready(state: State<'_, AppState>) -> Result<FoundryLoc
         service_running,
         service_url,
         models,
+        configured_model,
         selected_model: backend.selected_model(),
         notes,
         phase,
@@ -698,6 +707,7 @@ pub async fn make_foundry_ready(state: State<'_, AppState>) -> Result<FoundryLoc
 fn build_foundry_local_status_no_probe(
     config: crate::config::FoundryLocalConfig,
 ) -> FoundryLocalStatus {
+    let configured_model = config.model.clone();
     let backend = FoundryLocalBackend::new(config);
     backend.refresh_service_status();
     let cli_available = FoundryLocalBackend::is_cli_available();
@@ -719,6 +729,7 @@ fn build_foundry_local_status_no_probe(
         service_running,
         service_url,
         models,
+        configured_model,
         selected_model: backend.selected_model(),
         notes: backend.notes(),
         phase,
@@ -918,6 +929,10 @@ pub async fn save_settings(
     // Persist the last capture region into the config
     let last_region = *state.capture_region.lock().unwrap();
     updated.last_capture_region = last_region;
+
+    // Persist the DPI scale factor so restored regions capture the correct physical pixels.
+    let last_scale_factor = *state.capture_scale_factor.lock().unwrap();
+    updated.last_capture_scale_factor = Some(last_scale_factor);
 
     // Capture window preferences if possible
     if let Some(window) = app.get_webview_window("main") {

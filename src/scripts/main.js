@@ -39,6 +39,7 @@ const appState = {
     },
     foundryStatus: {
         last: null,
+        lastCheckedMs: 0,
     },
 };
 
@@ -933,10 +934,25 @@ function renderFoundryStatus(status) {
 
     const modelDesc = escapeHtml(status.notes || '');
 
-    const selectedModel = status.selectedModel ? escapeHtml(status.selectedModel) : '--';
+    const configuredRaw = status.configuredModel || '';
+    const resolvedRaw = status.selectedModel || '';
 
-    const lastAttemptMs = status.probe?.lastAttemptMs;
-    const lastChecked = formatEpochMsDelta(lastAttemptMs);
+    let modelDisplay = '(auto)';
+    if (!configuredRaw && resolvedRaw) {
+        modelDisplay = `(auto) \u2192 ${escapeHtml(resolvedRaw)}`;
+    } else if (configuredRaw && resolvedRaw && configuredRaw !== resolvedRaw) {
+        modelDisplay = `${escapeHtml(configuredRaw)} \u2192 ${escapeHtml(resolvedRaw)}`;
+    } else if (configuredRaw) {
+        modelDisplay = escapeHtml(configuredRaw);
+    } else if (resolvedRaw) {
+        modelDisplay = escapeHtml(resolvedRaw);
+    }
+
+    const probeAttemptMs = status.probe?.lastAttemptMs;
+    const checkedEpochMs = Number.isFinite(probeAttemptMs)
+        ? probeAttemptMs
+        : appState.foundryStatus.lastCheckedMs;
+    const lastChecked = formatEpochMsDelta(checkedEpochMs);
 
     let lastError = '';
     if (status.probe?.result === 'error') {
@@ -994,8 +1010,8 @@ function renderFoundryStatus(status) {
         </div>
         <div class="foundry-meta">
             <div class="foundry-meta-row">
-                <span class="foundry-meta-label">Selected model</span>
-                <span class="foundry-meta-value">${selectedModel}</span>
+                <span class="foundry-meta-label">Model</span>
+                <span class="foundry-meta-value">${modelDisplay}</span>
             </div>
             <div class="foundry-meta-row">
                 <span class="foundry-meta-label">Last checked</span>
@@ -1077,6 +1093,7 @@ async function refreshFoundryStatus(opts) {
             ? await TauriBridge.invoke('refresh_foundry_local_status')
             : await TauriBridge.invoke('get_foundry_local_status');
 
+        appState.foundryStatus.lastCheckedMs = Date.now();
         renderFoundryStatus(status);
         maybeAutoProbeFoundry(status);
         return status;
@@ -1157,15 +1174,16 @@ async function handleFoundryMakeReady() {
 function scheduleFoundryAutoProbe() {
     // Don't block startup; run shortly after initial diagnostics paint.
     setTimeout(() => {
-        const shouldProbe = !!appState.captureRegion && appState.isRunning !== true;
+        const enabled = document.getElementById('toggle-foundry-local')?.checked === true;
+        const shouldProbe = enabled && appState.isRunning !== true;
         void refreshFoundryStatus({ probe: shouldProbe, reason: 'auto' });
     }, 300);
 }
 
 function maybeAutoProbeFoundry(status) {
-    // Only warm up automatically when the user has selected a region (intent to translate).
-    // Avoid "background warming" that can feel heavy or keep the Foundry service flapping.
-    if (!appState.captureRegion || appState.isRunning === true) {
+    // Keep auto-probing light: do one fast check on startup, and at most a couple of
+    // follow-ups if Foundry is still warming up.
+    if (appState.isRunning === true) {
         const state = appState.foundryAutoProbe;
         state.attempts = 0;
         if (state.timerId) {
@@ -1191,8 +1209,7 @@ function maybeAutoProbeFoundry(status) {
     }
 
     const phase = (status.phase || '').toString();
-    if (!['unchecked', 'preparing', 'error'].includes(phase)) {
-        // Reset once we're in a stable state.
+    if (phase === 'ready') {
         const state = appState.foundryAutoProbe;
         state.attempts = 0;
         if (state.timerId) {
@@ -1203,11 +1220,21 @@ function maybeAutoProbeFoundry(status) {
     }
 
     const state = appState.foundryAutoProbe;
-    if (state.attempts >= 12) {
+    if (state.attempts >= 3) {
         return;
     }
 
-    const delayMs = phase === 'error' ? 15_000 : 8_000;
+    let delayMs = null;
+    if (phase === 'unchecked') {
+        delayMs = 800;
+    } else if (phase === 'preparing') {
+        delayMs = 25_000;
+    } else if (phase === 'error') {
+        delayMs = 15_000;
+    } else {
+        return;
+    }
+
     if (state.timerId) {
         clearTimeout(state.timerId);
     }
@@ -1644,7 +1671,19 @@ function openFoundryWarmupModal(status) {
 
     const phase = (status?.phase || 'error').toString();
     const phaseInfo = formatFoundryPhase(phase);
-    const selectedModel = status?.selectedModel ? status.selectedModel : '(auto)';
+
+    const configuredRaw = status?.configuredModel || '';
+    const resolvedRaw = status?.selectedModel || '';
+    let modelDisplay = '(auto)';
+    if (!configuredRaw && resolvedRaw) {
+        modelDisplay = `(auto) \u2192 ${resolvedRaw}`;
+    } else if (configuredRaw && resolvedRaw && configuredRaw !== resolvedRaw) {
+        modelDisplay = `${configuredRaw} \u2192 ${resolvedRaw}`;
+    } else if (configuredRaw) {
+        modelDisplay = configuredRaw;
+    } else if (resolvedRaw) {
+        modelDisplay = resolvedRaw;
+    }
     const lastError =
         status?.probe?.result === 'error'
             ? (status.probe.error || 'Unknown error')
@@ -1670,7 +1709,7 @@ function openFoundryWarmupModal(status) {
             <span class="status-pill ${escapeHtml(phaseInfo.className)}">● ${escapeHtml(phaseInfo.label.toUpperCase())}</span>
         </div>
         <div class="setting-hint" style="margin-bottom: 10px;">
-            Selected model: ${escapeHtml(selectedModel)}
+            Model: ${escapeHtml(modelDisplay)}
         </div>
         <div class="setting-hint" style="margin-bottom: 10px;">
             ${escapeHtml(notes)}

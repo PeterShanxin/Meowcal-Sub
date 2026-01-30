@@ -122,6 +122,9 @@ pub struct FoundryLocalStatus {
     pub service_running: bool,
     pub service_url: Option<String>,
     pub models: Vec<String>,
+    /// Model configured in settings (None = Auto).
+    pub configured_model: Option<String>,
+    /// Resolved model that will be used (if available).
     pub selected_model: Option<String>,
     pub notes: String,
     /// Granular Foundry Local phase (e.g. notInstalled, notRunning, noModels, preparing, ready).
@@ -285,7 +288,9 @@ async fn list_foundry_local_models(State(state): State<HttpAppState>) -> impl In
 /// GET /api/foundry-local/status - Get Foundry Local status
 async fn get_foundry_local_status(State(state): State<HttpAppState>) -> impl IntoResponse {
     let config = state.config.lock().unwrap().clone();
-    let backend = FoundryLocalBackend::new(config.translation.foundry_local);
+    let foundry_config = config.translation.foundry_local.clone();
+    let configured_model = foundry_config.model.clone();
+    let backend = FoundryLocalBackend::new(foundry_config);
     backend.refresh_service_status();
 
     let cli_available = FoundryLocalBackend::is_cli_available();
@@ -305,6 +310,7 @@ async fn get_foundry_local_status(State(state): State<HttpAppState>) -> impl Int
         service_running,
         service_url,
         models,
+        configured_model,
         selected_model: backend.selected_model(),
         notes: backend.notes(),
         phase,
@@ -316,6 +322,7 @@ async fn get_foundry_local_status(State(state): State<HttpAppState>) -> impl Int
 async fn refresh_foundry_local_status(State(state): State<HttpAppState>) -> impl IntoResponse {
     let config = state.config.lock().unwrap().clone();
     let foundry_config = config.translation.foundry_local.clone();
+    let configured_model = foundry_config.model.clone();
 
     let (backend, cli_available, service_url, service_running, models, notes) =
         tokio::task::spawn_blocking({
@@ -344,7 +351,7 @@ async fn refresh_foundry_local_status(State(state): State<HttpAppState>) -> impl
         })
         .await
         .unwrap_or_else(|_| {
-            let backend = FoundryLocalBackend::new(foundry_config);
+            let backend = FoundryLocalBackend::new(foundry_config.clone());
             (
                 backend,
                 false,
@@ -374,6 +381,7 @@ async fn refresh_foundry_local_status(State(state): State<HttpAppState>) -> impl
         service_running,
         service_url,
         models,
+        configured_model,
         selected_model: backend.selected_model(),
         notes,
         phase,
@@ -385,6 +393,7 @@ async fn refresh_foundry_local_status(State(state): State<HttpAppState>) -> impl
 async fn prepare_foundry_local(State(state): State<HttpAppState>) -> impl IntoResponse {
     let config = state.config.lock().unwrap().clone();
     let foundry_config = config.translation.foundry_local.clone();
+    let configured_model = foundry_config.model.clone();
     let (backend, cli_available, service_url, service_running, models, mut notes) =
         tokio::task::spawn_blocking({
             let config = foundry_config.clone();
@@ -412,7 +421,7 @@ async fn prepare_foundry_local(State(state): State<HttpAppState>) -> impl IntoRe
         })
         .await
         .unwrap_or_else(|_| {
-            let backend = FoundryLocalBackend::new(foundry_config);
+            let backend = FoundryLocalBackend::new(foundry_config.clone());
             (
                 backend,
                 false,
@@ -441,6 +450,7 @@ async fn prepare_foundry_local(State(state): State<HttpAppState>) -> impl IntoRe
         service_running,
         service_url,
         models,
+        configured_model,
         selected_model: backend.selected_model(),
         notes,
         phase,
@@ -452,6 +462,7 @@ async fn prepare_foundry_local(State(state): State<HttpAppState>) -> impl IntoRe
 async fn make_foundry_ready(State(state): State<HttpAppState>) -> impl IntoResponse {
     let config = state.config.lock().unwrap().clone();
     let foundry_config = config.translation.foundry_local.clone();
+    let configured_model = foundry_config.model.clone();
     let configured_timeout_ms = foundry_config.timeout_ms as u64;
     let steady_probe_timeout_ms = configured_timeout_ms.clamp(5_000, SLOW_PROBE_TIMEOUT_MS);
 
@@ -485,7 +496,7 @@ async fn make_foundry_ready(State(state): State<HttpAppState>) -> impl IntoRespo
         })
         .await
         .unwrap_or_else(|_| {
-            let backend = FoundryLocalBackend::new(foundry_config);
+            let backend = FoundryLocalBackend::new(foundry_config.clone());
             (
                 backend,
                 false,
@@ -503,6 +514,7 @@ async fn make_foundry_ready(State(state): State<HttpAppState>) -> impl IntoRespo
             service_running,
             service_url,
             models,
+            configured_model,
             selected_model: backend.selected_model(),
             notes,
             phase,
@@ -569,6 +581,7 @@ async fn make_foundry_ready(State(state): State<HttpAppState>) -> impl IntoRespo
         service_running,
         service_url,
         models,
+        configured_model,
         selected_model: backend.selected_model(),
         notes,
         phase,

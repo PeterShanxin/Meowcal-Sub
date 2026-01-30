@@ -44,6 +44,12 @@ pub struct AppConfig {
     #[serde(default)]
     pub last_capture_region: Option<CaptureRegion>,
 
+    /// Last known DPI scale factor for the capture region (logical -> physical pixels).
+    ///
+    /// This is persisted so restored regions behave correctly on high-DPI displays.
+    #[serde(default)]
+    pub last_capture_scale_factor: Option<f64>,
+
     /// Window size/position preferences
     #[serde(default)]
     pub window_preferences: WindowPreferences,
@@ -281,6 +287,7 @@ impl Default for AppConfig {
             overlay: OverlayConfig::default(),
             translation: TranslationConfig::default(),
             last_capture_region: None,
+            last_capture_scale_factor: None,
             window_preferences: WindowPreferences::default(),
             auto_start: false,
             minimize_to_tray: true,

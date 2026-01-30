@@ -287,6 +287,14 @@ fn main() {
                 if let Some(region) = loaded_config.last_capture_region {
                     *state.capture_region.lock().unwrap() = Some(region);
                 }
+
+                // If the scale factor wasn't persisted yet (older configs), fall back to the
+                // current window's scale factor so restored regions capture correctly.
+                let scale_factor = loaded_config.last_capture_scale_factor.or_else(|| {
+                    app.get_webview_window("main")
+                        .and_then(|window| window.scale_factor().ok())
+                });
+                *state.capture_scale_factor.lock().unwrap() = scale_factor.unwrap_or(1.0);
             }
 
             // Apply window preferences if available
