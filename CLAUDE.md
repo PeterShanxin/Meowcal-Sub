@@ -8,6 +8,30 @@ Meowcal-Sub is a local LLM-powered subtitle translation app for Windows, built w
 
 Key features include context-aware translation (with memory + recent subtitle context), hardware-accelerated screen capture (Windows.Graphics.Capture API), and automatic backend fallback chain.
 
+## Code Navigation (LSP-First)
+
+**IMPORTANT:** This project has LSP (Language Server Protocol) configured. Always prefer LSP operations over text-based search when navigating code:
+
+| Task | Use LSP | NOT grep/glob |
+|------|---------|---------------|
+| Find where a function/struct is defined | `goToDefinition` | ~~grep "fn foo"~~ |
+| Find all usages of a symbol | `findReferences` | ~~grep "foo"~~ |
+| Get type info or documentation | `hover` | ~~read file and guess~~ |
+| List functions/structs in a file | `documentSymbol` | ~~read entire file~~ |
+| Search for symbols across codebase | `workspaceSymbol` | ~~glob + grep~~ |
+| Find trait implementations | `goToImplementation` | ~~grep "impl Trait"~~ |
+| Trace call hierarchy | `incomingCalls`/`outgoingCalls` | ~~manual search~~ |
+
+**Available LSPs:**
+- **Rust** (`rust-analyzer`) - Full support for `.rs` files
+- **TypeScript/JavaScript** (`typescript-language-server`) - For `.js`, `.ts`, `.jsx`, `.tsx` files
+  - ⚠️ **Known issue:** Official plugin broken on Windows ([#15235](https://github.com/anthropics/claude-code/issues/15235), [#19658](https://github.com/anthropics/claude-code/issues/19658)). Use text search for JS files until fixed.
+
+**When to fall back to search:**
+- LSP server unavailable or erroring (e.g., TypeScript on Windows)
+- Searching for strings/comments (not symbols)
+- Finding files by name pattern (use `Glob`)
+
 ## Build & Development Commands
 
 ```powershell
