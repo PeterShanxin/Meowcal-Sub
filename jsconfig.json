@@ -1,0 +1,20 @@
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "checkJs": true,
+    "strict": false,
+    "baseUrl": ".",
+    "paths": {
+      "/*": ["./*"]
+    }
+  },
+  "include": [
+    "src/scripts/**/*.js",
+    "src/**/*.html"
+  ],
+  "exclude": [
+    "node_modules"
+  ]
+}

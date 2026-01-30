@@ -17,8 +17,9 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tracing::{debug, info, warn};
 
 // Foundry can crash/restart during warmup; keep cooldown short so "Make Foundry Ready"
-// can retry without feeling stuck.
-const START_ATTEMPT_COOLDOWN_MS: u64 = 10_000;
+// can retry without feeling stuck. 6 seconds aligns with the make_foundry_ready loop
+// (900ms sleep * 6 iterations = 5.4s) to allow quick retries.
+const START_ATTEMPT_COOLDOWN_MS: u64 = 6_000;
 static LAST_START_ATTEMPT_MS: AtomicU64 = AtomicU64::new(0);
 
 /// Cache probe success for this duration (milliseconds)
@@ -1476,11 +1477,11 @@ impl TranslatorBackend for FoundryLocalBackend {
             return ReadyState::NotReady;
         }
 
-        if self.is_probe_cache_valid() {
-            ReadyState::Ready
-        } else {
-            ReadyState::NotReady
-        }
+        // If service is running and model is available, consider it ready for translation.
+        // The probe cache is for UI status display (the "Model ready (probe)" ladder step),
+        // not for blocking translation attempts. Translation will timeout/fallback if
+        // the model is still warming up.
+        ReadyState::Ready
     }
 
     fn notes(&self) -> String {
