@@ -350,6 +350,9 @@ function clampInt(value, min, max, fallback) {
 async function saveSettings(opts) {
     const options = opts && typeof opts === 'object' ? opts : {};
     const silent = options.silent === true;
+    const refreshDiagnostics = options.refreshDiagnostics !== undefined
+        ? options.refreshDiagnostics === true
+        : !silent;
     const translationConfig = normalizeTranslationConfig(appState.settings?.translation);
     const offlineMtPath = document.getElementById('offline-mt-path').value.trim();
     const foundryModel = document.getElementById('foundry-local-model').value.trim();
@@ -433,9 +436,11 @@ async function saveSettings(opts) {
             showToast('Settings saved!', 'success');
         }
         console.log('Settings saved:', settings);
-        const refreshTask = refreshTranslationDiagnostics();
-        if (!silent) {
-            await refreshTask;
+        if (refreshDiagnostics) {
+            const refreshTask = refreshTranslationDiagnostics();
+            if (!silent) {
+                await refreshTask;
+            }
         }
     } catch (error) {
         console.error('Failed to save settings:', error);
@@ -455,7 +460,7 @@ function scheduleAutoSave() {
 
     autoSaveTimer = setTimeout(async () => {
         autoSaveTimer = null;
-        await saveSettings({ silent: true });
+        await saveSettings({ silent: true, refreshDiagnostics: false });
     }, AUTO_SAVE_DELAY_MS);
 }
 
@@ -542,7 +547,7 @@ function setupEventListeners() {
     // Save model selection immediately (users expect this to persist across restarts)
     document.getElementById('foundry-local-model').addEventListener('change', async () => {
         console.log('Foundry Local model changed, saving...');
-        await saveSettings({ silent: true });
+        await saveSettings({ silent: true, refreshDiagnostics: false });
         void refreshFoundryStatus({ probe: true, reason: 'model-change' });
     });
 
@@ -724,6 +729,9 @@ async function startRegionPolling() {
                 document.getElementById('region-size').textContent = `Size: ${region.width} × ${region.height}`;
                 document.getElementById('btn-start').disabled = false;
                 showToast('Region selected!', 'success');
+
+                // Now that the user intends to translate, warm up Foundry readiness in the background.
+                scheduleFoundryAutoProbe();
             }
         } catch (e) {
             // Ignore errors during polling
@@ -763,6 +771,9 @@ async function setupRegionSelectedListener() {
             document.getElementById('btn-start').disabled = false;
 
             showToast('Region selected!', 'success');
+
+            // Now that the user intends to translate, warm up Foundry readiness in the background.
+            scheduleFoundryAutoProbe();
         });
         console.log('Region selected listener set up');
     } catch (error) {
@@ -778,6 +789,15 @@ function handleClearRegion() {
     document.getElementById('region-preview').style.display = 'none';
     document.getElementById('btn-start').disabled = true;
     showToast('Region cleared', 'success');
+
+    // Stop any background Foundry probing now that translation intent is gone.
+    const state = appState.foundryAutoProbe;
+    state.attempts = 0;
+    if (state.timerId) {
+        clearTimeout(state.timerId);
+        state.timerId = null;
+    }
+    void refreshFoundryStatus({ probe: false, reason: 'region-cleared' });
 }
 
 /**
@@ -1080,6 +1100,8 @@ async function handleFoundryRefresh() {
     button.textContent = 'Refreshing...';
 
     try {
+        // Ensure the backend uses the currently selected model before probing.
+        await saveSettings({ silent: true, refreshDiagnostics: false });
         const status = await refreshFoundryStatus({ probe: true, reason: 'manual' });
         void refreshTranslationDiagnostics();
         if (status?.phase === 'ready') {
@@ -1107,6 +1129,8 @@ async function handleFoundryMakeReady() {
     renderFoundryStatusChecking('Starting service (if needed) and warming up model...');
 
     try {
+        // Ensure the backend uses the currently selected model before warmup.
+        await saveSettings({ silent: true, refreshDiagnostics: false });
         const status = await TauriBridge.invoke('make_foundry_ready');
         renderFoundryStatus(status);
         void refreshTranslationDiagnostics();
@@ -1133,11 +1157,24 @@ async function handleFoundryMakeReady() {
 function scheduleFoundryAutoProbe() {
     // Don't block startup; run shortly after initial diagnostics paint.
     setTimeout(() => {
-        void refreshFoundryStatus({ probe: true, reason: 'auto' });
+        const shouldProbe = !!appState.captureRegion && appState.isRunning !== true;
+        void refreshFoundryStatus({ probe: shouldProbe, reason: 'auto' });
     }, 300);
 }
 
 function maybeAutoProbeFoundry(status) {
+    // Only warm up automatically when the user has selected a region (intent to translate).
+    // Avoid "background warming" that can feel heavy or keep the Foundry service flapping.
+    if (!appState.captureRegion || appState.isRunning === true) {
+        const state = appState.foundryAutoProbe;
+        state.attempts = 0;
+        if (state.timerId) {
+            clearTimeout(state.timerId);
+            state.timerId = null;
+        }
+        return;
+    }
+
     const enabled = document.getElementById('toggle-foundry-local')?.checked === true;
     if (!enabled) {
         const state = appState.foundryAutoProbe;
@@ -1675,6 +1712,7 @@ async function handleWarmupFoundryAndStart() {
     }
 
     try {
+        await saveSettings({ silent: true, refreshDiagnostics: false });
         const status = await TauriBridge.invoke('make_foundry_ready');
         renderFoundryStatus(status);
 
@@ -1701,6 +1739,7 @@ async function handleWarmupFoundryAndStart() {
 async function handleStartWithFallbackNow() {
     closeFoundryWarmupModal();
     showToast('Starting with fallback (Foundry not ready).', 'warning');
+    await saveSettings({ silent: true, refreshDiagnostics: false });
     await startTranslationNow();
 }
 
@@ -1902,16 +1941,8 @@ async function startTranslationNow() {
         await TauriBridge.invoke('start_translation');
         appState.isRunning = true;
 
-        // Update UI
-        if (startButton) {
-            startButton.style.display = 'none';
-        }
-        if (stopButton) {
-            stopButton.style.display = 'flex';
-            stopButton.disabled = false;
-        }
-        updateStatus('running', 'Translating...');
-
+        // Reconcile UI with backend truth (helps if the backend returned early or got stuck).
+        await syncTranslationState();
         showToast('Translation started!', 'success');
     } catch (error) {
         console.error('Failed to start translation:', error);
@@ -1927,6 +1958,13 @@ async function startTranslationNow() {
         }
         updateStatus('ready', 'Ready');
         showToast('Failed to start: ' + error, 'error');
+
+        // If the backend got stuck in a running state, sync will restore the Stop button.
+        try {
+            await syncTranslationState();
+        } catch (e) {
+            // Ignore sync errors.
+        }
     }
 }
 
@@ -1935,6 +1973,9 @@ async function startTranslationNow() {
  */
 async function handleStartTranslation() {
     console.log('Start translation clicked');
+
+    // Ensure backend is using the current UI settings (languages, model selection, toggles).
+    await saveSettings({ silent: true, refreshDiagnostics: false });
 
     const foundryEnabled = document.getElementById('toggle-foundry-local')?.checked === true;
     if (foundryEnabled) {

@@ -16,7 +16,9 @@ use std::sync::{OnceLock, RwLock};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tracing::{debug, info, warn};
 
-const START_ATTEMPT_COOLDOWN_MS: u64 = 30_000;
+// Foundry can crash/restart during warmup; keep cooldown short so "Make Foundry Ready"
+// can retry without feeling stuck.
+const START_ATTEMPT_COOLDOWN_MS: u64 = 10_000;
 static LAST_START_ATTEMPT_MS: AtomicU64 = AtomicU64::new(0);
 
 /// Cache probe success for this duration (milliseconds)
@@ -29,6 +31,8 @@ pub const SLOW_PROBE_TIMEOUT_MS: u64 = 25_000;
 const API_NAMESPACE_UNKNOWN: u8 = 0;
 const API_NAMESPACE_OPENAI: u8 = 1;
 const API_NAMESPACE_V1: u8 = 2;
+
+const AUTO_MODEL_GROUP_WEIGHT: u32 = 120;
 
 // Cache probe success across backend instances. Diagnostics frequently create fresh
 // FoundryLocalBackend values, so per-instance caches won't persist long enough.
@@ -363,6 +367,110 @@ impl FoundryLocalBackend {
         None
     }
 
+    fn parse_decimal_tenths(value: &str) -> Option<u32> {
+        let trimmed = value.trim();
+        if trimmed.is_empty() {
+            return None;
+        }
+
+        let mut iter = trimmed.splitn(2, '.');
+        let int_part = iter.next()?.parse::<u32>().ok()?;
+        let frac_part = iter.next();
+        let tenths = match frac_part {
+            None => 0,
+            Some(frac) => frac.chars().next()?.to_digit(10)?,
+        };
+        Some(int_part.saturating_mul(10).saturating_add(tenths))
+    }
+
+    fn estimate_param_size_tenths(model: &str) -> Option<u32> {
+        for segment in model.split(['-', '_', ' ']) {
+            let lower = segment.to_ascii_lowercase();
+            if lower.ends_with('b') {
+                let num = lower.trim_end_matches('b');
+                if let Some(parsed) = Self::parse_decimal_tenths(num) {
+                    return Some(parsed);
+                }
+            }
+        }
+
+        let lower = model.to_ascii_lowercase();
+        if let Some(idx) = lower.find("phi-") {
+            let rest = &lower[(idx + 4)..];
+            let mut digits = String::new();
+            for ch in rest.chars() {
+                if ch.is_ascii_digit() || ch == '.' {
+                    digits.push(ch);
+                } else {
+                    break;
+                }
+            }
+            if !digits.is_empty() {
+                return Self::parse_decimal_tenths(&digits);
+            }
+        }
+
+        None
+    }
+
+    fn auto_model_score(model: &str) -> u32 {
+        let lower = model.to_ascii_lowercase();
+
+        let group_rank = if lower.contains("qnn-npu") {
+            0u32
+        } else if lower.contains("generic-cpu") {
+            1u32
+        } else if lower.contains("generic-gpu") {
+            2u32
+        } else {
+            3u32
+        };
+
+        let size_tenths = Self::estimate_param_size_tenths(model).unwrap_or(9_999);
+        let mut score = group_rank.saturating_mul(AUTO_MODEL_GROUP_WEIGHT);
+        score = score.saturating_add(size_tenths.saturating_mul(10));
+
+        // Heuristics: prefer smaller, instruction-tuned models. Avoid very large or "R1/distill"
+        // models by default because they can take a long time to warm up (or crash the service).
+        if lower.contains("deepseek") || lower.contains("r1") {
+            score = score.saturating_add(50_000);
+        }
+        if lower.contains("distill") {
+            score = score.saturating_add(20_000);
+        }
+        if lower.contains("coder") {
+            score = score.saturating_add(10_000);
+        }
+
+        // Avoid ultra-tiny models as the default (quality can be too low for subtitles).
+        if size_tenths < 10 {
+            score = score.saturating_add(3_000);
+        } else if size_tenths < 15 {
+            score = score.saturating_add(800);
+        }
+
+        score
+    }
+
+    fn choose_auto_model(models: &[String]) -> Option<String> {
+        if models.is_empty() {
+            return None;
+        }
+
+        let mut candidates: Vec<&String> = models.iter().collect();
+        let has_instruct = candidates
+            .iter()
+            .any(|m| m.to_ascii_lowercase().contains("instruct"));
+        if has_instruct {
+            candidates.retain(|m| m.to_ascii_lowercase().contains("instruct"));
+        }
+
+        candidates
+            .into_iter()
+            .min_by_key(|m| Self::auto_model_score(m))
+            .cloned()
+    }
+
     fn is_probable_model_id(candidate: &str) -> bool {
         if candidate.is_empty() {
             return false;
@@ -681,7 +789,7 @@ impl FoundryLocalBackend {
         Ok(model_ids)
     }
 
-    /// Get the model to use (configured or first available)
+    /// Get the model to use (configured or preferred auto-selection)
     fn get_model(&self) -> Option<String> {
         let models = self.cached_models.read().unwrap();
 
@@ -692,7 +800,11 @@ impl FoundryLocalBackend {
             }
         }
 
-        // Otherwise use first cached model
+        // Otherwise choose a reasonable auto model.
+        if let Some(chosen) = Self::choose_auto_model(&models) {
+            return Some(self.resolve_model_id(&chosen, &models));
+        }
+
         models
             .first()
             .map(|model| self.resolve_model_id(model, &models))
@@ -952,8 +1064,8 @@ impl FoundryLocalBackend {
         ) -> Result<bool, LlmError> {
             let url = backend.api_url_for(base_url, preferred_namespace, "chat/completions");
             debug!(
-                "Probing Foundry Local chat completions (timeout={}ms): {}",
-                timeout_ms, url
+                "Probing Foundry Local chat completions (timeout={}ms, model={}): {}",
+                timeout_ms, request.model, url
             );
 
             let response = probe_client.post(&url).json(request).send().await;
@@ -1372,7 +1484,8 @@ impl TranslatorBackend for FoundryLocalBackend {
                     )
                 }
             } else if let Some(model) = models.first() {
-                let resolved = self.resolve_model_id(model, &models);
+                let auto = Self::choose_auto_model(&models).unwrap_or_else(|| model.clone());
+                let resolved = self.resolve_model_id(&auto, &models);
                 format!(
                     "Service at {}. Auto-selected model: {}. To pick a different model, choose one and Save Settings.",
                     url, resolved

@@ -573,64 +573,84 @@ pub async fn make_foundry_ready(state: State<'_, AppState>) -> Result<FoundryLoc
     let configured_timeout_ms = config.timeout_ms as u64;
     let steady_probe_timeout_ms = configured_timeout_ms.clamp(5_000, SLOW_PROBE_TIMEOUT_MS);
 
-    // Ensure service is running and gather baseline info.
-    let (backend, cli_available, mut service_url, mut service_running, mut models, mut notes) =
-        async_runtime::spawn_blocking({
-            let config = config.clone();
-            move || {
-                let backend = FoundryLocalBackend::new(config);
-                let cli_available = FoundryLocalBackend::is_cli_available();
-                if cli_available {
-                    backend.ensure_service_running();
-                }
-                backend.refresh_service_status();
-                let service_url = FoundryLocalBackend::get_service_url_from_cli();
-                let service_running = service_url.is_some();
-                let models = if service_running {
-                    FoundryLocalBackend::get_cached_models_from_cli()
-                } else {
-                    Vec::new()
-                };
-                let notes = backend.notes();
-                (
-                    backend,
-                    cli_available,
-                    service_url,
-                    service_running,
-                    models,
-                    notes,
-                )
-            }
-        })
-        .await
-        .map_err(|err| format!("Foundry Local make-ready task failed: {}", err))?;
+    let backend = Arc::new(FoundryLocalBackend::new(config));
 
-    // If we can't even reach the service or models yet, return the fast phase.
-    if !cli_available || !service_running || models.is_empty() {
-        let phase = backend.phase();
-        return Ok(FoundryLocalStatus {
-            cli_available,
-            service_running,
-            service_url,
-            models,
-            selected_model: backend.selected_model(),
-            notes,
-            phase,
-            probe: backend.probe_snapshot(),
-        });
-    }
-
-    // Keep probing for readiness. Fast probes are used between warmup attempts so we don't
-    // block for long on each iteration.
     let started = Instant::now();
     let max_total = Duration::from_secs(90);
-    let mut attempt = 0usize;
-    let mut phase = FoundryLocalPhase::Preparing;
+
+    let mut cli_available = false;
+    let mut service_url: Option<String> = None;
+    let mut service_running = false;
+    let mut models: Vec<String> = Vec::new();
+    let mut notes = String::new();
+
     let mut last_error: Option<String> = None;
+    let mut phase = FoundryLocalPhase::Preparing;
+    let mut attempt = 0usize;
+    let mut models_wait_started: Option<Instant> = None;
 
     while started.elapsed() < max_total {
-        attempt += 1;
+        let (snap_cli, snap_url, snap_running, snap_models, snap_notes) =
+            async_runtime::spawn_blocking({
+                let backend = backend.clone();
+                move || {
+                    backend.refresh_service_status();
+                    let cli_available = FoundryLocalBackend::is_cli_available();
+                    let service_url = FoundryLocalBackend::get_service_url_from_cli();
+                    let service_running = service_url.is_some();
+                    let models = if service_running {
+                        FoundryLocalBackend::get_cached_models_from_cli()
+                    } else {
+                        Vec::new()
+                    };
+                    let notes = backend.notes();
+                    (cli_available, service_url, service_running, models, notes)
+                }
+            })
+            .await
+            .map_err(|err| format!("Foundry Local make-ready snapshot failed: {}", err))?;
 
+        cli_available = snap_cli;
+        service_url = snap_url;
+        service_running = snap_running;
+        models = snap_models;
+        notes = snap_notes;
+
+        if !cli_available {
+            phase = FoundryLocalPhase::NotInstalled;
+            break;
+        }
+
+        if !service_running {
+            phase = FoundryLocalPhase::NotRunning;
+
+            // Attempt to start the service (non-fatal if it takes time).
+            let _ = async_runtime::spawn_blocking({
+                let backend = backend.clone();
+                move || backend.ensure_service_running()
+            })
+            .await;
+
+            tokio::time::sleep(Duration::from_millis(900)).await;
+            continue;
+        }
+
+        if models.is_empty() {
+            phase = FoundryLocalPhase::NoModels;
+            models_wait_started.get_or_insert_with(Instant::now);
+            if models_wait_started
+                .as_ref()
+                .is_some_and(|t| t.elapsed() > Duration::from_secs(12))
+            {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(900)).await;
+            continue;
+        }
+        models_wait_started = None;
+
+        // Service + models exist: warm up the selected model and keep probing until Ready.
+        attempt += 1;
         let timeout_ms = if attempt == 1 {
             SLOW_PROBE_TIMEOUT_MS
         } else {
@@ -640,7 +660,6 @@ pub async fn make_foundry_ready(state: State<'_, AppState>) -> Result<FoundryLoc
         match backend.probe_chat_completions(timeout_ms).await {
             Ok(true) => {
                 phase = FoundryLocalPhase::Ready;
-                notes = format!("{} Ready.", notes);
                 last_error = None;
                 break;
             }
@@ -653,30 +672,13 @@ pub async fn make_foundry_ready(state: State<'_, AppState>) -> Result<FoundryLoc
             }
         }
 
-        // Refresh service URL and cached models in case Foundry restarted mid-warmup.
-        backend.refresh_service_status();
-        service_url = FoundryLocalBackend::get_service_url_from_cli();
-        service_running = service_url.is_some();
-        models = if service_running {
-            FoundryLocalBackend::get_cached_models_from_cli()
-        } else {
-            Vec::new()
-        };
-
-        // If the service vanished, stop trying - user needs to restart it.
-        if !service_running {
-            phase = FoundryLocalPhase::NotRunning;
-            break;
-        }
-
+        // Give Foundry some breathing room; it may restart on a new port after a crash.
         tokio::time::sleep(Duration::from_millis(1500)).await;
     }
 
     if phase != FoundryLocalPhase::Ready {
         if let Some(err) = last_error {
             notes = format!("{} Last error: {}", notes, err);
-        } else {
-            notes = format!("{} Still warming up. Try again shortly.", notes);
         }
     }
 
@@ -1354,15 +1356,6 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
     info!(">>> START_TRANSLATION COMMAND CALLED <<<");
     info!("Starting translation...");
 
-    // Check if already running and mark as running atomically
-    {
-        let mut is_running = state.is_running.lock().unwrap();
-        if *is_running {
-            return Err("Translation is already running".to_string());
-        }
-        *is_running = true;
-    }
-
     // Get the capture region
     let region = {
         let region_guard = state.capture_region.lock().unwrap();
@@ -1371,6 +1364,15 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
             None => return Err("No capture region set. Please select an area first.".to_string()),
         }
     };
+
+    // Mark as running only after we know we have a region (prevents "stuck running" on early return).
+    {
+        let mut is_running = state.is_running.lock().unwrap();
+        if *is_running {
+            return Err("Translation is already running".to_string());
+        }
+        *is_running = true;
+    }
 
     // Get the capture scale factor (logical -> physical pixels)
     let scale_factor = {
@@ -1466,6 +1468,19 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
             let mut is_running = state.is_running.lock().unwrap();
             *is_running = false;
         };
+
+        info!("Translation loop started");
+        info!("Initializing OCR engine (language={})", source_language);
+
+        // Ensure WinRT is initialized on this worker thread before calling OCR/capture APIs.
+        // This prevents "nothing happens" failures when the runtime isn't set up on the thread.
+        #[cfg(target_os = "windows")]
+        {
+            use windows::Win32::System::WinRT::{RoInitialize, RO_INIT_MULTITHREADED};
+            if let Err(e) = unsafe { RoInitialize(RO_INIT_MULTITHREADED) } {
+                warn!("⚠️ Failed to initialize WinRT on worker thread: {}", e);
+            }
+        }
 
         // Initialize OCR engine using the configured source language
         let ocr = match WindowsOcr::with_language(&source_language) {
