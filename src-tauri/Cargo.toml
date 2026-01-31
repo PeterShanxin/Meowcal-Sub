@@ -49,6 +49,7 @@ serde_json = "1"           # JSON parsing and generation
 # Used for the selector window screenshot workaround (data:image/png;base64,...)
 base64 = "0.22"
 png = "0.17"
+scopeguard = "1.2"          # RAII guards for panic-safe cleanup
 
 # --- Async Runtime ---
 # Rust's way of handling async operations (like JavaScript's async/await)

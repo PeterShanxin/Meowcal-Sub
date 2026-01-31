@@ -27,6 +27,7 @@ use crate::llm::{
 use crate::ocr::WindowsOcr;
 use crate::overlay;
 use reqwest::Client;
+use scopeguard::defer;
 use serde::Serialize;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
@@ -965,10 +966,15 @@ pub async fn save_settings(
     async_runtime::spawn_blocking(move || save_config(&app_handle, &updated_clone))
         .await
         .map_err(|err| {
+            let message = format!("Failed to spawn save_config task: {}", err);
+            warn!("{}", message);
+            message
+        })?
+        .map_err(|err| {
             let message = format!("Failed to save settings: {}", err);
             warn!("{}", message);
             message
-        })??;
+        })?;
 
     Ok(())
 }
@@ -1481,12 +1487,17 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
 
     // Spawn the background translation loop
     tokio::spawn(async move {
-        // Helper to reset is_running state on early exit
-        let reset_running_state = || {
-            let state = app.state::<AppState>();
-            let mut is_running = state.is_running.lock().unwrap();
-            *is_running = false;
-        };
+        // Scope guard ensures is_running is reset even if the task panics (in debug builds).
+        // This replaces the manual reset_running_state() calls with RAII-style cleanup.
+        let app_for_guard = app.clone();
+        defer! {
+            let state = app_for_guard.state::<AppState>();
+            if let Ok(mut is_running) = state.is_running.lock() {
+                *is_running = false;
+            }
+            capture::close_capture_session();
+            info!("Translation loop cleanup complete");
+        }
 
         info!("Translation loop started");
         info!("Initializing OCR engine (language={})", source_language);
@@ -1516,7 +1527,7 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
                     Ok(o) => o,
                     Err(e) => {
                         warn!("❌ Failed to initialize OCR: {}", e);
-                        reset_running_state();
+                        // Scopeguard handles cleanup automatically on early return
                         return;
                     }
                 }
@@ -1982,9 +1993,7 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
             tokio::time::sleep(Duration::from_millis(interval_ms as u64)).await;
         }
 
-        // Close the capture session when loop ends
-        capture::close_capture_session();
-        reset_running_state();
+        // Scopeguard handles cleanup: close_capture_session() and is_running reset
         info!("Translation loop ended");
     });
 
