@@ -34,6 +34,9 @@ pub mod http_server;
 /// IPC (Inter-Process Communication) with WinUI3 OverlayHost
 pub mod ipc;
 
+/// Synchronization utilities - safe mutex/RwLock handling with poison recovery
+pub mod sync_utils;
+
 // =============================================================================
 // RE-EXPORTS
 // =============================================================================

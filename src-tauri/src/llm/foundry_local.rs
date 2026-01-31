@@ -7,6 +7,7 @@ use crate::llm::{
     build_subtitle_translation_prompt, BackendId, FoundryLocalPhase, LlmError, PromptRouterOptions,
     ReadyState, TranslatorBackend,
 };
+use crate::sync_utils::{read_or_recover, write_or_recover};
 use async_trait::async_trait;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
@@ -171,7 +172,7 @@ impl FoundryLocalBackend {
     }
 
     fn mark_service_unavailable(&self) {
-        *self.service_url.write().unwrap() = None;
+        *write_or_recover(&self.service_url) = None;
         self.service_available.store(false, Ordering::SeqCst);
         self.api_namespace
             .store(API_NAMESPACE_UNKNOWN, Ordering::SeqCst);
@@ -571,7 +572,7 @@ impl FoundryLocalBackend {
 
     /// Refresh service status and URL (read-only; does NOT start the service).
     pub fn refresh_service_status(&self) {
-        let previous_url = self.service_url.read().unwrap().clone();
+        let previous_url = read_or_recover(&self.service_url).clone();
 
         if let Some(url) = Self::get_service_url_from_cli() {
             debug!("Foundry Local service detected at {}", url);
@@ -583,11 +584,11 @@ impl FoundryLocalBackend {
                 // Cached probe is no longer valid.
                 self.invalidate_probe_cache();
             }
-            *self.service_url.write().unwrap() = Some(url);
+            *write_or_recover(&self.service_url) = Some(url);
             self.service_available.store(true, Ordering::SeqCst);
 
             // Also try to populate models from CLI if cache is empty
-            let models = self.cached_models.read().unwrap();
+            let models = read_or_recover(&self.cached_models);
             if models.is_empty() {
                 drop(models); // Release read lock before acquiring write lock
                 let cli_models = Self::get_cached_models_from_cli();
@@ -596,7 +597,7 @@ impl FoundryLocalBackend {
                         "Populated {} models from CLI during refresh",
                         cli_models.len()
                     );
-                    *self.cached_models.write().unwrap() = cli_models;
+                    *write_or_recover(&self.cached_models) = cli_models;
                 }
             }
         } else {
@@ -605,7 +606,7 @@ impl FoundryLocalBackend {
             }
 
             debug!("Foundry Local service not running");
-            *self.service_url.write().unwrap() = None;
+            *write_or_recover(&self.service_url) = None;
             self.service_available.store(false, Ordering::SeqCst);
         }
     }
@@ -643,7 +644,7 @@ impl FoundryLocalBackend {
 
     /// Get cached service URL
     fn get_service_url(&self) -> Option<String> {
-        self.service_url.read().unwrap().clone()
+        read_or_recover(&self.service_url).clone()
     }
 
     async fn send_chat_completion(
@@ -825,14 +826,14 @@ impl FoundryLocalBackend {
         });
 
         // Cache the models
-        *self.cached_models.write().unwrap() = model_ids.clone();
+        *write_or_recover(&self.cached_models) = model_ids.clone();
 
         Ok(model_ids)
     }
 
     /// Get the model to use (configured or preferred auto-selection)
     fn get_model(&self) -> Option<String> {
-        let models = self.cached_models.read().unwrap();
+        let models = read_or_recover(&self.cached_models);
 
         // Use configured model if set and available
         if let Some(ref model) = self.config.model {
@@ -937,8 +938,8 @@ impl FoundryLocalBackend {
             None => return false,
         };
 
-        let cached_url = cache.last_service_url.read().unwrap().clone();
-        let cached_model = cache.last_model.read().unwrap().clone();
+        let cached_url = read_or_recover(&cache.last_service_url).clone();
+        let cached_model = read_or_recover(&cache.last_model).clone();
 
         cached_url.as_deref() == Some(current_url.as_str())
             && cached_model.as_deref() == Some(current_model.as_str())
@@ -957,9 +958,9 @@ impl FoundryLocalBackend {
         cache
             .last_result
             .store(PROBE_RESULT_SUCCESS, Ordering::SeqCst);
-        *cache.last_error.write().unwrap() = None;
-        *cache.last_service_url.write().unwrap() = Some(url);
-        *cache.last_model.write().unwrap() = Some(model);
+        *write_or_recover(&cache.last_error) = None;
+        *write_or_recover(&cache.last_service_url) = Some(url);
+        *write_or_recover(&cache.last_model) = Some(model);
     }
 
     fn record_probe_timeout(&self) {
@@ -973,9 +974,9 @@ impl FoundryLocalBackend {
         cache
             .last_result
             .store(PROBE_RESULT_TIMEOUT, Ordering::SeqCst);
-        *cache.last_error.write().unwrap() = None;
-        *cache.last_service_url.write().unwrap() = Some(url);
-        *cache.last_model.write().unwrap() = Some(model);
+        *write_or_recover(&cache.last_error) = None;
+        *write_or_recover(&cache.last_service_url) = Some(url);
+        *write_or_recover(&cache.last_model) = Some(model);
     }
 
     fn record_probe_error(&self, message: String) {
@@ -989,9 +990,9 @@ impl FoundryLocalBackend {
         cache
             .last_result
             .store(PROBE_RESULT_ERROR, Ordering::SeqCst);
-        *cache.last_error.write().unwrap() = Some(message);
-        *cache.last_service_url.write().unwrap() = Some(url);
-        *cache.last_model.write().unwrap() = Some(model);
+        *write_or_recover(&cache.last_error) = Some(message);
+        *write_or_recover(&cache.last_service_url) = Some(url);
+        *write_or_recover(&cache.last_model) = Some(model);
     }
 
     /// Invalidate the probe cache (call when model selection changes)
@@ -1000,9 +1001,9 @@ impl FoundryLocalBackend {
         cache.last_success_ms.store(0, Ordering::SeqCst);
         cache.last_attempt_ms.store(0, Ordering::SeqCst);
         cache.last_result.store(PROBE_RESULT_NONE, Ordering::SeqCst);
-        *cache.last_error.write().unwrap() = None;
-        *cache.last_service_url.write().unwrap() = None;
-        *cache.last_model.write().unwrap() = None;
+        *write_or_recover(&cache.last_error) = None;
+        *write_or_recover(&cache.last_service_url) = None;
+        *write_or_recover(&cache.last_model) = None;
     }
 
     fn is_last_probe_for_current_target(&self) -> bool {
@@ -1017,8 +1018,8 @@ impl FoundryLocalBackend {
             None => return false,
         };
 
-        let cached_url = cache.last_service_url.read().unwrap().clone();
-        let cached_model = cache.last_model.read().unwrap().clone();
+        let cached_url = read_or_recover(&cache.last_service_url).clone();
+        let cached_model = read_or_recover(&cache.last_model).clone();
 
         cached_url.as_deref() == Some(current_url.as_str())
             && cached_model.as_deref() == Some(current_model.as_str())
@@ -1042,7 +1043,7 @@ impl FoundryLocalBackend {
         }
 
         let kind = cache.last_result.load(Ordering::SeqCst);
-        let error = cache.last_error.read().unwrap().clone();
+        let error = read_or_recover(&cache.last_error).clone();
         Some((kind, age_ms, error))
     }
 
@@ -1213,7 +1214,7 @@ impl FoundryLocalBackend {
         }
 
         // Check if models are cached
-        let models = self.cached_models.read().unwrap();
+        let models = read_or_recover(&self.cached_models);
         if models.is_empty() {
             return FoundryLocalPhase::NoModels;
         }
@@ -1432,7 +1433,7 @@ impl TranslatorBackend for FoundryLocalBackend {
         }
 
         let model_ready = {
-            let models = self.cached_models.read().unwrap();
+            let models = read_or_recover(&self.cached_models);
             if let Some(ref model) = self.config.model {
                 Self::model_in_cache(model, &models)
             } else {
@@ -1453,7 +1454,7 @@ impl TranslatorBackend for FoundryLocalBackend {
 
     fn notes(&self) -> String {
         if let Some(url) = self.get_service_url() {
-            let models = self.cached_models.read().unwrap();
+            let models = read_or_recover(&self.cached_models);
 
             if let Some(ref configured) = self.config.model {
                 if Self::model_in_cache(configured, &models) {

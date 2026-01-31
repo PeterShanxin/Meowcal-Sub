@@ -16,6 +16,7 @@
 use super::d3d;
 use super::{CaptureError, CaptureResult};
 use crate::config::CaptureRegion;
+use crate::sync_utils::lock_or_recover;
 use std::sync::mpsc::{channel, Receiver};
 use std::sync::Mutex;
 use tracing::{debug, info, warn};
@@ -325,7 +326,7 @@ lazy_static::lazy_static! {
 /// Initialize the global capture session.
 /// Call this once when starting translation.
 pub fn init_capture_session() -> Result<(), CaptureError> {
-    let mut session = CAPTURE_SESSION.lock().unwrap();
+    let mut session = lock_or_recover(&CAPTURE_SESSION);
     if session.is_none() {
         *session = Some(ScreenCaptureSession::new()?);
     }
@@ -335,13 +336,13 @@ pub fn init_capture_session() -> Result<(), CaptureError> {
 /// Close the global capture session.
 /// Call this when stopping translation.
 pub fn close_capture_session() {
-    let mut session = CAPTURE_SESSION.lock().unwrap();
+    let mut session = lock_or_recover(&CAPTURE_SESSION);
     let _ = session.take();
 }
 
 /// Capture a region using the persistent session.
 pub fn capture_with_session(region: &CaptureRegion) -> Result<CaptureResult, CaptureError> {
-    let mut session = CAPTURE_SESSION.lock().unwrap();
+    let mut session = lock_or_recover(&CAPTURE_SESSION);
     match session.as_mut() {
         Some(s) => s.capture_region(region),
         None => Err(CaptureError::GraphicsCaptureError(
@@ -472,7 +473,7 @@ fn crop_region(
 /// This is kept for compatibility but the persistent session is preferred.
 pub fn capture_region_graphics(region: &CaptureRegion) -> Result<CaptureResult, CaptureError> {
     // Use the persistent session if available
-    let session = CAPTURE_SESSION.lock().unwrap();
+    let session = lock_or_recover(&CAPTURE_SESSION);
     if session.is_some() {
         drop(session); // Release lock
         return capture_with_session(region);
