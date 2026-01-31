@@ -1098,7 +1098,11 @@ impl FoundryLocalBackend {
     pub async fn probe_chat_completions(&self, timeout_ms: u64) -> Result<bool, LlmError> {
         let base_url = match self.get_service_url() {
             Some(url) => url,
-            None => return Err(LlmError::ApiError("Foundry Local service not running".to_string())),
+            None => {
+                return Err(LlmError::ApiError(
+                    "Foundry Local service not running".to_string(),
+                ))
+            }
         };
 
         // Wait for service to stabilize if it just started.
@@ -1129,7 +1133,8 @@ impl FoundryLocalBackend {
 
         match probe_client.get(&models_url).send().await {
             Ok(resp) if resp.status().is_success() => {
-                self.api_namespace.store(preferred_namespace, Ordering::SeqCst);
+                self.api_namespace
+                    .store(preferred_namespace, Ordering::SeqCst);
                 self.record_probe_success();
                 debug!("Foundry Local probe succeeded (models endpoint responsive)");
                 Ok(true)
@@ -1146,9 +1151,12 @@ impl FoundryLocalBackend {
 
                 match probe_client.get(&fallback_url).send().await {
                     Ok(resp) if resp.status().is_success() => {
-                        self.api_namespace.store(fallback_namespace, Ordering::SeqCst);
+                        self.api_namespace
+                            .store(fallback_namespace, Ordering::SeqCst);
                         self.record_probe_success();
-                        debug!("Foundry Local probe succeeded (fallback models endpoint responsive)");
+                        debug!(
+                            "Foundry Local probe succeeded (fallback models endpoint responsive)"
+                        );
                         Ok(true)
                     }
                     Ok(resp) => {
