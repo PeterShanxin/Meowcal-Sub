@@ -596,6 +596,7 @@ pub async fn make_foundry_ready(state: State<'_, AppState>) -> Result<FoundryLoc
     let mut phase = FoundryLocalPhase::Preparing;
     let mut attempt = 0usize;
     let mut models_wait_started: Option<Instant> = None;
+    let mut service_just_started = false; // Track if we just started the service
 
     while started.elapsed() < max_total {
         let (snap_cli, snap_url, snap_running, snap_models, snap_notes) =
@@ -639,6 +640,7 @@ pub async fn make_foundry_ready(state: State<'_, AppState>) -> Result<FoundryLoc
             })
             .await;
 
+            service_just_started = true; // Mark that we just tried to start
             tokio::time::sleep(Duration::from_millis(900)).await;
             continue;
         }
@@ -656,6 +658,13 @@ pub async fn make_foundry_ready(state: State<'_, AppState>) -> Result<FoundryLoc
             continue;
         }
         models_wait_started = None;
+
+        // If we just started the service, give it a moment to stabilize before probing.
+        // Foundry Local (especially with NPU models) can crash if probed too early.
+        if service_just_started {
+            service_just_started = false;
+            tokio::time::sleep(Duration::from_millis(2500)).await;
+        }
 
         // Service + models exist: warm up the selected model and keep probing until Ready.
         attempt += 1;
@@ -676,7 +685,12 @@ pub async fn make_foundry_ready(state: State<'_, AppState>) -> Result<FoundryLoc
             }
             Err(e) => {
                 phase = FoundryLocalPhase::Error;
-                last_error = Some(e.to_string());
+                let err_str = e.to_string();
+                // Connection reset often means Foundry crashed - mark that we need a longer delay.
+                if err_str.contains("ConnectionReset") || err_str.contains("10054") {
+                    service_just_started = true; // Treat as if service restarted
+                }
+                last_error = Some(err_str);
             }
         }
 
