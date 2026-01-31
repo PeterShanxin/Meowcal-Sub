@@ -1967,11 +1967,14 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
                 .unwrap_or_default()
                 .as_millis() as u64;
 
+            // Pre-compute shared values to avoid redundant allocations
+            let backend_str = backend_used.as_str().to_string();
+
             let payload = TranslationPayload {
                 original: current_text.clone(),
                 translated: translated.clone(),
-                backend_used: backend_used.as_str().to_string(),
-                warnings: warnings.clone(),
+                backend_used: backend_str.clone(),
+                warnings, // Move instead of clone - not used after this
                 timestamp,
             };
 
@@ -1980,11 +1983,12 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
             }
 
             // Send subtitle update to WinUI3 OverlayHost
+            // Move strings since they're no longer needed after this
             let subtitle_payload = SubtitleUpdatePayload {
-                text: translated.clone(),
-                source_text: current_text.clone(),
+                text: translated,          // Move instead of clone
+                source_text: current_text, // Move instead of clone
                 timestamp: timestamp.to_string(),
-                backend_used: Some(backend_used.as_str().to_string()),
+                backend_used: Some(backend_str), // Move instead of new allocation
             };
 
             send_overlay_message(
