@@ -1497,9 +1497,8 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
         let app_for_guard = app.clone();
         defer! {
             let state = app_for_guard.state::<AppState>();
-            if let Ok(mut is_running) = state.is_running.lock() {
-                *is_running = false;
-            }
+            // Use lock_or_recover to ensure cleanup succeeds even if mutex is poisoned
+            *lock_or_recover(&state.is_running) = false;
             capture::close_capture_session();
             info!("Translation loop cleanup complete");
         }

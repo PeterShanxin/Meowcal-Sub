@@ -26,6 +26,8 @@ use tracing::warn;
 pub fn lock_or_recover<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
     mutex.lock().unwrap_or_else(|poisoned| {
         warn!("Mutex poisoned, recovering - a thread previously panicked while holding this lock");
+        // Clear the poison flag so subsequent acquisitions don't spam logs
+        mutex.clear_poison();
         poisoned.into_inner()
     })
 }
@@ -38,6 +40,8 @@ pub fn read_or_recover<T>(rwlock: &RwLock<T>) -> RwLockReadGuard<'_, T> {
         warn!(
             "RwLock poisoned (read), recovering - a thread previously panicked while holding this lock"
         );
+        // Clear the poison flag so subsequent acquisitions don't spam logs
+        rwlock.clear_poison();
         poisoned.into_inner()
     })
 }
@@ -50,6 +54,8 @@ pub fn write_or_recover<T>(rwlock: &RwLock<T>) -> RwLockWriteGuard<'_, T> {
         warn!(
             "RwLock poisoned (write), recovering - a thread previously panicked while holding this lock"
         );
+        // Clear the poison flag so subsequent acquisitions don't spam logs
+        rwlock.clear_poison();
         poisoned.into_inner()
     })
 }
