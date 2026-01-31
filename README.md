@@ -1,8 +1,11 @@
 # 🐱 Meowcal Sub
 
+> ⚠️ **BETA SOFTWARE** - This is an early beta release. Expect bugs and breaking changes. Please report issues on GitHub!
+
 A local LLM-powered subtitle translation app for Windows. Captures any region of your screen, performs OCR, and displays translated subtitles in a floating overlay.
 
 ![Platform](https://img.shields.io/badge/Platform-Windows-blue)
+![Version](https://img.shields.io/badge/Version-0.1.0--beta-orange)
 ![Rust](https://img.shields.io/badge/Built%20with-Rust%20%2B%20Tauri-orange)
 ![License](https://img.shields.io/badge/License-MIT-green)
 
@@ -18,9 +21,9 @@ A local LLM-powered subtitle translation app for Windows. Captures any region of
 
 | Requirement | Details |
 |-------------|---------|
-| **OS** | Windows 10/11 |
+| **OS** | Windows 10/11 (Windows 11 recommended for best compatibility) |
 | **RAM** | 8GB minimum, 16GB recommended |
-| **LLM Backend** | [Foundry Local](https://github.com/microsoft/Foundry-Local) or compatible OpenAI API endpoint |
+| **LLM Backend** | [Foundry Local](https://github.com/microsoft/Foundry-Local) (robustly tested) or compatible OpenAI API endpoint |
 
 ## 🚀 Quick Start
 
@@ -126,31 +129,61 @@ Example config snippet:
 }
 ```
 
+## ⚠️ Beta Limitations & Known Issues
+
+### Current Limitations
+
+- **Translation Backends:**
+  - **Foundry Local** - Robustly tested and recommended ✅
+  - **Offline MT (translateLocally)** - Included but not actively tested/used
+  - **Windows AI (Phi Silica)** - Experimental Microsoft feature, not functional on most systems
+  - *Future plan: Will gradually remove untested/unmaintained backends*
+
+- **Overlay System:**
+  - Currently using web-based overlay (legacy compatible method)
+  - Debug overlay information is visible by default (see overlay.html line 65)
+  - Multiple overlay implementations exist in codebase (WinUI3 version is deprecated)
+  - *Future plan: Will remove unused overlay implementations*
+
+- **Known Issues:**
+  - First-run model downloads can cause delays
+  - Multi-monitor setups with different DPI scaling may have positioning issues
+  - No auto-update mechanism (manual updates required)
+  - Limited language pair testing (contributions welcome!)
+
 ### Troubleshooting
 
-Build issues:
+**Build issues:**
 - `clang` not found / `cc-rs` errors: install VS Build Tools and run from a VS Developer shell, or use `dev-tauri.cmd`.
 - `failed to remove file ... meowcal-sub.exe`: close the running app (tray icon) and retry.
 
-Common backend status/warning codes:
+**Common backend status/warning codes:**
 - `not_supported`: API/runtime not available.
 - `not_ready`: model needs first-time download.
 - `not_available`: backend binary not found.
 - `timeout`: backend hung or took too long; fallback used.
 - `backend_not_registered`: misconfigured backend id.
 
-### Known Issues
+**Debug & Diagnostics:**
 
-**Overlay Window Chrome:**
-- Clicking the capture frame then switching to the main Meowcal-Sub window may cause a persistent window bar to appear at the top of the screen. Hover over the capture frame area to dismiss.
-- When clicking "Start Translation", there may be a brief white flash and faint acrylic edges visible at screen edges. This is the overlay window initializing.
+The app automatically generates verbose logs for every session at:
+```
+%APPDATA%\com.meowcal.sub\logs\meowcal-sub-YYYY-MM-DD_HH-MM-SS.log
+```
 
-**Button State Mismatch (intermittent):**
-- Under certain conditions, the Start/Stop button state may become out of sync with the actual translation state. If clicking "Start Translation" shows "Translation is already running" error, the app may need to be restarted.
+**Important:** Logs are automatically rotated (kept for 7 days). When reporting issues:
+1. Reproduce the issue
+2. Find the corresponding session log (check timestamp)
+3. Share the log file when asking for help
 
-If translation falls back to passthrough (OCR text), check:
-- Foundry Local: ensure it's running and accessible at the configured endpoint.
-- Offline MT: set `translation.offlineMt.binaryPath` or add `translateLocally` to PATH.
+**Privacy Note:** While logs are verbose and include OCR/translated text, all processing happens **completely locally** on your machine. Logs contain:
+- OCR results (source text)
+- Translation results
+- Backend status and errors
+- System diagnostics
+
+No data is sent to external servers during normal operation.
+
 
 ## 🏗️ Project Structure
 
@@ -193,6 +226,33 @@ cargo clippy
 cargo fmt
 ```
 
+## 🗺️ Future Roadmap
+
+### Planned Changes (TODO)
+
+- [ ] **Backend Cleanup:**
+  - Remove or clearly mark as experimental: Offline MT (translateLocally) backend
+  - Remove Windows AI (Phi Silica) backend (non-functional experimental MS feature)
+  - Focus development on Foundry Local backend
+
+- [ ] **Overlay Architecture Cleanup:**
+  - Remove deprecated WinUI3-based overlay implementation (`src-winui3/OverlayHost/`)
+  - Keep and improve current web-based overlay (legacy compatible method)
+  - Remove unused IPC infrastructure once WinUI overlay is removed
+
+- [ ] **Production Polish:**
+  - Remove or make optional the debug overlay (overlay.html line 65)
+  - Add auto-update mechanism
+  - Improve multi-monitor DPI handling
+  - Add more language pair testing and optimizations
+
+- [ ] **Testing & Documentation:**
+  - Expand automated test coverage (see `docs/plans/2026-01-26-comprehensive-test-automation-design.md`)
+  - Add video tutorials and usage examples
+  - Create troubleshooting guide for common scenarios
+
+Contributions welcome! See the Contributing section below.
+
 ## 🤝 Contributing
 
 Contributions are welcome! Please feel free to submit a Pull Request.
@@ -206,6 +266,7 @@ MIT License - see [LICENSE](LICENSE) for details.
 - Built with [Tauri](https://tauri.app/)
 - Uses [Windows.Media.Ocr](https://docs.microsoft.com/en-us/uwp/api/windows.media.ocr) for text recognition
 - Translation powered by local LLMs via [Foundry Local](https://github.com/microsoft/Foundry-Local)
+- Overlay uses web-based rendering for maximum compatibility across Windows versions
 
 ---
 
