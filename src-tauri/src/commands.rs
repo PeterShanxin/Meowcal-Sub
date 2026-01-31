@@ -26,6 +26,7 @@ use crate::llm::{
 };
 use crate::ocr::WindowsOcr;
 use crate::overlay;
+use crate::sync_utils::lock_or_recover;
 use reqwest::Client;
 use scopeguard::defer;
 use serde::Serialize;
@@ -37,7 +38,7 @@ use tauri::{async_runtime, AppHandle, Emitter, Manager, State};
 use tauri_plugin_opener::OpenerExt;
 use tokio::fs;
 use tokio::sync::watch;
-use tracing::{debug, info, warn};
+use tracing::{debug, error, info, warn};
 
 // =============================================================================
 // IPC HELPER
@@ -318,7 +319,10 @@ pub async fn detect_offline_mt_binary(
     state: State<'_, AppState>,
     app: AppHandle,
 ) -> Result<Option<OfflineMtDetection>, String> {
-    let config = state.config.lock().unwrap().translation.offline_mt.clone();
+    let config = lock_or_recover(&state.config)
+        .translation
+        .offline_mt
+        .clone();
     let app_handle = app.clone();
 
     async_runtime::spawn_blocking(move || {
@@ -373,7 +377,7 @@ pub async fn get_foundry_local_status(
     state: State<'_, AppState>,
 ) -> Result<FoundryLocalStatus, String> {
     let config = {
-        let guard = state.config.lock().unwrap();
+        let guard = lock_or_recover(&state.config);
         guard.translation.foundry_local.clone()
     };
 
@@ -390,7 +394,7 @@ pub async fn get_foundry_local_status(
 #[tauri::command]
 pub async fn list_foundry_local_models(state: State<'_, AppState>) -> Result<Vec<String>, String> {
     let config = {
-        let guard = state.config.lock().unwrap();
+        let guard = lock_or_recover(&state.config);
         guard.translation.foundry_local.clone()
     };
 
@@ -407,7 +411,7 @@ pub async fn refresh_foundry_local_status(
     use crate::llm::FAST_PROBE_TIMEOUT_MS;
 
     let config = {
-        let guard = state.config.lock().unwrap();
+        let guard = lock_or_recover(&state.config);
         guard.translation.foundry_local.clone()
     };
     let configured_model = config.model.clone();
@@ -494,7 +498,7 @@ pub async fn prepare_foundry_local(
     use crate::llm::SLOW_PROBE_TIMEOUT_MS;
 
     let config = {
-        let guard = state.config.lock().unwrap();
+        let guard = lock_or_recover(&state.config);
         guard.translation.foundry_local.clone()
     };
     let configured_model = config.model.clone();
@@ -575,7 +579,7 @@ pub async fn make_foundry_ready(state: State<'_, AppState>) -> Result<FoundryLoc
     use crate::llm::{FAST_PROBE_TIMEOUT_MS, SLOW_PROBE_TIMEOUT_MS};
 
     let config = {
-        let guard = state.config.lock().unwrap();
+        let guard = lock_or_recover(&state.config);
         guard.translation.foundry_local.clone()
     };
     let configured_model = config.model.clone();
@@ -914,7 +918,7 @@ async fn download_translate_locally_asset(url: &str, target_path: &PathBuf) -> R
 #[tauri::command]
 pub fn get_settings(state: State<'_, AppState>) -> AppConfig {
     info!("Getting settings...");
-    let config = state.config.lock().unwrap();
+    let config = lock_or_recover(&state.config);
     config.clone()
 }
 
@@ -932,11 +936,11 @@ pub async fn save_settings(
     let mut updated = settings.clone();
 
     // Persist the last capture region into the config
-    let last_region = *state.capture_region.lock().unwrap();
+    let last_region = *lock_or_recover(&state.capture_region);
     updated.last_capture_region = last_region;
 
     // Persist the DPI scale factor so restored regions capture the correct physical pixels.
-    let last_scale_factor = *state.capture_scale_factor.lock().unwrap();
+    let last_scale_factor = *lock_or_recover(&state.capture_scale_factor);
     updated.last_capture_scale_factor = Some(last_scale_factor);
 
     // Capture window preferences if possible
@@ -956,7 +960,7 @@ pub async fn save_settings(
 
     // Update the in-memory config
     {
-        let mut config = state.config.lock().unwrap();
+        let mut config = lock_or_recover(&state.config);
         *config = updated.clone();
     }
 
@@ -1016,10 +1020,10 @@ pub fn set_capture_region(
         height,
     };
 
-    let mut capture_region = state.capture_region.lock().unwrap();
+    let mut capture_region = lock_or_recover(&state.capture_region);
     *capture_region = Some(region);
 
-    let mut capture_scale_factor = state.capture_scale_factor.lock().unwrap();
+    let mut capture_scale_factor = lock_or_recover(&state.capture_scale_factor);
     *capture_scale_factor = scale_factor;
 
     Ok(())
@@ -1030,7 +1034,7 @@ pub fn set_capture_region(
 /// Called from JavaScript: `const region = await invoke('get_capture_region');`
 #[tauri::command]
 pub fn get_capture_region(state: State<'_, AppState>) -> Option<CaptureRegion> {
-    let region = state.capture_region.lock().unwrap();
+    let region = lock_or_recover(&state.capture_region);
     *region
 }
 
@@ -1184,18 +1188,18 @@ async fn open_area_selector_legacy(
                 }
 
                 // Store for the selector window to pull on load (and for subsequent opens).
-                *state.selector_snapshot.lock().unwrap() = Some(snapshot.clone());
+                *lock_or_recover(&state.selector_snapshot) = Some(snapshot.clone());
 
                 // Also push it as an event (helps if the selector window is already loaded).
                 let _ = window.emit("selector-background-snapshot", snapshot);
             }
             Ok(Err(e)) => {
                 warn!("Area selector snapshot capture failed: {}", e);
-                *state.selector_snapshot.lock().unwrap() = None;
+                *lock_or_recover(&state.selector_snapshot) = None;
             }
             Err(join_err) => {
                 warn!("Area selector snapshot task failed: {}", join_err);
-                *state.selector_snapshot.lock().unwrap() = None;
+                *lock_or_recover(&state.selector_snapshot) = None;
             }
         }
 
@@ -1214,7 +1218,7 @@ async fn open_area_selector_legacy(
 /// Called from JavaScript (selector window): `const snap = await invoke('get_selector_snapshot');`
 #[tauri::command]
 pub fn get_selector_snapshot(state: State<'_, AppState>) -> Option<SelectorSnapshot> {
-    state.selector_snapshot.lock().unwrap().clone()
+    lock_or_recover(&state.selector_snapshot).clone()
 }
 
 /// Close the area selector overlay window
@@ -1227,7 +1231,7 @@ pub async fn close_area_selector(app: AppHandle, state: State<'_, AppState>) -> 
     if let Some(window) = app.get_webview_window("selector") {
         window.hide().map_err(|e| e.to_string())?;
         // Drop the snapshot to avoid holding a huge base64 string in memory.
-        *state.selector_snapshot.lock().unwrap() = None;
+        *lock_or_recover(&state.selector_snapshot) = None;
         info!("✅ Area selector closed!");
     } else {
         return Err("Selector window not found".to_string());
@@ -1274,7 +1278,7 @@ pub struct CaptureStatusPayload {
 /// This allows the frontend to sync button state with backend on page load/reload.
 #[tauri::command]
 pub fn is_translation_running(state: State<'_, AppState>) -> bool {
-    let is_running = state.is_running.lock().unwrap();
+    let is_running = lock_or_recover(&state.is_running);
     *is_running
 }
 
@@ -1285,7 +1289,7 @@ pub async fn list_translation_backends(
     app: AppHandle,
 ) -> Result<Vec<BackendInfo>, String> {
     let config = {
-        let guard = state.config.lock().unwrap();
+        let guard = lock_or_recover(&state.config);
         guard.translation.clone()
     };
 
@@ -1314,7 +1318,7 @@ pub async fn translate_once(
     app: AppHandle,
 ) -> Result<TranslationOutcome, String> {
     let config = {
-        let guard = state.config.lock().unwrap();
+        let guard = lock_or_recover(&state.config);
         guard.translation.clone()
     };
 
@@ -1332,7 +1336,7 @@ pub async fn get_translation_diagnostics(
     app: AppHandle,
 ) -> Result<TranslationDiagnostics, String> {
     let config = {
-        let guard = state.config.lock().unwrap();
+        let guard = lock_or_recover(&state.config);
         guard.translation.clone()
     };
 
@@ -1383,7 +1387,7 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
 
     // Get the capture region
     let region = {
-        let region_guard = state.capture_region.lock().unwrap();
+        let region_guard = lock_or_recover(&state.capture_region);
         match *region_guard {
             Some(r) => r,
             None => return Err("No capture region set. Please select an area first.".to_string()),
@@ -1392,7 +1396,7 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
 
     // Mark as running only after we know we have a region (prevents "stuck running" on early return).
     {
-        let mut is_running = state.is_running.lock().unwrap();
+        let mut is_running = lock_or_recover(&state.is_running);
         if *is_running {
             return Err("Translation is already running".to_string());
         }
@@ -1401,7 +1405,7 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
 
     // Get the capture scale factor (logical -> physical pixels)
     let scale_factor = {
-        let scale_guard = state.capture_scale_factor.lock().unwrap();
+        let scale_guard = lock_or_recover(&state.capture_scale_factor);
         *scale_guard
     };
     let capture_region = region.scaled(scale_factor);
@@ -1412,7 +1416,7 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
 
     // Get settings from config
     let (interval_ms, source_language, target_language, translation_config) = {
-        let config = state.config.lock().unwrap();
+        let config = lock_or_recover(&state.config);
         (
             config.capture_interval_ms,
             config.source_language.clone(),
@@ -1430,7 +1434,7 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
 
     // Store the sender so stop_translation can use it
     {
-        let mut stop_signal = state.stop_signal.lock().unwrap();
+        let mut stop_signal = lock_or_recover(&state.stop_signal);
         *stop_signal = Some(stop_tx);
     }
 
@@ -1460,7 +1464,7 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
 
     // Send initial settings to overlay
     let settings_payload = {
-        let config = state.config.lock().unwrap();
+        let config = lock_or_recover(&state.config);
         SettingsSyncPayload {
             overlay: OverlaySettingsData::from(&config.overlay),
         }
@@ -1485,8 +1489,9 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
     // Clone app handle for use inside the async block to access state
     let app_for_region = app.clone();
 
-    // Spawn the background translation loop
-    tokio::spawn(async move {
+    // Spawn the background translation loop with panic monitoring.
+    // If the task panics, we log it and the scopeguard (defer!) still runs for cleanup.
+    let translation_handle = tokio::spawn(async move {
         // Scope guard ensures is_running is reset even if the task panics (in debug builds).
         // This replaces the manual reset_running_state() calls with RAII-style cleanup.
         let app_for_guard = app.clone();
@@ -1581,8 +1586,8 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
             // Re-read the capture region from state (allows live resize/reposition)
             let current_capture_region = {
                 let state = app_for_region.state::<AppState>();
-                let region_opt = *state.capture_region.lock().unwrap();
-                let scale = *state.capture_scale_factor.lock().unwrap();
+                let region_opt = *lock_or_recover(&state.capture_region);
+                let scale = *lock_or_recover(&state.capture_scale_factor);
                 // Mutex guards are dropped here before any await
                 match region_opt {
                     Some(r) => {
@@ -1997,6 +2002,34 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
         info!("Translation loop ended");
     });
 
+    // Monitor the translation task for panics - log but don't propagate
+    tokio::spawn(async move {
+        match translation_handle.await {
+            Ok(()) => {
+                // Task completed normally
+            }
+            Err(join_error) => {
+                if join_error.is_panic() {
+                    // Extract panic message if possible
+                    let panic_info = join_error.into_panic();
+                    let panic_msg = if let Some(s) = panic_info.downcast_ref::<&str>() {
+                        s.to_string()
+                    } else if let Some(s) = panic_info.downcast_ref::<String>() {
+                        s.clone()
+                    } else {
+                        "unknown panic".to_string()
+                    };
+                    error!(
+                        "❌ Translation loop panicked: {}. Cleanup was handled by scopeguard.",
+                        panic_msg
+                    );
+                } else if join_error.is_cancelled() {
+                    info!("Translation loop was cancelled");
+                }
+            }
+        }
+    });
+
     Ok(())
 }
 
@@ -2009,7 +2042,7 @@ pub async fn stop_translation(state: State<'_, AppState>, app: AppHandle) -> Res
 
     // Send the stop signal
     {
-        let stop_signal = state.stop_signal.lock().unwrap();
+        let stop_signal = lock_or_recover(&state.stop_signal);
         if let Some(ref sender) = *stop_signal {
             let _ = sender.send(true);
             info!("Stop signal sent");
@@ -2018,7 +2051,7 @@ pub async fn stop_translation(state: State<'_, AppState>, app: AppHandle) -> Res
 
     // Clear the stop signal sender
     {
-        let mut stop_signal = state.stop_signal.lock().unwrap();
+        let mut stop_signal = lock_or_recover(&state.stop_signal);
         *stop_signal = None;
     }
 

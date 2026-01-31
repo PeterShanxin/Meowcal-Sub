@@ -8,6 +8,7 @@ use crate::llm::{
     PhiSilica, PromptRouterOptions, ReadyState, TranslationContext, TranslationDiagnostics,
     TranslationDiagnosticsState, TranslationOutcome, TranslatorBackend,
 };
+use crate::sync_utils::{lock_or_recover, read_or_recover, write_or_recover};
 use std::sync::atomic::{AtomicU8, Ordering};
 use std::sync::{Arc, Mutex, RwLock};
 use std::time::Instant;
@@ -184,7 +185,7 @@ impl TranslationManager {
     pub fn diagnostics_snapshot(&self) -> TranslationDiagnostics {
         let backends = self.list_backends();
         let (last_error_by_backend, last_latency_by_backend) =
-            self.diagnostics.lock().unwrap().snapshot();
+            lock_or_recover(&self.diagnostics).snapshot();
 
         TranslationDiagnostics {
             backends,
@@ -260,7 +261,7 @@ impl TranslationManager {
                 Some(b) => b,
                 None => {
                     warnings.push(format!("{}: backend_not_registered", id.as_str()));
-                    self.diagnostics.lock().unwrap().record_error(
+                    lock_or_recover(&self.diagnostics).record_error(
                         id,
                         "backend_not_registered",
                         None,
@@ -360,7 +361,7 @@ impl TranslationManager {
                         if remaining_total.is_zero() {
                             let latency_ms = started.elapsed().as_millis();
                             let error_code = "timeout";
-                            self.diagnostics.lock().unwrap().record_error(
+                            lock_or_recover(&self.diagnostics).record_error(
                                 id,
                                 error_code,
                                 Some(latency_ms),
@@ -451,7 +452,7 @@ impl TranslationManager {
                                 let should_retry = attempt < max_attempts
                                     && Self::should_retry_foundry_error(&err);
 
-                                self.diagnostics.lock().unwrap().record_error(
+                                lock_or_recover(&self.diagnostics).record_error(
                                     id,
                                     err.code(),
                                     Some(latency_ms),
@@ -485,7 +486,7 @@ impl TranslationManager {
                             }
                             Err(_) => {
                                 let error_code = "timeout";
-                                self.diagnostics.lock().unwrap().record_error(
+                                lock_or_recover(&self.diagnostics).record_error(
                                     id,
                                     error_code,
                                     Some(latency_ms),
@@ -626,7 +627,7 @@ impl TranslationManager {
                         };
                     }
                     Err(err) => {
-                        self.diagnostics.lock().unwrap().record_error(
+                        lock_or_recover(&self.diagnostics).record_error(
                             BackendId::Mock,
                             err.code(),
                             None,
@@ -639,7 +640,7 @@ impl TranslationManager {
 
         // Last resort: passthrough to keep the app responsive
         warnings.push("no translation backend available".to_string());
-        self.diagnostics.lock().unwrap().record_error(
+        lock_or_recover(&self.diagnostics).record_error(
             BackendId::Mock,
             "no_backend_available",
             None,
@@ -729,11 +730,11 @@ impl TranslationManager {
     }
 
     fn context_read(&self) -> std::sync::RwLockReadGuard<'_, TranslationContext> {
-        self.context.read().unwrap_or_else(|err| err.into_inner())
+        read_or_recover(&self.context)
     }
 
     fn context_write(&self) -> std::sync::RwLockWriteGuard<'_, TranslationContext> {
-        self.context.write().unwrap_or_else(|err| err.into_inner())
+        write_or_recover(&self.context)
     }
 
     fn backend_by_id(&self, id: BackendId) -> Option<&dyn TranslatorBackend> {

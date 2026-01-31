@@ -33,6 +33,7 @@ use meowcal_sub::commands::{self, AppState};
 use meowcal_sub::config::load_config;
 use meowcal_sub::http_server;
 use meowcal_sub::ipc::{IpcMessage, IpcServer};
+use meowcal_sub::sync_utils::lock_or_recover;
 use std::path::PathBuf;
 use std::process::{Child, Command};
 use std::sync::{Arc, Mutex};
@@ -140,11 +141,11 @@ fn handle_ipc_message(app: &tauri::AppHandle, message: IpcMessage) {
                         height: result.region_physical.height,
                     };
 
-                    *state.capture_region.lock().unwrap() = Some(new_region);
+                    *lock_or_recover(&state.capture_region) = Some(new_region);
 
                     // Save to config
                     {
-                        let mut config = state.config.lock().unwrap();
+                        let mut config = lock_or_recover(&state.config);
                         config.last_capture_region = Some(new_region);
                         let _ = meowcal_sub::config::save_config(app, &config);
                     }
@@ -283,9 +284,9 @@ fn main() {
             let loaded_config = load_config(app.handle());
             {
                 let state = app.state::<AppState>();
-                *state.config.lock().unwrap() = loaded_config.clone();
+                *lock_or_recover(&state.config) = loaded_config.clone();
                 if let Some(region) = loaded_config.last_capture_region {
-                    *state.capture_region.lock().unwrap() = Some(region);
+                    *lock_or_recover(&state.capture_region) = Some(region);
                 }
 
                 // If the scale factor wasn't persisted yet (older configs), fall back to the
@@ -294,7 +295,7 @@ fn main() {
                     app.get_webview_window("main")
                         .and_then(|window| window.scale_factor().ok())
                 });
-                *state.capture_scale_factor.lock().unwrap() = scale_factor.unwrap_or(1.0);
+                *lock_or_recover(&state.capture_scale_factor) = scale_factor.unwrap_or(1.0);
             }
 
             // Apply window preferences if available
@@ -468,7 +469,7 @@ fn main() {
         .on_window_event(|window, event| {
             if matches!(event, tauri::WindowEvent::Destroyed) {
                 if let Some(overlay_process) = window.try_state::<OverlayHostProcess>() {
-                    if let Some(mut child) = overlay_process.0.lock().unwrap().take() {
+                    if let Some(mut child) = lock_or_recover(&overlay_process.0).take() {
                         let _ = child.kill();
                         info!("🛑 Killed OverlayHost process");
                     }

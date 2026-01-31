@@ -30,6 +30,7 @@ use crate::llm::{
     ReadyState, TranslationDiagnostics, TranslationDiagnosticsState, TranslatorBackend,
     FAST_PROBE_TIMEOUT_MS, SLOW_PROBE_TIMEOUT_MS,
 };
+use crate::sync_utils::lock_or_recover;
 
 // =============================================================================
 // HTTP SERVER STATE
@@ -178,7 +179,7 @@ async fn get_system_info() -> impl IntoResponse {
 
 /// GET /api/settings - Get current settings
 async fn get_settings(State(state): State<HttpAppState>) -> impl IntoResponse {
-    let config = state.config.lock().unwrap().clone();
+    let config = lock_or_recover(&state.config).clone();
     Json(config)
 }
 
@@ -189,7 +190,7 @@ async fn save_settings(
 ) -> impl IntoResponse {
     // Update in-memory config
     {
-        let mut config = state.config.lock().unwrap();
+        let mut config = lock_or_recover(&state.config);
         *config = settings.clone();
     }
 
@@ -202,7 +203,7 @@ async fn save_settings(
 
 /// GET /api/translation/diagnostics - Get translation backend diagnostics
 async fn get_translation_diagnostics(State(state): State<HttpAppState>) -> impl IntoResponse {
-    let config = state.config.lock().unwrap().clone();
+    let config = lock_or_recover(&state.config).clone();
 
     // Build backend list with real status checks
     let mut backends: Vec<BackendInfo> = Vec::new();
@@ -261,7 +262,7 @@ async fn get_translation_diagnostics(State(state): State<HttpAppState>) -> impl 
         });
     }
 
-    let diagnostics_state = state.translation_diagnostics.lock().unwrap();
+    let diagnostics_state = lock_or_recover(&state.translation_diagnostics);
     let (last_error_by_backend, last_latency_by_backend) = diagnostics_state.snapshot();
 
     Json(TranslationDiagnostics {
@@ -273,7 +274,7 @@ async fn get_translation_diagnostics(State(state): State<HttpAppState>) -> impl 
 
 /// GET /api/foundry-local/models - List Foundry Local models
 async fn list_foundry_local_models(State(state): State<HttpAppState>) -> impl IntoResponse {
-    let config = state.config.lock().unwrap().clone();
+    let config = lock_or_recover(&state.config).clone();
     let backend = FoundryLocalBackend::new(config.translation.foundry_local);
 
     // Refresh service status to detect service URL before listing models
@@ -287,7 +288,7 @@ async fn list_foundry_local_models(State(state): State<HttpAppState>) -> impl In
 
 /// GET /api/foundry-local/status - Get Foundry Local status
 async fn get_foundry_local_status(State(state): State<HttpAppState>) -> impl IntoResponse {
-    let config = state.config.lock().unwrap().clone();
+    let config = lock_or_recover(&state.config).clone();
     let foundry_config = config.translation.foundry_local.clone();
     let configured_model = foundry_config.model.clone();
     let backend = FoundryLocalBackend::new(foundry_config);
@@ -320,7 +321,7 @@ async fn get_foundry_local_status(State(state): State<HttpAppState>) -> impl Int
 
 /// POST /api/foundry-local/refresh - Refresh Foundry Local status (fast, read-only probe)
 async fn refresh_foundry_local_status(State(state): State<HttpAppState>) -> impl IntoResponse {
-    let config = state.config.lock().unwrap().clone();
+    let config = lock_or_recover(&state.config).clone();
     let foundry_config = config.translation.foundry_local.clone();
     let configured_model = foundry_config.model.clone();
 
@@ -391,7 +392,7 @@ async fn refresh_foundry_local_status(State(state): State<HttpAppState>) -> impl
 
 /// POST /api/foundry-local/prepare - Attempt to start Foundry Local service
 async fn prepare_foundry_local(State(state): State<HttpAppState>) -> impl IntoResponse {
-    let config = state.config.lock().unwrap().clone();
+    let config = lock_or_recover(&state.config).clone();
     let foundry_config = config.translation.foundry_local.clone();
     let configured_model = foundry_config.model.clone();
     let (backend, cli_available, service_url, service_running, models, mut notes) =
@@ -460,7 +461,7 @@ async fn prepare_foundry_local(State(state): State<HttpAppState>) -> impl IntoRe
 
 /// POST /api/foundry-local/make-ready - Start service if needed + keep probing until Ready (or timeout)
 async fn make_foundry_ready(State(state): State<HttpAppState>) -> impl IntoResponse {
-    let config = state.config.lock().unwrap().clone();
+    let config = lock_or_recover(&state.config).clone();
     let foundry_config = config.translation.foundry_local.clone();
     let configured_model = foundry_config.model.clone();
     let configured_timeout_ms = foundry_config.timeout_ms as u64;
@@ -597,7 +598,7 @@ async fn get_windows_ai_diagnostics() -> impl IntoResponse {
 
 /// GET /api/offline-mt/detect - Detect Offline MT binary
 async fn detect_offline_mt_binary(State(state): State<HttpAppState>) -> impl IntoResponse {
-    let config = state.config.lock().unwrap().clone();
+    let config = lock_or_recover(&state.config).clone();
 
     // Use standalone detection (checks PATH and common locations)
     match OfflineMtBackend::detect_binary_standalone(&config.translation.offline_mt) {
@@ -652,7 +653,7 @@ async fn stop_translation() -> impl IntoResponse {
 
 /// GET /api/capture-region - Get current capture region
 async fn get_capture_region(State(state): State<HttpAppState>) -> impl IntoResponse {
-    let region = *state.capture_region.lock().unwrap();
+    let region = *lock_or_recover(&state.capture_region);
     Json(region)
 }
 
@@ -676,7 +677,7 @@ async fn set_capture_region(
         width: req.width,
         height: req.height,
     };
-    *state.capture_region.lock().unwrap() = Some(region);
+    *lock_or_recover(&state.capture_region) = Some(region);
     Json(serde_json::json!({ "success": true }))
 }
 
