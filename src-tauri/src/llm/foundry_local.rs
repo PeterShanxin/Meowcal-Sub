@@ -58,6 +58,42 @@ struct ProbeCache {
 
 static PROBE_CACHE: OnceLock<ProbeCache> = OnceLock::new();
 
+/// TTL for CLI cache entries (milliseconds). CLI calls spawn processes which is expensive,
+/// so we cache results for a short time to avoid repeated process spawning in hot paths.
+const CLI_CACHE_TTL_MS: u64 = 5_000;
+
+/// Global cache for CLI results to avoid repeated process spawning.
+/// This is separate from per-instance state because TranslationManager creates fresh
+/// FoundryLocalBackend instances frequently (e.g., in list_backends).
+struct CliCache {
+    /// Cached service URL from `foundry service status`
+    service_url: RwLock<Option<String>>,
+    /// Timestamp when service URL was cached
+    service_url_cached_at: AtomicU64,
+    /// Cached models from `foundry cache list`
+    cached_models: RwLock<Vec<String>>,
+    /// Timestamp when models were cached
+    models_cached_at: AtomicU64,
+}
+
+static CLI_CACHE: OnceLock<CliCache> = OnceLock::new();
+
+fn cli_cache() -> &'static CliCache {
+    CLI_CACHE.get_or_init(|| CliCache {
+        service_url: RwLock::new(None),
+        service_url_cached_at: AtomicU64::new(0),
+        cached_models: RwLock::new(Vec::new()),
+        models_cached_at: AtomicU64::new(0),
+    })
+}
+
+/// Invalidate the CLI cache, forcing fresh CLI calls on next access.
+pub fn invalidate_cli_cache() {
+    let cache = cli_cache();
+    cache.service_url_cached_at.store(0, Ordering::SeqCst);
+    cache.models_cached_at.store(0, Ordering::SeqCst);
+}
+
 const PROBE_RESULT_NONE: u8 = 0;
 const PROBE_RESULT_SUCCESS: u8 = 1;
 const PROBE_RESULT_TIMEOUT: u8 = 2;
@@ -194,8 +230,38 @@ impl FoundryLocalBackend {
         }
     }
 
-    /// Get the service URL by parsing `foundry service status` output
+    /// Get the service URL by parsing `foundry service status` output.
+    /// Uses a TTL cache to avoid spawning processes repeatedly.
     pub fn get_service_url_from_cli() -> Option<String> {
+        Self::get_service_url_from_cli_cached(false)
+    }
+
+    /// Get service URL, optionally bypassing the cache for fresh data.
+    pub fn get_service_url_from_cli_cached(force_refresh: bool) -> Option<String> {
+        let cache = cli_cache();
+        let now_ms = epoch_ms();
+
+        // Check cache validity
+        if !force_refresh {
+            let cached_at = cache.service_url_cached_at.load(Ordering::SeqCst);
+            if cached_at > 0 && now_ms.saturating_sub(cached_at) < CLI_CACHE_TTL_MS {
+                let cached = crate::sync_utils::read_or_recover(&cache.service_url).clone();
+                return cached;
+            }
+        }
+
+        // Cache miss or expired - fetch fresh data
+        let result = Self::fetch_service_url_from_cli();
+
+        // Update cache
+        *crate::sync_utils::write_or_recover(&cache.service_url) = result.clone();
+        cache.service_url_cached_at.store(now_ms, Ordering::SeqCst);
+
+        result
+    }
+
+    /// Internal: actually spawn the CLI process to get service URL
+    fn fetch_service_url_from_cli() -> Option<String> {
         let output = Command::new("foundry")
             .args(["service", "status"])
             .output()
@@ -257,9 +323,38 @@ impl FoundryLocalBackend {
         without_path.to_string()
     }
 
-    /// Get cached models by parsing `foundry cache list` output
-    /// This is a fallback when the API doesn't return models (e.g., models cached but not running)
+    /// Get cached models by parsing `foundry cache list` output.
+    /// This is a fallback when the API doesn't return models (e.g., models cached but not running).
+    /// Uses a TTL cache to avoid spawning processes repeatedly.
     pub fn get_cached_models_from_cli() -> Vec<String> {
+        Self::get_cached_models_from_cli_cached(false)
+    }
+
+    /// Get cached models, optionally bypassing the cache for fresh data.
+    pub fn get_cached_models_from_cli_cached(force_refresh: bool) -> Vec<String> {
+        let cache = cli_cache();
+        let now_ms = epoch_ms();
+
+        // Check cache validity - return cached value even if empty (empty is a valid cached outcome)
+        if !force_refresh {
+            let cached_at = cache.models_cached_at.load(Ordering::SeqCst);
+            if cached_at > 0 && now_ms.saturating_sub(cached_at) < CLI_CACHE_TTL_MS {
+                return crate::sync_utils::read_or_recover(&cache.cached_models).clone();
+            }
+        }
+
+        // Cache miss or expired - fetch fresh data
+        let result = Self::fetch_cached_models_from_cli();
+
+        // Update cache (even if empty, to avoid repeated failed calls)
+        *crate::sync_utils::write_or_recover(&cache.cached_models) = result.clone();
+        cache.models_cached_at.store(now_ms, Ordering::SeqCst);
+
+        result
+    }
+
+    /// Internal: actually spawn the CLI process to get cached models
+    fn fetch_cached_models_from_cli() -> Vec<String> {
         let output = Command::new("foundry").args(["cache", "list"]).output();
 
         let Ok(output) = output else {
@@ -583,6 +678,8 @@ impl FoundryLocalBackend {
                 LAST_SERVICE_START_MS.store(epoch_ms(), Ordering::SeqCst);
                 // Cached probe is no longer valid.
                 self.invalidate_probe_cache();
+                // Invalidate CLI cache so next calls get fresh data (new port = potentially new models).
+                invalidate_cli_cache();
             }
             *write_or_recover(&self.service_url) = Some(url);
             self.service_available.store(true, Ordering::SeqCst);
@@ -603,6 +700,8 @@ impl FoundryLocalBackend {
         } else {
             if previous_url.is_some() {
                 self.invalidate_probe_cache();
+                // Service went away; invalidate CLI cache so next refresh gets accurate state.
+                invalidate_cli_cache();
             }
 
             debug!("Foundry Local service not running");
@@ -616,7 +715,8 @@ impl FoundryLocalBackend {
     /// Use this for the explicit "Prepare Foundry" flow - regular status checks should
     /// call `refresh_service_status()` which is read-only.
     pub fn ensure_service_running(&self) -> bool {
-        if Self::get_service_url_from_cli().is_some() {
+        // Force refresh since we're actively trying to start/find the service
+        if Self::get_service_url_from_cli_cached(true).is_some() {
             self.refresh_service_status();
             return true;
         }
@@ -628,10 +728,11 @@ impl FoundryLocalBackend {
         }
 
         // The start command returns quickly; poll for the service URL for a short time.
+        // Use force_refresh=true since we're polling for a newly started service.
         let start = std::time::Instant::now();
         let deadline = Duration::from_secs(5);
         while start.elapsed() < deadline {
-            if Self::get_service_url_from_cli().is_some() {
+            if Self::get_service_url_from_cli_cached(true).is_some() {
                 self.refresh_service_status();
                 return true;
             }
@@ -1650,17 +1751,18 @@ fn sanitize_subtitle_translation_output(output: &str) -> String {
         return String::new();
     }
 
-    // Strip common wrapping quotes.
+    // Strip common wrapping quotes (ASCII and Unicode curly quotes).
     let trimmed = trimmed
-        .trim_matches('"')
-        .trim_matches('\'')
-        .trim_matches('“')
-        .trim_matches('”')
-        .trim_matches('`')
+        .trim_matches('"') // ASCII double quote
+        .trim_matches('\'') // ASCII single quote
+        .trim_matches('\u{201C}') // Left double curly quote "
+        .trim_matches('\u{201D}') // Right double curly quote "
+        .trim_matches('`') // Backtick
         .trim();
 
     // If the model returned a labelled response, strip the label and keep the content.
-    let mut collected: Vec<String> = Vec::new();
+    // Pre-allocate with reasonable capacity for subtitle text (typically 1-3 lines)
+    let mut collected: Vec<String> = Vec::with_capacity(4);
     let mut started = false;
     for raw_line in trimmed.lines() {
         let line = raw_line.trim();
