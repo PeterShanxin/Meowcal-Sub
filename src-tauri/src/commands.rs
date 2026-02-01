@@ -2186,23 +2186,29 @@ pub fn set_overlay_window_clip(
                 let region = region.scaled(scale_factor);
                 let border_px = (2.0 * scale_factor).round().max(1.0) as i32;
                 let radius_px = (8.0 * scale_factor).round().max(0.0) as i32;
+                // Padding to include resize handles (positioned at -7px) and settings button (-22px).
+                // The settings button is 18px tall at top: -22px, so it spans from y-22 to y-4.
+                // We use 26px padding to include it with some buffer.
+                let outer_padding = (26.0 * scale_factor).round() as i32;
 
-                let x1 = region.x;
-                let y1 = region.y;
-                let x2 = region.x + region.width;
-                let y2 = region.y + region.height;
+                // Expand outer boundary to include handles and settings button
+                let x1 = region.x - outer_padding;
+                let y1 = region.y - outer_padding;
+                let x2 = region.x + region.width + outer_padding;
+                let y2 = region.y + region.height + outer_padding;
 
-                // Outer rounded rectangle.
+                // Outer rounded rectangle (expanded to include handles).
                 let outer = CreateRoundRectRgn(x1, y1, x2, y2, radius_px * 2, radius_px * 2);
                 if outer.is_invalid() {
                     return Err("CreateRoundRectRgn (outer) failed".to_string());
                 }
 
                 // Inner rounded rectangle to subtract (creates a ring).
-                let inner_x1 = x1 + border_px;
-                let inner_y1 = y1 + border_px;
-                let inner_x2 = x2 - border_px;
-                let inner_y2 = y2 - border_px;
+                // The inner "hole" stays at the original region bounds (not expanded).
+                let inner_x1 = region.x + border_px;
+                let inner_y1 = region.y + border_px;
+                let inner_x2 = region.x + region.width - border_px;
+                let inner_y2 = region.y + region.height - border_px;
 
                 if inner_x2 > inner_x1 && inner_y2 > inner_y1 {
                     let inner_radius = (radius_px - border_px).max(0);

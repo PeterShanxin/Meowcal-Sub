@@ -168,7 +168,8 @@ function getInteractiveBoundsPhysical(scaleFactor) {
     const bounds = [];
 
     if (overlayState.region) {
-        const handlePadding = 12;
+        // Increase padding to cover the settings button (28px button at 8px from edge)
+        const handlePadding = 40;
         bounds.push({
             left: (overlayState.region.x - handlePadding) * scaleFactor,
             top: (overlayState.region.y - handlePadding) * scaleFactor,
@@ -1044,6 +1045,7 @@ async function updateOverlayWindowClip() {
     const captureFrame = document.getElementById('capture-frame');
     const subtitleContainer = document.getElementById('subtitle-container');
     const debugInfo = document.getElementById('debug-info');
+    const settingsMenu = document.getElementById('settings-menu');
 
     const frameVisible = captureFrame &&
         captureFrame.classList.contains('visible') &&
@@ -1068,43 +1070,12 @@ async function updateOverlayWindowClip() {
         // scale factor and let Rust convert everything to physical pixels.
         const scaleFactor = await getScaleFactor();
 
-        // Resize handles extend outside the capture-frame box (negative offsets).
-        // If we don't include them in the window region, they'll be clipped and resizing breaks.
+        // The frame region is now expanded in Rust to include resize handles
+        // and settings button, so we don't need to add them as separate rectangles.
+        // We add other UI elements (diagnostics panel, settings menu) separately.
         const bounds = [];
-        if (frameVisible && captureFrame) {
-            const handles = captureFrame.querySelectorAll('.resize-handle');
-            handles.forEach((handle) => {
-                // Only include handles when they're actually visible.
-                const opacity = parseFloat(getComputedStyle(handle).opacity || '0');
-                if (opacity < 0.05) return;
-
-                const rect = handle.getBoundingClientRect();
-                bounds.push({
-                    x: Math.round(rect.left),
-                    y: Math.round(rect.top),
-                    width: Math.round(rect.width),
-                    height: Math.round(rect.height),
-                });
-            });
-
-            // Include the settings button in the window region
-            const settingsBtn = captureFrame.querySelector('.settings-button');
-            if (settingsBtn) {
-                const opacity = parseFloat(getComputedStyle(settingsBtn).opacity || '0');
-                if (opacity > 0.05) {
-                    const rect = settingsBtn.getBoundingClientRect();
-                    bounds.push({
-                        x: Math.round(rect.left),
-                        y: Math.round(rect.top),
-                        width: Math.round(rect.width),
-                        height: Math.round(rect.height),
-                    });
-                }
-            }
-        }
 
         // Keep the bottom-right diagnostics panel visible when window clipping is enabled.
-        // Otherwise it gets clipped out by the Win32 SetWindowRgn workaround.
         if (debugInfo) {
             const style = getComputedStyle(debugInfo);
             const opacity = parseFloat(style.opacity || '0');
@@ -1117,6 +1088,17 @@ async function updateOverlayWindowClip() {
                     height: Math.round(rect.height),
                 });
             }
+        }
+
+        // Include the settings menu when it's visible (positioned at screen center)
+        if (settingsMenu && overlayState.settingsOpen) {
+            const rect = settingsMenu.getBoundingClientRect();
+            bounds.push({
+                x: Math.round(rect.left),
+                y: Math.round(rect.top),
+                width: Math.round(rect.width),
+                height: Math.round(rect.height),
+            });
         }
 
         const handleBounds = bounds.length > 0 ? bounds : null;
@@ -1240,15 +1222,23 @@ function setupSettingsButton(button, menu, subtitleText, subtitleContainer) {
 
     // Prevent mousedown from triggering capture frame drag
     button.addEventListener('mousedown', (e) => {
+        console.log('⚙️ Settings button mousedown');
         e.stopPropagation();
+        e.preventDefault();
     });
 
     // Toggle menu
     button.addEventListener('click', (e) => {
+        console.log('⚙️ Settings button CLICKED!');
         e.stopPropagation();
+        e.preventDefault();
         overlayState.settingsOpen = !overlayState.settingsOpen;
         menu.classList.toggle('visible', overlayState.settingsOpen);
         menu.classList.toggle('hidden', !overlayState.settingsOpen);
+        console.log('⚙️ Settings menu visible:', overlayState.settingsOpen);
+
+        // Update window clip to include/exclude the settings menu
+        scheduleWindowClipUpdate();
 
         if (!overlayState.settingsOpen) {
             scheduleFadeOut();
@@ -1261,6 +1251,7 @@ function setupSettingsButton(button, menu, subtitleText, subtitleContainer) {
             overlayState.settingsOpen = false;
             menu.classList.remove('visible');
             menu.classList.add('hidden');
+            scheduleWindowClipUpdate();
             scheduleFadeOut();
         }
     });

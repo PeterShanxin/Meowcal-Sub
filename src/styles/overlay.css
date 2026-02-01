@@ -217,15 +217,17 @@ body {
     transform: scale(1.2);
 }
 
-/* Position each handle */
+/* Position each handle - positioned OUTSIDE the frame so they don't get
+   cropped by the inner click-through hole. With 14px diameter at -14px offset,
+   handles span from frame-14 to frame+0, fully outside the inner hole (frame+2). */
 .resize-handle[data-position="nw"] {
-    top: -7px;
-    left: -7px;
+    top: -14px;
+    left: -14px;
     cursor: nwse-resize;
 }
 
 .resize-handle[data-position="n"] {
-    top: -7px;
+    top: -14px;
     left: 50%;
     transform: translateX(-50%) scale(0.5);
     cursor: ns-resize;
@@ -241,14 +243,14 @@ body {
 }
 
 .resize-handle[data-position="ne"] {
-    top: -7px;
-    right: -7px;
+    top: -14px;
+    right: -14px;
     cursor: nesw-resize;
 }
 
 .resize-handle[data-position="w"] {
     top: 50%;
-    left: -7px;
+    left: -14px;
     transform: translateY(-50%) scale(0.5);
     cursor: ew-resize;
 }
@@ -264,7 +266,7 @@ body {
 
 .resize-handle[data-position="e"] {
     top: 50%;
-    right: -7px;
+    right: -14px;
     transform: translateY(-50%) scale(0.5);
     cursor: ew-resize;
 }
@@ -279,13 +281,13 @@ body {
 }
 
 .resize-handle[data-position="sw"] {
-    bottom: -7px;
-    left: -7px;
+    bottom: -14px;
+    left: -14px;
     cursor: nesw-resize;
 }
 
 .resize-handle[data-position="s"] {
-    bottom: -7px;
+    bottom: -14px;
     left: 50%;
     transform: translateX(-50%) scale(0.5);
     cursor: ns-resize;
@@ -301,8 +303,8 @@ body {
 }
 
 .resize-handle[data-position="se"] {
-    bottom: -7px;
-    right: -7px;
+    bottom: -14px;
+    right: -14px;
     cursor: nwse-resize;
 }
 
@@ -511,18 +513,21 @@ body {
 
 .settings-button {
     position: absolute;
-    top: 8px;
-    right: 8px;
-    width: 28px;
-    height: 28px;
-    padding: 6px;
+    /* Position well OUTSIDE the frame to avoid click-through hole.
+       The inner hole starts at frame_y + 2px, so we position the button
+       completely above the frame with enough margin. */
+    top: -22px;
+    right: 10px;  /* Between frame edge and NE corner handle */
+    width: 18px;
+    height: 18px;
+    padding: 0;
 
-    background: rgba(255, 159, 67, 0.9);  /* Orange background for visibility */
-    border: 2px solid white;
-    border-radius: 6px;
+    background: rgba(80, 80, 80, 0.95);
+    border: 2px solid rgba(255, 255, 255, 0.9);
+    border-radius: 50%;  /* Circular like resize handles */
     cursor: pointer;
 
-    color: white;
+    color: rgba(255, 255, 255, 0.9);
 
     display: flex;
     align-items: center;
@@ -534,16 +539,18 @@ body {
         opacity 0.2s ease,
         transform 0.2s ease;
 
-    opacity: 1;  /* Fully visible */
+    opacity: 0;  /* Hidden by default like resize handles */
+    transform: scale(0.5);
     pointer-events: auto;
-    z-index: 100;  /* High z-index */
+    z-index: 100;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25);
 }
 
-/* Full opacity on hover */
+/* Show button when hovering capture frame (like resize handles) */
 .capture-frame:hover .settings-button,
-.capture-frame.dragging .settings-button,
-.settings-button:hover {
+.capture-frame.dragging .settings-button {
     opacity: 1;
+    transform: scale(1);
 }
 
 /* Hide when frame is faded/entering/exiting */
@@ -555,18 +562,19 @@ body {
 }
 
 .settings-button:hover {
-    background: rgba(255, 159, 67, 0.8);  /* Accent color */
-    color: rgba(255, 255, 255, 1);
-    transform: scale(1.05);
+    background: rgba(255, 255, 255, 1);
+    transform: scale(1.2);
 }
 
 .settings-button:active {
-    background: rgba(255, 122, 61, 0.9);
+    background: rgba(255, 159, 67, 1);
     transform: scale(0.95);
 }
 
 .settings-button svg {
     display: block;
+    width: 12px;
+    height: 12px;
 }
 
 /* =============================================================================
