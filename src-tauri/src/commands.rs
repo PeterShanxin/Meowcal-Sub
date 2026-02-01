@@ -214,17 +214,28 @@ pub fn get_system_info() -> SystemInfo {
 }
 
 // =============================================================================
+// TIMING CONSTANTS - Translation Loop & UI
+// =============================================================================
+// These control timing behavior in the translation loop. Grouped here for
+// visibility; tune together to balance responsiveness vs. stability.
+
+/// Maximum retries when summarizing context fails (transient errors)
+const CONTEXT_SUMMARY_MAX_RETRIES: usize = 3;
+/// Delay between context summarization retries
+const CONTEXT_SUMMARY_RETRY_DELAY_MS: u64 = 500;
+/// Wait time after Foundry becomes ready before summarizing (prevents race conditions)
+const CONTEXT_SUMMARY_STABILITY_DELAY_MS: u64 = 900;
+/// Cooldown before retrying mock backend after failures
+const MOCK_RETRY_COOLDOWN_MS: u64 = 2500;
+/// Overlay fade-out duration - MUST match `OVERLAY_VISIBILITY_FADE_MS` in overlay.js
+const OVERLAY_HIDE_FADE_MS: u64 = 220;
+
+// =============================================================================
 // DOWNLOAD COMMANDS (OFFLINE MT)
 // =============================================================================
 
 const TRANSLATE_LOCALLY_BASE_URL: &str =
     "https://github.com/XapaJIaMnu/translateLocally/releases/download/latest";
-const CONTEXT_SUMMARY_MAX_RETRIES: usize = 3;
-const CONTEXT_SUMMARY_RETRY_DELAY_MS: u64 = 500;
-const CONTEXT_SUMMARY_STABILITY_DELAY_MS: u64 = 900;
-const MOCK_RETRY_COOLDOWN_MS: u64 = 2500;
-// Keep in sync with `OVERLAY_VISIBILITY_FADE_MS` in `src/scripts/overlay.js`.
-const OVERLAY_HIDE_FADE_MS: u64 = 220;
 
 /// Open the translateLocally download page in the default browser.
 #[tauri::command]
@@ -1272,6 +1283,102 @@ pub struct CaptureStatusPayload {
     pub is_error: bool,
 }
 
+/// Result of a capture attempt with session state
+enum CaptureAttemptResult {
+    /// Capture succeeded with the image data
+    Success(capture::CaptureResult),
+    /// Capture failed and should be retried after a delay
+    RetryAfterDelay,
+}
+
+/// State for the capture session fallback logic
+struct CaptureSessionState {
+    use_persistent: bool,
+    failure_count: u32,
+    fallback_notified: bool,
+}
+
+impl CaptureSessionState {
+    fn new(use_persistent: bool) -> Self {
+        Self {
+            use_persistent,
+            failure_count: 0,
+            fallback_notified: false,
+        }
+    }
+}
+
+/// Attempt to capture the screen region, handling session recovery and fallback.
+///
+/// This flattens the deeply nested capture logic into a single function.
+fn try_capture(
+    region: &CaptureRegion,
+    state: &mut CaptureSessionState,
+    app: &AppHandle,
+) -> CaptureAttemptResult {
+    // Try persistent session first if available
+    if state.use_persistent {
+        match capture::capture_with_session(region) {
+            Ok(result) => {
+                state.failure_count = 0;
+                return CaptureAttemptResult::Success(result);
+            }
+            Err(e) => {
+                state.failure_count += 1;
+                warn!(
+                    "⚠️ Session capture failed (attempt {}): {}",
+                    state.failure_count, e
+                );
+
+                // Try to recover the session on first failure
+                if state.failure_count == 1 {
+                    capture::close_capture_session();
+                    if let Err(restart_err) = capture::init_capture_session() {
+                        warn!(
+                            "⚠️ Failed to restart capture session, falling back: {}",
+                            restart_err
+                        );
+                        state.use_persistent = false;
+                    } else {
+                        info!("✅ Capture session restarted");
+                    }
+                } else if state.failure_count >= 3 {
+                    warn!("⚠️ Disabling persistent capture after repeated failures");
+                    capture::close_capture_session();
+                    state.use_persistent = false;
+                }
+            }
+        }
+    }
+
+    // Fall back to smart_capture
+    match capture::smart_capture(region) {
+        Ok((result, using_fallback)) => {
+            if using_fallback && !state.fallback_notified {
+                state.fallback_notified = true;
+                let status = CaptureStatusPayload {
+                    using_fallback: true,
+                    message: "Using GDI fallback - video content may not capture correctly"
+                        .to_string(),
+                    is_error: false,
+                };
+                let _ = app.emit("capture-status", status);
+            }
+            CaptureAttemptResult::Success(result)
+        }
+        Err(e) => {
+            warn!("⚠️ Capture failed: {}", e);
+            let status = CaptureStatusPayload {
+                using_fallback: false,
+                message: format!("Capture failed: {}", e),
+                is_error: true,
+            };
+            let _ = app.emit("capture-status", status);
+            CaptureAttemptResult::RetryAfterDelay
+        }
+    }
+}
+
 /// Check if translation is currently running
 ///
 /// Called from JavaScript: `const running = await invoke('is_translation_running');`
@@ -1546,11 +1653,8 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
             .unwrap_or_else(Instant::now);
         let mut last_capture_region: Option<CaptureRegion> = None;
 
-        // Track if we've already notified about fallback
-        let mut fallback_notified = false;
-
-        // Initialize persistent capture session (no border flashing)
-        let mut use_persistent_session = match capture::init_capture_session() {
+        // Initialize capture session state
+        let use_persistent = match capture::init_capture_session() {
             Ok(_) => {
                 info!("✅ Persistent capture session initialized");
                 true
@@ -1563,8 +1667,7 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
                 false
             }
         };
-
-        let mut session_failures = 0;
+        let mut capture_state = CaptureSessionState::new(use_persistent);
 
         loop {
             // Check if we should stop
@@ -1630,99 +1733,15 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
 
             debug!("📸 Capturing region: {:?}", current_capture_region);
 
-            // Step 1: Capture screen region
-            // If persistent session is available, use it (no border flashing)
-            // Otherwise fall back to smart_capture which creates new session each time
-            let capture_result = if use_persistent_session {
-                match capture::capture_with_session(&current_capture_region) {
-                    Ok(result) => {
-                        session_failures = 0;
-                        result
-                    }
-                    Err(e) => {
-                        session_failures += 1;
-                        warn!(
-                            "⚠️ Session capture failed (attempt {}): {}",
-                            session_failures, e
-                        );
-
-                        if session_failures == 1 {
-                            capture::close_capture_session();
-                            match capture::init_capture_session() {
-                                Ok(_) => {
-                                    info!("✅ Capture session restarted");
-                                }
-                                Err(restart_err) => {
-                                    warn!(
-                                        "⚠️ Failed to restart capture session, falling back: {}",
-                                        restart_err
-                                    );
-                                    use_persistent_session = false;
-                                }
-                            }
-                        } else if session_failures >= 3 {
-                            warn!("⚠️ Disabling persistent capture after repeated failures");
-                            capture::close_capture_session();
-                            use_persistent_session = false;
-                        }
-
-                        // Try smart capture to avoid surfacing transient session errors
-                        match capture::smart_capture(&current_capture_region) {
-                            Ok((result, fallback)) => {
-                                if fallback && !fallback_notified {
-                                    fallback_notified = true;
-                                    let status = CaptureStatusPayload {
-                                        using_fallback: true,
-                                        message: "Using GDI fallback - video content may not capture correctly".to_string(),
-                                        is_error: false,
-                                    };
-                                    let _ = app.emit("capture-status", status);
-                                }
-                                result
-                            }
-                            Err(fallback_err) => {
-                                let status = CaptureStatusPayload {
-                                    using_fallback: false,
-                                    message: format!("Capture failed: {}", fallback_err),
-                                    is_error: true,
-                                };
-                                let _ = app.emit("capture-status", status);
-                                tokio::time::sleep(Duration::from_millis(interval_ms as u64)).await;
-                                continue;
-                            }
-                        }
-                    }
-                }
-            } else {
-                // Fallback to smart_capture (creates new session each time)
-                match capture::smart_capture(&current_capture_region) {
-                    Ok((result, fallback)) => {
-                        if fallback && !fallback_notified {
-                            fallback_notified = true;
-                            let status = CaptureStatusPayload {
-                                using_fallback: true,
-                                message:
-                                    "Using GDI fallback - video content may not capture correctly"
-                                        .to_string(),
-                                is_error: false,
-                            };
-                            let _ = app.emit("capture-status", status);
-                        }
-                        result
-                    }
-                    Err(e) => {
-                        warn!("⚠️ Capture failed: {}", e);
-                        let status = CaptureStatusPayload {
-                            using_fallback: false,
-                            message: format!("Capture failed: {}", e),
-                            is_error: true,
-                        };
-                        let _ = app.emit("capture-status", status);
+            // Step 1: Capture screen region with session fallback handling
+            let capture_result =
+                match try_capture(&current_capture_region, &mut capture_state, &app) {
+                    CaptureAttemptResult::Success(result) => result,
+                    CaptureAttemptResult::RetryAfterDelay => {
                         tokio::time::sleep(Duration::from_millis(interval_ms as u64)).await;
                         continue;
                     }
-                }
-            };
+                };
 
             // If stop was requested while we were capturing, don't do any more work or emit updates.
             if *stop_rx.borrow() {

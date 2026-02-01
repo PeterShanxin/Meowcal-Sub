@@ -30,7 +30,14 @@
     // =============================================================================
 
     /**
-     * Map Tauri command names to HTTP endpoints
+     * Map Tauri command names to HTTP endpoints for browser dev mode.
+     *
+     * COUPLING NOTE: These command names must match the #[tauri::command] function
+     * names in src-tauri/src/commands.rs. The HTTP paths must match the routes in
+     * src-tauri/src/http_server.rs. When adding a new command:
+     *   1. Add #[tauri::command] function in commands.rs
+     *   2. Add route in http_server.rs
+     *   3. Add mapping here
      */
     const COMMAND_TO_ENDPOINT = {
         // System
