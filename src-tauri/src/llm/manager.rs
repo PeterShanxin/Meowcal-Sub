@@ -20,10 +20,61 @@ const DEFAULT_BACKEND_TIMEOUT_MS: u64 = 2500;
 const MAX_TRANSLATION_INPUT_CHARS: usize = 2000;
 const FOUNDRY_TRANSIENT_MAX_RETRIES: usize = 2;
 const FOUNDRY_TRANSIENT_RETRY_DELAY_MS: u64 = 600;
-const CONTEXT_TIER_FULL: u8 = 2;
-const CONTEXT_TIER_MEMORY_ONLY: u8 = 1;
-const CONTEXT_TIER_NONE: u8 = 0;
 const CONTEXT_SLOW_DEGRADE_MS: u128 = 1800;
+
+// =============================================================================
+// CONTEXT TIER - State machine for context degradation
+// =============================================================================
+
+/// Context tier for Foundry Local requests.
+/// Degrades automatically on slow responses or timeouts to keep subtitles responsive.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[repr(u8)]
+pub enum ContextTier {
+    /// No context included in translation requests
+    None = 0,
+    /// Only memory summary included (lighter weight)
+    MemoryOnly = 1,
+    /// Full context: memory + recent subtitle lines
+    Full = 2,
+}
+
+impl ContextTier {
+    /// Convert from raw u8 value (for atomic storage compatibility)
+    fn from_u8(value: u8) -> Self {
+        match value {
+            0 => Self::None,
+            1 => Self::MemoryOnly,
+            _ => Self::Full,
+        }
+    }
+
+    /// Convert from ContextLevel config setting
+    fn from_config(level: ContextLevel, enabled: bool) -> Self {
+        if !enabled {
+            return Self::None;
+        }
+        match level {
+            ContextLevel::Off => Self::None,
+            ContextLevel::MemoryOnly => Self::MemoryOnly,
+            ContextLevel::MemoryAndRecent => Self::Full,
+        }
+    }
+
+    /// Degrade to a lower tier (returns self if already at None)
+    fn degraded(self) -> Self {
+        match self {
+            Self::Full => Self::MemoryOnly,
+            Self::MemoryOnly => Self::None,
+            Self::None => Self::None,
+        }
+    }
+
+    /// Check if this tier includes any context
+    fn has_context(self) -> bool {
+        self != Self::None
+    }
+}
 
 /// Manages available translation backends and fallback selection
 pub struct TranslationManager {
@@ -34,8 +85,7 @@ pub struct TranslationManager {
     /// Session translation context (shared across calls)
     context: Arc<RwLock<TranslationContext>>,
     /// Effective context tier to use for Foundry Local requests.
-    ///
-    /// 2 = memory + recent, 1 = memory only, 0 = no context
+    /// Stored as u8 for atomic operations, use ContextTier::from_u8() to read.
     context_tier: AtomicU8,
 }
 
@@ -62,15 +112,7 @@ impl TranslationManager {
         let context_enabled =
             config.enable_context_aware && config.context_level != ContextLevel::Off;
         let context = TranslationContext::new(context_budget, context_enabled);
-        let context_tier = if context_enabled {
-            match config.context_level {
-                ContextLevel::Off => CONTEXT_TIER_NONE,
-                ContextLevel::MemoryOnly => CONTEXT_TIER_MEMORY_ONLY,
-                ContextLevel::MemoryAndRecent => CONTEXT_TIER_FULL,
-            }
-        } else {
-            CONTEXT_TIER_NONE
-        };
+        let context_tier = ContextTier::from_config(config.context_level, context_enabled);
 
         Self {
             config,
@@ -78,7 +120,7 @@ impl TranslationManager {
             diagnostics,
             backend_timeout_ms: DEFAULT_BACKEND_TIMEOUT_MS,
             context: Arc::new(RwLock::new(context)),
-            context_tier: AtomicU8::new(context_tier),
+            context_tier: AtomicU8::new(context_tier as u8),
         }
     }
 
@@ -117,22 +159,14 @@ impl TranslationManager {
         let context_enabled =
             config.enable_context_aware && config.context_level != ContextLevel::Off;
         let context = TranslationContext::new(500, context_enabled);
-        let context_tier = if context_enabled {
-            match config.context_level {
-                ContextLevel::Off => CONTEXT_TIER_NONE,
-                ContextLevel::MemoryOnly => CONTEXT_TIER_MEMORY_ONLY,
-                ContextLevel::MemoryAndRecent => CONTEXT_TIER_FULL,
-            }
-        } else {
-            CONTEXT_TIER_NONE
-        };
+        let context_tier = ContextTier::from_config(config.context_level, context_enabled);
         Self {
             config,
             backends,
             diagnostics,
             backend_timeout_ms,
             context: Arc::new(RwLock::new(context)),
-            context_tier: AtomicU8::new(context_tier),
+            context_tier: AtomicU8::new(context_tier as u8),
         }
     }
 
@@ -328,207 +362,22 @@ impl TranslationManager {
             // Foundry Local supports context and can degrade it on slow/timeout paths
             // to keep subtitle output responsive.
             if id == BackendId::FoundryLocal && Self::backend_supports_context(id) {
-                let initial_tier = self
-                    .context_tier
-                    .load(Ordering::SeqCst)
-                    .clamp(CONTEXT_TIER_NONE, CONTEXT_TIER_FULL);
-
-                let memory_only_prompt = if initial_tier >= CONTEXT_TIER_MEMORY_ONLY {
-                    self.context_read()
-                        .build_memory_prompt(self.config.prompt_max_context_chars)
-                } else {
-                    None
-                };
-
-                let mut tier = initial_tier;
-                let mut last_error: Option<LlmError> = None;
-
-                loop {
-                    let context_for_tier = match tier {
-                        CONTEXT_TIER_FULL => context_prompt,
-                        CONTEXT_TIER_MEMORY_ONLY => memory_only_prompt.as_deref(),
-                        _ => None,
-                    };
-                    let context_used = context_for_tier.is_some();
-
-                    let mut attempt = 0usize;
-                    let mut timed_out = false;
-                    let mut total_exhausted = false;
-                    loop {
-                        attempt += 1;
-
-                        let remaining_total = total_timeout.saturating_sub(started.elapsed());
-                        if remaining_total.is_zero() {
-                            let latency_ms = started.elapsed().as_millis();
-                            let error_code = "timeout";
-                            lock_or_recover(&self.diagnostics).record_error(
-                                id,
-                                error_code,
-                                Some(latency_ms),
-                            );
-                            warn!(
-                                backend_id = id.as_str(),
-                                ready_state = ?ready_state,
-                                latency_ms,
-                                error_code,
-                                "Translation backend timed out"
-                            );
-                            warnings.push(format!("{}: timeout", id.as_str()));
-                            timed_out = true;
-                            total_exhausted = true;
-                            break;
-                        }
-
-                        // Soft timeout only when we *actually* include context.
-                        //
-                        // When `context_for_tier` is None (common on first run), applying the soft
-                        // timeout causes unnecessary fallbacks to "mock" even though the overall
-                        // Foundry timeout is higher.
-                        let attempt_timeout = if context_used {
-                            remaining_total.min(Duration::from_millis(DEFAULT_BACKEND_TIMEOUT_MS))
-                        } else {
-                            remaining_total
-                        };
-
-                        let result = timeout(
-                            attempt_timeout,
-                            backend.translate_with_context_options(
-                                text,
-                                source_language,
-                                target_language,
-                                context_for_tier,
-                                Some(PromptRouterOptions {
-                                    enable_context: context_used,
-                                    max_context_chars: self.config.prompt_max_context_chars,
-                                    max_source_chars: self.config.prompt_max_source_chars,
-                                }),
-                            ),
-                        )
-                        .await;
-                        let latency_ms = started.elapsed().as_millis();
-
-                        match result {
-                            Ok(Ok(translated)) => {
-                                self.diagnostics
-                                    .lock()
-                                    .unwrap()
-                                    .record_success(id, latency_ms);
-                                if attempt > 1 {
-                                    warnings
-                                        .push(format!("{}: recovered_after_retry", id.as_str()));
-                                }
-
-                                if context_used {
-                                    if tier > CONTEXT_TIER_NONE
-                                        && latency_ms > CONTEXT_SLOW_DEGRADE_MS
-                                    {
-                                        let degraded = tier.saturating_sub(1);
-                                        if degraded != tier {
-                                            self.context_tier.store(degraded, Ordering::SeqCst);
-                                            warnings.push(format!(
-                                                "{}: context_degraded_slow",
-                                                id.as_str()
-                                            ));
-                                        }
-                                    } else {
-                                        self.context_tier.store(tier, Ordering::SeqCst);
-                                    }
-                                }
-
-                                info!(
-                                    backend_id = id.as_str(),
-                                    ready_state = ?ready_state,
-                                    latency_ms,
-                                    error_code = "",
-                                    "Translation backend used"
-                                );
-                                return TranslationOutcome {
-                                    translated,
-                                    backend_used: id,
-                                    warnings,
-                                };
-                            }
-                            Ok(Err(err)) => {
-                                let should_retry = attempt < max_attempts
-                                    && Self::should_retry_foundry_error(&err);
-
-                                lock_or_recover(&self.diagnostics).record_error(
-                                    id,
-                                    err.code(),
-                                    Some(latency_ms),
-                                );
-                                warn!(
-                                    backend_id = id.as_str(),
-                                    ready_state = ?ready_state,
-                                    latency_ms,
-                                    error_code = err.code(),
-                                    attempt,
-                                    max_attempts,
-                                    "Translation backend failed: {}",
-                                    err
-                                );
-                                last_error = Some(err.clone());
-
-                                if should_retry {
-                                    let delay = Duration::from_millis(
-                                        FOUNDRY_TRANSIENT_RETRY_DELAY_MS
-                                            .saturating_mul(attempt as u64),
-                                    );
-                                    let remaining_after_delay =
-                                        total_timeout.saturating_sub(started.elapsed());
-                                    if remaining_after_delay > delay {
-                                        tokio::time::sleep(delay).await;
-                                        continue;
-                                    }
-                                }
-
-                                break;
-                            }
-                            Err(_) => {
-                                let error_code = "timeout";
-                                lock_or_recover(&self.diagnostics).record_error(
-                                    id,
-                                    error_code,
-                                    Some(latency_ms),
-                                );
-                                warn!(
-                                    backend_id = id.as_str(),
-                                    ready_state = ?ready_state,
-                                    latency_ms,
-                                    error_code,
-                                    "Translation backend timed out"
-                                );
-                                warnings.push(format!("{}: timeout", id.as_str()));
-                                timed_out = true;
-                                break;
-                            }
-                        }
-                    }
-
-                    // If we exhausted the overall timeout, don't keep retrying with lower tiers.
-                    if total_exhausted {
-                        break;
-                    }
-
-                    // Only degrade on timeouts when context was actually used. Other errors should
-                    // fall through to the next backend without extra work.
-                    if timed_out && context_used && tier > CONTEXT_TIER_NONE {
-                        let degraded = tier.saturating_sub(1);
-                        if degraded != tier {
-                            tier = degraded;
-                            self.context_tier.store(tier, Ordering::SeqCst);
-                            warnings.push(format!("{}: context_degraded", id.as_str()));
-                            continue;
-                        }
-                    }
-
-                    break;
+                if let Some(outcome) = self
+                    .try_foundry_with_context(
+                        backend,
+                        text,
+                        source_language,
+                        target_language,
+                        context_prompt,
+                        ready_state,
+                        total_timeout,
+                        max_attempts,
+                        &mut warnings,
+                    )
+                    .await
+                {
+                    return outcome;
                 }
-
-                if let Some(err) = last_error {
-                    warnings.push(format!("{}: {}", id.as_str(), err));
-                }
-
                 continue;
             }
 
@@ -682,15 +531,15 @@ impl TranslationManager {
             return None;
         }
 
-        match self.context_tier.load(Ordering::SeqCst) {
-            CONTEXT_TIER_FULL => self.context_read().build_context_prompt_with_recent_limit(
+        match ContextTier::from_u8(self.context_tier.load(Ordering::SeqCst)) {
+            ContextTier::Full => self.context_read().build_context_prompt_with_recent_limit(
                 self.config.context_recent_count,
                 self.config.prompt_max_context_chars,
             ),
-            CONTEXT_TIER_MEMORY_ONLY => self
+            ContextTier::MemoryOnly => self
                 .context_read()
                 .build_memory_prompt(self.config.prompt_max_context_chars),
-            _ => None,
+            ContextTier::None => None,
         }
     }
 
@@ -799,6 +648,280 @@ impl TranslationManager {
 
     fn backend_supports_context(id: BackendId) -> bool {
         matches!(id, BackendId::FoundryLocal)
+    }
+
+    /// Attempt translation with Foundry Local, degrading context tier on slow responses/timeouts.
+    ///
+    /// Returns `Some(outcome)` on success, `None` if all context tiers failed (caller should
+    /// try next backend in fallback chain).
+    #[allow(clippy::too_many_arguments)]
+    async fn try_foundry_with_context(
+        &self,
+        backend: &dyn TranslatorBackend,
+        text: &str,
+        source_language: &str,
+        target_language: &str,
+        full_context_prompt: Option<&str>,
+        ready_state: ReadyState,
+        total_timeout: Duration,
+        max_attempts: usize,
+        warnings: &mut Vec<String>,
+    ) -> Option<TranslationOutcome> {
+        let id = backend.id();
+        let started = Instant::now();
+
+        // Load current tier from atomic storage
+        let initial_tier = ContextTier::from_u8(self.context_tier.load(Ordering::SeqCst));
+
+        // Pre-build memory-only prompt if we might need it
+        let memory_only_prompt = if initial_tier >= ContextTier::MemoryOnly {
+            self.context_read()
+                .build_memory_prompt(self.config.prompt_max_context_chars)
+        } else {
+            None
+        };
+
+        let mut tier = initial_tier;
+        let mut last_error: Option<LlmError> = None;
+
+        // Context degradation loop: try current tier, degrade on timeout, repeat
+        loop {
+            let context_for_tier =
+                tier.select_context(full_context_prompt, memory_only_prompt.as_deref());
+            let context_used = context_for_tier.is_some();
+
+            // Retry loop for transient errors at current tier
+            let result = self
+                .try_translate_with_retries(
+                    backend,
+                    text,
+                    source_language,
+                    target_language,
+                    context_for_tier,
+                    context_used,
+                    ready_state,
+                    &started,
+                    total_timeout,
+                    max_attempts,
+                    warnings,
+                )
+                .await;
+
+            match result {
+                TierAttemptResult::Success(translated, latency_ms, recovered) => {
+                    if recovered {
+                        warnings.push(format!("{}: recovered_after_retry", id.as_str()));
+                    }
+
+                    // If response was slow, degrade tier for future requests.
+                    // Only update stored tier when context was actually used - otherwise we
+                    // haven't verified that the tier works with context.
+                    if context_used && tier.has_context() && latency_ms > CONTEXT_SLOW_DEGRADE_MS {
+                        let degraded = tier.degraded();
+                        if degraded != tier {
+                            self.context_tier.store(degraded as u8, Ordering::SeqCst);
+                            warnings.push(format!("{}: context_degraded_slow", id.as_str()));
+                        }
+                    } else if context_used {
+                        self.context_tier.store(tier as u8, Ordering::SeqCst);
+                    }
+
+                    info!(
+                        backend_id = id.as_str(),
+                        ready_state = ?ready_state,
+                        latency_ms,
+                        error_code = "",
+                        "Translation backend used"
+                    );
+
+                    return Some(TranslationOutcome {
+                        translated,
+                        backend_used: id,
+                        warnings: std::mem::take(warnings),
+                    });
+                }
+                TierAttemptResult::Timeout { total_exhausted } => {
+                    // If overall timeout exhausted, stop trying lower tiers
+                    if total_exhausted {
+                        break;
+                    }
+
+                    // Only degrade on timeouts when context was actually used
+                    if context_used && tier.has_context() {
+                        let degraded = tier.degraded();
+                        if degraded != tier {
+                            tier = degraded;
+                            self.context_tier.store(tier as u8, Ordering::SeqCst);
+                            warnings.push(format!("{}: context_degraded", id.as_str()));
+                            continue; // Try again with lower tier
+                        }
+                    }
+                    break;
+                }
+                TierAttemptResult::Error(err) => {
+                    last_error = Some(err);
+                    break;
+                }
+            }
+        }
+
+        if let Some(err) = last_error {
+            warnings.push(format!("{}: {}", id.as_str(), err));
+        }
+
+        None // Signal caller to try next backend
+    }
+
+    /// Attempt translation with retries for transient errors.
+    #[allow(clippy::too_many_arguments)]
+    async fn try_translate_with_retries(
+        &self,
+        backend: &dyn TranslatorBackend,
+        text: &str,
+        source_language: &str,
+        target_language: &str,
+        context_prompt: Option<&str>,
+        context_used: bool,
+        ready_state: ReadyState,
+        started: &Instant,
+        total_timeout: Duration,
+        max_attempts: usize,
+        warnings: &mut Vec<String>,
+    ) -> TierAttemptResult {
+        let id = backend.id();
+
+        for attempt in 1..=max_attempts {
+            let remaining_total = total_timeout.saturating_sub(started.elapsed());
+            if remaining_total.is_zero() {
+                let latency_ms = started.elapsed().as_millis();
+                lock_or_recover(&self.diagnostics).record_error(id, "timeout", Some(latency_ms));
+                warn!(
+                    backend_id = id.as_str(),
+                    ready_state = ?ready_state,
+                    latency_ms,
+                    error_code = "timeout",
+                    "Translation backend timed out"
+                );
+                warnings.push(format!("{}: timeout", id.as_str()));
+                return TierAttemptResult::Timeout {
+                    total_exhausted: true,
+                };
+            }
+
+            // Soft timeout only when context is included
+            let attempt_timeout = if context_used {
+                remaining_total.min(Duration::from_millis(DEFAULT_BACKEND_TIMEOUT_MS))
+            } else {
+                remaining_total
+            };
+
+            let result = timeout(
+                attempt_timeout,
+                backend.translate_with_context_options(
+                    text,
+                    source_language,
+                    target_language,
+                    context_prompt,
+                    Some(PromptRouterOptions {
+                        enable_context: context_used,
+                        max_context_chars: self.config.prompt_max_context_chars,
+                        max_source_chars: self.config.prompt_max_source_chars,
+                    }),
+                ),
+            )
+            .await;
+            let latency_ms = started.elapsed().as_millis();
+
+            match result {
+                Ok(Ok(translated)) => {
+                    self.diagnostics
+                        .lock()
+                        .unwrap()
+                        .record_success(id, latency_ms);
+                    return TierAttemptResult::Success(translated, latency_ms, attempt > 1);
+                }
+                Ok(Err(err)) => {
+                    let should_retry =
+                        attempt < max_attempts && Self::should_retry_foundry_error(&err);
+                    lock_or_recover(&self.diagnostics).record_error(
+                        id,
+                        err.code(),
+                        Some(latency_ms),
+                    );
+                    warn!(
+                        backend_id = id.as_str(),
+                        ready_state = ?ready_state,
+                        latency_ms,
+                        error_code = err.code(),
+                        attempt,
+                        max_attempts,
+                        "Translation backend failed: {}",
+                        err
+                    );
+
+                    if should_retry {
+                        let delay = Duration::from_millis(
+                            FOUNDRY_TRANSIENT_RETRY_DELAY_MS.saturating_mul(attempt as u64),
+                        );
+                        let remaining = total_timeout.saturating_sub(started.elapsed());
+                        if remaining > delay {
+                            tokio::time::sleep(delay).await;
+                            continue;
+                        }
+                    }
+
+                    return TierAttemptResult::Error(err);
+                }
+                Err(_) => {
+                    lock_or_recover(&self.diagnostics).record_error(
+                        id,
+                        "timeout",
+                        Some(latency_ms),
+                    );
+                    warn!(
+                        backend_id = id.as_str(),
+                        ready_state = ?ready_state,
+                        latency_ms,
+                        error_code = "timeout",
+                        "Translation backend timed out"
+                    );
+                    warnings.push(format!("{}: timeout", id.as_str()));
+                    return TierAttemptResult::Timeout {
+                        total_exhausted: false,
+                    };
+                }
+            }
+        }
+
+        // Should not reach here, but fallback
+        TierAttemptResult::Timeout {
+            total_exhausted: true,
+        }
+    }
+}
+
+/// Result of attempting translation at a specific context tier
+enum TierAttemptResult {
+    /// Translation succeeded: (text, latency_ms, recovered_after_retry)
+    Success(String, u128, bool),
+    /// Timed out: total_exhausted indicates if overall timeout was hit
+    Timeout { total_exhausted: bool },
+    /// Non-retryable error occurred
+    Error(LlmError),
+}
+
+impl ContextTier {
+    /// Select the appropriate context prompt for this tier
+    fn select_context<'a>(
+        self,
+        full_context: Option<&'a str>,
+        memory_only: Option<&'a str>,
+    ) -> Option<&'a str> {
+        match self {
+            Self::Full => full_context,
+            Self::MemoryOnly => memory_only,
+            Self::None => None,
+        }
     }
 }
 

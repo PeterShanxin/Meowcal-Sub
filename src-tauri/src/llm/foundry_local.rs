@@ -230,6 +230,136 @@ impl FoundryLocalBackend {
         }
     }
 
+    /// Get the alternate namespace to try on 404 errors
+    fn fallback_namespace(preferred: u8) -> u8 {
+        if preferred == API_NAMESPACE_OPENAI {
+            API_NAMESPACE_V1
+        } else {
+            API_NAMESPACE_OPENAI
+        }
+    }
+
+    /// Execute a GET request with automatic namespace fallback on 404.
+    ///
+    /// On success, stores the working namespace for future requests.
+    async fn get_with_namespace_fallback(
+        &self,
+        client: &Client,
+        base_url: &str,
+        endpoint: &str,
+    ) -> Result<reqwest::Response, LlmError> {
+        let preferred = self.preferred_api_namespace();
+        let url = self.api_url_for(base_url, preferred, endpoint);
+
+        match client.get(&url).send().await {
+            Ok(resp) if resp.status().is_success() => {
+                self.api_namespace.store(preferred, Ordering::SeqCst);
+                Ok(resp)
+            }
+            Ok(resp) if resp.status().as_u16() == 404 => {
+                let fallback = Self::fallback_namespace(preferred);
+                let fallback_url = self.api_url_for(base_url, fallback, endpoint);
+                debug!(
+                    "Endpoint {} returned 404, trying fallback {}",
+                    url, fallback_url
+                );
+
+                let resp = client
+                    .get(&fallback_url)
+                    .send()
+                    .await
+                    .map_err(|e| LlmError::ApiError(format!("Request failed: {}", e)))?;
+
+                if resp.status().is_success() {
+                    self.api_namespace.store(fallback, Ordering::SeqCst);
+                    Ok(resp)
+                } else {
+                    let status = resp.status();
+                    let body = resp.text().await.unwrap_or_default();
+                    Err(LlmError::ApiError(format!(
+                        "API error {}: {}",
+                        status,
+                        body.chars().take(200).collect::<String>()
+                    )))
+                }
+            }
+            Ok(resp) => {
+                let status = resp.status();
+                let body = resp.text().await.unwrap_or_default();
+                Err(LlmError::ApiError(format!(
+                    "API error {}: {}",
+                    status,
+                    body.chars().take(200).collect::<String>()
+                )))
+            }
+            Err(e) => Err(LlmError::ApiError(format!("Request failed: {}", e))),
+        }
+    }
+
+    /// Execute a POST request with automatic namespace fallback on 404.
+    ///
+    /// On success, stores the working namespace for future requests.
+    async fn post_with_namespace_fallback<T: Serialize>(
+        &self,
+        client: &Client,
+        base_url: &str,
+        endpoint: &str,
+        body: &T,
+    ) -> Result<reqwest::Response, LlmError> {
+        let preferred = self.preferred_api_namespace();
+        let url = self.api_url_for(base_url, preferred, endpoint);
+
+        match client.post(&url).json(body).send().await {
+            Ok(resp) if resp.status().is_success() => {
+                self.api_namespace.store(preferred, Ordering::SeqCst);
+                Ok(resp)
+            }
+            Ok(resp) if resp.status().as_u16() == 404 => {
+                let fallback = Self::fallback_namespace(preferred);
+                let fallback_url = self.api_url_for(base_url, fallback, endpoint);
+                debug!(
+                    "Endpoint {} returned 404, trying fallback {}",
+                    url, fallback_url
+                );
+
+                let resp = client
+                    .post(&fallback_url)
+                    .json(body)
+                    .send()
+                    .await
+                    .map_err(|e| LlmError::ApiError(format!("Request failed: {}", e)))?;
+
+                if resp.status().is_success() {
+                    self.api_namespace.store(fallback, Ordering::SeqCst);
+                    Ok(resp)
+                } else {
+                    let status = resp.status();
+                    let body = resp.text().await.unwrap_or_default();
+                    warn!("Foundry Local returned error {}: {}", status, body);
+                    Err(LlmError::ApiError(format!(
+                        "API error {}: {}",
+                        status,
+                        body.chars().take(200).collect::<String>()
+                    )))
+                }
+            }
+            Ok(resp) => {
+                let status = resp.status();
+                let body = resp.text().await.unwrap_or_default();
+                warn!("Foundry Local returned error {}: {}", status, body);
+                Err(LlmError::ApiError(format!(
+                    "API error {}: {}",
+                    status,
+                    body.chars().take(200).collect::<String>()
+                )))
+            }
+            Err(e) => {
+                warn!("Foundry Local request failed: {}", e);
+                Err(LlmError::ApiError(format!("Request failed: {}", e)))
+            }
+        }
+    }
+
     /// Get the service URL by parsing `foundry service status` output.
     /// Uses a TTL cache to avoid spawning processes repeatedly.
     pub fn get_service_url_from_cli() -> Option<String> {
@@ -753,73 +883,12 @@ impl FoundryLocalBackend {
         base_url: &str,
         request: &ChatCompletionRequest,
     ) -> Result<reqwest::Response, LlmError> {
-        let preferred_namespace = self.preferred_api_namespace();
-        let url = self.api_url_for(base_url, preferred_namespace, "chat/completions");
-
-        let response = self.http_client.post(&url).json(request).send().await;
-
-        match response {
-            Ok(resp) if resp.status().is_success() => {
-                self.api_namespace
-                    .store(preferred_namespace, Ordering::SeqCst);
-                // Any successful chat completion implies the model is "ready to talk".
-                self.record_probe_success();
-                Ok(resp)
-            }
-            Ok(resp) if resp.status().as_u16() == 404 => {
-                let fallback_namespace = if preferred_namespace == API_NAMESPACE_OPENAI {
-                    API_NAMESPACE_V1
-                } else {
-                    API_NAMESPACE_OPENAI
-                };
-                let fallback_url =
-                    self.api_url_for(base_url, fallback_namespace, "chat/completions");
-                debug!(
-                    "Foundry Local chat completions returned 404 for {}, trying {}",
-                    url, fallback_url
-                );
-                let resp = self
-                    .http_client
-                    .post(&fallback_url)
-                    .json(request)
-                    .send()
-                    .await
-                    .map_err(|e| {
-                        warn!("Foundry Local request failed: {}", e);
-                        LlmError::ApiError(format!("Request failed: {}", e))
-                    })?;
-
-                if resp.status().is_success() {
-                    self.api_namespace
-                        .store(fallback_namespace, Ordering::SeqCst);
-                    self.record_probe_success();
-                    Ok(resp)
-                } else {
-                    let status = resp.status();
-                    let body = resp.text().await.unwrap_or_default();
-                    warn!("Foundry Local returned error {}: {}", status, body);
-                    Err(LlmError::ApiError(format!(
-                        "API error {}: {}",
-                        status,
-                        body.chars().take(200).collect::<String>()
-                    )))
-                }
-            }
-            Ok(resp) => {
-                let status = resp.status();
-                let body = resp.text().await.unwrap_or_default();
-                warn!("Foundry Local returned error {}: {}", status, body);
-                Err(LlmError::ApiError(format!(
-                    "API error {}: {}",
-                    status,
-                    body.chars().take(200).collect::<String>()
-                )))
-            }
-            Err(e) => {
-                warn!("Foundry Local request failed: {}", e);
-                Err(LlmError::ApiError(format!("Request failed: {}", e)))
-            }
-        }
+        let resp = self
+            .post_with_namespace_fallback(&self.http_client, base_url, "chat/completions", request)
+            .await?;
+        // Any successful chat completion implies the model is "ready to talk".
+        self.record_probe_success();
+        Ok(resp)
     }
 
     /// List available models from the service
@@ -834,53 +903,9 @@ impl FoundryLocalBackend {
             }
         };
 
-        let preferred_namespace = self.preferred_api_namespace();
-        let url = self.api_url_for(&base_url, preferred_namespace, "models");
-
-        let response = self.http_client.get(&url).send().await;
-
-        // If /openai/ path fails, try fallback to /v1/models (for compatibility)
-        let response = match response {
-            Ok(resp) if resp.status().is_success() => {
-                self.api_namespace
-                    .store(preferred_namespace, Ordering::SeqCst);
-                resp
-            }
-            Ok(resp) if resp.status().as_u16() == 404 => {
-                let fallback_namespace = if preferred_namespace == API_NAMESPACE_OPENAI {
-                    API_NAMESPACE_V1
-                } else {
-                    API_NAMESPACE_OPENAI
-                };
-                let fallback_url = self.api_url_for(&base_url, fallback_namespace, "models");
-                debug!(
-                    "Foundry Local models returned 404 for {}, trying {}",
-                    url, fallback_url
-                );
-                let resp = self
-                    .http_client
-                    .get(&fallback_url)
-                    .send()
-                    .await
-                    .map_err(|e| LlmError::ApiError(format!("Failed to fetch models: {}", e)))?;
-
-                if resp.status().is_success() {
-                    self.api_namespace
-                        .store(fallback_namespace, Ordering::SeqCst);
-                }
-
-                resp
-            }
-            Ok(resp) => {
-                return Err(LlmError::ApiError(format!(
-                    "Models endpoint returned status {}",
-                    resp.status()
-                )));
-            }
-            Err(e) => {
-                return Err(LlmError::ApiError(format!("Failed to fetch models: {}", e)));
-            }
-        };
+        let response = self
+            .get_with_namespace_fallback(&self.http_client, &base_url, "models")
+            .await?;
 
         let models_response: ModelsResponse = response
             .json()
@@ -1228,37 +1253,40 @@ impl FoundryLocalBackend {
             .build()
             .unwrap_or_default();
 
-        let preferred_namespace = self.preferred_api_namespace();
-        let models_url = self.api_url_for(&base_url, preferred_namespace, "models");
+        // Try probe with namespace fallback
+        self.probe_with_namespace_fallback(&probe_client, &base_url)
+            .await
+    }
 
-        debug!("Probing Foundry Local models endpoint: {}", models_url);
+    /// Probe helper with 404-fallback logic for namespace discovery.
+    /// Returns Ok(true) on success, Ok(false) on timeout, Err on other errors.
+    async fn probe_with_namespace_fallback(
+        &self,
+        client: &Client,
+        base_url: &str,
+    ) -> Result<bool, LlmError> {
+        let preferred = self.preferred_api_namespace();
+        let url = self.api_url_for(base_url, preferred, "models");
+        debug!("Probing Foundry Local models endpoint: {}", url);
 
-        match probe_client.get(&models_url).send().await {
+        match client.get(&url).send().await {
             Ok(resp) if resp.status().is_success() => {
-                self.api_namespace
-                    .store(preferred_namespace, Ordering::SeqCst);
+                self.api_namespace.store(preferred, Ordering::SeqCst);
                 self.record_probe_success();
-                debug!("Foundry Local probe succeeded (models endpoint responsive)");
+                debug!("Foundry Local probe succeeded");
                 Ok(true)
             }
             Ok(resp) if resp.status().as_u16() == 404 => {
                 // Try fallback namespace
-                let fallback_namespace = if preferred_namespace == API_NAMESPACE_OPENAI {
-                    API_NAMESPACE_V1
-                } else {
-                    API_NAMESPACE_OPENAI
-                };
-                let fallback_url = self.api_url_for(&base_url, fallback_namespace, "models");
-                debug!("Probing fallback models endpoint: {}", fallback_url);
+                let fallback = Self::fallback_namespace(preferred);
+                let fallback_url = self.api_url_for(base_url, fallback, "models");
+                debug!("Probing fallback endpoint: {}", fallback_url);
 
-                match probe_client.get(&fallback_url).send().await {
+                match client.get(&fallback_url).send().await {
                     Ok(resp) if resp.status().is_success() => {
-                        self.api_namespace
-                            .store(fallback_namespace, Ordering::SeqCst);
+                        self.api_namespace.store(fallback, Ordering::SeqCst);
                         self.record_probe_success();
-                        debug!(
-                            "Foundry Local probe succeeded (fallback models endpoint responsive)"
-                        );
+                        debug!("Foundry Local probe succeeded (fallback)");
                         Ok(true)
                     }
                     Ok(resp) => {
@@ -1382,9 +1410,6 @@ impl FoundryLocalBackend {
             .get_model()
             .ok_or_else(|| LlmError::ModelNotAvailable("No model available".to_string()))?;
 
-        let preferred_namespace = self.preferred_api_namespace();
-        let url = self.api_url_for(&base_url, preferred_namespace, "chat/completions");
-
         // Build history text
         let history_text: String = history
             .iter()
@@ -1418,81 +1443,16 @@ impl FoundryLocalBackend {
             max_tokens: 150,
         };
 
-        debug!("Sending summarization request to Foundry Local: {}", url);
+        debug!("Sending summarization request to Foundry Local");
 
-        let response = self.http_client.post(&url).json(&request).send().await;
-
-        let response = match response {
-            Ok(resp) if resp.status().is_success() => {
-                self.api_namespace
-                    .store(preferred_namespace, Ordering::SeqCst);
-                resp
-            }
-            Ok(resp) if resp.status().as_u16() == 404 => {
-                let fallback_namespace = if preferred_namespace == API_NAMESPACE_OPENAI {
-                    API_NAMESPACE_V1
-                } else {
-                    API_NAMESPACE_OPENAI
-                };
-                let fallback_url =
-                    self.api_url_for(&base_url, fallback_namespace, "chat/completions");
-                debug!(
-                    "Foundry Local chat completions returned 404 for {}, trying {}",
-                    url, fallback_url
-                );
-                let resp = self
-                    .http_client
-                    .post(&fallback_url)
-                    .json(&request)
-                    .send()
-                    .await
-                    .map_err(|e| {
-                        warn!("Foundry Local summarization request failed: {}", e);
-                        LlmError::ApiError(format!("Summarization request failed: {}", e))
-                    })?;
-
-                if resp.status().is_success() {
-                    self.api_namespace
-                        .store(fallback_namespace, Ordering::SeqCst);
-                }
-
-                resp
-            }
-            Ok(resp) => {
-                let status = resp.status();
-                let body = resp.text().await.unwrap_or_default();
-                warn!(
-                    "Foundry Local summarization returned error {}: {}",
-                    status, body
-                );
-                return Err(LlmError::ApiError(format!(
-                    "Summarization API error {}: {}",
-                    status,
-                    body.chars().take(200).collect::<String>()
-                )));
-            }
-            Err(e) => {
-                warn!("Foundry Local summarization request failed: {}", e);
-                return Err(LlmError::ApiError(format!(
-                    "Summarization request failed: {}",
-                    e
-                )));
-            }
-        };
-
-        if !response.status().is_success() {
-            let status = response.status();
-            let body = response.text().await.unwrap_or_default();
-            warn!(
-                "Foundry Local summarization returned error {}: {}",
-                status, body
-            );
-            return Err(LlmError::ApiError(format!(
-                "Summarization API error {}: {}",
-                status,
-                body.chars().take(200).collect::<String>()
-            )));
-        }
+        let response = self
+            .post_with_namespace_fallback(
+                &self.http_client,
+                &base_url,
+                "chat/completions",
+                &request,
+            )
+            .await?;
 
         let completion: ChatCompletionResponse = response
             .json()

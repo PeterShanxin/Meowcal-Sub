@@ -50,6 +50,7 @@ let subtitleHintHideTimer = null;
 
 // Fade duration for "start/stop translation" show/hide transitions.
 // Keep this short to avoid delaying stop/start responsiveness.
+// IMPORTANT: Must match OVERLAY_HIDE_FADE_MS in src-tauri/src/commands.rs
 const OVERLAY_VISIBILITY_FADE_MS = 220;
 
 function syncFrameScaleTokens(scaleFactor) {
