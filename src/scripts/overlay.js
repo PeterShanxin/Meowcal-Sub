@@ -28,7 +28,11 @@ const overlayState = {
     isOverlayActive: false, // Whether user is interacting with overlay
     currentText: '',
     debugMode: true,
+    // Overlay appearance settings
     fontSize: 24,
+    fontFamily: 'Segoe UI',
+    textColor: '#FFFFFF',
+    backgroundColor: 'rgba(0, 0, 0, 0.75)',
     showDiagnostics: false, // Whether to show the diagnostics panel
     settingsOpen: false,
     isDragging: false,
@@ -750,21 +754,33 @@ async function setupEventListeners(elements) {
             const payload = event.payload || {};
             console.log('⚙️ Overlay settings updated from main UI:', payload);
 
-            // Update font size
+            // Update all overlay appearance settings
             if (typeof payload.fontSize === 'number') {
                 overlayState.fontSize = payload.fontSize;
-                if (subtitleText) {
-                    subtitleText.style.fontSize = `${payload.fontSize}px`;
-                }
                 const fontSizeSlider = document.getElementById('font-size-slider');
                 const fontSizeDisplay = document.getElementById('font-size-display');
                 if (fontSizeSlider) fontSizeSlider.value = payload.fontSize;
                 if (fontSizeDisplay) fontSizeDisplay.textContent = `${payload.fontSize}px`;
+            }
 
-                // Reposition subtitle if needed
-                if (overlayState.region && subtitleContainer) {
-                    updateSubtitlePosition(subtitleContainer, overlayState.region);
-                }
+            if (typeof payload.fontFamily === 'string') {
+                overlayState.fontFamily = payload.fontFamily;
+            }
+
+            if (typeof payload.textColor === 'string') {
+                overlayState.textColor = payload.textColor;
+            }
+
+            if (typeof payload.backgroundColor === 'string') {
+                overlayState.backgroundColor = payload.backgroundColor;
+            }
+
+            // Apply all styles to subtitle elements
+            applyOverlayStyles();
+
+            // Reposition subtitle if needed (font size affects layout)
+            if (overlayState.region && subtitleContainer) {
+                updateSubtitlePosition(subtitleContainer, overlayState.region);
             }
 
             // Update diagnostics visibility
@@ -1070,6 +1086,21 @@ async function updateOverlayWindowClip() {
                     height: Math.round(rect.height),
                 });
             });
+
+            // Include the settings button in the window region
+            const settingsBtn = captureFrame.querySelector('.settings-button');
+            if (settingsBtn) {
+                const opacity = parseFloat(getComputedStyle(settingsBtn).opacity || '0');
+                if (opacity > 0.05) {
+                    const rect = settingsBtn.getBoundingClientRect();
+                    bounds.push({
+                        x: Math.round(rect.left),
+                        y: Math.round(rect.top),
+                        width: Math.round(rect.width),
+                        height: Math.round(rect.height),
+                    });
+                }
+            }
         }
 
         // Keep the bottom-right diagnostics panel visible when window clipping is enabled.
@@ -1116,12 +1147,15 @@ async function loadOverlaySettings(subtitleText) {
     try {
         const settings = await window.__TAURI__.core.invoke('get_settings');
         if (settings?.overlay) {
+            // Load all overlay settings into state
             overlayState.fontSize = settings.overlay.fontSize || 24;
+            overlayState.fontFamily = settings.overlay.fontFamily || 'Segoe UI';
+            overlayState.textColor = settings.overlay.textColor || '#FFFFFF';
+            overlayState.backgroundColor = settings.overlay.backgroundColor || 'rgba(0, 0, 0, 0.75)';
             overlayState.showDiagnostics = settings.overlay.showDiagnostics === true;
 
-            if (subtitleText) {
-                subtitleText.style.fontSize = `${overlayState.fontSize}px`;
-            }
+            // Apply all styles to subtitle elements
+            applyOverlayStyles();
 
             // Apply diagnostics visibility
             updateDiagnosticsVisibility();
@@ -1131,10 +1165,41 @@ async function loadOverlaySettings(subtitleText) {
             if (diagnosticsToggle) {
                 diagnosticsToggle.checked = overlayState.showDiagnostics;
             }
+
+            console.log('🎨 Loaded overlay settings:', {
+                fontSize: overlayState.fontSize,
+                fontFamily: overlayState.fontFamily,
+                textColor: overlayState.textColor,
+                backgroundColor: overlayState.backgroundColor,
+                showDiagnostics: overlayState.showDiagnostics,
+            });
         }
     } catch (e) {
         console.error('Failed to load settings:', e);
     }
+}
+
+function applyOverlayStyles() {
+    const subtitleText = document.getElementById('subtitle-text');
+    const subtitleContainer = document.getElementById('subtitle-container');
+
+    if (subtitleText) {
+        subtitleText.style.fontSize = `${overlayState.fontSize}px`;
+        subtitleText.style.fontFamily = overlayState.fontFamily;
+        subtitleText.style.color = overlayState.textColor;
+    }
+
+    if (subtitleContainer) {
+        // Use 'background' to override the CSS shorthand property
+        subtitleContainer.style.background = overlayState.backgroundColor;
+    }
+
+    console.log('🎨 Applied overlay styles:', {
+        fontSize: overlayState.fontSize,
+        fontFamily: overlayState.fontFamily,
+        textColor: overlayState.textColor,
+        backgroundColor: overlayState.backgroundColor,
+    });
 }
 
 function updateDiagnosticsVisibility() {
