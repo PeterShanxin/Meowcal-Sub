@@ -29,6 +29,7 @@ const overlayState = {
     currentText: '',
     debugMode: true,
     fontSize: 24,
+    showDiagnostics: false, // Whether to show the diagnostics panel
     settingsOpen: false,
     isDragging: false,
     isResizing: false,
@@ -744,6 +745,37 @@ async function setupEventListeners(elements) {
             }
         });
 
+        // Listen for settings updates from main UI
+        await window.__TAURI__.event.listen('overlay-settings-updated', async (event) => {
+            const payload = event.payload || {};
+            console.log('⚙️ Overlay settings updated from main UI:', payload);
+
+            // Update font size
+            if (typeof payload.fontSize === 'number') {
+                overlayState.fontSize = payload.fontSize;
+                if (subtitleText) {
+                    subtitleText.style.fontSize = `${payload.fontSize}px`;
+                }
+                const fontSizeSlider = document.getElementById('font-size-slider');
+                const fontSizeDisplay = document.getElementById('font-size-display');
+                if (fontSizeSlider) fontSizeSlider.value = payload.fontSize;
+                if (fontSizeDisplay) fontSizeDisplay.textContent = `${payload.fontSize}px`;
+
+                // Reposition subtitle if needed
+                if (overlayState.region && subtitleContainer) {
+                    updateSubtitlePosition(subtitleContainer, overlayState.region);
+                }
+            }
+
+            // Update diagnostics visibility
+            if (typeof payload.showDiagnostics === 'boolean') {
+                overlayState.showDiagnostics = payload.showDiagnostics;
+                updateDiagnosticsVisibility();
+                const diagnosticsToggle = document.getElementById('diagnostics-toggle');
+                if (diagnosticsToggle) diagnosticsToggle.checked = payload.showDiagnostics;
+            }
+        });
+
         console.log('✅ Event listeners set up');
     } catch (error) {
         console.error('❌ Failed to set up event listeners:', error);
@@ -1085,8 +1117,19 @@ async function loadOverlaySettings(subtitleText) {
         const settings = await window.__TAURI__.core.invoke('get_settings');
         if (settings?.overlay) {
             overlayState.fontSize = settings.overlay.fontSize || 24;
+            overlayState.showDiagnostics = settings.overlay.showDiagnostics === true;
+
             if (subtitleText) {
                 subtitleText.style.fontSize = `${overlayState.fontSize}px`;
+            }
+
+            // Apply diagnostics visibility
+            updateDiagnosticsVisibility();
+
+            // Sync the toggle checkbox if it exists
+            const diagnosticsToggle = document.getElementById('diagnostics-toggle');
+            if (diagnosticsToggle) {
+                diagnosticsToggle.checked = overlayState.showDiagnostics;
             }
         }
     } catch (e) {
@@ -1094,12 +1137,26 @@ async function loadOverlaySettings(subtitleText) {
     }
 }
 
+function updateDiagnosticsVisibility() {
+    const debugInfo = document.getElementById('debug-info');
+    if (!debugInfo) return;
+
+    if (overlayState.showDiagnostics) {
+        debugInfo.classList.remove('hidden');
+        debugInfo.classList.add('visible');
+    } else {
+        debugInfo.classList.add('hidden');
+        debugInfo.classList.remove('visible');
+    }
+}
+
 async function saveOverlaySettings() {
     try {
         const settings = await window.__TAURI__.core.invoke('get_settings');
         settings.overlay.fontSize = overlayState.fontSize;
+        settings.overlay.showDiagnostics = overlayState.showDiagnostics;
         await window.__TAURI__.core.invoke('save_settings', { settings });
-        console.log('💾 Saved font size:', overlayState.fontSize);
+        console.log('💾 Saved overlay settings:', { fontSize: overlayState.fontSize, showDiagnostics: overlayState.showDiagnostics });
     } catch (e) {
         console.error('Failed to save settings:', e);
     }
@@ -1110,9 +1167,16 @@ function setupSettingsButton(button, menu, subtitleText, subtitleContainer) {
 
     const fontSizeSlider = document.getElementById('font-size-slider');
     const fontSizeDisplay = document.getElementById('font-size-display');
+    const diagnosticsToggle = document.getElementById('diagnostics-toggle');
 
     if (fontSizeSlider) fontSizeSlider.value = overlayState.fontSize;
     if (fontSizeDisplay) fontSizeDisplay.textContent = `${overlayState.fontSize}px`;
+    if (diagnosticsToggle) diagnosticsToggle.checked = overlayState.showDiagnostics;
+
+    // Prevent mousedown from triggering capture frame drag
+    button.addEventListener('mousedown', (e) => {
+        e.stopPropagation();
+    });
 
     // Toggle menu
     button.addEventListener('click', (e) => {
@@ -1149,6 +1213,15 @@ function setupSettingsButton(button, menu, subtitleText, subtitleContainer) {
         });
 
         fontSizeSlider.addEventListener('change', () => saveOverlaySettings());
+    }
+
+    // Diagnostics toggle
+    if (diagnosticsToggle) {
+        diagnosticsToggle.addEventListener('change', (e) => {
+            overlayState.showDiagnostics = e.target.checked;
+            updateDiagnosticsVisibility();
+            saveOverlaySettings();
+        });
     }
 
     button.style.pointerEvents = 'auto';

@@ -283,6 +283,70 @@
                 </div>
             </div>
 
+            <!-- Overlay Appearance Settings -->
+            <details class="settings-section" id="overlay-appearance-section" open>
+                <summary class="collapsible-header">
+                    <span class="section-title">
+                        <span class="section-icon">🎨</span>
+                        Overlay Appearance
+                    </span>
+                </summary>
+                <div class="collapsible-content">
+                    <p class="setting-hint">
+                        Configure the subtitle overlay appearance. Changes apply immediately to the overlay window.
+                    </p>
+
+                    <!-- Font Size -->
+                    <div class="settings-group">
+                        <label class="setting-label" for="overlay-font-size">
+                            Font Size: <span id="overlay-font-size-value">24</span>px
+                        </label>
+                        <input type="range" id="overlay-font-size"
+                               min="12" max="48" step="1" value="24"
+                               class="slider">
+                    </div>
+
+                    <!-- Font Family -->
+                    <div class="settings-group">
+                        <label class="setting-label" for="overlay-font-family">Font Family</label>
+                        <select id="overlay-font-family" class="select">
+                            <option value="Segoe UI">Segoe UI (Default)</option>
+                            <option value="Microsoft YaHei">Microsoft YaHei (Chinese)</option>
+                            <option value="Arial">Arial</option>
+                            <option value="Consolas">Consolas (Monospace)</option>
+                            <option value="Noto Sans">Noto Sans</option>
+                        </select>
+                    </div>
+
+                    <!-- Text Color -->
+                    <div class="settings-group">
+                        <label class="setting-label" for="overlay-text-color">Text Color</label>
+                        <input type="color" id="overlay-text-color" value="#FFFFFF" class="color-input">
+                    </div>
+
+                    <!-- Background Color -->
+                    <div class="settings-group">
+                        <label class="setting-label" for="overlay-bg-color">Background Opacity</label>
+                        <input type="range" id="overlay-bg-opacity"
+                               min="0" max="100" step="5" value="75"
+                               class="slider">
+                        <span id="overlay-bg-opacity-value" class="slider-value">75%</span>
+                    </div>
+
+                    <!-- Show Diagnostics Toggle -->
+                    <div class="toggle-wrapper">
+                        <span class="toggle-label">Show Diagnostics Panel</span>
+                        <label class="toggle">
+                            <input type="checkbox" id="toggle-show-diagnostics">
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
+                    <p class="setting-hint">
+                        Display debug info (region coordinates, backend status) on the overlay window.
+                    </p>
+                </div>
+            </details>
+
             <!-- Collapsible: Fallback Backends -->
             <details class="settings-section" id="fallback-backends-section">
                 <summary class="collapsible-header">

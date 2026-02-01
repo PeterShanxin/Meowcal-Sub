@@ -85,6 +85,10 @@ pub struct OverlayConfig {
 
     /// Maximum width of the overlay (in pixels, 0 = match capture region)
     pub max_width: u32,
+
+    /// Whether to show the diagnostics overlay (debug info panel)
+    #[serde(default)]
+    pub show_diagnostics: bool,
 }
 
 /// Window size/position preferences
@@ -305,6 +309,7 @@ impl Default for OverlayConfig {
             background_color: "rgba(0, 0, 0, 0.75)".to_string(), // Semi-transparent black
             offset_y: 10,                      // 10px below capture region
             max_width: 0,                      // Match capture region width
+            show_diagnostics: false,           // Off by default
         }
     }
 }

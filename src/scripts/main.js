@@ -182,6 +182,7 @@ async function loadSettings() {
         document.getElementById('interval-value').textContent = settings.captureIntervalMs;
 
         applyTranslationSettings(settings.translation);
+        applyOverlaySettings(settings.overlay);
 
         if (settings.lastCaptureRegion) {
             const region = settings.lastCaptureRegion;
@@ -243,6 +244,84 @@ function applyTranslationSettings(translation) {
     loadFoundryLocalModels(foundryModel).catch(error => {
         console.warn('Background model loading failed:', error);
     });
+}
+
+function applyOverlaySettings(overlay) {
+    const defaults = {
+        fontSize: 24,
+        fontFamily: 'Segoe UI',
+        textColor: '#FFFFFF',
+        backgroundColor: 'rgba(0, 0, 0, 0.75)',
+        offsetY: 10,
+        maxWidth: 0,
+        showDiagnostics: false,
+    };
+
+    const config = overlay || defaults;
+
+    // Font size
+    const fontSizeSlider = document.getElementById('overlay-font-size');
+    const fontSizeValue = document.getElementById('overlay-font-size-value');
+    if (fontSizeSlider) fontSizeSlider.value = config.fontSize || defaults.fontSize;
+    if (fontSizeValue) fontSizeValue.textContent = config.fontSize || defaults.fontSize;
+
+    // Font family
+    const fontFamily = document.getElementById('overlay-font-family');
+    if (fontFamily) fontFamily.value = config.fontFamily || defaults.fontFamily;
+
+    // Text color
+    const textColor = document.getElementById('overlay-text-color');
+    if (textColor) {
+        // Extract hex color from value (might be named color or hex)
+        const hexColor = config.textColor?.startsWith('#') ? config.textColor : '#FFFFFF';
+        textColor.value = hexColor;
+    }
+
+    // Background opacity (extract from rgba)
+    const bgOpacitySlider = document.getElementById('overlay-bg-opacity');
+    const bgOpacityValue = document.getElementById('overlay-bg-opacity-value');
+    if (bgOpacitySlider) {
+        const bgColor = config.backgroundColor || defaults.backgroundColor;
+        const match = bgColor.match(/rgba?\([^,]+,[^,]+,[^,]+,?\s*([\d.]+)?\)/);
+        const opacity = match && match[1] ? Math.round(parseFloat(match[1]) * 100) : 75;
+        bgOpacitySlider.value = opacity;
+        if (bgOpacityValue) bgOpacityValue.textContent = `${opacity}%`;
+    }
+
+    // Show diagnostics
+    const showDiagnostics = document.getElementById('toggle-show-diagnostics');
+    if (showDiagnostics) showDiagnostics.checked = config.showDiagnostics === true;
+}
+
+function collectOverlaySettings() {
+    const fontSize = parseInt(document.getElementById('overlay-font-size')?.value) || 24;
+    const fontFamily = document.getElementById('overlay-font-family')?.value || 'Segoe UI';
+    const textColor = document.getElementById('overlay-text-color')?.value || '#FFFFFF';
+    const bgOpacity = parseInt(document.getElementById('overlay-bg-opacity')?.value) || 75;
+    const backgroundColor = `rgba(0, 0, 0, ${bgOpacity / 100})`;
+    const showDiagnostics = document.getElementById('toggle-show-diagnostics')?.checked === true;
+
+    return {
+        fontSize,
+        fontFamily,
+        textColor,
+        backgroundColor,
+        offsetY: 10,
+        maxWidth: 0,
+        showDiagnostics,
+    };
+}
+
+async function notifyOverlaySettingsChanged() {
+    if (!TauriBridge.event?.emit) return;
+
+    try {
+        const overlaySettings = collectOverlaySettings();
+        await TauriBridge.event.emit('overlay-settings-updated', overlaySettings);
+        console.log('📡 Emitted overlay settings to overlay window:', overlaySettings);
+    } catch (e) {
+        console.warn('Failed to notify overlay of settings change:', e);
+    }
 }
 
 function normalizeTranslationConfig(translation) {
@@ -416,14 +495,7 @@ async function saveSettings(opts) {
         sourceLanguage: document.getElementById('source-language').value,
         targetLanguage: document.getElementById('target-language').value,
         captureIntervalMs: parseInt(document.getElementById('capture-interval').value),
-        overlay: appState.settings?.overlay || {
-            fontSize: 24,
-            fontFamily: 'Segoe UI',
-            textColor: '#FFFFFF',
-            backgroundColor: 'rgba(0, 0, 0, 0.75)',
-            offsetY: 10,
-            maxWidth: 0,
-        },
+        overlay: collectOverlaySettings(),
         autoStart: false,
         minimizeToTray: true,
         startWithWindows: false,
@@ -652,6 +724,59 @@ function setupEventListeners() {
         .addEventListener('click', handleWarmupFoundryAndStart);
     document.getElementById('btn-foundry-fallback-start')
         .addEventListener('click', handleStartWithFallbackNow);
+
+    // Overlay appearance settings
+    const overlayFontSize = document.getElementById('overlay-font-size');
+    if (overlayFontSize) {
+        overlayFontSize.addEventListener('input', (e) => {
+            document.getElementById('overlay-font-size-value').textContent = e.target.value;
+        });
+        overlayFontSize.addEventListener('change', () => {
+            console.log('Overlay font size changed, auto-saving...');
+            scheduleAutoSave();
+            notifyOverlaySettingsChanged();
+        });
+    }
+
+    const overlayFontFamily = document.getElementById('overlay-font-family');
+    if (overlayFontFamily) {
+        overlayFontFamily.addEventListener('change', () => {
+            console.log('Overlay font family changed, auto-saving...');
+            scheduleAutoSave();
+            notifyOverlaySettingsChanged();
+        });
+    }
+
+    const overlayTextColor = document.getElementById('overlay-text-color');
+    if (overlayTextColor) {
+        overlayTextColor.addEventListener('change', () => {
+            console.log('Overlay text color changed, auto-saving...');
+            scheduleAutoSave();
+            notifyOverlaySettingsChanged();
+        });
+    }
+
+    const overlayBgOpacity = document.getElementById('overlay-bg-opacity');
+    if (overlayBgOpacity) {
+        overlayBgOpacity.addEventListener('input', (e) => {
+            const opacityValue = document.getElementById('overlay-bg-opacity-value');
+            if (opacityValue) opacityValue.textContent = `${e.target.value}%`;
+        });
+        overlayBgOpacity.addEventListener('change', () => {
+            console.log('Overlay background opacity changed, auto-saving...');
+            scheduleAutoSave();
+            notifyOverlaySettingsChanged();
+        });
+    }
+
+    const showDiagnosticsToggle = document.getElementById('toggle-show-diagnostics');
+    if (showDiagnosticsToggle) {
+        showDiagnosticsToggle.addEventListener('change', () => {
+            console.log('Show diagnostics toggled, auto-saving...');
+            scheduleAutoSave();
+            notifyOverlaySettingsChanged();
+        });
+    }
 }
 
 // =============================================================================
