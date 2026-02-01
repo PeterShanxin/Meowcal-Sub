@@ -335,14 +335,11 @@ impl FoundryLocalBackend {
         let cache = cli_cache();
         let now_ms = epoch_ms();
 
-        // Check cache validity
+        // Check cache validity - return cached value even if empty (empty is a valid cached outcome)
         if !force_refresh {
             let cached_at = cache.models_cached_at.load(Ordering::SeqCst);
             if cached_at > 0 && now_ms.saturating_sub(cached_at) < CLI_CACHE_TTL_MS {
-                let cached = crate::sync_utils::read_or_recover(&cache.cached_models).clone();
-                if !cached.is_empty() {
-                    return cached;
-                }
+                return crate::sync_utils::read_or_recover(&cache.cached_models).clone();
             }
         }
 
@@ -681,6 +678,8 @@ impl FoundryLocalBackend {
                 LAST_SERVICE_START_MS.store(epoch_ms(), Ordering::SeqCst);
                 // Cached probe is no longer valid.
                 self.invalidate_probe_cache();
+                // Invalidate CLI cache so next calls get fresh data (new port = potentially new models).
+                invalidate_cli_cache();
             }
             *write_or_recover(&self.service_url) = Some(url);
             self.service_available.store(true, Ordering::SeqCst);
@@ -701,6 +700,8 @@ impl FoundryLocalBackend {
         } else {
             if previous_url.is_some() {
                 self.invalidate_probe_cache();
+                // Service went away; invalidate CLI cache so next refresh gets accurate state.
+                invalidate_cli_cache();
             }
 
             debug!("Foundry Local service not running");
@@ -1750,13 +1751,13 @@ fn sanitize_subtitle_translation_output(output: &str) -> String {
         return String::new();
     }
 
-    // Strip common wrapping quotes.
+    // Strip common wrapping quotes (ASCII and Unicode curly quotes).
     let trimmed = trimmed
-        .trim_matches('"')
-        .trim_matches('\'')
-        .trim_matches('"')
-        .trim_matches('"')
-        .trim_matches('`')
+        .trim_matches('"') // ASCII double quote
+        .trim_matches('\'') // ASCII single quote
+        .trim_matches('\u{201C}') // Left double curly quote "
+        .trim_matches('\u{201D}') // Right double curly quote "
+        .trim_matches('`') // Backtick
         .trim();
 
     // If the model returned a labelled response, strip the label and keep the content.
