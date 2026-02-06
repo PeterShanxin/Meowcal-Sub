@@ -1210,7 +1210,8 @@ async function refreshFoundryStatus(opts) {
 
     state.inFlight = true;
     try {
-        if (probe) {
+        const shouldRenderChecking = probe && (reason !== 'auto' || !appState.foundryStatus.last);
+        if (shouldRenderChecking) {
             renderFoundryStatusChecking('Verifying model readiness...');
         }
 
