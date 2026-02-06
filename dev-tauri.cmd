@@ -15,6 +15,9 @@ if not exist "D:\cargo-build" mkdir "D:\cargo-build"
 REM Initialize Visual Studio environment
 call "C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\Common7\Tools\VsDevCmd.bat" -arch=arm64 -host_arch=arm64
 
+REM Re-add user CLI shim locations after VsDevCmd, which can reset PATH.
+set "PATH=%LOCALAPPDATA%\Microsoft\WindowsApps;%USERPROFILE%\.cargo\bin;%PATH%"
+
 pushd "%~dp0"
 
 REM Build OverlayHost for current architecture before starting Tauri
