@@ -14,6 +14,7 @@ mod mock;
 mod offline_mt;
 mod phi_silica;
 mod prompt_router;
+mod text_utils;
 
 pub use context::*;
 pub use foundry_local::*;
