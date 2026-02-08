@@ -13,3 +13,15 @@ pub fn is_cjk_char(ch: char) -> bool {
         '\u{AC00}'..='\u{D7AF}'     // Hangul
     )
 }
+
+/// Returns true when `ch` is a Hangul syllable.
+pub fn is_hangul_char(ch: char) -> bool {
+    matches!(ch, '\u{AC00}'..='\u{D7AF}')
+}
+
+/// CJK scripts where OCR often inserts spaces between characters that should be removed.
+///
+/// Hangul is intentionally excluded because Korean uses spaces between words.
+pub fn is_cjk_compactable_char(ch: char) -> bool {
+    is_cjk_char(ch) && !is_hangul_char(ch)
+}

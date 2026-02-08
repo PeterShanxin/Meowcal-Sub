@@ -25,6 +25,7 @@ const FOUNDRY_TRANSIENT_RETRY_DELAY_MS: u64 = 600;
 const CONTEXT_SLOW_DEGRADE_MS: u128 = 1800;
 const MAX_SUBTITLE_OUTPUT_CHARS: usize = 120;
 const MAX_SUBTITLE_OUTPUT_RATIO: usize = 4;
+const MIN_SHORT_SOURCE_OUTPUT_CHARS: usize = 24;
 
 // =============================================================================
 // CONTEXT TIER - State machine for context degradation
@@ -666,9 +667,10 @@ impl TranslationManager {
             return Err("empty_output");
         }
 
-        if translated_chars > MAX_SUBTITLE_OUTPUT_CHARS
-            || translated_chars > source_chars.saturating_mul(MAX_SUBTITLE_OUTPUT_RATIO)
-        {
+        let ratio_limit = source_chars
+            .saturating_mul(MAX_SUBTITLE_OUTPUT_RATIO)
+            .max(MIN_SHORT_SOURCE_OUTPUT_CHARS);
+        if translated_chars > MAX_SUBTITLE_OUTPUT_CHARS || translated_chars > ratio_limit {
             return Err("too_long");
         }
 
@@ -798,17 +800,13 @@ impl TranslationManager {
 
     fn quality_issue_message(reason: &str) -> String {
         match reason {
-            "too_long" => {
-                "Translation looked corrupted (overlong output). Retrying or falling back."
-            }
-            "repetition_loop" => {
-                "Translation looked corrupted (repetitive output). Retrying or falling back."
-            }
+            "too_long" => "Translation output rejected as corrupted (overlong output).",
+            "repetition_loop" => "Translation output rejected as corrupted (repetitive output).",
             "wrong_language" => {
-                "Translation looked corrupted (incorrect output language). Retrying or falling back."
+                "Translation output rejected as corrupted (incorrect output language)."
             }
-            "empty_output" => "Translation looked corrupted (empty output). Retrying or falling back.",
-            _ => "Translation looked corrupted. Retrying or falling back.",
+            "empty_output" => "Translation output rejected as corrupted (empty output).",
+            _ => "Translation output rejected as corrupted.",
         }
         .to_string()
     }
@@ -1265,6 +1263,15 @@ mod tests {
         let result =
             TranslationManager::validate_foundry_translation_output(source, &translated, "en-US");
         assert_eq!(result, Err("too_long"));
+    }
+
+    #[test]
+    fn test_validate_foundry_output_allows_short_source_with_normal_english_expansion() {
+        let source = "谢谢";
+        let translated = "Thank you.";
+        let result =
+            TranslationManager::validate_foundry_translation_output(source, translated, "en-US");
+        assert!(result.is_ok());
     }
 
     #[test]

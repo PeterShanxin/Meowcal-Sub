@@ -7,7 +7,7 @@
 // - Build a single instruction prompt suitable for MT-style models (e.g. HY-MT1.5).
 // =============================================================================
 
-use super::text_utils::is_cjk_char;
+use super::text_utils::is_cjk_compactable_char;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PromptTemplateLanguage {
@@ -147,8 +147,8 @@ fn normalize_ocr_spaced_cjk(text: &str) -> String {
 }
 
 fn should_join_without_space(prev: char, next: char) -> bool {
-    let prev_cjk_like = is_cjk_char(prev) || is_cjk_punctuation(prev);
-    let next_cjk_like = is_cjk_char(next) || is_cjk_punctuation(next);
+    let prev_cjk_like = is_cjk_compactable_char(prev) || is_cjk_punctuation(prev);
+    let next_cjk_like = is_cjk_compactable_char(next) || is_cjk_punctuation(next);
     prev_cjk_like && next_cjk_like
 }
 
@@ -368,5 +368,11 @@ mod tests {
     fn clean_source_text_joins_cjk_punctuation_spacing() {
         let cleaned = clean_source_text("你 好 ， 世 界 ！");
         assert_eq!(cleaned, "你好，世界！");
+    }
+
+    #[test]
+    fn clean_source_text_preserves_korean_word_spacing() {
+        let cleaned = clean_source_text("안녕 하세요 여러분");
+        assert_eq!(cleaned, "안녕 하세요 여러분");
     }
 }
