@@ -23,7 +23,7 @@
 use tauri::{
     menu::{Menu, MenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
-    Manager, PhysicalPosition, PhysicalSize,
+    Emitter, Manager, PhysicalPosition, PhysicalSize,
 };
 use tracing::{info, warn};
 use tracing_subscriber::{EnvFilter, FmtSubscriber};
@@ -482,8 +482,18 @@ fn main() {
             match event {
                 tauri::WindowEvent::CloseRequested { api, .. } => {
                     // For the wizard window, hide instead of destroying so it can be re-opened
+                    // Emit the same close event so the main window can refresh status
                     if window.label() == "foundry-wizard" {
                         api.prevent_close();
+                        let _ = window.emit("wizard-window-hidden", ());
+                        let _ = window.app_handle().emit(
+                            "foundry-wizard-closed",
+                            serde_json::json!({
+                                "modelDownloaded": false,
+                                "selectedModel": null,
+                                "closedViaX": true
+                            }),
+                        );
                         let _ = window.hide();
                     }
                 }

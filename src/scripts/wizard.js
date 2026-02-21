@@ -207,11 +207,15 @@
                 console.error('Poll error:', e);
             }
 
-            // Check for timeout -- stop polling to avoid endless console flashes
+            // Check for timeout -- stop polling and let user retry
             if (Date.now() - state.pollStartTime > INSTALL_TIMEOUT_MS) {
                 clearInterval(state.pollTimer);
                 state.pollTimer = null;
                 show('install-timeout-hint');
+                // Re-enable the Next button so user can retry the install
+                const btnNext = $('btn-wizard-next');
+                btnNext.disabled = false;
+                btnNext.textContent = 'Retry Install';
             }
         }, POLL_INTERVAL_MS);
     }
@@ -252,12 +256,16 @@
         // Try to get the real user home directory from Tauri path API
         try {
             if (window.__TAURI__ && window.__TAURI__.path) {
-                const homeDir = await window.__TAURI__.path.homeDir();
+                let homeDir = await window.__TAURI__.path.homeDir();
+                // Ensure trailing separator before appending
+                if (!homeDir.endsWith('\\') && !homeDir.endsWith('/')) {
+                    homeDir += '\\';
+                }
                 return homeDir + '.foundry\\cache';
             }
         } catch (_) { /* fall through */ }
-        // Fallback: use USERPROFILE environment variable hint
-        return 'C:\\Users\\' + (window.__TAURI__ ? 'You' : 'User') + '\\.foundry\\cache';
+        // Fallback: show generic placeholder (actual path depends on user profile)
+        return '%USERPROFILE%\\.foundry\\cache';
     }
 
     async function handleBrowseCache() {
@@ -447,7 +455,10 @@
 
             hide('verify-progress');
 
-            if (status && status.cliAvailable) {
+            // Require CLI available AND service running (not just cliAvailable)
+            const ready = status && status.cliAvailable && status.serviceRunning;
+
+            if (ready) {
                 show('verify-success');
 
                 // Build summary
@@ -459,10 +470,18 @@
                 if (serviceUrl) {
                     rows += `<div class="wizard-summary-row"><span class="wizard-summary-label">Service URL</span><span class="wizard-summary-value">${escapeHtml(serviceUrl)}</span></div>`;
                 }
+                if (status.phase) {
+                    rows += `<div class="wizard-summary-row"><span class="wizard-summary-label">Status</span><span class="wizard-summary-value">${escapeHtml(status.phase)}</span></div>`;
+                }
                 summary.innerHTML = rows;
             } else {
                 show('verify-error');
-                $('verify-error-message').textContent = 'Foundry CLI is not available after installation.';
+                const reason = !status?.cliAvailable
+                    ? 'Foundry CLI is not available after installation.'
+                    : !status?.serviceRunning
+                        ? 'Foundry service is not running. Try restarting the wizard.'
+                        : 'Foundry is not fully ready. Check logs for details.';
+                $('verify-error-message').textContent = reason;
             }
         } catch (e) {
             hide('verify-progress');
@@ -501,7 +520,35 @@
     // EVENT LISTENERS
     // =========================================================================
 
+    function resetWizardState() {
+        if (state.pollTimer) {
+            clearInterval(state.pollTimer);
+            state.pollTimer = null;
+        }
+        state.currentStep = 1;
+        state.foundryInstalled = false;
+        state.selectedModel = null;
+        state.modelDownloaded = false;
+        state.downloadInProgress = false;
+        state.pollStartTime = null;
+        $('terminal-output').textContent = '';
+        showStep(1);
+    }
+
     function setupEventListeners() {
+        // Reset wizard to step 1 when re-opened (window is hidden, not destroyed)
+        TauriBridge.event.listen('wizard-reset', () => {
+            resetWizardState();
+        });
+
+        // Clean up timers when the wizard window is hidden (X button close)
+        TauriBridge.event.listen('wizard-window-hidden', () => {
+            if (state.pollTimer) {
+                clearInterval(state.pollTimer);
+                state.pollTimer = null;
+            }
+        });
+
         // Streaming output from model download
         TauriBridge.event.listen('wizard-output', (event) => {
             const { stream, line } = event.payload;

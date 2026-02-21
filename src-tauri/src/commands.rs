@@ -2346,11 +2346,14 @@ pub struct WizardDiskSpace {
     pub available_display: String,
 }
 
-/// Show the foundry-wizard window
+/// Show the foundry-wizard window, resetting state for a fresh run
 #[tauri::command]
 pub fn open_foundry_wizard(app: AppHandle) -> Result<(), String> {
+    use tauri::Emitter;
     info!("Opening Foundry setup wizard");
     if let Some(window) = app.get_webview_window("foundry-wizard") {
+        // Emit reset event so the wizard JS resets to step 1 and clears timers
+        let _ = window.emit("wizard-reset", ());
         window.show().map_err(|e| e.to_string())?;
         window.set_focus().map_err(|e| e.to_string())?;
         window.center().map_err(|e| e.to_string())?;
@@ -2581,12 +2584,18 @@ pub fn wizard_get_disk_space(path: String) -> Result<WizardDiskSpace, String> {
         use windows::core::PCWSTR;
         use windows::Win32::Storage::FileSystem::GetDiskFreeSpaceExW;
 
-        // Validate: only allow local drive paths (reject UNC and relative paths)
+        // Validate: require absolute local drive path (e.g. C:\...)
+        // Reject UNC paths, drive-relative paths (C:foo), and non-drive paths
         if path.starts_with("\\\\") {
             return Err("UNC paths are not supported, only local drives".to_string());
         }
-        if path.len() < 2 || path.as_bytes()[1] != b':' {
-            return Err("Only local drive paths (e.g. C:\\) are supported".to_string());
+        let bytes = path.as_bytes();
+        let valid_drive = bytes.len() >= 3
+            && bytes[0].is_ascii_alphabetic()
+            && bytes[1] == b':'
+            && (bytes[2] == b'\\' || bytes[2] == b'/');
+        if !valid_drive {
+            return Err("Only absolute local drive paths (e.g. C:\\) are supported".to_string());
         }
 
         let wide_path: Vec<u16> = OsStr::new(&path)
