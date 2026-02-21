@@ -2,6 +2,7 @@
 // MANAGER.RS - Translation Backend Selection + Fallback
 // =============================================================================
 
+use super::text_utils::is_cjk_char;
 use crate::config::{ContextLevel, TranslationConfig};
 use crate::llm::{
     BackendId, BackendInfo, FoundryLocalBackend, LlmError, MockBackend, OfflineMtBackend,
@@ -9,6 +10,7 @@ use crate::llm::{
     TranslationDiagnosticsState, TranslationOutcome, TranslatorBackend,
 };
 use crate::sync_utils::{lock_or_recover, read_or_recover, write_or_recover};
+use std::collections::HashSet;
 use std::sync::atomic::{AtomicU8, Ordering};
 use std::sync::{Arc, Mutex, RwLock};
 use std::time::Instant;
@@ -21,6 +23,9 @@ const MAX_TRANSLATION_INPUT_CHARS: usize = 2000;
 const FOUNDRY_TRANSIENT_MAX_RETRIES: usize = 2;
 const FOUNDRY_TRANSIENT_RETRY_DELAY_MS: u64 = 600;
 const CONTEXT_SLOW_DEGRADE_MS: u128 = 1800;
+const MAX_SUBTITLE_OUTPUT_CHARS: usize = 120;
+const MAX_SUBTITLE_OUTPUT_RATIO: usize = 4;
+const MIN_SHORT_SOURCE_OUTPUT_CHARS: usize = 24;
 
 // =============================================================================
 // CONTEXT TIER - State machine for context degradation
@@ -650,6 +655,162 @@ impl TranslationManager {
         matches!(id, BackendId::FoundryLocal)
     }
 
+    fn validate_foundry_translation_output(
+        source_text: &str,
+        translated: &str,
+        target_language: &str,
+    ) -> Result<(), &'static str> {
+        let source_chars = source_text.chars().count().max(1);
+        let translated_chars = translated.chars().count();
+
+        if translated_chars == 0 {
+            return Err("empty_output");
+        }
+
+        let ratio_limit = source_chars
+            .saturating_mul(MAX_SUBTITLE_OUTPUT_RATIO)
+            .max(MIN_SHORT_SOURCE_OUTPUT_CHARS);
+        if translated_chars > MAX_SUBTITLE_OUTPUT_CHARS || translated_chars > ratio_limit {
+            return Err("too_long");
+        }
+
+        if Self::looks_repetition_loop(translated) {
+            return Err("repetition_loop");
+        }
+
+        if Self::is_english_target(target_language)
+            && Self::is_probably_non_english_for_en_target(translated)
+        {
+            return Err("wrong_language");
+        }
+
+        Ok(())
+    }
+
+    fn looks_repetition_loop(text: &str) -> bool {
+        let tokens = Self::tokenize_for_repetition(text);
+        if tokens.len() < 8 {
+            return false;
+        }
+
+        // Catch obvious loops like "I'm / I'm / I'm ...".
+        let mut streak = 1usize;
+        let mut max_streak = 1usize;
+        for i in 1..tokens.len() {
+            if tokens[i] == tokens[i - 1] {
+                streak += 1;
+                max_streak = max_streak.max(streak);
+            } else {
+                streak = 1;
+            }
+        }
+        if max_streak >= 4 {
+            return true;
+        }
+
+        // Catch low-diversity rambling outputs.
+        let unique: HashSet<&str> = tokens.iter().map(String::as_str).collect();
+        if unique.len().saturating_mul(3) <= tokens.len() {
+            return true;
+        }
+
+        // Catch repeated slash-separated phrase lists.
+        if text.matches('/').count() >= 5 {
+            let parts: Vec<String> = text
+                .split('/')
+                .map(|part| part.trim().to_ascii_lowercase())
+                .filter(|part| !part.is_empty())
+                .collect();
+            if parts.len() >= 5 {
+                let unique_parts: HashSet<&str> = parts.iter().map(String::as_str).collect();
+                if unique_parts.len().saturating_mul(2) <= parts.len() {
+                    return true;
+                }
+            }
+        }
+
+        false
+    }
+
+    fn tokenize_for_repetition(text: &str) -> Vec<String> {
+        text.split(|ch: char| !(ch.is_alphanumeric() || is_cjk_char(ch)))
+            .map(|token| token.trim().to_ascii_lowercase())
+            .filter(|token| !token.is_empty())
+            .collect()
+    }
+
+    fn is_english_target(target_language: &str) -> bool {
+        target_language
+            .split('-')
+            .next()
+            .map(|lang| lang.eq_ignore_ascii_case("en"))
+            .unwrap_or(false)
+    }
+
+    fn is_probably_non_english_for_en_target(text: &str) -> bool {
+        let mut alphabetic_total = 0usize;
+        let mut latin_letters = 0usize;
+        let mut cjk_letters = 0usize;
+        let mut non_whitespace_chars = 0usize;
+
+        // Keep this as a single pass because it's on a hot translation path.
+        for ch in text.chars() {
+            if !ch.is_whitespace() {
+                non_whitespace_chars += 1;
+            }
+            if ch.is_alphabetic() {
+                alphabetic_total += 1;
+                if ch.is_ascii_alphabetic() {
+                    latin_letters += 1;
+                }
+            }
+            if is_cjk_char(ch) {
+                cjk_letters += 1;
+            }
+        }
+
+        if cjk_letters == 0 {
+            return false;
+        }
+
+        // Pure CJK output is almost certainly not an English subtitle.
+        if latin_letters == 0 {
+            return true;
+        }
+
+        // Avoid false positives on short mixed-language snippets like "OK 好".
+        if non_whitespace_chars < 6 && cjk_letters <= 1 {
+            return false;
+        }
+        if non_whitespace_chars < 10 && cjk_letters < 3 {
+            return false;
+        }
+
+        // Require meaningful CJK presence before rejecting as wrong language.
+        if cjk_letters.saturating_mul(100) < non_whitespace_chars.saturating_mul(30) {
+            return false;
+        }
+
+        if alphabetic_total == 0 {
+            return true;
+        }
+
+        latin_letters.saturating_mul(10) < alphabetic_total.saturating_mul(7)
+    }
+
+    fn quality_issue_message(reason: &str) -> String {
+        match reason {
+            "too_long" => "Translation output rejected as corrupted (overlong output).",
+            "repetition_loop" => "Translation output rejected as corrupted (repetitive output).",
+            "wrong_language" => {
+                "Translation output rejected as corrupted (incorrect output language)."
+            }
+            "empty_output" => "Translation output rejected as corrupted (empty output).",
+            _ => "Translation output rejected as corrupted.",
+        }
+        .to_string()
+    }
+
     /// Attempt translation with Foundry Local, degrading context tier on slow responses/timeouts.
     ///
     /// Returns `Some(outcome)` on success, `None` if all context tiers failed (caller should
@@ -834,6 +995,44 @@ impl TranslationManager {
 
             match result {
                 Ok(Ok(translated)) => {
+                    if let Err(reason) = Self::validate_foundry_translation_output(
+                        text,
+                        &translated,
+                        target_language,
+                    ) {
+                        lock_or_recover(&self.diagnostics).record_error(
+                            id,
+                            "low_quality_output",
+                            Some(latency_ms),
+                        );
+                        warn!(
+                            backend_id = id.as_str(),
+                            ready_state = ?ready_state,
+                            latency_ms,
+                            error_code = "low_quality_output",
+                            quality_issue = reason,
+                            attempt,
+                            max_attempts,
+                            "Translation output rejected"
+                        );
+
+                        if attempt < max_attempts {
+                            warnings.push(format!("{}: low_quality_output_retry", id.as_str()));
+                            let delay = Duration::from_millis(
+                                FOUNDRY_TRANSIENT_RETRY_DELAY_MS.saturating_mul(attempt as u64) / 2,
+                            );
+                            let remaining = total_timeout.saturating_sub(started.elapsed());
+                            if remaining > delay {
+                                tokio::time::sleep(delay).await;
+                            }
+                            continue;
+                        }
+
+                        return TierAttemptResult::Error(LlmError::TranslationError(
+                            Self::quality_issue_message(reason),
+                        ));
+                    }
+
                     self.diagnostics
                         .lock()
                         .unwrap()
@@ -1055,5 +1254,75 @@ mod tests {
 
         assert_eq!(outcome.backend_used, BackendId::OfflineMt);
         assert_eq!(outcome.translated, "fast");
+    }
+
+    #[test]
+    fn test_validate_foundry_output_rejects_too_long() {
+        let source = "你好";
+        let translated = "a".repeat(150);
+        let result =
+            TranslationManager::validate_foundry_translation_output(source, &translated, "en-US");
+        assert_eq!(result, Err("too_long"));
+    }
+
+    #[test]
+    fn test_validate_foundry_output_allows_short_source_with_normal_english_expansion() {
+        let source = "谢谢";
+        let translated = "Thank you.";
+        let result =
+            TranslationManager::validate_foundry_translation_output(source, translated, "en-US");
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_foundry_output_rejects_empty_output() {
+        let source = "你好";
+        let result = TranslationManager::validate_foundry_translation_output(source, "", "en-US");
+        assert_eq!(result, Err("empty_output"));
+    }
+
+    #[test]
+    fn test_validate_foundry_output_rejects_repetition_loop() {
+        let source = "这是一个足够长的字幕文本用于测试";
+        let translated = "go go go go go go go go";
+        let result =
+            TranslationManager::validate_foundry_translation_output(source, translated, "en-US");
+        assert_eq!(result, Err("repetition_loop"));
+    }
+
+    #[test]
+    fn test_validate_foundry_output_rejects_non_english_when_target_en() {
+        let source = "需要鳗鱼。";
+        let translated = "需要鲨鱼。";
+        let result =
+            TranslationManager::validate_foundry_translation_output(source, translated, "en-US");
+        assert_eq!(result, Err("wrong_language"));
+    }
+
+    #[test]
+    fn test_validate_foundry_output_allows_short_mixed_text_for_en() {
+        let source = "需要";
+        let translated = "OK 好";
+        let result =
+            TranslationManager::validate_foundry_translation_output(source, translated, "en-US");
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_foundry_output_does_not_apply_wrong_language_for_non_english_target() {
+        let source = "Need eel.";
+        let translated = "需要鲨鱼。";
+        let result =
+            TranslationManager::validate_foundry_translation_output(source, translated, "zh-CN");
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_foundry_output_accepts_normal_subtitle() {
+        let source = "孩子们听到了";
+        let translated = "The children heard it.";
+        let result =
+            TranslationManager::validate_foundry_translation_output(source, translated, "en-US");
+        assert!(result.is_ok());
     }
 }

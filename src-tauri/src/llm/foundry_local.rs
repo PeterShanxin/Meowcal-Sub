@@ -1627,7 +1627,7 @@ impl TranslatorBackend for FoundryLocalBackend {
                 content: prompt,
             }],
             temperature: 0.2, // Lower temperature for subtitle consistency
-            max_tokens: 512,
+            max_tokens: 120,
         };
 
         let current_namespace = self.preferred_api_namespace();

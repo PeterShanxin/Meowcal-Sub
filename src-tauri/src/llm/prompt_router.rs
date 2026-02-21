@@ -7,6 +7,8 @@
 // - Build a single instruction prompt suitable for MT-style models (e.g. HY-MT1.5).
 // =============================================================================
 
+use super::text_utils::is_cjk_compactable_char;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PromptTemplateLanguage {
     Chinese,
@@ -98,7 +100,8 @@ pub fn build_subtitle_translation_prompt(
 }
 
 pub fn clean_source_text(text: &str) -> String {
-    collapse_whitespace(text).trim().to_string()
+    let collapsed = collapse_whitespace(text);
+    normalize_ocr_spaced_cjk(&collapsed).trim().to_string()
 }
 
 fn collapse_whitespace(text: &str) -> String {
@@ -116,6 +119,61 @@ fn collapse_whitespace(text: &str) -> String {
         }
     }
     out
+}
+
+fn normalize_ocr_spaced_cjk(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut chars = text.chars().peekable();
+    let mut previous_emitted: Option<char> = None;
+
+    while let Some(ch) = chars.next() {
+        if ch == ' ' {
+            let next = chars.peek().copied();
+            if let (Some(prev), Some(next_ch)) = (previous_emitted, next) {
+                if should_join_without_space(prev, next_ch) {
+                    continue;
+                }
+            }
+            out.push(ch);
+            previous_emitted = Some(ch);
+            continue;
+        }
+
+        out.push(ch);
+        previous_emitted = Some(ch);
+    }
+
+    out
+}
+
+fn should_join_without_space(prev: char, next: char) -> bool {
+    let prev_cjk_like = is_cjk_compactable_char(prev) || is_cjk_punctuation(prev);
+    let next_cjk_like = is_cjk_compactable_char(next) || is_cjk_punctuation(next);
+    prev_cjk_like && next_cjk_like
+}
+
+fn is_cjk_punctuation(ch: char) -> bool {
+    matches!(
+        ch,
+        '，' | '。'
+            | '！'
+            | '？'
+            | '：'
+            | '；'
+            | '、'
+            | '（'
+            | '）'
+            | '「'
+            | '」'
+            | '《'
+            | '》'
+            | '“'
+            | '”'
+            | '‘'
+            | '’'
+            | '…'
+            | '·'
+    )
 }
 
 fn truncate_chars(text: &str, max_chars: usize) -> String {
@@ -292,5 +350,29 @@ mod tests {
         assert!(built.used_context);
         assert!(built.prompt.contains("参考上面的信息"));
         assert!(built.prompt.contains("Alice is here."));
+    }
+
+    #[test]
+    fn clean_source_text_joins_spaced_cjk_characters() {
+        let cleaned = clean_source_text("看 来 很 喜 欢 你 啊");
+        assert_eq!(cleaned, "看来很喜欢你啊");
+    }
+
+    #[test]
+    fn clean_source_text_keeps_space_between_cjk_and_ascii() {
+        let cleaned = clean_source_text("第 2 季 final");
+        assert_eq!(cleaned, "第 2 季 final");
+    }
+
+    #[test]
+    fn clean_source_text_joins_cjk_punctuation_spacing() {
+        let cleaned = clean_source_text("你 好 ， 世 界 ！");
+        assert_eq!(cleaned, "你好，世界！");
+    }
+
+    #[test]
+    fn clean_source_text_preserves_korean_word_spacing() {
+        let cleaned = clean_source_text("안녕 하세요 여러분");
+        assert_eq!(cleaned, "안녕 하세요 여러분");
     }
 }

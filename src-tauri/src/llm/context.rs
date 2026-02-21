@@ -5,6 +5,7 @@
 // Context resets when capture stops and starts again.
 // =============================================================================
 
+use super::text_utils::is_cjk_char;
 use std::collections::{hash_map::DefaultHasher, VecDeque};
 use std::hash::{Hash, Hasher};
 use std::time::Instant;
@@ -494,7 +495,7 @@ impl TranslationContext {
     fn is_noise_line(text: &str) -> bool {
         let significant = text
             .chars()
-            .filter(|ch| ch.is_alphanumeric() || Self::is_cjk(*ch))
+            .filter(|ch| ch.is_alphanumeric() || is_cjk_char(*ch))
             .count();
         significant < 2
     }
@@ -510,7 +511,7 @@ impl TranslationContext {
     /// Estimate tokens (rough: ~4 chars per token for CJK-heavy content)
     fn estimate_tokens(text: &str) -> usize {
         // CJK characters are roughly 1 token each, ASCII ~4 chars per token
-        let cjk_count = text.chars().filter(|c| Self::is_cjk(*c)).count();
+        let cjk_count = text.chars().filter(|c| is_cjk_char(*c)).count();
         let total_chars = text.chars().count();
         let non_cjk_count = total_chars.saturating_sub(cjk_count);
         cjk_count + non_cjk_count.div_ceil(4)
@@ -542,7 +543,7 @@ impl TranslationContext {
         let mut end = 0usize;
 
         for (idx, ch) in trimmed.char_indices() {
-            if Self::is_cjk(ch) {
+            if is_cjk_char(ch) {
                 cjk_count += 1;
             } else {
                 non_cjk_count += 1;
@@ -562,7 +563,7 @@ impl TranslationContext {
         }
 
         // For ASCII-heavy text, try to avoid cutting mid-word.
-        if !prefix.chars().any(Self::is_cjk) {
+        if !prefix.chars().any(is_cjk_char) {
             if let Some(pos) = prefix.rfind(char::is_whitespace) {
                 let candidate = prefix[..pos].trim();
                 if !candidate.is_empty() {
@@ -576,16 +577,6 @@ impl TranslationContext {
 
     fn recalculate_history_tokens(&mut self) {
         self.history_tokens = self.history.iter().map(|e| e.token_estimate).sum();
-    }
-
-    fn is_cjk(c: char) -> bool {
-        matches!(c,
-            '\u{4E00}'..='\u{9FFF}' |   // CJK Unified Ideographs
-            '\u{3400}'..='\u{4DBF}' |   // CJK Extension A
-            '\u{3040}'..='\u{309F}' |   // Hiragana
-            '\u{30A0}'..='\u{30FF}' |   // Katakana
-            '\u{AC00}'..='\u{D7AF}'     // Hangul
-        )
     }
 
     /// Simple Jaccard-ish similarity for deduplication

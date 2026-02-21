@@ -6,8 +6,6 @@ use tracing::{debug, error, info, warn};
 use super::protocol::IpcMessage;
 
 #[cfg(windows)]
-use interprocess::os::windows::named_pipe::tokio::PipeListenerOptionsExt;
-#[cfg(windows)]
 use interprocess::os::windows::named_pipe::{pipe_mode, PipeListenerOptions, PipeMode};
 #[cfg(windows)]
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
