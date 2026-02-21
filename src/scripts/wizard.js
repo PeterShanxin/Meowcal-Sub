@@ -207,8 +207,10 @@
                 console.error('Poll error:', e);
             }
 
-            // Check for timeout
+            // Check for timeout -- stop polling to avoid endless console flashes
             if (Date.now() - state.pollStartTime > INSTALL_TIMEOUT_MS) {
+                clearInterval(state.pollTimer);
+                state.pollTimer = null;
                 show('install-timeout-hint');
             }
         }, POLL_INTERVAL_MS);
@@ -230,7 +232,7 @@
 
     async function initStepConfigure() {
         // Show default cache path
-        const defaultPath = getDefaultCachePath();
+        const defaultPath = await getDefaultCachePath();
         $('cache-dir-path').value = defaultPath;
 
         // Check disk space
@@ -246,10 +248,16 @@
         }
     }
 
-    function getDefaultCachePath() {
-        // Best guess at the default Foundry cache location
-        const userProfile = 'C:\\Users';
-        return userProfile + '\\.foundry\\cache';
+    async function getDefaultCachePath() {
+        // Try to get the real user home directory from Tauri path API
+        try {
+            if (window.__TAURI__ && window.__TAURI__.path) {
+                const homeDir = await window.__TAURI__.path.homeDir();
+                return homeDir + '.foundry\\cache';
+            }
+        } catch (_) { /* fall through */ }
+        // Fallback: use USERPROFILE environment variable hint
+        return 'C:\\Users\\' + (window.__TAURI__ ? 'You' : 'User') + '\\.foundry\\cache';
     }
 
     async function handleBrowseCache() {
@@ -297,6 +305,8 @@
 
             if (hw.hasNpu) {
                 textEl.textContent = 'NPU Detected (Snapdragon X) - NPU-optimized models recommended';
+            } else if (hw.hasGpu && hw.gpuName) {
+                textEl.textContent = `GPU Detected: ${hw.gpuName}`;
             } else if (hw.isArm64) {
                 textEl.textContent = 'ARM64 CPU detected';
             } else {
@@ -432,12 +442,12 @@
             // Brief wait for model warmup
             await new Promise(r => setTimeout(r, 2000));
 
-            // Check if it's really ready
-            const installed = await TauriBridge.invoke('wizard_poll_foundry_installed');
+            // Full probe: check CLI + service + model availability
+            const status = await TauriBridge.invoke('get_foundry_local_status');
 
             hide('verify-progress');
 
-            if (installed) {
+            if (status && status.cliAvailable) {
                 show('verify-success');
 
                 // Build summary

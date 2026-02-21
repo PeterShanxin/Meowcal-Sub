@@ -2333,6 +2333,8 @@ pub struct WizardHardwareInfo {
     pub arch: String,
     pub is_arm64: bool,
     pub has_npu: bool,
+    pub has_gpu: bool,
+    pub gpu_name: String,
     pub recommendation: String,
 }
 
@@ -2384,13 +2386,23 @@ pub fn close_foundry_wizard(
 #[tauri::command]
 pub async fn wizard_check_winget() -> Result<bool, String> {
     async_runtime::spawn_blocking(|| {
-        std::process::Command::new("winget")
-            .arg("--version")
-            .stdout(std::process::Stdio::null())
-            .stderr(std::process::Stdio::null())
-            .status()
-            .map(|s| s.success())
-            .unwrap_or(false)
+        #[cfg(windows)]
+        {
+            use std::os::windows::process::CommandExt;
+            const CREATE_NO_WINDOW: u32 = 0x08000000;
+            std::process::Command::new("winget")
+                .arg("--version")
+                .stdout(std::process::Stdio::null())
+                .stderr(std::process::Stdio::null())
+                .creation_flags(CREATE_NO_WINDOW)
+                .status()
+                .map(|s| s.success())
+                .unwrap_or(false)
+        }
+        #[cfg(not(windows))]
+        {
+            false
+        }
     })
     .await
     .map_err(|e| e.to_string())
@@ -2467,6 +2479,14 @@ pub async fn wizard_download_model(app: AppHandle, model_id: String) -> Result<(
     use tokio::io::{AsyncBufReadExt, BufReader};
     use tokio::process::Command as TokioCommand;
 
+    // C1: Validate model_id to prevent injection of unexpected CLI arguments
+    if model_id.is_empty()
+        || model_id.len() > 200
+        || model_id.contains(|c: char| !c.is_alphanumeric() && !"-._/:".contains(c))
+    {
+        return Err(format!("Invalid model ID: '{}'", model_id));
+    }
+
     info!("Wizard: downloading model '{}'", model_id);
 
     let mut child = TokioCommand::new("foundry")
@@ -2479,14 +2499,15 @@ pub async fn wizard_download_model(app: AppHandle, model_id: String) -> Result<(
     let stdout = child.stdout.take();
     let stderr = child.stderr.take();
 
-    // Stream stdout lines as events
+    // Stream stdout lines as targeted events to the wizard window only
     if let Some(stdout) = stdout {
         let app_out = app.clone();
         tokio::spawn(async move {
             let reader = BufReader::new(stdout);
             let mut lines = reader.lines();
             while let Ok(Some(line)) = lines.next_line().await {
-                let _ = app_out.emit(
+                let _ = app_out.emit_to(
+                    "foundry-wizard",
                     "wizard-output",
                     serde_json::json!({"stream": "stdout", "line": line}),
                 );
@@ -2494,14 +2515,15 @@ pub async fn wizard_download_model(app: AppHandle, model_id: String) -> Result<(
         });
     }
 
-    // Stream stderr lines as events
+    // Stream stderr lines as targeted events to the wizard window only
     if let Some(stderr) = stderr {
         let app_err = app.clone();
         tokio::spawn(async move {
             let reader = BufReader::new(stderr);
             let mut lines = reader.lines();
             while let Ok(Some(line)) = lines.next_line().await {
-                let _ = app_err.emit(
+                let _ = app_err.emit_to(
+                    "foundry-wizard",
                     "wizard-output",
                     serde_json::json!({"stream": "stderr", "line": line}),
                 );
@@ -2517,20 +2539,22 @@ pub async fn wizard_download_model(app: AppHandle, model_id: String) -> Result<(
 
     if status.success() {
         info!("Wizard: model '{}' downloaded successfully", model_id);
-        let _ = app.emit(
+        let _ = app.emit_to(
+            "foundry-wizard",
             "wizard-download-complete",
             serde_json::json!({"success": true, "model": model_id}),
         );
-        Ok(())
     } else {
         let msg = format!("Model download exited with code: {:?}", status.code());
         warn!("Wizard: {}", msg);
-        let _ = app.emit(
+        let _ = app.emit_to(
+            "foundry-wizard",
             "wizard-download-complete",
             serde_json::json!({"success": false, "error": msg}),
         );
-        Err(msg)
     }
+    // Always return Ok -- success/failure communicated via events to avoid dual error reporting
+    Ok(())
 }
 
 /// Start the Foundry service and return the service URL
@@ -2556,6 +2580,14 @@ pub fn wizard_get_disk_space(path: String) -> Result<WizardDiskSpace, String> {
         use std::os::windows::ffi::OsStrExt;
         use windows::core::PCWSTR;
         use windows::Win32::Storage::FileSystem::GetDiskFreeSpaceExW;
+
+        // Validate: only allow local drive paths (reject UNC and relative paths)
+        if path.starts_with("\\\\") {
+            return Err("UNC paths are not supported, only local drives".to_string());
+        }
+        if path.len() < 2 || path.as_bytes()[1] != b':' {
+            return Err("Only local drive paths (e.g. C:\\) are supported".to_string());
+        }
 
         let wide_path: Vec<u16> = OsStr::new(&path)
             .encode_wide()
@@ -2600,8 +2632,43 @@ pub fn wizard_get_hardware_info() -> WizardHardwareInfo {
     let is_arm64 = cfg!(target_arch = "aarch64");
     let has_npu = is_arm64 && cfg!(target_os = "windows");
 
+    // Detect GPU by querying WMIC (works on all Windows editions)
+    let (has_gpu, gpu_name) = {
+        #[cfg(windows)]
+        {
+            use std::os::windows::process::CommandExt;
+            const CREATE_NO_WINDOW: u32 = 0x08000000;
+            match std::process::Command::new("wmic")
+                .args(["path", "win32_VideoController", "get", "name"])
+                .creation_flags(CREATE_NO_WINDOW)
+                .output()
+            {
+                Ok(output) => {
+                    let text = String::from_utf8_lossy(&output.stdout);
+                    // Skip header line ("Name") and blank lines
+                    let gpu = text
+                        .lines()
+                        .find(|l| {
+                            let trimmed = l.trim();
+                            !trimmed.is_empty() && !trimmed.eq_ignore_ascii_case("name")
+                        })
+                        .map(|l| l.trim().to_string());
+                    let detected = gpu.is_some();
+                    (detected, gpu.unwrap_or_default())
+                }
+                Err(_) => (false, String::new()),
+            }
+        }
+        #[cfg(not(windows))]
+        {
+            (false, String::new())
+        }
+    };
+
     let recommendation = if has_npu {
         "npu".to_string()
+    } else if has_gpu {
+        "gpu".to_string()
     } else {
         "cpu".to_string()
     };
@@ -2610,6 +2677,8 @@ pub fn wizard_get_hardware_info() -> WizardHardwareInfo {
         arch: std::env::consts::ARCH.to_string(),
         is_arm64,
         has_npu,
+        has_gpu,
+        gpu_name,
         recommendation,
     }
 }
