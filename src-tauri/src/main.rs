@@ -272,8 +272,20 @@ fn main() {
             // Overlay commands
             commands::set_overlay_click_through,
             commands::set_overlay_window_clip,
+            // Foundry setup wizard commands
+            commands::open_foundry_wizard,
+            commands::close_foundry_wizard,
+            commands::wizard_check_winget,
+            commands::wizard_install_foundry,
+            commands::wizard_poll_foundry_installed,
+            commands::wizard_list_available_models,
+            commands::wizard_download_model,
+            commands::wizard_start_service,
+            commands::wizard_get_disk_space,
+            commands::wizard_get_hardware_info,
         ])
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_dialog::init())
         // Register our app state (shared across all commands)
         .manage(AppState::default())
         // Set up the system tray icon
@@ -467,13 +479,23 @@ fn main() {
         })
         // Add cleanup on window close
         .on_window_event(|window, event| {
-            if matches!(event, tauri::WindowEvent::Destroyed) {
-                if let Some(overlay_process) = window.try_state::<OverlayHostProcess>() {
-                    if let Some(mut child) = lock_or_recover(&overlay_process.0).take() {
-                        let _ = child.kill();
-                        info!("🛑 Killed OverlayHost process");
+            match event {
+                tauri::WindowEvent::CloseRequested { api, .. } => {
+                    // For the wizard window, hide instead of destroying so it can be re-opened
+                    if window.label() == "foundry-wizard" {
+                        api.prevent_close();
+                        let _ = window.hide();
                     }
                 }
+                tauri::WindowEvent::Destroyed => {
+                    if let Some(overlay_process) = window.try_state::<OverlayHostProcess>() {
+                        if let Some(mut child) = lock_or_recover(&overlay_process.0).take() {
+                            let _ = child.kill();
+                            info!("🛑 Killed OverlayHost process");
+                        }
+                    }
+                }
+                _ => {}
             }
         })
         // Run the app!

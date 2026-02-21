@@ -5,13 +5,15 @@
     "windows": [
         "main",
         "selector",
-        "overlay"
+        "overlay",
+        "foundry-wizard"
     ],
     "permissions": [
         "core:default",
         "core:event:default",
         "core:event:allow-listen",
         "core:event:allow-emit",
-        "opener:default"
+        "opener:default",
+        "dialog:default"
     ]
 }

@@ -459,3 +459,25 @@
 .settings-section[open] .collapsible-header::after {
     transform: rotate(180deg);
 }
+
+/* Foundry install banner (shown when CLI is not installed) */
+.foundry-install-banner {
+    background: rgba(0, 120, 212, 0.1);
+    border: 1px solid rgba(0, 120, 212, 0.3);
+    border-radius: var(--radius-md);
+    padding: var(--spacing-md);
+    margin-bottom: var(--spacing-md);
+    font-size: var(--font-size-sm);
+    color: var(--color-text-primary);
+    line-height: 1.5;
+}
+
+.foundry-install-banner strong {
+    color: #4da3ff;
+}
+
+.foundry-install-banner em {
+    color: var(--color-accent);
+    font-style: normal;
+    font-weight: 600;
+}

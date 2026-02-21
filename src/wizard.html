@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Foundry Local Setup</title>
+    <link rel="stylesheet" href="styles/main.css">
+    <link rel="stylesheet" href="styles/wizard.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div id="wizard">
+        <!-- Step indicator bar -->
+        <div class="wizard-step-bar">
+            <div class="wizard-step-item active" data-step="1">
+                <div class="wizard-step-number">1</div>
+                <div class="wizard-step-label">Install</div>
+            </div>
+            <div class="wizard-step-connector"></div>
+            <div class="wizard-step-item" data-step="2">
+                <div class="wizard-step-number">2</div>
+                <div class="wizard-step-label">Configure</div>
+            </div>
+            <div class="wizard-step-connector"></div>
+            <div class="wizard-step-item" data-step="3">
+                <div class="wizard-step-number">3</div>
+                <div class="wizard-step-label">Model</div>
+            </div>
+            <div class="wizard-step-connector"></div>
+            <div class="wizard-step-item" data-step="4">
+                <div class="wizard-step-number">4</div>
+                <div class="wizard-step-label">Verify</div>
+            </div>
+        </div>
+
+        <!-- Step 1: Install Foundry CLI -->
+        <div class="wizard-panel" id="step-install">
+            <h2 class="wizard-panel-title">Install Foundry Local</h2>
+            <p class="wizard-panel-desc">
+                Foundry Local is Microsoft's local LLM runtime that powers on-device AI translation.
+                It runs entirely on your machine for privacy and speed.
+            </p>
+
+            <div id="install-winget-ok" style="display: none;">
+                <div class="wizard-command-preview">
+                    <div class="wizard-command-label">This command will be run in PowerShell:</div>
+                    <code class="wizard-command">winget install Microsoft.FoundryLocal --accept-source-agreements --accept-package-agreements</code>
+                </div>
+                <p class="setting-hint">
+                    A PowerShell window will open to run the installer.
+                    You may be prompted for administrator access (UAC).
+                </p>
+            </div>
+
+            <div id="install-winget-missing" class="wizard-error-box" style="display: none;">
+                <strong>winget is not available.</strong>
+                <p>
+                    The Windows Package Manager (winget) is required to install Foundry Local.
+                    Install "App Installer" from the Microsoft Store, then try again.
+                </p>
+            </div>
+
+            <div id="install-already-installed" style="display: none;">
+                <div class="wizard-success-box">
+                    Foundry Local CLI is already installed. Continuing to configuration...
+                </div>
+            </div>
+
+            <!-- Installation progress (shown after clicking Install) -->
+            <div id="install-progress" style="display: none;">
+                <div class="wizard-progress-box">
+                    <div class="wizard-spinner"></div>
+                    <div>
+                        <strong>Waiting for installation to complete...</strong>
+                        <p class="setting-hint">The PowerShell window is running the installer. This panel will auto-advance when done.</p>
+                    </div>
+                </div>
+                <div id="install-timeout-hint" class="wizard-error-box" style="display: none;">
+                    <strong>Installation is taking longer than expected.</strong>
+                    <p>If you've already installed Foundry manually, click "I installed it manually" below.</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Step 2: Configure Cache Directory -->
+        <div class="wizard-panel" id="step-configure" style="display: none;">
+            <h2 class="wizard-panel-title">Model Storage</h2>
+            <p class="wizard-panel-desc">
+                AI models will be downloaded and stored on your computer.
+                Choose where to save them (large models can be 1-8 GB).
+            </p>
+
+            <div class="wizard-config-row">
+                <label class="setting-label">Cache directory</label>
+                <div class="wizard-path-picker">
+                    <input type="text" class="text-input" id="cache-dir-path" readonly placeholder="Loading default path...">
+                    <button class="btn btn-outline btn-small" id="btn-browse-cache">Browse</button>
+                </div>
+            </div>
+
+            <div class="wizard-disk-info" id="disk-space-info">
+                <span class="wizard-disk-label">Available space:</span>
+                <span class="wizard-disk-value" id="disk-space-value">Checking...</span>
+            </div>
+
+            <p class="setting-hint" id="cache-dir-hint">
+                You can change this later. If unsure, the default location works fine.
+            </p>
+        </div>
+
+        <!-- Step 3: Download Model -->
+        <div class="wizard-panel" id="step-model" style="display: none;">
+            <h2 class="wizard-panel-title">Download a Model</h2>
+            <p class="wizard-panel-desc">
+                Select an AI model to download. Smaller models are faster but less accurate.
+            </p>
+
+            <div id="hardware-info" class="wizard-hardware-badge" style="display: none;">
+                <span id="hardware-badge-text"></span>
+            </div>
+
+            <div id="model-list" class="wizard-model-list">
+                <div class="wizard-progress-box">
+                    <div class="wizard-spinner"></div>
+                    <span>Loading available models...</span>
+                </div>
+            </div>
+
+            <div id="model-disk-warning" class="wizard-warning-box" style="display: none;">
+                Low disk space. The selected model may not fit. Consider freeing space or choosing a smaller model.
+            </div>
+
+            <!-- Download progress -->
+            <div id="download-progress" style="display: none;">
+                <div class="wizard-progress-box">
+                    <div class="wizard-spinner"></div>
+                    <div>
+                        <strong>Downloading <span id="downloading-model-name"></span>...</strong>
+                        <p class="setting-hint">This may take several minutes depending on your connection.</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Terminal output -->
+            <div class="wizard-terminal" id="wizard-terminal" style="display: none;">
+                <pre id="terminal-output"></pre>
+            </div>
+        </div>
+
+        <!-- Step 4: Verify & Done -->
+        <div class="wizard-panel" id="step-verify" style="display: none;">
+            <h2 class="wizard-panel-title">Setup Complete</h2>
+
+            <div id="verify-progress" style="display: none;">
+                <div class="wizard-progress-box">
+                    <div class="wizard-spinner"></div>
+                    <span>Starting Foundry service and verifying...</span>
+                </div>
+            </div>
+
+            <div id="verify-success" style="display: none;">
+                <div class="wizard-success-box wizard-success-large">
+                    <div class="wizard-success-icon">&#10004;</div>
+                    <div>
+                        <strong>Foundry Local is ready!</strong>
+                        <p>The service is running and your model is loaded. You can start translating now.</p>
+                    </div>
+                </div>
+                <div class="wizard-summary" id="setup-summary"></div>
+            </div>
+
+            <div id="verify-error" class="wizard-error-box" style="display: none;">
+                <strong>Verification failed.</strong>
+                <p id="verify-error-message"></p>
+            </div>
+        </div>
+
+        <!-- Action buttons (always visible at bottom) -->
+        <div class="wizard-actions">
+            <button class="btn btn-outline btn-small" id="btn-wizard-cancel">Cancel</button>
+            <div class="wizard-actions-right">
+                <button class="btn btn-outline btn-small" id="btn-wizard-skip" style="display: none;">Skip</button>
+                <button class="btn btn-outline btn-small" id="btn-wizard-retry" style="display: none;">Retry</button>
+                <button class="btn btn-outline btn-small" id="btn-wizard-manual" style="display: none;">I installed it manually</button>
+                <button class="btn btn-primary btn-small" id="btn-wizard-next">Install Foundry</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="scripts/tauri-bridge.js"></script>
+    <script src="scripts/wizard.js"></script>
+</body>
+</html>

@@ -651,6 +651,18 @@ async fn stop_translation() -> impl IntoResponse {
     )
 }
 
+/// Wizard endpoints - Not available in browser mode (require Tauri window)
+async fn wizard_not_available() -> impl IntoResponse {
+    (
+        StatusCode::NOT_IMPLEMENTED,
+        Json(BrowserModeInfo {
+            browser_mode: true,
+            message: "Setup wizard requires Tauri window. Not available in browser mode."
+                .to_string(),
+        }),
+    )
+}
+
 /// GET /api/capture-region - Get current capture region
 async fn get_capture_region(State(state): State<HttpAppState>) -> impl IntoResponse {
     let region = *lock_or_recover(&state.capture_region);
@@ -729,6 +741,17 @@ pub fn create_router(state: HttpAppState) -> Router {
         .route("/api/area-selector", post(open_area_selector))
         .route("/api/translation/start", post(start_translation))
         .route("/api/translation/stop", post(stop_translation))
+        // Wizard endpoints (Tauri-only, return 501 in browser mode)
+        .route("/api/wizard/open", post(wizard_not_available))
+        .route("/api/wizard/close", post(wizard_not_available))
+        .route("/api/wizard/check-winget", get(wizard_not_available))
+        .route("/api/wizard/install-foundry", post(wizard_not_available))
+        .route("/api/wizard/poll-installed", get(wizard_not_available))
+        .route("/api/wizard/models", get(wizard_not_available))
+        .route("/api/wizard/download-model", post(wizard_not_available))
+        .route("/api/wizard/start-service", post(wizard_not_available))
+        .route("/api/wizard/disk-space", get(wizard_not_available))
+        .route("/api/wizard/hardware-info", get(wizard_not_available))
         .layer(cors)
         .with_state(state)
 }
