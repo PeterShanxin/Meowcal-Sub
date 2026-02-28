@@ -255,6 +255,8 @@ fn main() {
             commands::stop_translation,
             commands::is_translation_running,
             commands::get_system_info,
+            commands::get_ocr_languages,
+            commands::install_ocr_language,
             commands::list_translation_backends,
             commands::get_translation_diagnostics,
             commands::get_windows_ai_diagnostics,

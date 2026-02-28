@@ -69,25 +69,34 @@ pub fn build_subtitle_translation_prompt(
         (PromptTemplateLanguage::Chinese, Some(ctx)) => (
             true,
             format!(
-                "{ctx}\n参考上面的信息，把下面的文本翻译成{target_label}，注意不需要翻译上文，也不要额外解释：{clipped_source}"
+                "{ctx}\n你是字幕翻译器。参考上面的字幕历史，将下面的字幕翻译成{target_label}。\
+                 只输出翻译结果，不要翻译或重复上文，不要解释。\
+                 字幕：{clipped_source}"
             ),
         ),
         (PromptTemplateLanguage::English, Some(ctx)) => (
             true,
             format!(
-                "{ctx}\nDo NOT translate or repeat the text above. Based on the information above, translate the following segment into {target_label}, without additional explanation. {clipped_source}"
+                "{ctx}\nYou are a subtitle translator. Based on the context above, \
+                 translate the following subtitle into {target_label}. \
+                 Output ONLY the translation. Do NOT repeat or translate the context. No explanations.\n\
+                 Subtitle: {clipped_source}"
             ),
         ),
         (PromptTemplateLanguage::Chinese, None) => (
             false,
             format!(
-                "将以下文本翻译为{target_label}，注意只需要输出翻译后的结果，不要额外解释：{clipped_source}"
+                "你是字幕翻译器。将下面的字幕翻译成{target_label}。\
+                 只输出翻译结果，不要解释，不要重复原文。\
+                 字幕：{clipped_source}"
             ),
         ),
         (PromptTemplateLanguage::English, None) => (
             false,
             format!(
-                "Translate the following segment into {target_label}, without additional explanation. {clipped_source}"
+                "You are a subtitle translator. Translate the subtitle into {target_label}. \
+                 Output ONLY the translation, no explanation, no repeating the source.\n\
+                 Subtitle: {clipped_source}"
             ),
         ),
     };
@@ -97,6 +106,46 @@ pub fn build_subtitle_translation_prompt(
         template_language,
         used_context,
     })
+}
+
+/// Returns true when the cleaned OCR text is almost certainly garbage that
+/// should not be sent to the LLM for translation.
+///
+/// Catches cases like:
+/// - "ooo", "HD", "BSVI" - credit overlays / UI elements / noise
+/// - Single character or empty strings
+/// - Strings with very few meaningful characters
+pub fn is_untranslatable_text(text: &str) -> bool {
+    let cleaned = clean_source_text(text);
+
+    if cleaned.is_empty() {
+        return true;
+    }
+
+    let cjk_count = cleaned
+        .chars()
+        .filter(|c| is_cjk_compactable_char(*c))
+        .count();
+    let alpha_count = cleaned.chars().filter(|c| c.is_alphabetic()).count();
+    let meaningful_count = cjk_count + alpha_count;
+
+    // Fewer than 3 meaningful characters → definitely garbage
+    if meaningful_count < 3 {
+        return true;
+    }
+
+    // Short pure ASCII uppercase with no spaces - credit text / HUD labels
+    // e.g., "BSVI", "HD", "EP1", "CC"
+    let total_chars = cleaned.chars().count();
+    if total_chars <= 4
+        && cleaned
+            .chars()
+            .all(|c| c.is_ascii_uppercase() || c.is_ascii_digit())
+    {
+        return true;
+    }
+
+    false
 }
 
 pub fn clean_source_text(text: &str) -> String {
@@ -291,7 +340,7 @@ mod tests {
         .unwrap();
 
         assert_eq!(built.template_language, PromptTemplateLanguage::Chinese);
-        assert!(built.prompt.starts_with("将以下文本翻译为"));
+        assert!(built.prompt.starts_with("你是字幕翻译器"));
     }
 
     #[test]
@@ -310,7 +359,7 @@ mod tests {
         .unwrap();
 
         assert_eq!(built.template_language, PromptTemplateLanguage::Chinese);
-        assert!(built.prompt.starts_with("将以下文本翻译为"));
+        assert!(built.prompt.starts_with("你是字幕翻译器"));
     }
 
     #[test]
@@ -329,7 +378,7 @@ mod tests {
         .unwrap();
 
         assert_eq!(built.template_language, PromptTemplateLanguage::English);
-        assert!(built.prompt.starts_with("Translate the following segment"));
+        assert!(built.prompt.starts_with("You are a subtitle translator"));
     }
 
     #[test]
@@ -348,7 +397,7 @@ mod tests {
         .unwrap();
 
         assert!(built.used_context);
-        assert!(built.prompt.contains("参考上面的信息"));
+        assert!(built.prompt.contains("参考上面的字幕历史"));
         assert!(built.prompt.contains("Alice is here."));
     }
 
@@ -374,5 +423,57 @@ mod tests {
     fn clean_source_text_preserves_korean_word_spacing() {
         let cleaned = clean_source_text("안녕 하세요 여러분");
         assert_eq!(cleaned, "안녕 하세요 여러분");
+    }
+
+    #[test]
+    fn is_untranslatable_text_rejects_short_noise() {
+        assert!(is_untranslatable_text(""));
+        assert!(is_untranslatable_text("  "));
+        assert!(is_untranslatable_text("BSVI"));
+        assert!(is_untranslatable_text("HD"));
+        assert!(is_untranslatable_text(".."));
+        assert!(is_untranslatable_text("）"));
+    }
+
+    #[test]
+    fn is_untranslatable_text_accepts_valid_subtitle() {
+        assert!(!is_untranslatable_text("看来很喜欢你啊"));
+        assert!(!is_untranslatable_text("Hello, world"));
+        assert!(!is_untranslatable_text("通往沙漠的所有交通被封鎖"));
+    }
+
+    #[test]
+    fn prompt_templates_contain_role_and_delimiter() {
+        // Chinese template
+        let built = build_subtitle_translation_prompt(
+            "你好世界",
+            Some("zh-CN"),
+            "en-US",
+            None,
+            PromptRouterOptions {
+                enable_context: false,
+                max_context_chars: 600,
+                max_source_chars: 200,
+            },
+        )
+        .unwrap();
+        assert!(built.prompt.contains("字幕翻译器"));
+        assert!(built.prompt.contains("字幕："));
+
+        // English template
+        let built = build_subtitle_translation_prompt(
+            "こんにちは",
+            Some("ja-JP"),
+            "en-US",
+            None,
+            PromptRouterOptions {
+                enable_context: false,
+                max_context_chars: 600,
+                max_source_chars: 200,
+            },
+        )
+        .unwrap();
+        assert!(built.prompt.contains("subtitle translator"));
+        assert!(built.prompt.contains("Subtitle:"));
     }
 }

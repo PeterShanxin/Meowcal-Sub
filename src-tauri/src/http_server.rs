@@ -177,6 +177,16 @@ async fn get_system_info() -> impl IntoResponse {
     })
 }
 
+/// GET /api/ocr/languages - List installed OCR language packs
+async fn get_ocr_languages_http() -> impl IntoResponse {
+    use crate::ocr::WindowsOcr;
+    let result = tokio::task::spawn_blocking(WindowsOcr::available_languages).await;
+    match result {
+        Ok(Ok(langs)) => Json(langs),
+        _ => Json(vec![]),
+    }
+}
+
 /// GET /api/settings - Get current settings
 async fn get_settings(State(state): State<HttpAppState>) -> impl IntoResponse {
     let config = lock_or_recover(&state.config).clone();
@@ -737,6 +747,9 @@ pub fn create_router(state: HttpAppState) -> Router {
         // Capture region
         .route("/api/capture-region", get(get_capture_region))
         .route("/api/capture-region", post(set_capture_region))
+        // OCR language management
+        .route("/api/ocr/languages", get(get_ocr_languages_http))
+        .route("/api/ocr/install-language", post(wizard_not_available))
         // Tauri-only endpoints (return 501)
         .route("/api/area-selector", post(open_area_selector))
         .route("/api/translation/start", post(start_translation))
