@@ -616,6 +616,38 @@ function setupEventListeners() {
         .addEventListener('click', handleFoundryRefresh);
     document.getElementById('btn-foundry-make-ready')
         .addEventListener('click', handleFoundryMakeReady);
+    document.getElementById('btn-foundry-wizard')
+        .addEventListener('click', () => TauriBridge.invoke('open_foundry_wizard'));
+
+    // Listen for wizard completion to auto-configure
+    TauriBridge.event.listen('foundry-wizard-closed', async (event) => {
+        const result = event.payload;
+        if (result?.modelDownloaded) {
+            // Auto-enable Foundry and set the downloaded model
+            const toggle = document.getElementById('toggle-foundry-local');
+            if (toggle) toggle.checked = true;
+            if (result.selectedModel) {
+                const select = document.getElementById('foundry-local-model');
+                if (select) {
+                    // Add option if not present
+                    let found = false;
+                    for (const opt of select.options) {
+                        if (opt.value === result.selectedModel) { found = true; break; }
+                    }
+                    if (!found) {
+                        const opt = document.createElement('option');
+                        opt.value = result.selectedModel;
+                        opt.textContent = result.selectedModel;
+                        select.appendChild(opt);
+                    }
+                    select.value = result.selectedModel;
+                }
+            }
+            await saveSettings({ silent: false, refreshDiagnostics: true });
+        }
+        await refreshFoundryStatus({ probe: true, reason: 'wizard-closed' });
+        await loadFoundryLocalModels();
+    });
 
     // Save model selection immediately (users expect this to persist across restarts)
     document.getElementById('foundry-local-model').addEventListener('change', async () => {
@@ -1099,7 +1131,15 @@ function renderFoundryStatus(status) {
         ? ''
         : '<div class="foundry-step-desc">Foundry Local is currently disabled (toggle above).</div>';
 
+    const installBanner = !installedOk
+        ? `<div class="foundry-install-banner">
+            <strong>Foundry Local is not installed.</strong>
+            Click <em>Make Foundry Ready</em> to launch the setup wizard, or use the <em>Setup Wizard</em> button below.
+        </div>`
+        : '';
+
     statusEl.innerHTML = `
+        ${installBanner}
         <div class="foundry-steps">
             <div class="foundry-step ${installedStepClass}">
                 <div class="foundry-step-dot"></div>
@@ -1267,8 +1307,24 @@ async function handleFoundryMakeReady() {
 
     button.disabled = true;
     const originalLabel = button.textContent;
-    button.textContent = 'Making ready...';
+    button.textContent = 'Checking...';
 
+    try {
+        // Quick status check: if CLI not installed, open the wizard instead
+        await saveSettings({ silent: true, refreshDiagnostics: false });
+        const quickStatus = await TauriBridge.invoke('get_foundry_local_status');
+        if (!quickStatus.cliAvailable) {
+            button.disabled = false;
+            button.textContent = originalLabel;
+            await TauriBridge.invoke('open_foundry_wizard');
+            return;
+        }
+    } catch (e) {
+        // If quick check fails, fall through to normal flow
+        console.warn('Quick status check failed, continuing with make_foundry_ready:', e);
+    }
+
+    button.textContent = 'Making ready...';
     renderFoundryStatusChecking('Starting service (if needed) and warming up model...');
 
     try {

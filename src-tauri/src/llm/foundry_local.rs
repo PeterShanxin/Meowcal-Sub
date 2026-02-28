@@ -698,7 +698,7 @@ impl FoundryLocalBackend {
         score
     }
 
-    fn choose_auto_model(models: &[String]) -> Option<String> {
+    pub fn choose_auto_model(models: &[String]) -> Option<String> {
         if models.is_empty() {
             return None;
         }

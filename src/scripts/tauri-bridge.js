@@ -69,6 +69,18 @@
         'get_capture_region': { method: 'GET', path: '/capture-region' },
         'set_capture_region': { method: 'POST', path: '/capture-region' },
 
+        // Foundry setup wizard (Tauri-only, returns 501 in browser mode)
+        'open_foundry_wizard':           { method: 'POST', path: '/wizard/open' },
+        'close_foundry_wizard':          { method: 'POST', path: '/wizard/close' },
+        'wizard_check_winget':           { method: 'GET',  path: '/wizard/check-winget' },
+        'wizard_install_foundry':        { method: 'POST', path: '/wizard/install-foundry' },
+        'wizard_poll_foundry_installed': { method: 'GET',  path: '/wizard/poll-installed' },
+        'wizard_list_available_models':  { method: 'GET',  path: '/wizard/models' },
+        'wizard_download_model':         { method: 'POST', path: '/wizard/download-model' },
+        'wizard_start_service':          { method: 'POST', path: '/wizard/start-service' },
+        'wizard_get_disk_space':         { method: 'GET',  path: '/wizard/disk-space' },
+        'wizard_get_hardware_info':      { method: 'GET',  path: '/wizard/hardware-info' },
+
         // Tauri-only (will return graceful error)
         'open_area_selector': { method: 'POST', path: '/area-selector' },
         'start_translation': { method: 'POST', path: '/translation/start' },

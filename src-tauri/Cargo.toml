@@ -38,6 +38,7 @@ tauri = { version = "2", features = [
     "tray-icon",          # System tray support (the icon in the taskbar)
 ] }
 tauri-plugin-opener = "2"  # Opens URLs/files with system defaults
+tauri-plugin-dialog = "2"  # Native file/folder picker dialogs
 raw-window-handle = "0.6"  # Cross-platform window handle access (for NonRudeHWND)
 
 # --- Serialization ---
@@ -109,6 +110,9 @@ windows = { version = "0.61", features = [
     
     # Security APIs for buffer handling
     "Security_Cryptography",
+
+    # File system APIs (disk space detection for wizard)
+    "Win32_Storage_FileSystem",
 ] }
 windows-core = "0.61"      # Core Windows types
 

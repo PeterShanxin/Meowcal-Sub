@@ -2312,3 +2312,382 @@ pub fn set_overlay_window_clip(
 
     Ok(())
 }
+
+// =============================================================================
+// FOUNDRY SETUP WIZARD COMMANDS
+// =============================================================================
+
+/// Model information returned by the wizard
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WizardModelInfo {
+    pub id: String,
+    pub recommended: bool,
+    pub hardware_tag: Option<String>,
+}
+
+/// Hardware information for model recommendations
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WizardHardwareInfo {
+    pub arch: String,
+    pub is_arm64: bool,
+    pub has_npu: bool,
+    pub has_gpu: bool,
+    pub gpu_name: String,
+    pub recommendation: String,
+}
+
+/// Disk space information
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WizardDiskSpace {
+    pub available_bytes: u64,
+    pub available_display: String,
+}
+
+/// Show the foundry-wizard window, resetting state for a fresh run
+#[tauri::command]
+pub fn open_foundry_wizard(app: AppHandle) -> Result<(), String> {
+    use tauri::Emitter;
+    info!("Opening Foundry setup wizard");
+    if let Some(window) = app.get_webview_window("foundry-wizard") {
+        // Emit reset event so the wizard JS resets to step 1 and clears timers
+        let _ = window.emit("wizard-reset", ());
+        window.show().map_err(|e| e.to_string())?;
+        window.set_focus().map_err(|e| e.to_string())?;
+        window.center().map_err(|e| e.to_string())?;
+    } else {
+        return Err("Wizard window not found".to_string());
+    }
+    Ok(())
+}
+
+/// Hide the foundry-wizard window and notify the main window
+#[tauri::command]
+pub fn close_foundry_wizard(
+    app: AppHandle,
+    model_downloaded: bool,
+    selected_model: Option<String>,
+) -> Result<(), String> {
+    info!("Closing Foundry setup wizard");
+    if let Some(window) = app.get_webview_window("foundry-wizard") {
+        window.hide().map_err(|e| e.to_string())?;
+    }
+    // Notify main window so it can refresh status and auto-configure
+    let _ = app.emit(
+        "foundry-wizard-closed",
+        serde_json::json!({
+            "modelDownloaded": model_downloaded,
+            "selectedModel": selected_model,
+        }),
+    );
+    Ok(())
+}
+
+/// Check whether winget is available on this system
+#[tauri::command]
+pub async fn wizard_check_winget() -> Result<bool, String> {
+    async_runtime::spawn_blocking(|| {
+        #[cfg(windows)]
+        {
+            use std::os::windows::process::CommandExt;
+            const CREATE_NO_WINDOW: u32 = 0x08000000;
+            std::process::Command::new("winget")
+                .arg("--version")
+                .stdout(std::process::Stdio::null())
+                .stderr(std::process::Stdio::null())
+                .creation_flags(CREATE_NO_WINDOW)
+                .status()
+                .map(|s| s.success())
+                .unwrap_or(false)
+        }
+        #[cfg(not(windows))]
+        {
+            false
+        }
+    })
+    .await
+    .map_err(|e| e.to_string())
+}
+
+/// Spawn a visible PowerShell window that runs `winget install Microsoft.FoundryLocal`
+#[tauri::command]
+pub async fn wizard_install_foundry() -> Result<(), String> {
+    async_runtime::spawn_blocking(|| {
+        let mut cmd = std::process::Command::new("powershell");
+        cmd.args([
+            "-NoProfile",
+            "-Command",
+            "Write-Host 'Installing Foundry Local via winget...' -ForegroundColor Cyan; \
+             Write-Host ''; \
+             winget install Microsoft.FoundryLocal --accept-source-agreements --accept-package-agreements; \
+             Write-Host ''; \
+             Write-Host 'Done! You can close this window.' -ForegroundColor Green; \
+             Start-Sleep -Seconds 5",
+        ]);
+        // Do NOT set CREATE_NO_WINDOW -- we want the user to see the installer progress
+        cmd.spawn()
+            .map_err(|e| format!("Failed to launch installer: {}", e))?;
+        Ok::<(), String>(())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// Poll whether Foundry CLI is now installed
+#[tauri::command]
+pub async fn wizard_poll_foundry_installed() -> Result<bool, String> {
+    async_runtime::spawn_blocking(FoundryLocalBackend::is_cli_available)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+/// List available models from Foundry cache for the wizard
+#[tauri::command]
+pub async fn wizard_list_available_models() -> Result<Vec<WizardModelInfo>, String> {
+    async_runtime::spawn_blocking(|| {
+        let models = FoundryLocalBackend::get_cached_models_from_cli();
+
+        let is_arm64 = cfg!(target_arch = "aarch64");
+        let is_npu = is_arm64 && cfg!(target_os = "windows");
+
+        // Use the existing auto-model selection heuristic to find the recommended model
+        let auto_pick = FoundryLocalBackend::choose_auto_model(&models);
+
+        models
+            .into_iter()
+            .map(|id| {
+                let recommended = auto_pick.as_deref() == Some(id.as_str());
+                let hardware_tag = if is_npu && id.to_lowercase().contains("npu") {
+                    Some("NPU".to_string())
+                } else {
+                    None
+                };
+                WizardModelInfo {
+                    id,
+                    recommended,
+                    hardware_tag,
+                }
+            })
+            .collect()
+    })
+    .await
+    .map_err(|e| e.to_string())
+}
+
+/// Download a model using `foundry cache download`, streaming output as events
+#[tauri::command]
+pub async fn wizard_download_model(app: AppHandle, model_id: String) -> Result<(), String> {
+    use tokio::io::{AsyncBufReadExt, BufReader};
+    use tokio::process::Command as TokioCommand;
+
+    // C1: Validate model_id to prevent injection of unexpected CLI arguments
+    if model_id.is_empty()
+        || model_id.len() > 200
+        || model_id.contains(|c: char| !c.is_alphanumeric() && !"-._/:".contains(c))
+    {
+        return Err(format!("Invalid model ID: '{}'", model_id));
+    }
+
+    info!("Wizard: downloading model '{}'", model_id);
+
+    let mut child = TokioCommand::new("foundry")
+        .args(["cache", "download", &model_id])
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .map_err(|e| format!("Failed to start model download: {}", e))?;
+
+    let stdout = child.stdout.take();
+    let stderr = child.stderr.take();
+
+    // Stream stdout lines as targeted events to the wizard window only
+    if let Some(stdout) = stdout {
+        let app_out = app.clone();
+        tokio::spawn(async move {
+            let reader = BufReader::new(stdout);
+            let mut lines = reader.lines();
+            while let Ok(Some(line)) = lines.next_line().await {
+                let _ = app_out.emit_to(
+                    "foundry-wizard",
+                    "wizard-output",
+                    serde_json::json!({"stream": "stdout", "line": line}),
+                );
+            }
+        });
+    }
+
+    // Stream stderr lines as targeted events to the wizard window only
+    if let Some(stderr) = stderr {
+        let app_err = app.clone();
+        tokio::spawn(async move {
+            let reader = BufReader::new(stderr);
+            let mut lines = reader.lines();
+            while let Ok(Some(line)) = lines.next_line().await {
+                let _ = app_err.emit_to(
+                    "foundry-wizard",
+                    "wizard-output",
+                    serde_json::json!({"stream": "stderr", "line": line}),
+                );
+            }
+        });
+    }
+
+    // Wait for process to complete
+    let status = child
+        .wait()
+        .await
+        .map_err(|e| format!("Model download failed: {}", e))?;
+
+    if status.success() {
+        info!("Wizard: model '{}' downloaded successfully", model_id);
+        let _ = app.emit_to(
+            "foundry-wizard",
+            "wizard-download-complete",
+            serde_json::json!({"success": true, "model": model_id}),
+        );
+    } else {
+        let msg = format!("Model download exited with code: {:?}", status.code());
+        warn!("Wizard: {}", msg);
+        let _ = app.emit_to(
+            "foundry-wizard",
+            "wizard-download-complete",
+            serde_json::json!({"success": false, "error": msg}),
+        );
+    }
+    // Always return Ok -- success/failure communicated via events to avoid dual error reporting
+    Ok(())
+}
+
+/// Start the Foundry service and return the service URL
+#[tauri::command]
+pub async fn wizard_start_service() -> Result<String, String> {
+    async_runtime::spawn_blocking(|| {
+        let config = crate::config::FoundryLocalConfig::default();
+        let backend = FoundryLocalBackend::new(config);
+        backend.ensure_service_running();
+        FoundryLocalBackend::get_service_url_from_cli()
+            .ok_or_else(|| "Service started but URL not found".to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// Get available disk space for a given path
+#[tauri::command]
+pub fn wizard_get_disk_space(path: String) -> Result<WizardDiskSpace, String> {
+    #[cfg(windows)]
+    {
+        use std::ffi::OsStr;
+        use std::os::windows::ffi::OsStrExt;
+        use windows::core::PCWSTR;
+        use windows::Win32::Storage::FileSystem::GetDiskFreeSpaceExW;
+
+        // Validate: require absolute local drive path (e.g. C:\...)
+        // Reject UNC paths, drive-relative paths (C:foo), and non-drive paths
+        if path.starts_with("\\\\") {
+            return Err("UNC paths are not supported, only local drives".to_string());
+        }
+        let bytes = path.as_bytes();
+        let valid_drive = bytes.len() >= 3
+            && bytes[0].is_ascii_alphabetic()
+            && bytes[1] == b':'
+            && (bytes[2] == b'\\' || bytes[2] == b'/');
+        if !valid_drive {
+            return Err("Only absolute local drive paths (e.g. C:\\) are supported".to_string());
+        }
+
+        let wide_path: Vec<u16> = OsStr::new(&path)
+            .encode_wide()
+            .chain(std::iter::once(0))
+            .collect();
+
+        let mut free_bytes_available: u64 = 0;
+
+        unsafe {
+            GetDiskFreeSpaceExW(
+                PCWSTR(wide_path.as_ptr()),
+                Some(&mut free_bytes_available as *mut u64),
+                None,
+                None,
+            )
+            .map_err(|e| format!("GetDiskFreeSpaceExW failed: {}", e))?;
+        }
+
+        let gb = free_bytes_available as f64 / (1024.0 * 1024.0 * 1024.0);
+        let display = if gb >= 1.0 {
+            format!("{:.1} GB", gb)
+        } else {
+            let mb = free_bytes_available as f64 / (1024.0 * 1024.0);
+            format!("{:.0} MB", mb)
+        };
+
+        Ok(WizardDiskSpace {
+            available_bytes: free_bytes_available,
+            available_display: display,
+        })
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = path;
+        Err("Disk space detection is only available on Windows".to_string())
+    }
+}
+
+/// Get hardware information for model recommendations
+#[tauri::command]
+pub fn wizard_get_hardware_info() -> WizardHardwareInfo {
+    let is_arm64 = cfg!(target_arch = "aarch64");
+    let has_npu = is_arm64 && cfg!(target_os = "windows");
+
+    // Detect GPU by querying WMIC (works on all Windows editions)
+    let (has_gpu, gpu_name) = {
+        #[cfg(windows)]
+        {
+            use std::os::windows::process::CommandExt;
+            const CREATE_NO_WINDOW: u32 = 0x08000000;
+            match std::process::Command::new("wmic")
+                .args(["path", "win32_VideoController", "get", "name"])
+                .creation_flags(CREATE_NO_WINDOW)
+                .output()
+            {
+                Ok(output) => {
+                    let text = String::from_utf8_lossy(&output.stdout);
+                    // Skip header line ("Name") and blank lines
+                    let gpu = text
+                        .lines()
+                        .find(|l| {
+                            let trimmed = l.trim();
+                            !trimmed.is_empty() && !trimmed.eq_ignore_ascii_case("name")
+                        })
+                        .map(|l| l.trim().to_string());
+                    let detected = gpu.is_some();
+                    (detected, gpu.unwrap_or_default())
+                }
+                Err(_) => (false, String::new()),
+            }
+        }
+        #[cfg(not(windows))]
+        {
+            (false, String::new())
+        }
+    };
+
+    let recommendation = if has_npu {
+        "npu".to_string()
+    } else if has_gpu {
+        "gpu".to_string()
+    } else {
+        "cpu".to_string()
+    };
+
+    WizardHardwareInfo {
+        arch: std::env::consts::ARCH.to_string(),
+        is_arm64,
+        has_npu,
+        has_gpu,
+        gpu_name,
+        recommendation,
+    }
+}
