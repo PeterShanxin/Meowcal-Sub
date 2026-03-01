@@ -430,6 +430,12 @@ function applyOcrSettings(translation) {
         if (confidenceValue) confidenceValue.textContent = config.confidenceThreshold.toFixed(2);
     }
     
+    // Validation strictness
+    const strictnessSelect = document.getElementById('ocr-strictness');
+    if (strictnessSelect) {
+        strictnessSelect.value = config.validationStrictness || 'moderate';
+    }
+    
     // Image preprocessing
     const preprocessingToggle = document.getElementById('toggle-ocr-preprocessing');
     if (preprocessingToggle) preprocessingToggle.checked = config.preprocessingEnabled;
@@ -489,14 +495,18 @@ function collectOcrSettings() {
     const confidenceSlider = document.getElementById('ocr-confidence');
     const confidenceValue = confidenceSlider ? parseInt(confidenceSlider.value) / 100 : 0.5;
     
+    // Get validation strictness (dropdown)
+    const strictnessSelect = document.getElementById('ocr-strictness');
+    const validationStrictness = strictnessSelect ? strictnessSelect.value : 'moderate';
+    
     return {
         confidenceThreshold: confidenceValue,
         preprocessingEnabled: document.getElementById('toggle-ocr-preprocessing')?.checked ?? true,
         grayscale: document.getElementById('toggle-ocr-grayscale')?.checked ?? true,
         contrastEnhancement: document.getElementById('toggle-ocr-contrast')?.checked ?? true,
         enableMultiPass: document.getElementById('toggle-ocr-multi-pass')?.checked ?? false,
-        multiPassCount: parseInt(document.getElementById('ocr-pass-count')?.value || '2'),
-        validationStrictness: 'moderate',
+        multiPassCount: Math.max(1, Math.min(5, parseInt(document.getElementById('ocr-pass-count')?.value || '2'))),
+        validationStrictness: validationStrictness,
     };
 }
 
@@ -849,7 +859,7 @@ function setupEventListeners() {
         });
     }
 
-    // Auto-save on any OCR toggle change
+    // Auto-save on any OCR toggle or dropdown change
     const ocrToggles = ['toggle-ocr-preprocessing', 'toggle-ocr-grayscale', 'toggle-ocr-contrast', 'ocr-pass-count'];
     ocrToggles.forEach(id => {
         const el = document.getElementById(id);
@@ -860,6 +870,15 @@ function setupEventListeners() {
             });
         }
     });
+
+    // Validation strictness dropdown
+    const ocrStrictness = document.getElementById('ocr-strictness');
+    if (ocrStrictness) {
+        ocrStrictness.addEventListener('change', () => {
+            console.log('OCR strictness changed, auto-saving...');
+            scheduleAutoSave();
+        });
+    }
 
     // Foundry Local controls
     document.getElementById('btn-foundry-refresh')

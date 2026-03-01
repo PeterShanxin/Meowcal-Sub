@@ -441,6 +441,17 @@
                         <p class="setting-hint">Higher values filter more noisy OCR results (0.0-1.0)</p>
                     </div>
 
+                    <!-- Validation Strictness -->
+                    <div class="settings-group">
+                        <label class="setting-label" for="ocr-strictness">Quality Strictness</label>
+                        <select id="ocr-strictness" class="text-input">
+                            <option value="permissive">Permissive - Accept more text</option>
+                            <option value="moderate" selected>Moderate - Balanced</option>
+                            <option value="strict">Strict - Aggressive filtering</option>
+                        </select>
+                        <p class="setting-hint">How aggressively to filter OCR artifacts</p>
+                    </div>
+
                     <!-- Image Preprocessing -->
                     <div class="toggle-wrapper">
                         <span class="toggle-label">Enhance Image Quality</span>
