@@ -1650,6 +1650,7 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
     let ocr_preprocessing_enabled = translation_config.ocr.preprocessing_enabled;
     let ocr_grayscale = translation_config.ocr.grayscale;
     let ocr_contrast_enhancement = translation_config.ocr.contrast_enhancement;
+    let ocr_binarize = translation_config.ocr.binarize;
     let ocr_enable_multi_pass = translation_config.ocr.enable_multi_pass;
     let ocr_multi_pass_count = translation_config.ocr.multi_pass_count;
     let ocr_validation_strictness = translation_config.ocr.validation_strictness;
@@ -1666,11 +1667,12 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
     };
 
     debug!(
-        "OCR settings: confidence_threshold={:.2}, preprocessing={}, grayscale={}, contrast={}, multi_pass={}, pass_count={}, strictness={:?}, effective_threshold={:.2}",
+        "OCR settings: confidence_threshold={:.2}, preprocessing={}, grayscale={}, contrast={}, binarize={}, multi_pass={}, pass_count={}, strictness={:?}, effective_threshold={:.2}",
         ocr_confidence_threshold,
         ocr_preprocessing_enabled,
         ocr_grayscale,
         ocr_contrast_enhancement,
+        ocr_binarize,
         ocr_enable_multi_pass,
         ocr_multi_pass_count,
         ocr_validation_strictness,
@@ -1929,6 +1931,7 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
                 let preprocessing_config = PreprocessingConfig {
                     grayscale: ocr_grayscale,
                     contrast_enhancement: ocr_contrast_enhancement,
+                    binarize: ocr_binarize,
                 };
                 match ocr
                     .recognize_with_preprocessing(

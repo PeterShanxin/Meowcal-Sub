@@ -315,18 +315,22 @@ impl WindowsOcr {
             PreprocessingConfig {
                 grayscale: true,
                 contrast_enhancement: true,
+                binarize: false,
             },
             PreprocessingConfig {
                 grayscale: true,
                 contrast_enhancement: false,
+                binarize: false,
             },
             PreprocessingConfig {
                 grayscale: false,
                 contrast_enhancement: true,
+                binarize: false,
             },
             PreprocessingConfig {
                 grayscale: false,
                 contrast_enhancement: false,
+                binarize: false,
             },
         ];
 

@@ -196,6 +196,12 @@ pub struct OcrConfig {
     #[serde(default = "default_contrast_enhancement")]
     pub contrast_enhancement: bool,
 
+    /// Apply binary threshold after contrast enhancement.
+    /// Converts the image to pure black and white at the midpoint (128/255).
+    /// Recommended: true — reduces noise and improves OCR accuracy on subtitle text.
+    #[serde(default = "default_binarize")]
+    pub binarize: bool,
+
     /// Enable multi-pass OCR for improved accuracy.
     /// When enabled, runs OCR multiple times with different preprocessing settings
     /// and selects the result with the highest confidence.
@@ -231,6 +237,10 @@ fn default_grayscale() -> bool {
 }
 
 fn default_contrast_enhancement() -> bool {
+    true
+}
+
+fn default_binarize() -> bool {
     true
 }
 
@@ -568,6 +578,7 @@ impl Default for OcrConfig {
             preprocessing_enabled: default_preprocessing_enabled(),
             grayscale: default_grayscale(),
             contrast_enhancement: default_contrast_enhancement(),
+            binarize: default_binarize(),
             enable_multi_pass: default_multi_pass_enabled(),
             multi_pass_count: default_multi_pass_count(),
             validation_strictness: ValidationStrictness::default(),

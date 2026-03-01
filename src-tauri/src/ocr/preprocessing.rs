@@ -15,6 +15,9 @@ pub struct PreprocessingConfig {
     pub grayscale: bool,
     /// Apply contrast enhancement (histogram equalization)
     pub contrast_enhancement: bool,
+    /// Apply binary threshold after contrast enhancement.
+    /// Converts image to pure black and white at the midpoint (128/255).
+    pub binarize: bool,
 }
 
 impl PreprocessingConfig {
@@ -23,12 +26,13 @@ impl PreprocessingConfig {
         Self {
             grayscale: true,
             contrast_enhancement: true,
+            binarize: true,
         }
     }
 
     /// Check if any preprocessing is enabled
     pub fn is_enabled(&self) -> bool {
-        self.grayscale || self.contrast_enhancement
+        self.grayscale || self.contrast_enhancement || self.binarize
     }
 }
 
@@ -54,11 +58,12 @@ pub fn preprocess_image(
     }
 
     debug!(
-        "Preprocessing image: {}x{}, grayscale: {}, contrast: {}",
+        "Preprocessing image: {}x{}, grayscale: {}, contrast: {}, binarize: {}",
         width,
         height,
         config.grayscale,
-        config.contrast_enhancement
+        config.contrast_enhancement,
+        config.binarize
     );
 
     let expected_size = (width * height * 4) as usize;
@@ -104,12 +109,23 @@ pub fn preprocess_image(
     };
 
     // Step 2: Apply contrast enhancement if enabled
-    let final_gray: GrayImage = if config.contrast_enhancement {
+    let after_eq: GrayImage = if config.contrast_enhancement {
         debug!("Applying contrast enhancement...");
         apply_histogram_equalization(&gray_image)
     } else {
         debug!("Skipping contrast enhancement");
         gray_image
+    };
+
+    // Step 3: Apply binary threshold if enabled
+    // Pixels below 128 become 0 (black); 128 and above become 255 (white).
+    // Applied after EQ so the threshold is always at the normalized midpoint.
+    let final_gray: GrayImage = if config.binarize {
+        debug!("Applying binary threshold (128)...");
+        apply_binarize(&after_eq)
+    } else {
+        debug!("Skipping binarization");
+        after_eq
     };
 
     // Convert grayscale back to BGRA for OCR (Windows OCR expects BGRA)
@@ -213,6 +229,21 @@ pub fn apply_contrast_stretch(image: &GrayImage) -> GrayImage {
     output
 }
 
+/// Apply binary threshold to a grayscale image.
+///
+/// Pixels with intensity < 128 become 0 (black).
+/// Pixels with intensity >= 128 become 255 (white).
+/// Call this after histogram equalization for best results.
+fn apply_binarize(image: &GrayImage) -> GrayImage {
+    let (width, height) = image.dimensions();
+    let mut output = GrayImage::new(width, height);
+    for (x, y, pixel) in image.enumerate_pixels() {
+        let new_val: u8 = if pixel[0] < 128 { 0 } else { 255 };
+        output.put_pixel(x, y, Luma([new_val]));
+    }
+    output
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -266,6 +297,51 @@ mod tests {
         // All pixels should become 0 after stretch (min=max=50)
         for pixel in result.pixels() {
             assert_eq!(pixel[0], 0, "Single-value image should become 0 after stretch");
+        }
+    }
+
+    #[test]
+    fn test_binarize_threshold() {
+        // Pixels below 128 → 0 (black), at/above 128 → 255 (white)
+        let mut image = GrayImage::new(4, 1);
+        image.put_pixel(0, 0, Luma([0]));
+        image.put_pixel(1, 0, Luma([127]));
+        image.put_pixel(2, 0, Luma([128]));
+        image.put_pixel(3, 0, Luma([255]));
+
+        let result = apply_binarize(&image);
+        assert_eq!(result.get_pixel(0, 0)[0], 0,   "0 → black");
+        assert_eq!(result.get_pixel(1, 0)[0], 0,   "127 → black");
+        assert_eq!(result.get_pixel(2, 0)[0], 255, "128 → white");
+        assert_eq!(result.get_pixel(3, 0)[0], 255, "255 → white");
+    }
+
+    #[test]
+    fn test_full_pipeline_binarized_output() {
+        // Run full grayscale → EQ → binarize pipeline; output must be only 0 or 255
+        let width = 10u32;
+        let height = 10u32;
+        let mut image_data = Vec::with_capacity((width * height * 4) as usize);
+        for i in 0..(width * height) {
+            let val = ((i * 255) / (width * height)) as u8;
+            image_data.extend_from_slice(&[val, val, val, 255u8]); // BGRA
+        }
+
+        let config = PreprocessingConfig {
+            grayscale: true,
+            contrast_enhancement: true,
+            binarize: true,
+        };
+
+        let result = preprocess_image(&image_data, width, height, config);
+
+        assert_eq!(result.len(), (width * height * 4) as usize, "output size");
+        for chunk in result.chunks(4) {
+            let b = chunk[0];
+            assert!(b == 0 || b == 255, "expected 0 or 255, got {}", b);
+            assert_eq!(chunk[0], chunk[1], "B == G");
+            assert_eq!(chunk[1], chunk[2], "G == R");
+            assert_eq!(chunk[3], 255,      "alpha == 255");
         }
     }
 }
