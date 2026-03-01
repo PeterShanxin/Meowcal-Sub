@@ -20,9 +20,6 @@ license = "MIT"
 # These are optional compile-time switches for advanced capabilities.
 
 [features]
-# Enable Windows AI (Phi Silica) bindings when available.
-windows_ai = []
-
 # Enable Windows-specific E2E tests
 test-windows = []
 

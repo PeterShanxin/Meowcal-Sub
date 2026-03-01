@@ -26,9 +26,9 @@ use tracing::info;
 
 use crate::config::{AppConfig, CaptureRegion};
 use crate::llm::{
-    BackendId, BackendInfo, FoundryLocalBackend, FoundryLocalPhase, OfflineMtBackend, PhiSilica,
-    ReadyState, TranslationDiagnostics, TranslationDiagnosticsState, TranslatorBackend,
-    FAST_PROBE_TIMEOUT_MS, SLOW_PROBE_TIMEOUT_MS,
+    BackendId, BackendInfo, FoundryLocalBackend, FoundryLocalPhase, ReadyState,
+    TranslationDiagnostics, TranslationDiagnosticsState, TranslatorBackend, FAST_PROBE_TIMEOUT_MS,
+    SLOW_PROBE_TIMEOUT_MS,
 };
 use crate::sync_utils::lock_or_recover;
 
@@ -136,13 +136,6 @@ pub struct FoundryLocalStatus {
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct OfflineMtDetection {
-    pub path: String,
-    pub source: String,
-}
-
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
 struct BrowserModeInfo {
     browser_mode: bool,
     message: String,
@@ -231,32 +224,6 @@ async fn get_translation_diagnostics(State(state): State<HttpAppState>) -> impl 
             ready_state: foundry.ready_state(),
             notes: foundry.notes(),
             phase: Some(phase),
-        });
-    }
-
-    // Offline MT
-    if config.translation.enable_offline_mt {
-        let offline = OfflineMtBackend::new_standalone(config.translation.offline_mt.clone());
-        backends.push(BackendInfo {
-            id: BackendId::OfflineMt,
-            name: "Offline MT (translateLocally)".to_string(),
-            available: true,
-            ready_state: offline.ready_state(),
-            notes: offline.notes(),
-            phase: None,
-        });
-    }
-
-    // Windows AI / Phi Silica
-    if config.translation.enable_windows_ai {
-        let phi = PhiSilica::new();
-        backends.push(BackendInfo {
-            id: BackendId::WindowsAi,
-            name: "Windows AI (Phi Silica)".to_string(),
-            available: true,
-            ready_state: phi.ready_state(),
-            notes: phi.notes(),
-            phase: None,
         });
     }
 
@@ -600,31 +567,6 @@ async fn make_foundry_ready(State(state): State<HttpAppState>) -> impl IntoRespo
     })
 }
 
-/// GET /api/windows-ai/diagnostics - Get Windows AI diagnostics
-async fn get_windows_ai_diagnostics() -> impl IntoResponse {
-    let phi = PhiSilica::new();
-    Json(phi.diagnostics())
-}
-
-/// GET /api/offline-mt/detect - Detect Offline MT binary
-async fn detect_offline_mt_binary(State(state): State<HttpAppState>) -> impl IntoResponse {
-    let config = lock_or_recover(&state.config).clone();
-
-    // Use standalone detection (checks PATH and common locations)
-    match OfflineMtBackend::detect_binary_standalone(&config.translation.offline_mt) {
-        Some((path, source)) => Json(serde_json::json!({
-            "found": true,
-            "path": path.to_string_lossy(),
-            "source": source
-        })),
-        None => Json(serde_json::json!({
-            "found": false,
-            "path": null,
-            "source": null
-        })),
-    }
-}
-
 /// POST /api/area-selector - Not available in browser mode
 async fn open_area_selector() -> impl IntoResponse {
     (
@@ -749,13 +691,6 @@ pub fn create_router(state: HttpAppState) -> Router {
         )
         .route("/api/foundry-local/prepare", post(prepare_foundry_local))
         .route("/api/foundry-local/make-ready", post(make_foundry_ready))
-        // Windows AI
-        .route(
-            "/api/windows-ai/diagnostics",
-            get(get_windows_ai_diagnostics),
-        )
-        // Offline MT
-        .route("/api/offline-mt/detect", get(detect_offline_mt_binary))
         // Capture region
         .route("/api/capture-region", get(get_capture_region))
         .route("/api/capture-region", post(set_capture_region))

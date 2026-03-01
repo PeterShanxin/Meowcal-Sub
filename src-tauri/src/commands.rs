@@ -20,9 +20,8 @@ use crate::ipc::{
     SubtitleUpdatePayload,
 };
 use crate::llm::{
-    BackendId, BackendInfo, FoundryLocalBackend, FoundryLocalPhase, OfflineMtBackend, PhiSilica,
-    TranslationDiagnostics, TranslationDiagnosticsState, TranslationManager, TranslationOutcome,
-    TranslatorBackend, WindowsAiDiagnostics,
+    BackendId, BackendInfo, FoundryLocalBackend, FoundryLocalPhase, TranslationDiagnostics,
+    TranslationDiagnosticsState, TranslationManager, TranslationOutcome, TranslatorBackend,
 };
 use crate::ocr::{PreprocessingConfig, WindowsOcr};
 use crate::overlay;
@@ -132,14 +131,6 @@ pub struct SystemInfo {
     pub phi_silica_available: bool,
     /// Whether Windows OCR is available
     pub windows_ocr_available: bool,
-}
-
-/// Offline MT binary detection result
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct OfflineMtDetection {
-    pub path: String,
-    pub source: String,
 }
 
 /// An available translateLocally download option for this platform.
@@ -435,41 +426,6 @@ pub async fn download_translate_locally(
     }
 
     Err(last_error.unwrap_or_else(|| "Download failed.".to_string()))
-}
-
-/// Try to detect translateLocally binary on disk.
-#[tauri::command]
-pub async fn detect_offline_mt_binary(
-    state: State<'_, AppState>,
-    app: AppHandle,
-) -> Result<Option<OfflineMtDetection>, String> {
-    let config = lock_or_recover(&state.config)
-        .translation
-        .offline_mt
-        .clone();
-    let app_handle = app.clone();
-
-    async_runtime::spawn_blocking(move || {
-        OfflineMtBackend::detect_binary(&app_handle, &config).map(|(path, source)| {
-            OfflineMtDetection {
-                path: path.to_string_lossy().to_string(),
-                source: source.to_string(),
-            }
-        })
-    })
-    .await
-    .map_err(|err| {
-        let message = format!("Offline MT detection task failed: {}", err);
-        warn!("{}", message);
-        message
-    })
-}
-
-/// Get detailed diagnostics for Windows AI backend.
-#[tauri::command]
-pub fn get_windows_ai_diagnostics() -> WindowsAiDiagnostics {
-    let phi = PhiSilica::new();
-    phi.diagnostics()
 }
 
 // =============================================================================

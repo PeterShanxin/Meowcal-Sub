@@ -109,12 +109,6 @@ pub struct TranslationConfig {
     /// Enable Foundry Local backend (primary, OpenAI-compatible)
     pub enable_foundry_local: bool,
 
-    /// Enable Windows AI backend (Phi Silica / LanguageModel)
-    pub enable_windows_ai: bool,
-
-    /// Enable offline MT backend (translateLocally/ORT)
-    pub enable_offline_mt: bool,
-
     /// Allow passthrough/mock fallback if all backends fail
     pub allow_mock_fallback: bool,
 
@@ -161,10 +155,6 @@ pub struct TranslationConfig {
     /// Foundry Local backend configuration
     #[serde(default)]
     pub foundry_local: FoundryLocalConfig,
-
-    /// Offline MT backend configuration
-    #[serde(default)]
-    pub offline_mt: OfflineMtConfig,
 
     /// OCR-specific settings
     #[serde(default)]
@@ -339,8 +329,6 @@ impl TranslationConfig {
             self.foundry_local.timeout_ms = 30_000;
         }
 
-        self.offline_mt.timeout_ms = self.offline_mt.timeout_ms.clamp(1, 120_000);
-
         // OCR config normalization
         self.ocr.confidence_threshold = self.ocr.confidence_threshold.clamp(0.0, 1.0);
         self.ocr.multi_pass_count = self.ocr.multi_pass_count.clamp(1, 5);
@@ -362,20 +350,6 @@ pub struct FoundryLocalConfig {
 
     /// Request timeout in milliseconds
     pub timeout_ms: u32,
-}
-
-/// Configuration for offline MT backend
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", default)]
-pub struct OfflineMtConfig {
-    /// Optional path to translateLocally binary
-    pub binary_path: Option<String>,
-
-    /// Translation timeout in milliseconds
-    pub timeout_ms: u32,
-
-    /// Maximum characters per chunk
-    pub max_chunk_chars: usize,
 }
 
 /// A rectangular region on the screen
@@ -552,8 +526,6 @@ impl Default for TranslationConfig {
     fn default() -> Self {
         Self {
             enable_foundry_local: true,
-            enable_windows_ai: cfg!(target_os = "windows"),
-            enable_offline_mt: true,
             allow_mock_fallback: true,
             enable_context_aware: true, // Enabled by default
             context_level: ContextLevel::MemoryAndRecent,
@@ -565,7 +537,6 @@ impl Default for TranslationConfig {
             context_buffer_size: default_context_buffer_size(),
             context_reset_gap_ms: default_context_reset_gap_ms(),
             foundry_local: FoundryLocalConfig::default(),
-            offline_mt: OfflineMtConfig::default(),
             ocr: OcrConfig::default(),
         }
     }
@@ -591,16 +562,6 @@ impl Default for FoundryLocalConfig {
         Self {
             model: None,
             timeout_ms: 30_000,
-        }
-    }
-}
-
-impl Default for OfflineMtConfig {
-    fn default() -> Self {
-        Self {
-            binary_path: None,
-            timeout_ms: 3000,
-            max_chunk_chars: 500,
         }
     }
 }
@@ -679,7 +640,6 @@ mod tests {
     fn test_translation_config_defaults() {
         let config = TranslationConfig::default();
         assert!(config.enable_foundry_local);
-        assert!(config.enable_offline_mt);
         assert!(config.allow_mock_fallback);
         assert!(config.enable_context_aware); // Context-aware enabled by default
         assert_eq!(config.context_level, ContextLevel::MemoryAndRecent);
@@ -713,11 +673,8 @@ mod tests {
         // Test that missing enable_context_aware field uses default (true)
         let json = r#"{
             "enableFoundryLocal": true,
-            "enableWindowsAi": false,
-            "enableOfflineMt": true,
             "allowMockFallback": true,
-            "foundryLocal": {},
-            "offlineMt": {}
+            "foundryLocal": {}
         }"#;
         let config: TranslationConfig = serde_json::from_str(json).unwrap();
         assert!(config.enable_context_aware); // Should default to true

@@ -872,9 +872,7 @@ function updateSubtitleText(textElement, newText, container) {
 function backendDisplayName(id) {
     switch ((id || '').toLowerCase()) {
         case 'foundry_local': return 'Foundry Local';
-        case 'offline_mt': return 'Offline MT';
-        case 'windows_ai': return 'Windows AI';
-        case 'mock': return 'OCR';
+        case 'mock': return 'Passthrough';
         default: return id || 'Unknown';
     }
 }
