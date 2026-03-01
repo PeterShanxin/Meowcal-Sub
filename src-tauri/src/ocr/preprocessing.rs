@@ -2,7 +2,7 @@
 // PREPROCESSING.RS - Image Preprocessing for OCR
 // =============================================================================
 // This module provides image preprocessing functions to improve OCR quality.
-// Pipeline: BGRA Image → Grayscale → Contrast Enhancement → Output
+// Pipeline: BGRA Image → Grayscale → Contrast Enhancement → Binarize → Output
 // =============================================================================
 
 use image::{GrayImage, ImageBuffer, Luma, Rgba};
@@ -59,11 +59,7 @@ pub fn preprocess_image(
 
     debug!(
         "Preprocessing image: {}x{}, grayscale: {}, contrast: {}, binarize: {}",
-        width,
-        height,
-        config.grayscale,
-        config.contrast_enhancement,
-        config.binarize
+        width, height, config.grayscale, config.contrast_enhancement, config.binarize
     );
 
     let expected_size = (width * height * 4) as usize;
@@ -73,13 +69,14 @@ pub fn preprocess_image(
     }
 
     // Create RGBA image from raw bytes
-    let rgba_image = match ImageBuffer::<Rgba<u8>, Vec<u8>>::from_raw(width, height, image_data.to_vec()) {
-        Some(img) => img,
-        None => {
-            debug!("Failed to create image buffer, returning original");
-            return image_data.to_vec();
-        }
-    };
+    let rgba_image =
+        match ImageBuffer::<Rgba<u8>, Vec<u8>>::from_raw(width, height, image_data.to_vec()) {
+            Some(img) => img,
+            None => {
+                debug!("Failed to create image buffer, returning original");
+                return image_data.to_vec();
+            }
+        };
 
     // Step 1: Convert to grayscale if enabled
     let gray_image: GrayImage = if config.grayscale {
@@ -136,7 +133,7 @@ pub fn preprocess_image(
         output.push(gray_value); // B
         output.push(gray_value); // G
         output.push(gray_value); // R
-        output.push(255);        // A (fully opaque)
+        output.push(255); // A (fully opaque)
     }
 
     debug!("Preprocessing complete: {} bytes output", output.len());
@@ -149,7 +146,7 @@ pub fn preprocess_image(
 /// text more distinguishable from light backgrounds.
 fn apply_histogram_equalization(image: &GrayImage) -> GrayImage {
     let (width, height) = image.dimensions();
-    let total_pixels = (width * height) as u32;
+    let total_pixels = width * height;
 
     // Build histogram (256 buckets for 8-bit grayscale)
     let mut histogram = [0u32; 256];
@@ -296,7 +293,10 @@ mod tests {
         let result = apply_contrast_stretch(&image);
         // All pixels should become 0 after stretch (min=max=50)
         for pixel in result.pixels() {
-            assert_eq!(pixel[0], 0, "Single-value image should become 0 after stretch");
+            assert_eq!(
+                pixel[0], 0,
+                "Single-value image should become 0 after stretch"
+            );
         }
     }
 
@@ -310,8 +310,8 @@ mod tests {
         image.put_pixel(3, 0, Luma([255]));
 
         let result = apply_binarize(&image);
-        assert_eq!(result.get_pixel(0, 0)[0], 0,   "0 → black");
-        assert_eq!(result.get_pixel(1, 0)[0], 0,   "127 → black");
+        assert_eq!(result.get_pixel(0, 0)[0], 0, "0 → black");
+        assert_eq!(result.get_pixel(1, 0)[0], 0, "127 → black");
         assert_eq!(result.get_pixel(2, 0)[0], 255, "128 → white");
         assert_eq!(result.get_pixel(3, 0)[0], 255, "255 → white");
     }
@@ -341,7 +341,7 @@ mod tests {
             assert!(b == 0 || b == 255, "expected 0 or 255, got {}", b);
             assert_eq!(chunk[0], chunk[1], "B == G");
             assert_eq!(chunk[1], chunk[2], "G == R");
-            assert_eq!(chunk[3], 255,      "alpha == 255");
+            assert_eq!(chunk[3], 255, "alpha == 255");
         }
     }
 }

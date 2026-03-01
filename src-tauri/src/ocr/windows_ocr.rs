@@ -7,7 +7,7 @@
 // On Copilot+ PCs, some of these operations run on the NPU for better battery.
 // =============================================================================
 
-use super::{OcrError, OcrResult, PreprocessingConfig, preprocess_image};
+use super::{preprocess_image, OcrError, OcrResult, PreprocessingConfig};
 use tracing::{debug, info, warn};
 
 // Windows Runtime APIs for OCR
@@ -137,7 +137,8 @@ impl WindowsOcr {
         height: u32,
     ) -> Result<OcrResult, OcrError> {
         // Use preprocessing by default (optimal settings for most images)
-        self.recognize_with_preprocessing(image_data, width, height, PreprocessingConfig::optimal()).await
+        self.recognize_with_preprocessing(image_data, width, height, PreprocessingConfig::optimal())
+            .await
     }
 
     /// Recognize text in an image without any preprocessing.
@@ -311,7 +312,7 @@ impl WindowsOcr {
         // Pass 2: Grayscale only (no contrast enhancement)
         // Pass 3: Contrast only (no grayscale)
         // Pass 4: No preprocessing (raw image)
-        let configs = vec![
+        let configs = [
             PreprocessingConfig {
                 grayscale: true,
                 contrast_enhancement: true,
@@ -345,11 +346,12 @@ impl WindowsOcr {
 
             let pass_num = i + 1;
             debug!(
-                "Multi-pass OCR: pass {}/{} with grayscale={}, contrast={}",
+                "Multi-pass OCR: pass {}/{} with grayscale={}, contrast={}, binarize={}",
                 pass_num,
                 pass_count,
                 config.grayscale,
-                config.contrast_enhancement
+                config.contrast_enhancement,
+                config.binarize
             );
 
             match self
@@ -371,10 +373,7 @@ impl WindowsOcr {
                     }
                 }
                 Err(e) => {
-                    warn!(
-                        "Multi-pass OCR: pass {} failed with error: {}",
-                        pass_num, e
-                    );
+                    warn!("Multi-pass OCR: pass {} failed with error: {}", pass_num, e);
                 }
             }
         }
