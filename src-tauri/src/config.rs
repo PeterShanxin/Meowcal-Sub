@@ -257,9 +257,9 @@ fn default_multi_pass_count() -> u32 {
 #[serde(rename_all = "camelCase")]
 pub enum ValidationStrictness {
     /// Permissive: only rejects obvious garbage
-    #[default]
     Permissive,
     /// Moderate: balances false positives and false negatives
+    #[default]
     Moderate,
     /// Strict: aggressively filters potential garbage
     Strict,
