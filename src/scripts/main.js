@@ -447,7 +447,11 @@ function applyOcrSettings(translation) {
     // Contrast enhancement
     const contrastToggle = document.getElementById('toggle-ocr-contrast');
     if (contrastToggle) contrastToggle.checked = config.contrastEnhancement;
-    
+
+    // Binarize
+    const binarizeToggle = document.getElementById('toggle-ocr-binarize');
+    if (binarizeToggle) binarizeToggle.checked = config.binarize;
+
     // Multi-pass OCR
     const multiPassToggle = document.getElementById('toggle-ocr-multi-pass');
     if (multiPassToggle) multiPassToggle.checked = config.enableMultiPass;
@@ -467,6 +471,7 @@ function normalizeOcrConfig(ocr) {
         preprocessingEnabled: true,
         grayscale: true,
         contrastEnhancement: true,
+        binarize: true,
         enableMultiPass: false,
         multiPassCount: 2,
         validationStrictness: 'moderate',
@@ -483,6 +488,7 @@ function normalizeOcrConfig(ocr) {
         preprocessingEnabled: ocr.preprocessingEnabled ?? defaultConfig.preprocessingEnabled,
         grayscale: ocr.grayscale ?? defaultConfig.grayscale,
         contrastEnhancement: ocr.contrastEnhancement ?? defaultConfig.contrastEnhancement,
+        binarize: ocr.binarize ?? defaultConfig.binarize,
         enableMultiPass: ocr.enableMultiPass ?? defaultConfig.enableMultiPass,
         multiPassCount: typeof ocr.multiPassCount === 'number'
             ? Math.max(1, Math.min(5, ocr.multiPassCount))
@@ -504,6 +510,7 @@ function collectOcrSettings() {
         preprocessingEnabled: document.getElementById('toggle-ocr-preprocessing')?.checked ?? true,
         grayscale: document.getElementById('toggle-ocr-grayscale')?.checked ?? true,
         contrastEnhancement: document.getElementById('toggle-ocr-contrast')?.checked ?? true,
+        binarize: document.getElementById('toggle-ocr-binarize')?.checked ?? true,
         enableMultiPass: document.getElementById('toggle-ocr-multi-pass')?.checked ?? false,
         multiPassCount: Math.max(1, Math.min(5, parseInt(document.getElementById('ocr-pass-count')?.value || '2'))),
         validationStrictness: validationStrictness,
