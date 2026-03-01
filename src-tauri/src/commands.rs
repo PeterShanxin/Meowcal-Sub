@@ -1998,9 +1998,7 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
                 let preview: String = current_text.chars().take(40).collect();
                 debug!(
                     "[FILTER: low_confidence] ({:.2} < {:.2}): {:?}",
-                    confidence,
-                    effective_confidence_threshold,
-                    preview
+                    confidence, effective_confidence_threshold, preview
                 );
                 tokio::time::sleep(Duration::from_millis(interval_ms as u64)).await;
                 continue;
@@ -2036,7 +2034,10 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
             let mut force_retry_duplicate = false;
             if is_exact_duplicate {
                 if last_backend_used != BackendId::Mock {
-                    debug!("[FILTER: duplicate_exact] OCR text (confidence: {:.2})", confidence);
+                    debug!(
+                        "[FILTER: duplicate_exact] OCR text (confidence: {:.2})",
+                        confidence
+                    );
                     translation_manager.record_ocr_line(&current_text);
                     tokio::time::sleep(Duration::from_millis(interval_ms as u64)).await;
                     continue;
@@ -2047,7 +2048,10 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
                 if now.duration_since(last_attempt_at)
                     < Duration::from_millis(MOCK_RETRY_COOLDOWN_MS)
                 {
-                    debug!("[FILTER: duplicate_mock_cooldown] OCR text (confidence: {:.2})", confidence);
+                    debug!(
+                        "[FILTER: duplicate_mock_cooldown] OCR text (confidence: {:.2})",
+                        confidence
+                    );
                     translation_manager.record_ocr_line(&current_text);
                     tokio::time::sleep(Duration::from_millis(interval_ms as u64)).await;
                     continue;
@@ -2062,7 +2066,10 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
                 && context_enabled
                 && translation_manager.is_duplicate(&current_text)
             {
-                debug!("[FILTER: duplicate_context] OCR text (confidence: {:.2})", confidence);
+                debug!(
+                    "[FILTER: duplicate_context] OCR text (confidence: {:.2})",
+                    confidence
+                );
                 translation_manager.record_ocr_line(&current_text);
                 tokio::time::sleep(Duration::from_millis(interval_ms as u64)).await;
                 continue;

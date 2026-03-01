@@ -91,10 +91,7 @@ impl OcrResult {
         }
 
         // Count alphanumeric characters (letters and numbers)
-        let alphanumeric_count = text
-            .chars()
-            .filter(|ch| ch.is_alphanumeric())
-            .count();
+        let alphanumeric_count = text.chars().filter(|ch| ch.is_alphanumeric()).count();
 
         // Base score from character variety
         let char_variety = alphanumeric_count as f32 / total_chars as f32;
@@ -104,13 +101,20 @@ impl OcrResult {
         let length_factor = (total_chars.min(50) as f32) / 50.0;
 
         // Check for common OCR noise patterns
-        let has_repeated_chars = text.contains("|||") || text.contains("---") || text.contains("...");
+        let has_repeated_chars =
+            text.contains("|||") || text.contains("---") || text.contains("...");
         let has_unusual_spacing = text.contains("  ") && !text.contains('\n');
 
         // Punctuation factor: proper use of punctuation suggests valid text
-        let punctuation_count = text.chars().filter(|ch| {
-            matches!(ch, '.' | ',' | '!' | '?' | ':' | ';' | '"' | '\'' | '(' | ')' | '[' | ']')
-        }).count();
+        let punctuation_count = text
+            .chars()
+            .filter(|ch| {
+                matches!(
+                    ch,
+                    '.' | ',' | '!' | '?' | ':' | ';' | '"' | '\'' | '(' | ')' | '[' | ']'
+                )
+            })
+            .count();
         let punctuation_factor = if total_chars > 0 {
             (punctuation_count as f32 / total_chars as f32).min(0.3)
         } else {
