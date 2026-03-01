@@ -82,23 +82,25 @@ pub fn preprocess_image(
     let gray_image: GrayImage = if config.grayscale {
         debug!("Converting to grayscale...");
         // Manual grayscale conversion using luminance formula: 0.299*R + 0.587*G + 0.114*B
+        // Input is BGRA format (from Windows capture), so channel indices are:
+        // B=0, G=1, R=2, A=3
         let mut gray = GrayImage::new(width, height);
         for (x, y, pixel) in rgba_image.enumerate_pixels() {
-            let r = pixel[0] as f32;
-            let g = pixel[1] as f32;
-            let b = pixel[2] as f32;
+            let b = pixel[0] as f32; // Blue
+            let g = pixel[1] as f32; // Green
+            let r = pixel[2] as f32; // Red
             let gray_val = (0.299 * r + 0.587 * g + 0.114 * b) as u8;
             gray.put_pixel(x, y, Luma([gray_val]));
         }
         gray
     } else {
-        // Convert RGBA to grayscale using same formula
+        // Convert BGRA to grayscale using same formula
         debug!("Converting to grayscale for OCR...");
         let mut gray = GrayImage::new(width, height);
         for (x, y, pixel) in rgba_image.enumerate_pixels() {
-            let r = pixel[0] as f32;
-            let g = pixel[1] as f32;
-            let b = pixel[2] as f32;
+            let b = pixel[0] as f32; // Blue
+            let g = pixel[1] as f32; // Green
+            let r = pixel[2] as f32; // Red
             let gray_val = (0.299 * r + 0.587 * g + 0.114 * b) as u8;
             gray.put_pixel(x, y, Luma([gray_val]));
         }

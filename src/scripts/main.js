@@ -873,7 +873,7 @@ function setupEventListeners() {
     }
 
     // Auto-save on any OCR toggle or dropdown change
-    const ocrToggles = ['toggle-ocr-preprocessing', 'toggle-ocr-grayscale', 'toggle-ocr-contrast', 'ocr-pass-count'];
+    const ocrToggles = ['toggle-ocr-preprocessing', 'toggle-ocr-grayscale', 'toggle-ocr-contrast', 'toggle-ocr-binarize', 'ocr-pass-count'];
     ocrToggles.forEach(id => {
         const el = document.getElementById(id);
         if (el) {

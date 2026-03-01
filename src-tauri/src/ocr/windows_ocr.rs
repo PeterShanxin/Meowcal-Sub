@@ -98,8 +98,8 @@ impl WindowsOcr {
 
     /// Recognize text in an image with preprocessing enabled by default.
     ///
-    /// This method applies image preprocessing (grayscale + contrast enhancement)
-    /// before OCR to improve accuracy. Use `recognize_without_preprocessing` if you
+    /// This method applies image preprocessing (grayscale, contrast enhancement,
+    /// and binarization) before OCR to improve accuracy. Use `recognize_without_preprocessing` if you
     /// want to skip preprocessing.
     ///
     /// # Arguments
@@ -156,8 +156,8 @@ impl WindowsOcr {
 
     /// Recognize text in an image with preprocessing configuration.
     ///
-    /// This method applies image preprocessing (grayscale, contrast enhancement)
-    /// before OCR to improve accuracy on noisy or low-contrast images.
+    /// This method applies image preprocessing (grayscale, contrast enhancement,
+    /// and binarization) before OCR to improve accuracy on noisy or low-contrast images.
     ///
     /// # Arguments
     /// * `image_data` - Raw pixel data in BGRA format (4 bytes per pixel)

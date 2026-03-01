@@ -1656,11 +1656,13 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
     let ocr_validation_strictness = translation_config.ocr.validation_strictness;
 
     // Calculate effective confidence threshold: use explicit threshold if set,
-    // otherwise fall back to strictness-based default
+    // otherwise fall back to strictness-based default.
+    // Using max() ensures strictness acts as a minimum floor - the effective
+    // threshold is always at least as strict as the strictness setting.
     let strictness_threshold = ocr_validation_strictness.threshold();
     let effective_confidence_threshold = if ocr_confidence_threshold > 0.0 {
-        // If user explicitly set a threshold, use that (but cap at strictness max)
-        ocr_confidence_threshold.min(strictness_threshold)
+        // If user explicitly set a threshold, use that (floored by strictness)
+        ocr_confidence_threshold.max(strictness_threshold)
     } else {
         // Default to strictness-based threshold
         strictness_threshold

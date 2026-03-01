@@ -181,7 +181,7 @@ pub struct OcrConfig {
     #[serde(default = "default_confidence_threshold")]
     pub confidence_threshold: f32,
 
-    /// Enable image preprocessing before OCR (grayscale, contrast enhancement).
+    /// Enable image preprocessing before OCR (grayscale, contrast enhancement, binarization).
     /// This can improve OCR accuracy for noisy or low-contrast images.
     #[serde(default = "default_preprocessing_enabled")]
     pub preprocessing_enabled: bool,
@@ -215,7 +215,7 @@ pub struct OcrConfig {
     #[serde(default = "default_multi_pass_count")]
     pub multi_pass_count: u32,
 
-    /// Validation strictness for ML-based text filtering.
+    /// Validation strictness for heuristic-based text filtering.
     /// Controls how aggressively to filter OCR artifacts and garbage text.
     /// - Permissive: Only rejects obvious garbage (low confidence < 0.2)
     /// - Moderate: Balances false positives/negatives (rejects confidence < 0.4)
