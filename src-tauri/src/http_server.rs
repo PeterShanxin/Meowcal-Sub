@@ -661,6 +661,18 @@ async fn stop_translation() -> impl IntoResponse {
     )
 }
 
+/// OCR install - Not available in browser mode (requires OS-level access)
+async fn ocr_install_not_available() -> impl IntoResponse {
+    (
+        StatusCode::NOT_IMPLEMENTED,
+        Json(BrowserModeInfo {
+            browser_mode: true,
+            message: "OCR language pack installation requires the desktop app. Not available in browser mode."
+                .to_string(),
+        }),
+    )
+}
+
 /// Wizard endpoints - Not available in browser mode (require Tauri window)
 async fn wizard_not_available() -> impl IntoResponse {
     (
@@ -749,7 +761,7 @@ pub fn create_router(state: HttpAppState) -> Router {
         .route("/api/capture-region", post(set_capture_region))
         // OCR language management
         .route("/api/ocr/languages", get(get_ocr_languages_http))
-        .route("/api/ocr/install-language", post(wizard_not_available))
+        .route("/api/ocr/install-language", post(ocr_install_not_available))
         // Tauri-only endpoints (return 501)
         .route("/api/area-selector", post(open_area_selector))
         .route("/api/translation/start", post(start_translation))

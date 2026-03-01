@@ -229,15 +229,18 @@ async function loadOcrLanguages() {
         const langs = await TauriBridge.invoke('get_ocr_languages');
         appState.ocrLanguages = new Set(langs);
         console.log('OCR languages installed:', langs);
-
-        const select = document.getElementById('source-language');
-        const currentValue = select.value;
-        populateSourceLanguageDropdown(appState.ocrLanguages, currentValue);
-        checkOcrLanguageWarning(currentValue);
     } catch (error) {
         console.warn('Could not load OCR languages:', error);
-        // Silently continue - dropdown remains with static fallback option
+        // Treat failure as "unknown" — still populate from KNOWN_SOURCE_LANGUAGES
+        appState.ocrLanguages = new Set();
     }
+
+    // Use saved setting as the selected value, since the HTML only has en-US
+    // as a static fallback and loadSettings() may have set a different value.
+    const currentValue = appState.settings?.sourceLanguage
+        || document.getElementById('source-language').value;
+    populateSourceLanguageDropdown(appState.ocrLanguages, currentValue);
+    checkOcrLanguageWarning(currentValue);
 }
 
 /**

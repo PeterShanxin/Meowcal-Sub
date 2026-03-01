@@ -220,15 +220,20 @@ pub fn get_system_info() -> SystemInfo {
 /// List OCR language packs installed on this system.
 /// Returns BCP-47 tags (e.g. ["en-US", "zh-CN"]).
 #[tauri::command]
-pub fn get_ocr_languages() -> Vec<String> {
+pub async fn get_ocr_languages() -> Vec<String> {
     info!("Getting available OCR languages...");
-    match WindowsOcr::available_languages() {
-        Ok(langs) => {
+    let result = async_runtime::spawn_blocking(WindowsOcr::available_languages).await;
+    match result {
+        Ok(Ok(langs)) => {
             info!("Found {} OCR language(s): {:?}", langs.len(), langs);
             langs
         }
-        Err(e) => {
+        Ok(Err(e)) => {
             warn!("Failed to enumerate OCR languages: {}", e);
+            Vec::new()
+        }
+        Err(e) => {
+            warn!("OCR language enumeration task failed: {}", e);
             Vec::new()
         }
     }
@@ -238,17 +243,25 @@ pub fn get_ocr_languages() -> Vec<String> {
 /// Triggers a UAC prompt — the user must approve the elevation.
 #[tauri::command]
 pub async fn install_ocr_language(language_tag: String) -> Result<(), String> {
-    // Map BCP-47 region tags to the script subtags Windows capabilities use
+    // Strict allowlist: only accept known BCP-47 tags to prevent command injection
+    // in the elevated PowerShell context.
     let capability_tag = match language_tag.as_str() {
-        "zh-TW" => "zh-Hant".to_string(),
-        "zh-CN" => "zh-Hans".to_string(),
-        "ja-JP" => "ja".to_string(),
-        "ko-KR" => "ko".to_string(),
-        "es-ES" => "es".to_string(),
-        "fr-FR" => "fr".to_string(),
-        "de-DE" => "de".to_string(),
-        other => other.to_string(),
-    };
+        "en-US" => "en-US",
+        "zh-TW" => "zh-Hant",
+        "zh-CN" => "zh-Hans",
+        "ja-JP" => "ja",
+        "ko-KR" => "ko",
+        "es-ES" => "es",
+        "fr-FR" => "fr",
+        "de-DE" => "de",
+        _ => {
+            return Err(format!(
+                "Unsupported language tag: '{}'. Only known languages can be installed.",
+                language_tag
+            ));
+        }
+    }
+    .to_string();
 
     info!(
         "Installing OCR language pack: {} (capability tag: {})",
@@ -1905,10 +1918,11 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
             // Additional garbage detection: skip OCR artifacts from credits, logos,
             // and scrambled character recognition that would cause hallucinations.
             if crate::llm::is_untranslatable_text(&current_text) {
+                let preview: String = current_text.chars().take(40).collect();
                 debug!(
                     "Skipping untranslatable text ({} chars): {:?}",
                     current_text.chars().count(),
-                    &current_text[..current_text.len().min(40)]
+                    preview
                 );
                 tokio::time::sleep(Duration::from_millis(interval_ms as u64)).await;
                 continue;

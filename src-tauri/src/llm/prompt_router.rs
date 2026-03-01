@@ -111,10 +111,9 @@ pub fn build_subtitle_translation_prompt(
 /// Returns true when the cleaned OCR text is almost certainly garbage that
 /// should not be sent to the LLM for translation.
 ///
-/// Catches cases like:
-/// - "ooo", "HD", "BSVI" - credit overlays / UI elements / noise
-/// - Single character or empty strings
-/// - Strings with very few meaningful characters
+/// Conservative filter: only rejects text with fewer than 2 meaningful
+/// characters (alphabetic or CJK) after OCR noise cleanup.
+/// Short but real subtitles like "OK", "No", "好的" still pass through.
 pub fn is_untranslatable_text(text: &str) -> bool {
     let cleaned = clean_source_text(text);
 
@@ -129,19 +128,9 @@ pub fn is_untranslatable_text(text: &str) -> bool {
     let alpha_count = cleaned.chars().filter(|c| c.is_alphabetic()).count();
     let meaningful_count = cjk_count + alpha_count;
 
-    // Fewer than 3 meaningful characters → definitely garbage
-    if meaningful_count < 3 {
-        return true;
-    }
-
-    // Short pure ASCII uppercase with no spaces - credit text / HUD labels
-    // e.g., "BSVI", "HD", "EP1", "CC"
-    let total_chars = cleaned.chars().count();
-    if total_chars <= 4
-        && cleaned
-            .chars()
-            .all(|c| c.is_ascii_uppercase() || c.is_ascii_digit())
-    {
+    // Fewer than 2 meaningful characters → definitely garbage.
+    // We allow 2+ so short subtitles like "OK", "No", or single CJK words still translate.
+    if meaningful_count < 2 {
         return true;
     }
 
@@ -429,10 +418,9 @@ mod tests {
     fn is_untranslatable_text_rejects_short_noise() {
         assert!(is_untranslatable_text(""));
         assert!(is_untranslatable_text("  "));
-        assert!(is_untranslatable_text("BSVI"));
-        assert!(is_untranslatable_text("HD"));
         assert!(is_untranslatable_text(".."));
         assert!(is_untranslatable_text("）"));
+        assert!(is_untranslatable_text("x")); // single meaningful char
     }
 
     #[test]
@@ -440,6 +428,10 @@ mod tests {
         assert!(!is_untranslatable_text("看来很喜欢你啊"));
         assert!(!is_untranslatable_text("Hello, world"));
         assert!(!is_untranslatable_text("通往沙漠的所有交通被封鎖"));
+        // Short but legitimate subtitles should pass
+        assert!(!is_untranslatable_text("No"));
+        assert!(!is_untranslatable_text("OK")); // caught by uppercase filter, but "Ok" wouldn't be
+        assert!(!is_untranslatable_text("好的"));
     }
 
     #[test]
