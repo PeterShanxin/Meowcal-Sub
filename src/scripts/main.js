@@ -866,8 +866,8 @@ function setupEventListeners() {
     // Clear region button
     document.getElementById('btn-clear-region').addEventListener('click', handleClearRegion);
 
-    // Save settings button
-    document.getElementById('btn-save-settings').addEventListener('click', saveSettings);
+    // Save settings button (optional - may not exist with autosave enabled)
+    document.getElementById('btn-save-settings')?.addEventListener('click', saveSettings);
 
     // Capture interval slider
     document.getElementById('capture-interval').addEventListener('input', (e) => {
