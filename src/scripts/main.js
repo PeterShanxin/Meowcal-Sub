@@ -592,7 +592,6 @@ function normalizeTranslationConfig(translation) {
             model: translation.foundryLocal?.model ?? defaultConfig.foundryLocal.model,
             timeoutMs: translation.foundryLocal?.timeoutMs ?? defaultConfig.foundryLocal.timeoutMs,
         },
-        },
     };
 }
 
@@ -977,16 +976,7 @@ function setupEventListeners() {
     document.getElementById('toggle-mock-fallback').addEventListener('change', () => {
         console.log('Passthrough fallback toggled, auto-saving...');
         scheduleAutoSave();
-    }); 
-    // translateLocally download modal actions
-    document.getElementById('btn-cancel-download')
-        .addEventListener('click', closeDownloadModal);
-    document.getElementById('download-backdrop')
-        .addEventListener('click', closeDownloadModal);
-    document.getElementById('btn-confirm-download')
-        .addEventListener('click', handleConfirmTranslateLocallyDownload);
-    document.getElementById('download-option')
-        .addEventListener('change', updateDownloadOptionNotes);
+    });
 
     // Foundry warmup modal actions
     document.getElementById('btn-foundry-warmup-cancel')

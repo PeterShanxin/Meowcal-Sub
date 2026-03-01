@@ -47,7 +47,7 @@ Foundry Local → Pass-through (Mock)
   - Remove all "windows_ai" | "windowsai" | "windows-ai" | "phi" | "phi_silica" mappings
   - Remove all "offline_mt" | "offlinemt" | "offline-mt" | "translatelocally" mappings
 - **Lines 209-221**: Remove `WindowsAiDiagnostics` struct entirely
-- **Note**: Keep `mod offline_mt;` and `mod phi_silica;` as they may be used elsewhere or for future use - instead just remove from fallback chain
+- **Note**: `offline_mt` and `phi_silica` modules and their exports are removed from `llm/mod.rs` and are no longer part of the translation backend implementation unless reintroduced in a future change.
 
 #### 1.3 Update `src-tauri/src/llm/manager.rs`
 - **Lines 7-11**: In imports:
