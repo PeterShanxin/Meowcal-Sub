@@ -187,6 +187,7 @@ async function loadSettings() {
 
         applyTranslationSettings(settings.translation);
         applyOverlaySettings(settings.overlay);
+        applyOcrSettings(settings.translation);
 
         if (settings.lastCaptureRegion) {
             const region = settings.lastCaptureRegion;
@@ -417,6 +418,88 @@ function applyOverlaySettings(overlay) {
     if (showDiagnostics) showDiagnostics.checked = config.showDiagnostics === true;
 }
 
+function applyOcrSettings(translation) {
+    const config = normalizeOcrConfig(translation?.ocr);
+    
+    // Confidence threshold
+    const confidenceSlider = document.getElementById('ocr-confidence');
+    const confidenceValue = document.getElementById('ocr-confidence-value');
+    if (confidenceSlider) {
+        const confVal = config.confidenceThreshold * 100;
+        confidenceSlider.value = confVal;
+        if (confidenceValue) confidenceValue.textContent = config.confidenceThreshold.toFixed(2);
+    }
+    
+    // Image preprocessing
+    const preprocessingToggle = document.getElementById('toggle-ocr-preprocessing');
+    if (preprocessingToggle) preprocessingToggle.checked = config.preprocessingEnabled;
+    
+    // Grayscale
+    const grayscaleToggle = document.getElementById('toggle-ocr-grayscale');
+    if (grayscaleToggle) grayscaleToggle.checked = config.grayscale;
+    
+    // Contrast enhancement
+    const contrastToggle = document.getElementById('toggle-ocr-contrast');
+    if (contrastToggle) contrastToggle.checked = config.contrastEnhancement;
+    
+    // Multi-pass OCR
+    const multiPassToggle = document.getElementById('toggle-ocr-multi-pass');
+    if (multiPassToggle) multiPassToggle.checked = config.enableMultiPass;
+    
+    // Pass count
+    const passCountGroup = document.getElementById('ocr-pass-count-group');
+    const passCountInput = document.getElementById('ocr-pass-count');
+    if (passCountGroup && passCountInput) {
+        passCountGroup.style.display = config.enableMultiPass ? 'block' : 'none';
+        passCountInput.value = config.multiPassCount;
+    }
+}
+
+function normalizeOcrConfig(ocr) {
+    const defaultConfig = {
+        confidenceThreshold: 0.5,
+        preprocessingEnabled: true,
+        grayscale: true,
+        contrastEnhancement: true,
+        enableMultiPass: false,
+        multiPassCount: 2,
+        validationStrictness: 'moderate',
+    };
+    
+    if (!ocr) {
+        return defaultConfig;
+    }
+    
+    return {
+        confidenceThreshold: typeof ocr.confidenceThreshold === 'number' 
+            ? Math.max(0, Math.min(1, ocr.confidenceThreshold)) 
+            : defaultConfig.confidenceThreshold,
+        preprocessingEnabled: ocr.preprocessingEnabled ?? defaultConfig.preprocessingEnabled,
+        grayscale: ocr.grayscale ?? defaultConfig.grayscale,
+        contrastEnhancement: ocr.contrastEnhancement ?? defaultConfig.contrastEnhancement,
+        enableMultiPass: ocr.enableMultiPass ?? defaultConfig.enableMultiPass,
+        multiPassCount: typeof ocr.multiPassCount === 'number'
+            ? Math.max(1, Math.min(5, ocr.multiPassCount))
+            : defaultConfig.multiPassCount,
+        validationStrictness: ocr.validationStrictness || defaultConfig.validationStrictness,
+    };
+}
+
+function collectOcrSettings() {
+    const confidenceSlider = document.getElementById('ocr-confidence');
+    const confidenceValue = confidenceSlider ? parseInt(confidenceSlider.value) / 100 : 0.5;
+    
+    return {
+        confidenceThreshold: confidenceValue,
+        preprocessingEnabled: document.getElementById('toggle-ocr-preprocessing')?.checked ?? true,
+        grayscale: document.getElementById('toggle-ocr-grayscale')?.checked ?? true,
+        contrastEnhancement: document.getElementById('toggle-ocr-contrast')?.checked ?? true,
+        enableMultiPass: document.getElementById('toggle-ocr-multi-pass')?.checked ?? false,
+        multiPassCount: parseInt(document.getElementById('ocr-pass-count')?.value || '2'),
+        validationStrictness: 'moderate',
+    };
+}
+
 function collectOverlaySettings() {
     const fontSize = parseInt(document.getElementById('overlay-font-size')?.value) || 24;
     const fontFamily = document.getElementById('overlay-font-family')?.value || 'Segoe UI';
@@ -615,6 +698,12 @@ async function saveSettings(opts) {
     translationConfig.foundryLocal.model = foundryModel.length > 0 ? foundryModel : null;
     translationConfig.offlineMt.binaryPath = offlineMtPath.length > 0 ? offlineMtPath : null;
 
+    // Collect OCR settings
+    const ocrConfig = collectOcrSettings();
+    
+    // Merge OCR config into translation config
+    translationConfig.ocr = ocrConfig;
+    
     const settings = {
         sourceLanguage: document.getElementById('source-language').value,
         targetLanguage: document.getElementById('target-language').value,
@@ -733,6 +822,43 @@ function setupEventListeners() {
     document.getElementById('capture-interval').addEventListener('change', () => {
         console.log('Capture interval changed, auto-saving...');
         scheduleAutoSave();
+    });
+
+    // OCR settings controls
+    const ocrConfidence = document.getElementById('ocr-confidence');
+    if (ocrConfidence) {
+        ocrConfidence.addEventListener('input', (e) => {
+            const value = e.target.value / 100;
+            document.getElementById('ocr-confidence-value').textContent = value.toFixed(2);
+        });
+        ocrConfidence.addEventListener('change', () => {
+            console.log('OCR confidence changed, auto-saving...');
+            scheduleAutoSave();
+        });
+    }
+
+    // Multi-pass toggle - show/hide pass count
+    const multiPassToggle = document.getElementById('toggle-ocr-multi-pass');
+    if (multiPassToggle) {
+        multiPassToggle.addEventListener('change', (e) => {
+            const passCountGroup = document.getElementById('ocr-pass-count-group');
+            if (passCountGroup) {
+                passCountGroup.style.display = e.target.checked ? 'block' : 'none';
+            }
+            scheduleAutoSave();
+        });
+    }
+
+    // Auto-save on any OCR toggle change
+    const ocrToggles = ['toggle-ocr-preprocessing', 'toggle-ocr-grayscale', 'toggle-ocr-contrast', 'ocr-pass-count'];
+    ocrToggles.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) {
+            el.addEventListener('change', () => {
+                console.log('OCR setting changed, auto-saving...');
+                scheduleAutoSave();
+            });
+        }
     });
 
     // Foundry Local controls
