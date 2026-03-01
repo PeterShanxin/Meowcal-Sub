@@ -46,12 +46,6 @@ function previewOverlay() {
 
 // Listen for keyboard shortcuts
 document.addEventListener('keydown', (e) => {
-    // Ctrl+S to save settings
-    if (e.ctrlKey && e.key === 's') {
-        e.preventDefault();
-        document.getElementById('btn-save-settings')?.click();
-    }
-
     // Escape to stop translation
     if (e.key === 'Escape' && window.MeowcalSub?.appState?.isRunning) {
         document.getElementById('btn-stop')?.click();

@@ -423,6 +423,95 @@
                 </div>
             </details>
 
+            <!-- OCR Settings -->
+            <details class="settings-section" id="ocr-section">
+                <summary class="collapsible-header">
+                    <span class="section-title">OCR Settings</span>
+                </summary>
+                <div class="collapsible-content">
+                    <p class="setting-hint">
+                        Configure OCR quality and preprocessing to reduce noise in recognized text.
+                    </p>
+                    
+                    <!-- Confidence Threshold -->
+                    <div class="settings-group">
+                        <label class="setting-label" for="ocr-confidence">OCR Quality Filter</label>
+                        <input type="range" id="ocr-confidence" min="0" max="100" value="50" class="slider">
+                        <span class="value-display" id="ocr-confidence-value">0.50</span>
+                        <p class="setting-hint">Higher values filter more noisy OCR results (0.0-1.0)</p>
+                    </div>
+
+                    <!-- Validation Strictness -->
+                    <div class="settings-group">
+                        <label class="setting-label" for="ocr-strictness">Quality Strictness</label>
+                        <select id="ocr-strictness" class="text-input">
+                            <option value="permissive">Permissive - Accept more text</option>
+                            <option value="moderate" selected>Moderate - Balanced</option>
+                            <option value="strict">Strict - Aggressive filtering</option>
+                        </select>
+                        <p class="setting-hint">How aggressively to filter OCR artifacts</p>
+                    </div>
+
+                    <!-- Image Preprocessing -->
+                    <div class="toggle-wrapper">
+                        <span class="toggle-label">Enhance Image Quality</span>
+                        <label class="toggle">
+                            <input type="checkbox" id="toggle-ocr-preprocessing" checked>
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
+                    <p class="setting-hint">Improves OCR accuracy on subtitles (grayscale + contrast + binarize)</p>
+
+                    <!-- Advanced OCR Settings -->
+                    <details class="settings-subsection">
+                        <summary>Advanced OCR</summary>
+                        
+                        <!-- Grayscale -->
+                        <div class="toggle-wrapper">
+                            <span class="toggle-label">Grayscale</span>
+                            <label class="toggle">
+                                <input type="checkbox" id="toggle-ocr-grayscale" checked>
+                                <span class="toggle-slider"></span>
+                            </label>
+                        </div>
+
+                        <!-- Contrast Enhancement -->
+                        <div class="toggle-wrapper">
+                            <span class="toggle-label">Contrast Enhancement</span>
+                            <label class="toggle">
+                                <input type="checkbox" id="toggle-ocr-contrast" checked>
+                                <span class="toggle-slider"></span>
+                            </label>
+                        </div>
+
+                        <!-- Binarize -->
+                        <div class="toggle-wrapper">
+                            <span class="toggle-label">Binarize</span>
+                            <label class="toggle">
+                                <input type="checkbox" id="toggle-ocr-binarize" checked>
+                                <span class="toggle-slider"></span>
+                            </label>
+                        </div>
+
+                        <!-- Multi-Pass OCR -->
+                        <div class="toggle-wrapper">
+                            <span class="toggle-label">Multi-Pass OCR</span>
+                            <label class="toggle">
+                                <input type="checkbox" id="toggle-ocr-multi-pass">
+                                <span class="toggle-slider"></span>
+                            </label>
+                        </div>
+                        <p class="setting-hint">Slower but more accurate (runs OCR multiple times)</p>
+
+                        <!-- Pass Count -->
+                        <div class="settings-group" id="ocr-pass-count-group" style="display: none;">
+                            <label class="setting-label" for="ocr-pass-count">Pass Count</label>
+                            <input type="number" id="ocr-pass-count" class="text-input" min="1" max="5" value="2">
+                        </div>
+                    </details>
+                </div>
+            </details>
+
             <!-- Collapsible: Backend Diagnostics -->
             <details class="settings-section" id="diagnostics-section">
                 <summary class="collapsible-header">
@@ -435,10 +524,6 @@
                     </div>
                 </div>
             </details>
-            
-            <button class="btn btn-outline" id="btn-save-settings">
-                Save Settings
-            </button>
         </section>
         
         <!-- Footer -->
@@ -535,7 +620,7 @@
             </div>
         </div>
     </div>
-    
+
     <!-- Scripts -->
     <!-- Load bridge first to set up unified API before other scripts run -->
     <script src="scripts/tauri-bridge.js"></script>

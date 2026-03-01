@@ -563,7 +563,7 @@ body {
 /* --- Toast Notifications --- */
 .toast {
     position: fixed;
-    bottom: var(--spacing-lg);
+    top: var(--spacing-lg);
     left: 50%;
     transform: translateX(-50%);
     padding: var(--spacing-md) var(--spacing-lg);
@@ -573,7 +573,7 @@ body {
     box-shadow: var(--shadow-lg);
     font-size: var(--font-size-sm);
     z-index: 1000;
-    animation: slideUp var(--transition-normal);
+    animation: slideDown var(--transition-normal);
 }
 
 .toast.success {
@@ -591,14 +591,14 @@ body {
     background: rgba(245, 158, 11, 0.1);
 }
 
-@keyframes slideUp {
-    from { 
-        opacity: 0; 
-        transform: translate(-50%, 20px); 
+@keyframes slideDown {
+    from {
+        opacity: 0;
+        transform: translate(-50%, -20px);
     }
-    to { 
-        opacity: 1; 
-        transform: translate(-50%, 0); 
+    to {
+        opacity: 1;
+        transform: translate(-50%, 0);
     }
 }
 
@@ -694,3 +694,4 @@ body {
     gap: var(--spacing-sm);
     margin-top: var(--spacing-md);
 }
+

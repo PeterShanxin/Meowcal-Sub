@@ -187,6 +187,7 @@ async function loadSettings() {
 
         applyTranslationSettings(settings.translation);
         applyOverlaySettings(settings.overlay);
+        applyOcrSettings(settings.translation);
 
         if (settings.lastCaptureRegion) {
             const region = settings.lastCaptureRegion;
@@ -417,6 +418,105 @@ function applyOverlaySettings(overlay) {
     if (showDiagnostics) showDiagnostics.checked = config.showDiagnostics === true;
 }
 
+function applyOcrSettings(translation) {
+    const config = normalizeOcrConfig(translation?.ocr);
+    
+    // Confidence threshold
+    const confidenceSlider = document.getElementById('ocr-confidence');
+    const confidenceValue = document.getElementById('ocr-confidence-value');
+    if (confidenceSlider) {
+        const confVal = config.confidenceThreshold * 100;
+        confidenceSlider.value = confVal;
+        if (confidenceValue) confidenceValue.textContent = config.confidenceThreshold.toFixed(2);
+    }
+    
+    // Validation strictness
+    const strictnessSelect = document.getElementById('ocr-strictness');
+    if (strictnessSelect) {
+        strictnessSelect.value = config.validationStrictness || 'moderate';
+    }
+    
+    // Image preprocessing
+    const preprocessingToggle = document.getElementById('toggle-ocr-preprocessing');
+    if (preprocessingToggle) preprocessingToggle.checked = config.preprocessingEnabled;
+    
+    // Grayscale
+    const grayscaleToggle = document.getElementById('toggle-ocr-grayscale');
+    if (grayscaleToggle) grayscaleToggle.checked = config.grayscale;
+    
+    // Contrast enhancement
+    const contrastToggle = document.getElementById('toggle-ocr-contrast');
+    if (contrastToggle) contrastToggle.checked = config.contrastEnhancement;
+
+    // Binarize
+    const binarizeToggle = document.getElementById('toggle-ocr-binarize');
+    if (binarizeToggle) binarizeToggle.checked = config.binarize;
+
+    // Multi-pass OCR
+    const multiPassToggle = document.getElementById('toggle-ocr-multi-pass');
+    if (multiPassToggle) multiPassToggle.checked = config.enableMultiPass;
+    
+    // Pass count
+    const passCountGroup = document.getElementById('ocr-pass-count-group');
+    const passCountInput = document.getElementById('ocr-pass-count');
+    if (passCountGroup && passCountInput) {
+        passCountGroup.style.display = config.enableMultiPass ? 'block' : 'none';
+        passCountInput.value = config.multiPassCount;
+    }
+}
+
+function normalizeOcrConfig(ocr) {
+    const defaultConfig = {
+        confidenceThreshold: 0.5,
+        preprocessingEnabled: true,
+        grayscale: true,
+        contrastEnhancement: true,
+        binarize: true,
+        enableMultiPass: false,
+        multiPassCount: 2,
+        validationStrictness: 'moderate',
+    };
+    
+    if (!ocr) {
+        return defaultConfig;
+    }
+    
+    return {
+        confidenceThreshold: typeof ocr.confidenceThreshold === 'number' 
+            ? Math.max(0, Math.min(1, ocr.confidenceThreshold)) 
+            : defaultConfig.confidenceThreshold,
+        preprocessingEnabled: ocr.preprocessingEnabled ?? defaultConfig.preprocessingEnabled,
+        grayscale: ocr.grayscale ?? defaultConfig.grayscale,
+        contrastEnhancement: ocr.contrastEnhancement ?? defaultConfig.contrastEnhancement,
+        binarize: ocr.binarize ?? defaultConfig.binarize,
+        enableMultiPass: ocr.enableMultiPass ?? defaultConfig.enableMultiPass,
+        multiPassCount: typeof ocr.multiPassCount === 'number'
+            ? Math.max(1, Math.min(5, ocr.multiPassCount))
+            : defaultConfig.multiPassCount,
+        validationStrictness: ocr.validationStrictness || defaultConfig.validationStrictness,
+    };
+}
+
+function collectOcrSettings() {
+    const confidenceSlider = document.getElementById('ocr-confidence');
+    const confidenceValue = confidenceSlider ? parseInt(confidenceSlider.value) / 100 : 0.5;
+    
+    // Get validation strictness (dropdown)
+    const strictnessSelect = document.getElementById('ocr-strictness');
+    const validationStrictness = strictnessSelect ? strictnessSelect.value : 'moderate';
+    
+    return {
+        confidenceThreshold: confidenceValue,
+        preprocessingEnabled: document.getElementById('toggle-ocr-preprocessing')?.checked ?? true,
+        grayscale: document.getElementById('toggle-ocr-grayscale')?.checked ?? true,
+        contrastEnhancement: document.getElementById('toggle-ocr-contrast')?.checked ?? true,
+        binarize: document.getElementById('toggle-ocr-binarize')?.checked ?? true,
+        enableMultiPass: document.getElementById('toggle-ocr-multi-pass')?.checked ?? false,
+        multiPassCount: Math.max(1, Math.min(5, parseInt(document.getElementById('ocr-pass-count')?.value || '2'))),
+        validationStrictness: validationStrictness,
+    };
+}
+
 function collectOverlaySettings() {
     const fontSize = parseInt(document.getElementById('overlay-font-size')?.value) || 24;
     const fontFamily = document.getElementById('overlay-font-family')?.value || 'Segoe UI';
@@ -554,6 +654,7 @@ function clampInt(value, min, max, fallback) {
 async function saveSettings(opts) {
     const options = opts && typeof opts === 'object' ? opts : {};
     const silent = options.silent === true;
+    const isAutoSave = options.isAutoSave === true;
     const refreshDiagnostics = options.refreshDiagnostics !== undefined
         ? options.refreshDiagnostics === true
         : !silent;
@@ -615,6 +716,12 @@ async function saveSettings(opts) {
     translationConfig.foundryLocal.model = foundryModel.length > 0 ? foundryModel : null;
     translationConfig.offlineMt.binaryPath = offlineMtPath.length > 0 ? offlineMtPath : null;
 
+    // Collect OCR settings
+    const ocrConfig = collectOcrSettings();
+    
+    // Merge OCR config into translation config
+    translationConfig.ocr = ocrConfig;
+    
     const settings = {
         sourceLanguage: document.getElementById('source-language').value,
         targetLanguage: document.getElementById('target-language').value,
@@ -629,7 +736,9 @@ async function saveSettings(opts) {
     try {
         await TauriBridge.invoke('save_settings', { settings });
         appState.settings = settings;
-        if (!silent) {
+        if (isAutoSave) {
+            showToast('✅ Settings saved', 'success');
+        } else if (!silent) {
             showToast('Settings saved!', 'success');
         }
         console.log('Settings saved:', settings);
@@ -641,7 +750,9 @@ async function saveSettings(opts) {
         }
     } catch (error) {
         console.error('Failed to save settings:', error);
-        if (!silent) {
+        if (isAutoSave) {
+            showToast('❌ Failed to save settings', 'error');
+        } else if (!silent) {
             showToast('Failed to save settings', 'error');
         }
     }
@@ -657,7 +768,8 @@ function scheduleAutoSave() {
 
     autoSaveTimer = setTimeout(async () => {
         autoSaveTimer = null;
-        await saveSettings({ silent: true, refreshDiagnostics: false });
+        // Save immediately without silent mode to trigger toast notification
+        await saveSettings({ silent: false, refreshDiagnostics: false, isAutoSave: true });
     }, AUTO_SAVE_DELAY_MS);
 }
 
@@ -723,8 +835,8 @@ function setupEventListeners() {
     // Clear region button
     document.getElementById('btn-clear-region').addEventListener('click', handleClearRegion);
 
-    // Save settings button
-    document.getElementById('btn-save-settings').addEventListener('click', saveSettings);
+    // Save settings button (optional - may not exist with autosave enabled)
+    document.getElementById('btn-save-settings')?.addEventListener('click', saveSettings);
 
     // Capture interval slider
     document.getElementById('capture-interval').addEventListener('input', (e) => {
@@ -734,6 +846,52 @@ function setupEventListeners() {
         console.log('Capture interval changed, auto-saving...');
         scheduleAutoSave();
     });
+
+    // OCR settings controls
+    const ocrConfidence = document.getElementById('ocr-confidence');
+    if (ocrConfidence) {
+        ocrConfidence.addEventListener('input', (e) => {
+            const value = e.target.value / 100;
+            document.getElementById('ocr-confidence-value').textContent = value.toFixed(2);
+        });
+        ocrConfidence.addEventListener('change', () => {
+            console.log('OCR confidence changed, auto-saving...');
+            scheduleAutoSave();
+        });
+    }
+
+    // Multi-pass toggle - show/hide pass count
+    const multiPassToggle = document.getElementById('toggle-ocr-multi-pass');
+    if (multiPassToggle) {
+        multiPassToggle.addEventListener('change', (e) => {
+            const passCountGroup = document.getElementById('ocr-pass-count-group');
+            if (passCountGroup) {
+                passCountGroup.style.display = e.target.checked ? 'block' : 'none';
+            }
+            scheduleAutoSave();
+        });
+    }
+
+    // Auto-save on any OCR toggle or dropdown change
+    const ocrToggles = ['toggle-ocr-preprocessing', 'toggle-ocr-grayscale', 'toggle-ocr-contrast', 'toggle-ocr-binarize', 'ocr-pass-count'];
+    ocrToggles.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) {
+            el.addEventListener('change', () => {
+                console.log('OCR setting changed, auto-saving...');
+                scheduleAutoSave();
+            });
+        }
+    });
+
+    // Validation strictness dropdown
+    const ocrStrictness = document.getElementById('ocr-strictness');
+    if (ocrStrictness) {
+        ocrStrictness.addEventListener('change', () => {
+            console.log('OCR strictness changed, auto-saving...');
+            scheduleAutoSave();
+        });
+    }
 
     // Foundry Local controls
     document.getElementById('btn-foundry-refresh')
