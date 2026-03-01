@@ -24,7 +24,7 @@ use crate::llm::{
     TranslationDiagnostics, TranslationDiagnosticsState, TranslationManager, TranslationOutcome,
     TranslatorBackend, WindowsAiDiagnostics,
 };
-use crate::ocr::WindowsOcr;
+use crate::ocr::{PreprocessingConfig, WindowsOcr};
 use crate::overlay;
 use crate::sync_utils::lock_or_recover;
 use reqwest::Client;
@@ -1645,6 +1645,38 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
         )
     };
 
+    // Extract OCR-specific settings
+    let ocr_confidence_threshold = translation_config.ocr.confidence_threshold;
+    let ocr_preprocessing_enabled = translation_config.ocr.preprocessing_enabled;
+    let ocr_grayscale = translation_config.ocr.grayscale;
+    let ocr_contrast_enhancement = translation_config.ocr.contrast_enhancement;
+    let ocr_enable_multi_pass = translation_config.ocr.enable_multi_pass;
+    let ocr_multi_pass_count = translation_config.ocr.multi_pass_count;
+    let ocr_validation_strictness = translation_config.ocr.validation_strictness;
+
+    // Calculate effective confidence threshold: use explicit threshold if set,
+    // otherwise fall back to strictness-based default
+    let strictness_threshold = ocr_validation_strictness.threshold();
+    let effective_confidence_threshold = if ocr_confidence_threshold > 0.0 {
+        // If user explicitly set a threshold, use that (but cap at strictness max)
+        ocr_confidence_threshold.min(strictness_threshold)
+    } else {
+        // Default to strictness-based threshold
+        strictness_threshold
+    };
+
+    debug!(
+        "OCR settings: confidence_threshold={:.2}, preprocessing={}, grayscale={}, contrast={}, multi_pass={}, pass_count={}, strictness={:?}, effective_threshold={:.2}",
+        ocr_confidence_threshold,
+        ocr_preprocessing_enabled,
+        ocr_grayscale,
+        ocr_contrast_enhancement,
+        ocr_enable_multi_pass,
+        ocr_multi_pass_count,
+        ocr_validation_strictness,
+        effective_confidence_threshold
+    );
+
     let context_enabled = translation_config.enable_context_aware;
     let translation_config_for_summary = translation_config.clone();
 
@@ -1875,19 +1907,60 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
             }
 
             // Step 2: Run OCR
-            let ocr_result = match ocr
-                .recognize(
-                    &capture_result.data,
-                    capture_result.width,
-                    capture_result.height,
-                )
-                .await
-            {
-                Ok(result) => result,
-                Err(e) => {
-                    warn!("⚠️ OCR failed: {}", e);
-                    tokio::time::sleep(Duration::from_millis(interval_ms as u64)).await;
-                    continue;
+            let ocr_result = if ocr_enable_multi_pass {
+                // Multi-pass OCR: run multiple passes with different preprocessing and pick best
+                match ocr
+                    .recognize_multi_pass(
+                        &capture_result.data,
+                        capture_result.width,
+                        capture_result.height,
+                        ocr_multi_pass_count,
+                    )
+                    .await
+                {
+                    Ok(result) => result,
+                    Err(e) => {
+                        warn!("⚠️ Multi-pass OCR failed: {}", e);
+                        tokio::time::sleep(Duration::from_millis(interval_ms as u64)).await;
+                        continue;
+                    }
+                }
+            } else if ocr_preprocessing_enabled {
+                let preprocessing_config = PreprocessingConfig {
+                    grayscale: ocr_grayscale,
+                    contrast_enhancement: ocr_contrast_enhancement,
+                };
+                match ocr
+                    .recognize_with_preprocessing(
+                        &capture_result.data,
+                        capture_result.width,
+                        capture_result.height,
+                        preprocessing_config,
+                    )
+                    .await
+                {
+                    Ok(result) => result,
+                    Err(e) => {
+                        warn!("⚠️ OCR failed: {}", e);
+                        tokio::time::sleep(Duration::from_millis(interval_ms as u64)).await;
+                        continue;
+                    }
+                }
+            } else {
+                match ocr
+                    .recognize_without_preprocessing(
+                        &capture_result.data,
+                        capture_result.width,
+                        capture_result.height,
+                    )
+                    .await
+                {
+                    Ok(result) => result,
+                    Err(e) => {
+                        warn!("⚠️ OCR failed: {}", e);
+                        tokio::time::sleep(Duration::from_millis(interval_ms as u64)).await;
+                        continue;
+                    }
                 }
             };
 
@@ -1899,29 +1972,56 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
 
             // Skip if empty or same as last frame
             if ocr_result.is_empty() {
-                debug!("No text detected, skipping");
+                debug!("[FILTER: empty] No text detected, skipping");
                 tokio::time::sleep(Duration::from_millis(interval_ms as u64)).await;
                 continue;
             }
 
+            // Get confidence score from OCR result
+            let confidence = ocr_result.confidence.unwrap_or(0.0);
             let current_text = ocr_result.text.trim().to_string();
+
+            // Verbose OCR logging: show first 100 chars of OCR output
+            let text_preview: String = current_text.chars().take(100).collect();
+            debug!(
+                "OCR output ({} chars, confidence: {:.2}): {:?}",
+                current_text.chars().count(),
+                confidence,
+                text_preview
+            );
+
+            // Confidence threshold check - skip if below threshold
+            if confidence < effective_confidence_threshold {
+                let preview: String = current_text.chars().take(40).collect();
+                debug!(
+                    "[FILTER: low_confidence] ({:.2} < {:.2}): {:?}",
+                    confidence,
+                    effective_confidence_threshold,
+                    preview
+                );
+                tokio::time::sleep(Duration::from_millis(interval_ms as u64)).await;
+                continue;
+            }
+
             let significant_chars = current_text
                 .chars()
                 .filter(|ch| ch.is_alphanumeric())
                 .count();
             if significant_chars < 2 {
-                debug!("Noise/very short text detected, skipping");
+                debug!("[FILTER: very_short] Noise/very short text detected, skipping");
                 tokio::time::sleep(Duration::from_millis(interval_ms as u64)).await;
                 continue;
             }
 
             // Additional garbage detection: skip OCR artifacts from credits, logos,
             // and scrambled character recognition that would cause hallucinations.
+            // Filter reason: untranslatable text
             if crate::llm::is_untranslatable_text(&current_text) {
                 let preview: String = current_text.chars().take(40).collect();
                 debug!(
-                    "Skipping untranslatable text ({} chars): {:?}",
+                    "[FILTER: untranslatable] OCR text ({} chars, confidence: {:.2}): {:?}",
                     current_text.chars().count(),
+                    confidence,
                     preview
                 );
                 tokio::time::sleep(Duration::from_millis(interval_ms as u64)).await;
@@ -1933,7 +2033,7 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
             let mut force_retry_duplicate = false;
             if is_exact_duplicate {
                 if last_backend_used != BackendId::Mock {
-                    debug!("Duplicate text detected, skipping");
+                    debug!("[FILTER: duplicate_exact] OCR text (confidence: {:.2})", confidence);
                     translation_manager.record_ocr_line(&current_text);
                     tokio::time::sleep(Duration::from_millis(interval_ms as u64)).await;
                     continue;
@@ -1944,7 +2044,7 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
                 if now.duration_since(last_attempt_at)
                     < Duration::from_millis(MOCK_RETRY_COOLDOWN_MS)
                 {
-                    debug!("Duplicate text (mock cooldown), skipping");
+                    debug!("[FILTER: duplicate_mock_cooldown] OCR text (confidence: {:.2})", confidence);
                     translation_manager.record_ocr_line(&current_text);
                     tokio::time::sleep(Duration::from_millis(interval_ms as u64)).await;
                     continue;
@@ -1959,7 +2059,7 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
                 && context_enabled
                 && translation_manager.is_duplicate(&current_text)
             {
-                debug!("Duplicate text detected (context dedup), skipping");
+                debug!("[FILTER: duplicate_context] OCR text (confidence: {:.2})", confidence);
                 translation_manager.record_ocr_line(&current_text);
                 tokio::time::sleep(Duration::from_millis(interval_ms as u64)).await;
                 continue;

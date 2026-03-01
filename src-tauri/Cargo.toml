@@ -116,7 +116,9 @@ windows = { version = "0.61", features = [
 ] }
 windows-core = "0.61"      # Core Windows types
 
-# --- Error Handling ---
+# --- Image Processing ---
+# For OCR image preprocessing (grayscale, contrast enhancement)
+image = "0.25"
 # Makes it easy to create custom error types with nice error messages
 thiserror = "2"
 

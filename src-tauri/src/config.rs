@@ -165,6 +165,106 @@ pub struct TranslationConfig {
     /// Offline MT backend configuration
     #[serde(default)]
     pub offline_mt: OfflineMtConfig,
+
+    /// OCR-specific settings
+    #[serde(default)]
+    pub ocr: OcrConfig,
+}
+
+/// OCR-specific configuration settings
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct OcrConfig {
+    /// Minimum confidence threshold (0.0 to 1.0) for OCR text to be accepted.
+    /// Text with confidence below this threshold will be skipped.
+    /// Note: Windows OCR doesn't provide native confidence, so this uses heuristic scoring.
+    #[serde(default = "default_confidence_threshold")]
+    pub confidence_threshold: f32,
+
+    /// Enable image preprocessing before OCR (grayscale, contrast enhancement).
+    /// This can improve OCR accuracy for noisy or low-contrast images.
+    #[serde(default = "default_preprocessing_enabled")]
+    pub preprocessing_enabled: bool,
+
+    /// Convert image to grayscale before OCR.
+    /// Recommended: true for most subtitle scenarios.
+    #[serde(default = "default_grayscale")]
+    pub grayscale: bool,
+
+    /// Apply contrast enhancement (histogram equalization) before OCR.
+    /// Helps with low-contrast images or uneven lighting.
+    #[serde(default = "default_contrast_enhancement")]
+    pub contrast_enhancement: bool,
+
+    /// Enable multi-pass OCR for improved accuracy.
+    /// When enabled, runs OCR multiple times with different preprocessing settings
+    /// and selects the result with the highest confidence.
+    /// Note: This doubles/triples OCR processing time but can improve accuracy.
+    #[serde(default = "default_multi_pass_enabled")]
+    pub enable_multi_pass: bool,
+
+    /// Number of OCR passes to run when multi-pass is enabled.
+    /// Higher values may improve accuracy but take longer.
+    /// Recommended: 2-3 passes.
+    #[serde(default = "default_multi_pass_count")]
+    pub multi_pass_count: u32,
+
+    /// Validation strictness for ML-based text filtering.
+    /// Controls how aggressively to filter OCR artifacts and garbage text.
+    /// - Permissive: Only rejects obvious garbage (low confidence < 0.2)
+    /// - Moderate: Balances false positives/negatives (rejects confidence < 0.4)
+    /// - Strict: Aggressively filters potential garbage (rejects confidence < 0.6)
+    #[serde(default)]
+    pub validation_strictness: ValidationStrictness,
+}
+
+fn default_confidence_threshold() -> f32 {
+    0.5
+}
+
+fn default_preprocessing_enabled() -> bool {
+    true
+}
+
+fn default_grayscale() -> bool {
+    true
+}
+
+fn default_contrast_enhancement() -> bool {
+    true
+}
+
+fn default_multi_pass_enabled() -> bool {
+    false
+}
+
+fn default_multi_pass_count() -> u32 {
+    2
+}
+
+/// Validation strictness level for ML-based text validation
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "camelCase")]
+pub enum ValidationStrictness {
+    /// Permissive: only rejects obvious garbage
+    #[default]
+    Permissive,
+    /// Moderate: balances false positives and false negatives
+    Moderate,
+    /// Strict: aggressively filters potential garbage
+    Strict,
+}
+
+impl ValidationStrictness {
+    /// Get the confidence threshold for this strictness level.
+    /// Returns the minimum confidence score required for OCR text to be accepted.
+    pub fn threshold(&self) -> f32 {
+        match self {
+            ValidationStrictness::Permissive => 0.2,
+            ValidationStrictness::Moderate => 0.4,
+            ValidationStrictness::Strict => 0.6,
+        }
+    }
 }
 
 /// Context-aware prompt level for Foundry Local.
@@ -230,6 +330,10 @@ impl TranslationConfig {
         }
 
         self.offline_mt.timeout_ms = self.offline_mt.timeout_ms.clamp(1, 120_000);
+
+        // OCR config normalization
+        self.ocr.confidence_threshold = self.ocr.confidence_threshold.clamp(0.0, 1.0);
+        self.ocr.multi_pass_count = self.ocr.multi_pass_count.clamp(1, 5);
     }
 }
 
@@ -452,6 +556,21 @@ impl Default for TranslationConfig {
             context_reset_gap_ms: default_context_reset_gap_ms(),
             foundry_local: FoundryLocalConfig::default(),
             offline_mt: OfflineMtConfig::default(),
+            ocr: OcrConfig::default(),
+        }
+    }
+}
+
+impl Default for OcrConfig {
+    fn default() -> Self {
+        Self {
+            confidence_threshold: default_confidence_threshold(),
+            preprocessing_enabled: default_preprocessing_enabled(),
+            grayscale: default_grayscale(),
+            contrast_enhancement: default_contrast_enhancement(),
+            enable_multi_pass: default_multi_pass_enabled(),
+            multi_pass_count: default_multi_pass_count(),
+            validation_strictness: ValidationStrictness::default(),
         }
     }
 }

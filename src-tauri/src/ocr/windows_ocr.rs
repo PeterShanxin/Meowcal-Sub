@@ -7,8 +7,8 @@
 // On Copilot+ PCs, some of these operations run on the NPU for better battery.
 // =============================================================================
 
-use super::{OcrError, OcrResult};
-use tracing::{debug, info};
+use super::{OcrError, OcrResult, PreprocessingConfig, preprocess_image};
+use tracing::{debug, info, warn};
 
 // Windows Runtime APIs for OCR
 use windows::Globalization::Language;
@@ -96,7 +96,11 @@ impl WindowsOcr {
         Ok(Self { engine })
     }
 
-    /// Recognize text in an image
+    /// Recognize text in an image with preprocessing enabled by default.
+    ///
+    /// This method applies image preprocessing (grayscale + contrast enhancement)
+    /// before OCR to improve accuracy. Use `recognize_without_preprocessing` if you
+    /// want to skip preprocessing.
     ///
     /// # Arguments
     /// * `image_data` - Raw pixel data in BGRA format (4 bytes per pixel)
@@ -127,6 +131,57 @@ impl WindowsOcr {
     /// }
     /// ```
     pub async fn recognize(
+        &self,
+        image_data: &[u8],
+        width: u32,
+        height: u32,
+    ) -> Result<OcrResult, OcrError> {
+        // Use preprocessing by default (optimal settings for most images)
+        self.recognize_with_preprocessing(image_data, width, height, PreprocessingConfig::optimal()).await
+    }
+
+    /// Recognize text in an image without any preprocessing.
+    ///
+    /// Use this when you want to process the image yourself or when preprocessing
+    /// is causing issues with your specific use case.
+    pub async fn recognize_without_preprocessing(
+        &self,
+        image_data: &[u8],
+        width: u32,
+        height: u32,
+    ) -> Result<OcrResult, OcrError> {
+        self.recognize_raw(image_data, width, height).await
+    }
+
+    /// Recognize text in an image with preprocessing configuration.
+    ///
+    /// This method applies image preprocessing (grayscale, contrast enhancement)
+    /// before OCR to improve accuracy on noisy or low-contrast images.
+    ///
+    /// # Arguments
+    /// * `image_data` - Raw pixel data in BGRA format (4 bytes per pixel)
+    /// * `width` - Image width in pixels
+    /// * `height` - Image height in pixels
+    /// * `preprocessing` - Preprocessing configuration options
+    ///
+    /// # Returns
+    /// The recognized text with confidence score
+    pub async fn recognize_with_preprocessing(
+        &self,
+        image_data: &[u8],
+        width: u32,
+        height: u32,
+        preprocessing: PreprocessingConfig,
+    ) -> Result<OcrResult, OcrError> {
+        // Apply preprocessing if enabled
+        let processed_data = preprocess_image(image_data, width, height, preprocessing);
+
+        // Use the processed data for OCR
+        self.recognize_raw(&processed_data, width, height).await
+    }
+
+    /// Internal method to recognize text from already-processed image data.
+    async fn recognize_raw(
         &self,
         image_data: &[u8],
         width: u32,
@@ -191,11 +246,18 @@ impl WindowsOcr {
             }
         }
 
-        let result = OcrResult::new(lines);
+        // Create the result
+        let mut result = OcrResult::new(lines);
+
+        // Calculate confidence score using heuristic method
+        // Windows OCR doesn't provide native confidence, so we estimate it
+        result.confidence = Some(result.calculate_confidence());
+
         debug!(
-            "OCR found {} lines ({} chars)",
+            "OCR found {} lines ({} chars), confidence: {:.2}",
             result.lines.len(),
-            result.text.chars().count()
+            result.text.chars().count(),
+            result.confidence.unwrap_or(0.0)
         );
 
         Ok(result)
@@ -216,6 +278,117 @@ impl WindowsOcr {
         }
 
         Ok(result)
+    }
+
+    /// Run multi-pass OCR with different preprocessing configurations.
+    ///
+    /// This method runs OCR multiple times with different preprocessing settings
+    /// and selects the result with the highest confidence score.
+    ///
+    /// The different passes use varying combinations of:
+    /// - Grayscale on/off
+    /// - Contrast enhancement on/off
+    ///
+    /// # Arguments
+    /// * `image_data` - Raw pixel data in BGRA format (4 bytes per pixel)
+    /// * `width` - Image width in pixels
+    /// * `height` - Image height in pixels
+    /// * `pass_count` - Number of OCR passes to run (typically 2-3)
+    ///
+    /// # Returns
+    /// The best OCR result based on confidence score
+    pub async fn recognize_multi_pass(
+        &self,
+        image_data: &[u8],
+        width: u32,
+        height: u32,
+        pass_count: u32,
+    ) -> Result<OcrResult, OcrError> {
+        info!("Running multi-pass OCR with {} passes", pass_count);
+
+        // Define different preprocessing configurations to try
+        // Pass 1: Standard preprocessing (grayscale + contrast)
+        // Pass 2: Grayscale only (no contrast enhancement)
+        // Pass 3: Contrast only (no grayscale)
+        // Pass 4: No preprocessing (raw image)
+        let configs = vec![
+            PreprocessingConfig {
+                grayscale: true,
+                contrast_enhancement: true,
+            },
+            PreprocessingConfig {
+                grayscale: true,
+                contrast_enhancement: false,
+            },
+            PreprocessingConfig {
+                grayscale: false,
+                contrast_enhancement: true,
+            },
+            PreprocessingConfig {
+                grayscale: false,
+                contrast_enhancement: false,
+            },
+        ];
+
+        let mut best_result: Option<OcrResult> = None;
+        let mut best_confidence: f32 = 0.0;
+
+        // Run OCR with each configuration (up to pass_count configs)
+        for (i, config) in configs.iter().enumerate() {
+            if i >= pass_count as usize {
+                break;
+            }
+
+            let pass_num = i + 1;
+            debug!(
+                "Multi-pass OCR: pass {}/{} with grayscale={}, contrast={}",
+                pass_num,
+                pass_count,
+                config.grayscale,
+                config.contrast_enhancement
+            );
+
+            match self
+                .recognize_with_preprocessing(image_data, width, height, *config)
+                .await
+            {
+                Ok(result) => {
+                    let confidence = result.confidence.unwrap_or(0.0);
+                    debug!(
+                        "Multi-pass OCR: pass {} result confidence = {:.2}, text length = {}",
+                        pass_num,
+                        confidence,
+                        result.text.len()
+                    );
+
+                    if confidence > best_confidence {
+                        best_confidence = confidence;
+                        best_result = Some(result);
+                    }
+                }
+                Err(e) => {
+                    warn!(
+                        "Multi-pass OCR: pass {} failed with error: {}",
+                        pass_num, e
+                    );
+                }
+            }
+        }
+
+        // Return the best result, or an empty result if all passes failed
+        match best_result {
+            Some(result) => {
+                info!(
+                    "Multi-pass OCR complete: best confidence = {:.2}",
+                    best_confidence
+                );
+                Ok(result)
+            }
+            None => {
+                warn!("Multi-pass OCR: all passes failed, returning empty result");
+                Ok(OcrResult::empty())
+            }
+        }
     }
 }
 
