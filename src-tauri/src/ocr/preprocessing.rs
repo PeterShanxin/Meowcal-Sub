@@ -204,9 +204,9 @@ pub fn apply_contrast_stretch(image: &GrayImage) -> GrayImage {
         max_val = max_val.max(val);
     }
 
-    // If image is already using full range, return copy
+    // If all pixels are the same value there is no range to stretch — return all zeros
     if max_val == min_val {
-        return image.clone();
+        return GrayImage::new(width, height);
     }
 
     // Apply linear stretch
