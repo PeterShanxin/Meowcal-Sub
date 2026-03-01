@@ -1,6 +1,6 @@
 {
   "name": "meowcal-sub",
-  "version": "0.1.0",
+  "version": "0.5.0",
   "description": "NPU-accelerated subtitle translation for Copilot+ PCs",
   "private": true,
   "scripts": {
