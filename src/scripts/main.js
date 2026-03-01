@@ -647,6 +647,7 @@ function clampInt(value, min, max, fallback) {
 async function saveSettings(opts) {
     const options = opts && typeof opts === 'object' ? opts : {};
     const silent = options.silent === true;
+    const isAutoSave = options.isAutoSave === true;
     const refreshDiagnostics = options.refreshDiagnostics !== undefined
         ? options.refreshDiagnostics === true
         : !silent;
@@ -728,7 +729,10 @@ async function saveSettings(opts) {
     try {
         await TauriBridge.invoke('save_settings', { settings });
         appState.settings = settings;
-        if (!silent) {
+        if (isAutoSave) {
+            // Show small modal for auto-save
+            showAutosaveModal();
+        } else if (!silent) {
             showToast('Settings saved!', 'success');
         }
         console.log('Settings saved:', settings);
@@ -740,7 +744,10 @@ async function saveSettings(opts) {
         }
     } catch (error) {
         console.error('Failed to save settings:', error);
-        if (!silent) {
+        if (isAutoSave) {
+            // Show error via modal for auto-save failures
+            showAutosaveModal();
+        } else if (!silent) {
             showToast('Failed to save settings', 'error');
         }
     }
@@ -748,6 +755,42 @@ async function saveSettings(opts) {
 
 const AUTO_SAVE_DELAY_MS = 350;
 let autoSaveTimer = null;
+let autosaveModalTimer = null;
+
+/**
+ * Show the auto-save notification modal
+ */
+function showAutosaveModal() {
+    const modal = document.getElementById('autosave-modal');
+    if (!modal) return;
+
+    // Clear any existing hide timer
+    if (autosaveModalTimer) {
+        clearTimeout(autosaveModalTimer);
+    }
+
+    // Show the modal
+    modal.classList.remove('hidden');
+
+    // Auto-hide after 1.5 seconds
+    autosaveModalTimer = setTimeout(() => {
+        hideAutosaveModal();
+    }, 1500);
+}
+
+/**
+ * Hide the auto-save notification modal
+ */
+function hideAutosaveModal() {
+    const modal = document.getElementById('autosave-modal');
+    if (modal) {
+        modal.classList.add('hidden');
+    }
+    if (autosaveModalTimer) {
+        clearTimeout(autosaveModalTimer);
+        autosaveModalTimer = null;
+    }
+}
 
 function scheduleAutoSave() {
     if (autoSaveTimer) {
@@ -756,7 +799,8 @@ function scheduleAutoSave() {
 
     autoSaveTimer = setTimeout(async () => {
         autoSaveTimer = null;
-        await saveSettings({ silent: true, refreshDiagnostics: false });
+        // Save immediately without silent mode to trigger modal
+        await saveSettings({ silent: false, refreshDiagnostics: false, isAutoSave: true });
     }, AUTO_SAVE_DELAY_MS);
 }
 
