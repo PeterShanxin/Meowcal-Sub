@@ -1191,6 +1191,7 @@ mod tests {
             context_reset_gap_ms: 6_000,
             foundry_local: crate::config::FoundryLocalConfig::default(),
             offline_mt: OfflineMtConfig::default(),
+            ocr: crate::config::OcrConfig::default(),
         }
     }
 
