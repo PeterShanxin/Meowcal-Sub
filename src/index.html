@@ -357,56 +357,9 @@
                         <span class="section-icon">⚙</span>
                         Fallback Backends
                     </span>
-                    <span class="badge badge-count" id="fallback-count">2 configured</span>
+                    <span class="badge badge-count" id="fallback-count">1 configured</span>
                 </summary>
                 <div class="collapsible-content">
-                    <!-- Offline MT -->
-                    <div class="backend-card">
-                        <div class="toggle-wrapper">
-                            <span class="toggle-label">Offline MT (translateLocally)</span>
-                            <label class="toggle">
-                                <input type="checkbox" id="toggle-offline-mt">
-                                <span class="toggle-slider"></span>
-                            </label>
-                        </div>
-                        <div class="settings-group">
-                            <label class="setting-label" for="offline-mt-path">Binary Path</label>
-                            <input
-                                type="text"
-                                id="offline-mt-path"
-                                class="text-input"
-                                placeholder="C:\\tools\\translateLocally\\translateLocally.exe"
-                            >
-                        </div>
-                        <div class="backend-status-inline" id="offline-mt-status">
-                            <span class="status-text">Checking status...</span>
-                        </div>
-                        <div class="card-actions">
-                            <button class="btn btn-outline btn-small" id="btn-download-offline-mt">
-                                Download
-                            </button>
-                        </div>
-                    </div>
-
-                    <!-- Windows AI -->
-                    <div class="backend-card">
-                        <div class="toggle-wrapper">
-                            <span class="toggle-label">Windows AI (Copilot Runtime)</span>
-                            <label class="toggle">
-                                <input type="checkbox" id="toggle-windows-ai">
-                                <span class="toggle-slider"></span>
-                            </label>
-                        </div>
-                        <div class="backend-status-inline" id="windows-ai-status">
-                            <span class="status-text">Checking status...</span>
-                        </div>
-                        <div class="card-actions">
-                            <button class="btn btn-outline btn-small" id="btn-windows-ai-diagnostics">
-                                View Diagnostics
-                            </button>
-                        </div>
-                    </div>
-
                     <!-- Passthrough Fallback -->
                     <div class="backend-card">
                         <div class="toggle-wrapper">
@@ -574,22 +527,6 @@
                 </button>
                 <button class="btn btn-primary btn-small" id="btn-confirm-download">
                     Download
-                </button>
-            </div>
-        </div>
-    </div>
-
-    <!-- Diagnostics Modal -->
-    <div class="modal hidden" id="diagnostics-modal" role="dialog" aria-modal="true">
-        <div class="modal-backdrop" id="diagnostics-backdrop"></div>
-        <div class="modal-content" role="document">
-            <div class="modal-header">
-                <h3>Windows AI Diagnostics</h3>
-            </div>
-            <div class="modal-body" id="windows-ai-diagnostics"></div>
-            <div class="modal-actions">
-                <button class="btn btn-outline btn-small" id="btn-close-diagnostics">
-                    Close
                 </button>
             </div>
         </div>

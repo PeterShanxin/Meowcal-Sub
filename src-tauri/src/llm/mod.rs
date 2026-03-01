@@ -4,15 +4,13 @@
 // This module defines:
 // 1. Backend interfaces and readiness states
 // 2. Backend selection + fallback manager
-// 3. Implementations for each backend (Windows AI, Offline MT, Mock)
+// 3. Implementations for each backend (Mock)
 // =============================================================================
 
 mod context;
 mod foundry_local;
 mod manager;
 mod mock;
-mod offline_mt;
-mod phi_silica;
 mod prompt_router;
 mod text_utils;
 
@@ -20,8 +18,6 @@ pub use context::*;
 pub use foundry_local::*;
 pub use manager::*;
 pub use mock::*;
-pub use offline_mt::*;
-pub use phi_silica::*;
 pub use prompt_router::*;
 
 use async_trait::async_trait;
@@ -59,8 +55,6 @@ impl LlmError {
 #[serde(rename_all = "camelCase")]
 pub enum BackendId {
     FoundryLocal,
-    WindowsAi,
-    OfflineMt,
     Mock,
 }
 
@@ -69,8 +63,6 @@ impl BackendId {
     pub fn as_str(&self) -> &'static str {
         match self {
             BackendId::FoundryLocal => "foundry_local",
-            BackendId::WindowsAi => "windows_ai",
-            BackendId::OfflineMt => "offline_mt",
             BackendId::Mock => "mock",
         }
     }
@@ -81,12 +73,6 @@ impl BackendId {
         match value.trim().to_lowercase().as_str() {
             "foundry_local" | "foundrylocal" | "foundry-local" | "foundry" => {
                 Some(BackendId::FoundryLocal)
-            }
-            "windows_ai" | "windowsai" | "windows-ai" | "phi" | "phi_silica" => {
-                Some(BackendId::WindowsAi)
-            }
-            "offline_mt" | "offlinemt" | "offline-mt" | "translatelocally" => {
-                Some(BackendId::OfflineMt)
             }
             "mock" | "passthrough" | "none" => Some(BackendId::Mock),
             _ => None,
@@ -204,20 +190,6 @@ pub struct TranslationDiagnostics {
     pub backends: Vec<BackendInfo>,
     pub last_error_by_backend: HashMap<String, String>,
     pub last_latency_by_backend: HashMap<String, u128>,
-}
-
-/// Windows AI diagnostics snapshot for UI.
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct WindowsAiDiagnostics {
-    pub ready_state: ReadyState,
-    pub notes: String,
-    pub runtime_class_present: bool,
-    pub bindings_enabled: bool,
-    pub packaged: bool,
-    pub package_full_name: Option<String>,
-    pub packaging_note: String,
-    pub capability_note: String,
 }
 
 /// Internal diagnostics state (stored in AppState).

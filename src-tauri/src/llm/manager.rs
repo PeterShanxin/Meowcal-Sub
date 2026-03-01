@@ -5,8 +5,8 @@
 use super::text_utils::is_cjk_char;
 use crate::config::{ContextLevel, TranslationConfig};
 use crate::llm::{
-    BackendId, BackendInfo, FoundryLocalBackend, LlmError, MockBackend, OfflineMtBackend,
-    PhiSilica, PromptRouterOptions, ReadyState, TranslationContext, TranslationDiagnostics,
+    BackendId, BackendInfo, FoundryLocalBackend, LlmError, MockBackend,
+    PromptRouterOptions, ReadyState, TranslationContext, TranslationDiagnostics,
     TranslationDiagnosticsState, TranslationOutcome, TranslatorBackend,
 };
 use crate::sync_utils::{lock_or_recover, read_or_recover, write_or_recover};
@@ -98,17 +98,12 @@ impl TranslationManager {
     /// Create a new manager with the configured backends
     pub fn new(
         config: TranslationConfig,
-        app: AppHandle,
+        _app: AppHandle,
         diagnostics: Arc<Mutex<TranslationDiagnosticsState>>,
     ) -> Self {
-        // Fallback order: Foundry Local -> Offline MT -> Windows AI -> Mock
+        // Fallback order: Foundry Local -> Mock (pass-through)
         let backends: Vec<Box<dyn TranslatorBackend>> = vec![
             Box::new(FoundryLocalBackend::new(config.foundry_local.clone())),
-            Box::new(OfflineMtBackend::new(
-                app.clone(),
-                config.offline_mt.clone(),
-            )),
-            Box::new(PhiSilica::new()),
             Box::new(MockBackend::new()),
         ];
 
@@ -601,28 +596,19 @@ impl TranslationManager {
     fn is_enabled(&self, id: BackendId) -> bool {
         match id {
             BackendId::FoundryLocal => self.config.enable_foundry_local,
-            BackendId::WindowsAi => self.config.enable_windows_ai,
-            BackendId::OfflineMt => self.config.enable_offline_mt,
             BackendId::Mock => self.config.allow_mock_fallback,
         }
     }
 
     fn ordered_backend_ids(&self) -> Vec<BackendId> {
-        // Fallback order:
-        // 1) Foundry Local (primary), 2) Offline MT, 3) Windows AI (experimental), 4) Mock
-        vec![
-            BackendId::FoundryLocal,
-            BackendId::OfflineMt,
-            BackendId::WindowsAi,
-            BackendId::Mock,
-        ]
+        // Fallback order: Foundry Local -> Mock (pass-through)
+        vec![BackendId::FoundryLocal, BackendId::Mock]
     }
 
     fn timeout_ms_for_backend(&self, id: BackendId) -> u64 {
         let timeout_ms = match id {
             BackendId::FoundryLocal => self.config.foundry_local.timeout_ms as u64,
-            BackendId::OfflineMt => self.config.offline_mt.timeout_ms as u64,
-            BackendId::WindowsAi | BackendId::Mock => self.backend_timeout_ms,
+            BackendId::Mock => self.backend_timeout_ms,
         };
         timeout_ms.clamp(1, 120_000)
     }
@@ -1127,7 +1113,7 @@ impl ContextTier {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::{ContextLevel, OfflineMtConfig, TranslationConfig};
+    use crate::config::{ContextLevel, TranslationConfig};
     use crate::llm::LlmError;
     use async_trait::async_trait;
 
@@ -1177,8 +1163,6 @@ mod tests {
     fn base_config() -> TranslationConfig {
         TranslationConfig {
             enable_foundry_local: true,
-            enable_windows_ai: true,
-            enable_offline_mt: true,
             allow_mock_fallback: true,
             enable_context_aware: true,
             context_level: ContextLevel::MemoryAndRecent,
@@ -1190,26 +1174,26 @@ mod tests {
             context_buffer_size: 12,
             context_reset_gap_ms: 6_000,
             foundry_local: crate::config::FoundryLocalConfig::default(),
-            offline_mt: OfflineMtConfig::default(),
             ocr: crate::config::OcrConfig::default(),
         }
     }
 
     #[tokio::test]
     async fn test_fallback_ordering() {
+        // Test fallback from FoundryLocal (fails) to Mock
         let backends: Vec<Box<dyn TranslatorBackend>> = vec![
             Box::new(TestBackend {
-                id: BackendId::WindowsAi,
+                id: BackendId::FoundryLocal,
                 available: true,
                 ready_state: ReadyState::Ready,
                 response: Err(LlmError::ApiError("boom".to_string())),
                 delay_ms: 0,
             }),
             Box::new(TestBackend {
-                id: BackendId::OfflineMt,
+                id: BackendId::Mock,
                 available: true,
                 ready_state: ReadyState::Ready,
-                response: Ok("ok".to_string()),
+                response: Ok("mock_response".to_string()),
                 delay_ms: 0,
             }),
         ];
@@ -1221,14 +1205,15 @@ mod tests {
             .translate_with_fallback("hello", "en-US", "zh-CN")
             .await;
 
-        assert_eq!(outcome.backend_used, BackendId::OfflineMt);
-        assert_eq!(outcome.translated, "ok");
+        assert_eq!(outcome.backend_used, BackendId::Mock);
+        assert_eq!(outcome.translated, "mock_response");
     }
 
     #[tokio::test]
     async fn test_backend_timeout_fallback() {
         let mut config = base_config();
         config.foundry_local.timeout_ms = 10;
+        // Test timeout fallback from FoundryLocal to Mock
         let backends: Vec<Box<dyn TranslatorBackend>> = vec![
             Box::new(TestBackend {
                 id: BackendId::FoundryLocal,
@@ -1238,7 +1223,7 @@ mod tests {
                 delay_ms: 50,
             }),
             Box::new(TestBackend {
-                id: BackendId::OfflineMt,
+                id: BackendId::Mock,
                 available: true,
                 ready_state: ReadyState::Ready,
                 response: Ok("fast".to_string()),
@@ -1253,7 +1238,7 @@ mod tests {
             .translate_with_fallback("hello", "en-US", "zh-CN")
             .await;
 
-        assert_eq!(outcome.backend_used, BackendId::OfflineMt);
+        assert_eq!(outcome.backend_used, BackendId::Mock);
         assert_eq!(outcome.translated, "fast");
     }
 

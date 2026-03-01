@@ -59,12 +59,6 @@
         'prepare_foundry_local': { method: 'POST', path: '/foundry-local/prepare' },
         'make_foundry_ready': { method: 'POST', path: '/foundry-local/make-ready' },
 
-        // Windows AI
-        'get_windows_ai_diagnostics': { method: 'GET', path: '/windows-ai/diagnostics' },
-
-        // Offline MT
-        'detect_offline_mt_binary': { method: 'GET', path: '/offline-mt/detect' },
-
         // OCR language management
         'get_ocr_languages': { method: 'GET', path: '/ocr/languages' },
         'install_ocr_language': { method: 'POST', path: '/ocr/install-language' },
@@ -142,12 +136,6 @@
         if (command === 'list_foundry_local_models') {
             // HTTP returns { models: [...] }, Tauri returns [...]
             return result.models || [];
-        }
-
-        if (command === 'detect_offline_mt_binary') {
-            // HTTP returns { found, path, source }, Tauri returns { path, source } or null
-            if (!result.found) return null;
-            return { path: result.path, source: result.source };
         }
 
         if (command === 'list_translation_backends') {

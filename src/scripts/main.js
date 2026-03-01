@@ -331,8 +331,6 @@ function applyTranslationSettings(translation) {
     const config = normalizeTranslationConfig(translation);
 
     document.getElementById('toggle-foundry-local').checked = config.enableFoundryLocal;
-    document.getElementById('toggle-windows-ai').checked = config.enableWindowsAi;
-    document.getElementById('toggle-offline-mt').checked = config.enableOfflineMt;
     document.getElementById('toggle-mock-fallback').checked = config.allowMockFallback;
     document.getElementById('context-level').value = config.contextLevel;
     document.getElementById('context-recent-count').value = config.contextRecentCount;
@@ -342,7 +340,6 @@ function applyTranslationSettings(translation) {
     document.getElementById('prompt-max-context-chars').value = config.promptMaxContextChars;
     document.getElementById('context-buffer-size').value = config.contextBufferSize;
     document.getElementById('context-reset-gap-ms').value = config.contextResetGapMs;
-    document.getElementById('offline-mt-path').value = config.offlineMt.binaryPath || '';
 
     syncContextControls();
 
@@ -551,8 +548,6 @@ async function notifyOverlaySettingsChanged() {
 function normalizeTranslationConfig(translation) {
     const defaultConfig = {
         enableFoundryLocal: true,
-        enableWindowsAi: true,
-        enableOfflineMt: true,
         allowMockFallback: true,
         enableContextAware: true,
         contextLevel: 'memoryAndRecent',
@@ -566,11 +561,6 @@ function normalizeTranslationConfig(translation) {
         foundryLocal: {
             model: null,
             timeoutMs: 30000,
-        },
-        offlineMt: {
-            binaryPath: null,
-            timeoutMs: 3000,
-            maxChunkChars: 500,
         },
     };
 
@@ -588,8 +578,6 @@ function normalizeTranslationConfig(translation) {
 
     return {
         enableFoundryLocal: translation.enableFoundryLocal ?? defaultConfig.enableFoundryLocal,
-        enableWindowsAi: translation.enableWindowsAi ?? defaultConfig.enableWindowsAi,
-        enableOfflineMt: translation.enableOfflineMt ?? defaultConfig.enableOfflineMt,
         allowMockFallback: translation.allowMockFallback ?? defaultConfig.allowMockFallback,
         enableContextAware,
         contextLevel,
@@ -604,10 +592,6 @@ function normalizeTranslationConfig(translation) {
             model: translation.foundryLocal?.model ?? defaultConfig.foundryLocal.model,
             timeoutMs: translation.foundryLocal?.timeoutMs ?? defaultConfig.foundryLocal.timeoutMs,
         },
-        offlineMt: {
-            binaryPath: translation.offlineMt?.binaryPath ?? defaultConfig.offlineMt.binaryPath,
-            timeoutMs: translation.offlineMt?.timeoutMs ?? defaultConfig.offlineMt.timeoutMs,
-            maxChunkChars: translation.offlineMt?.maxChunkChars ?? defaultConfig.offlineMt.maxChunkChars,
         },
     };
 }
@@ -659,12 +643,9 @@ async function saveSettings(opts) {
         ? options.refreshDiagnostics === true
         : !silent;
     const translationConfig = normalizeTranslationConfig(appState.settings?.translation);
-    const offlineMtPath = document.getElementById('offline-mt-path').value.trim();
     const foundryModel = document.getElementById('foundry-local-model').value.trim();
 
     translationConfig.enableFoundryLocal = document.getElementById('toggle-foundry-local').checked;
-    translationConfig.enableWindowsAi = document.getElementById('toggle-windows-ai').checked;
-    translationConfig.enableOfflineMt = document.getElementById('toggle-offline-mt').checked;
     translationConfig.allowMockFallback = document.getElementById('toggle-mock-fallback').checked;
 
     const contextLevel = document.getElementById('context-level').value;
@@ -714,7 +695,6 @@ async function saveSettings(opts) {
     );
     syncContextControls();
     translationConfig.foundryLocal.model = foundryModel.length > 0 ? foundryModel : null;
-    translationConfig.offlineMt.binaryPath = offlineMtPath.length > 0 ? offlineMtPath : null;
 
     // Collect OCR settings
     const ocrConfig = collectOcrSettings();
@@ -994,37 +974,10 @@ function setupEventListeners() {
         void refreshFoundryStatus({ probe: false, reason: 'toggle' });
         scheduleFoundryAutoProbe();
     });
-    document.getElementById('toggle-windows-ai').addEventListener('change', () => {
-        console.log('Windows AI toggled, auto-saving...');
-        scheduleAutoSave();
-    });
-    document.getElementById('toggle-offline-mt').addEventListener('change', () => {
-        console.log('Offline MT toggled, auto-saving...');
-        scheduleAutoSave();
-    });
     document.getElementById('toggle-mock-fallback').addEventListener('change', () => {
         console.log('Passthrough fallback toggled, auto-saving...');
         scheduleAutoSave();
-    });
-    document.getElementById('offline-mt-path').addEventListener('change', () => {
-        console.log('Offline MT path changed, auto-saving...');
-        scheduleAutoSave();
-    });
-
-    // Download translateLocally
-    document.getElementById('btn-download-offline-mt')
-        .addEventListener('click', handleOfflineMtDownload);
-
-    // Windows AI diagnostics
-    document.getElementById('btn-windows-ai-diagnostics')
-        .addEventListener('click', handleWindowsAiDiagnostics);
-
-    // Diagnostics modal close
-    document.getElementById('btn-close-diagnostics')
-        .addEventListener('click', closeDiagnosticsModal);
-    document.getElementById('diagnostics-backdrop')
-        .addEventListener('click', closeDiagnosticsModal);
-
+    }); 
     // translateLocally download modal actions
     document.getElementById('btn-cancel-download')
         .addEventListener('click', closeDownloadModal);
@@ -1283,7 +1236,6 @@ async function refreshTranslationDiagnostics() {
     try {
         const diagnostics = await TauriBridge.invoke('get_translation_diagnostics');
         updateBackendStatusUI(diagnostics);
-        await autoDetectOfflineMtPath();
         if (document.getElementById('toggle-foundry-local')?.checked) {
             await loadFoundryLocalModels();
         }
@@ -1719,10 +1671,6 @@ function backendIdKey(id) {
     switch (id) {
         case 'foundryLocal':
             return 'foundry_local';
-        case 'windowsAi':
-            return 'windows_ai';
-        case 'offlineMt':
-            return 'offline_mt';
         case 'mock':
             return 'mock';
         default:
@@ -1833,8 +1781,6 @@ function updateBackendStatusUI(diagnostics) {
     });
 
     // Update inline status cards
-    updateOfflineMtStatusInline(diagnostics);
-    updateWindowsAiStatusInline(diagnostics);
     updateStatusSummary(diagnostics);
 }
 
@@ -1889,62 +1835,6 @@ function updateFoundryStatusInline(diagnostics) {
 }
 
 /**
- * Update Offline MT status inline display
- */
-function updateOfflineMtStatusInline(diagnostics) {
-    const statusEl = document.getElementById('offline-mt-status');
-    if (!statusEl || !diagnostics.backends) return;
-
-    const offline = diagnostics.backends.find(b => b.id === 'offlineMt');
-    if (!offline) {
-        statusEl.innerHTML = '<span class="status-text">Offline MT not found</span>';
-        return;
-    }
-
-    let readyState = offline.readyState;
-    if (!offline.available && readyState === 'ready') {
-        readyState = 'notReady';
-    }
-
-    const statusInfo = formatReadyState(readyState);
-    const statusClass = statusInfo.className;
-    const pill = `<span class="status-pill ${statusClass}">● ${statusInfo.label.toUpperCase()}</span>`;
-
-    statusEl.innerHTML = `
-        ${pill}
-        <span class="status-text">${offline.notes}</span>
-    `;
-}
-
-/**
- * Update Windows AI status inline display
- */
-function updateWindowsAiStatusInline(diagnostics) {
-    const statusEl = document.getElementById('windows-ai-status');
-    if (!statusEl || !diagnostics.backends) return;
-
-    const windowsAi = diagnostics.backends.find(b => b.id === 'windowsAi');
-    if (!windowsAi) {
-        statusEl.innerHTML = '<span class="status-text">Windows AI not found</span>';
-        return;
-    }
-
-    let readyState = windowsAi.readyState;
-    if (!windowsAi.available && readyState === 'ready') {
-        readyState = 'notReady';
-    }
-
-    const statusInfo = formatReadyState(readyState);
-    const statusClass = statusInfo.className;
-    const pill = `<span class="status-pill ${statusClass}">● ${statusInfo.label.toUpperCase()}</span>`;
-
-    statusEl.innerHTML = `
-        ${pill}
-        <span class="status-text">${windowsAi.notes}</span>
-    `;
-}
-
-/**
  * Update status summary (X/Y ready)
  */
 function updateStatusSummary(diagnostics) {
@@ -1968,40 +1858,6 @@ async function handleOfflineMtDownload() {
     } catch (error) {
         console.error('Failed to prepare download modal:', error);
         showToast('Failed to load download options', 'error');
-    }
-}
-
-async function autoDetectOfflineMtPath(force = false) {
-    const input = document.getElementById('offline-mt-path');
-    if (!input) {
-        return;
-    }
-
-    if (!force && input.value.trim().length > 0) {
-        return;
-    }
-
-    try {
-        const detection = await TauriBridge.invoke('detect_offline_mt_binary');
-        if (detection && detection.path) {
-            input.value = detection.path;
-            showToast(`Found translateLocally via ${detection.source}. Click Save Settings.`, 'success');
-        } else if (force) {
-            showToast('translateLocally not found yet. Install it and click Refresh.', 'warning');
-        }
-    } catch (error) {
-        console.error('Offline MT detection failed:', error);
-    }
-}
-
-async function handleWindowsAiDiagnostics() {
-    try {
-        const diagnostics = await TauriBridge.invoke('get_windows_ai_diagnostics');
-        renderWindowsAiDiagnostics(diagnostics);
-        openDiagnosticsModal();
-    } catch (error) {
-        console.error('Failed to load Windows AI diagnostics:', error);
-        showToast('Failed to load Windows AI diagnostics', 'error');
     }
 }
 
@@ -2250,114 +2106,6 @@ async function handleStartWithFallbackNow() {
     showToast('Starting with fallback (Foundry not ready).', 'warning');
     await saveSettings({ silent: true, refreshDiagnostics: false });
     await startTranslationNow();
-}
-
-function renderWindowsAiDiagnostics(diagnostics) {
-    const container = document.getElementById('windows-ai-diagnostics');
-    if (!container) {
-        return;
-    }
-
-    container.innerHTML = '';
-
-    if (!diagnostics) {
-        container.textContent = 'No diagnostics available.';
-        return;
-    }
-
-    const readyState = formatReadyState(diagnostics.readyState);
-    const readyClass = diagnostics.readyState === 'ready'
-        ? 'ok'
-        : diagnostics.readyState === 'notReady'
-            ? 'warn'
-            : 'blocked';
-    container.appendChild(
-        createDiagnosticItem('Ready State', readyState.label, diagnostics.notes, readyClass)
-    );
-
-    const runtimeDetail = diagnostics.runtimeClassPresent
-        ? 'LanguageModel runtime class detected.'
-        : 'LanguageModel runtime class not registered.';
-    container.appendChild(
-        createDiagnosticItem(
-            'Runtime Class',
-            diagnostics.runtimeClassPresent ? 'OK' : 'Blocked',
-            runtimeDetail,
-            diagnostics.runtimeClassPresent ? 'ok' : 'blocked'
-        )
-    );
-
-    const bindingsDetail = diagnostics.bindingsEnabled
-        ? 'Bindings enabled.'
-        : 'Enable feature windows_ai and add WinAppSDK bindings.';
-    container.appendChild(
-        createDiagnosticItem(
-            'Bindings',
-            diagnostics.bindingsEnabled ? 'OK' : 'Blocked',
-            bindingsDetail,
-            diagnostics.bindingsEnabled ? 'ok' : 'blocked'
-        )
-    );
-
-    const packagingDetail = diagnostics.packagingNote || 'Packaging status unknown.';
-    container.appendChild(
-        createDiagnosticItem(
-            'Packaging',
-            diagnostics.packaged ? 'OK' : 'Blocked',
-            packagingDetail,
-            diagnostics.packaged ? 'ok' : 'blocked'
-        )
-    );
-
-    const capabilityDetail = diagnostics.capabilityNote || 'Capability status unknown.';
-    container.appendChild(
-        createDiagnosticItem(
-            'Capability',
-            diagnostics.packaged ? 'Warn' : 'Blocked',
-            capabilityDetail,
-            diagnostics.packaged ? 'warn' : 'blocked'
-        )
-    );
-}
-
-function createDiagnosticItem(label, status, detail, statusClass) {
-    const item = document.createElement('div');
-    item.className = 'diag-item';
-
-    const header = document.createElement('div');
-    header.className = 'diag-header';
-
-    const title = document.createElement('span');
-    title.className = 'diag-label';
-    title.textContent = label;
-
-    const badge = document.createElement('span');
-    badge.className = `diag-status ${statusClass}`;
-    badge.textContent = status;
-
-    header.appendChild(title);
-    header.appendChild(badge);
-
-    const body = document.createElement('div');
-    body.textContent = detail;
-
-    item.appendChild(header);
-    item.appendChild(body);
-    return item;
-}
-
-function openDiagnosticsModal() {
-    const modal = document.getElementById('diagnostics-modal');
-    if (modal) {
-        modal.classList.remove('hidden');
-    }
-}
-
-function closeDiagnosticsModal() {
-    const modal = document.getElementById('diagnostics-modal');
-    if (modal) {
-        modal.classList.add('hidden');
-    }
 }
 
 /**

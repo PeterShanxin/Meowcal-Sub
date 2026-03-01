@@ -259,8 +259,6 @@ fn main() {
             commands::install_ocr_language,
             commands::list_translation_backends,
             commands::get_translation_diagnostics,
-            commands::get_windows_ai_diagnostics,
-            commands::detect_offline_mt_binary,
             commands::open_translate_locally_download,
             commands::get_translate_locally_download_info,
             commands::download_translate_locally,
