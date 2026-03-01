@@ -26,9 +26,9 @@ use tracing::info;
 
 use crate::config::{AppConfig, CaptureRegion};
 use crate::llm::{
-    BackendId, BackendInfo, FoundryLocalBackend, FoundryLocalPhase,
-    ReadyState, TranslationDiagnostics, TranslationDiagnosticsState, TranslatorBackend,
-    FAST_PROBE_TIMEOUT_MS, SLOW_PROBE_TIMEOUT_MS,
+    BackendId, BackendInfo, FoundryLocalBackend, FoundryLocalPhase, ReadyState,
+    TranslationDiagnostics, TranslationDiagnosticsState, TranslatorBackend, FAST_PROBE_TIMEOUT_MS,
+    SLOW_PROBE_TIMEOUT_MS,
 };
 use crate::sync_utils::lock_or_recover;
 

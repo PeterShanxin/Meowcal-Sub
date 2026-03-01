@@ -20,9 +20,8 @@ use crate::ipc::{
     SubtitleUpdatePayload,
 };
 use crate::llm::{
-    BackendId, BackendInfo, FoundryLocalBackend, FoundryLocalPhase,
-    TranslationDiagnostics, TranslationDiagnosticsState, TranslationManager, TranslationOutcome,
-    TranslatorBackend,
+    BackendId, BackendInfo, FoundryLocalBackend, FoundryLocalPhase, TranslationDiagnostics,
+    TranslationDiagnosticsState, TranslationManager, TranslationOutcome, TranslatorBackend,
 };
 use crate::ocr::{PreprocessingConfig, WindowsOcr};
 use crate::overlay;
