@@ -695,27 +695,3 @@ body {
     margin-top: var(--spacing-md);
 }
 
-/* --- Auto-save Notification Modal (small, auto-dismissing) --- */
-.modal-small {
-    width: 250px;
-    padding: var(--spacing-md);
-    text-align: center;
-}
-
-.modal-small .modal-body {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: var(--spacing-sm);
-    margin-top: 0;
-    font-size: var(--font-size-md);
-    color: var(--color-text-primary);
-}
-
-.autosave-icon {
-    font-size: 1.25rem;
-}
-
-.autosave-message {
-    font-weight: 500;
-}
