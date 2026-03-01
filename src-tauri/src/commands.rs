@@ -214,6 +214,119 @@ pub fn get_system_info() -> SystemInfo {
 }
 
 // =============================================================================
+// OCR LANGUAGE MANAGEMENT
+// =============================================================================
+
+/// List OCR language packs installed on this system.
+/// Returns BCP-47 tags (e.g. ["en-US", "zh-CN"]).
+#[tauri::command]
+pub async fn get_ocr_languages() -> Vec<String> {
+    info!("Getting available OCR languages...");
+    let result = async_runtime::spawn_blocking(WindowsOcr::available_languages).await;
+    match result {
+        Ok(Ok(langs)) => {
+            info!("Found {} OCR language(s): {:?}", langs.len(), langs);
+            langs
+        }
+        Ok(Err(e)) => {
+            warn!("Failed to enumerate OCR languages: {}", e);
+            Vec::new()
+        }
+        Err(e) => {
+            warn!("OCR language enumeration task failed: {}", e);
+            Vec::new()
+        }
+    }
+}
+
+/// Install an OCR language pack via an elevated PowerShell window.
+/// Triggers a UAC prompt — the user must approve the elevation.
+#[tauri::command]
+pub async fn install_ocr_language(language_tag: String) -> Result<(), String> {
+    // Strict allowlist: only accept known BCP-47 tags to prevent command injection
+    // in the elevated PowerShell context.
+    let capability_tag = match language_tag.as_str() {
+        "en-US" => "en-US",
+        "zh-TW" => "zh-Hant",
+        "zh-CN" => "zh-Hans",
+        "ja-JP" => "ja",
+        "ko-KR" => "ko",
+        "es-ES" => "es",
+        "fr-FR" => "fr",
+        "de-DE" => "de",
+        _ => {
+            return Err(format!(
+                "Unsupported language tag: '{}'. Only known languages can be installed.",
+                language_tag
+            ));
+        }
+    }
+    .to_string();
+
+    info!(
+        "Installing OCR language pack: {} (capability tag: {})",
+        language_tag, capability_tag
+    );
+
+    async_runtime::spawn_blocking(move || {
+        // Build the inner (elevated) PowerShell script
+        let inner_script = format!(
+            "Write-Host 'Installing OCR language pack: {tag}...' -ForegroundColor Cyan; \
+             Write-Host ''; \
+             $cap = Get-WindowsCapability -Online | Where-Object {{ $_.Name -Like 'Language.OCR*{tag}*' -and $_.State -ne 'Installed' }}; \
+             if ($cap) {{ \
+                 $cap | Add-WindowsCapability -Online; \
+                 Write-Host ''; \
+                 Write-Host 'Done! OCR language pack installed successfully.' -ForegroundColor Green \
+             }} else {{ \
+                 Write-Host 'Language pack is already installed or not available.' -ForegroundColor Yellow \
+             }}; \
+             Start-Sleep -Seconds 5",
+            tag = capability_tag
+        );
+
+        // Outer PowerShell spawns an elevated inner shell via Start-Process -Verb RunAs
+        let mut cmd = std::process::Command::new("powershell");
+        cmd.args([
+            "-NoProfile",
+            "-Command",
+            &format!(
+                "Start-Process powershell -Verb RunAs -Wait -ArgumentList '-NoProfile -Command {}'",
+                // Escape single quotes for the nested argument
+                inner_script.replace('\'', "''")
+            ),
+        ]);
+
+        #[cfg(windows)]
+        {
+            use std::os::windows::process::CommandExt;
+            const CREATE_NO_WINDOW: u32 = 0x08000000;
+            cmd.creation_flags(CREATE_NO_WINDOW);
+        }
+
+        match cmd.status() {
+            Ok(status) if status.success() => {
+                info!("OCR language pack install completed for: {}", language_tag);
+                Ok(())
+            }
+            Ok(status) => {
+                let msg = format!(
+                    "OCR language pack install exited with code: {:?}",
+                    status.code()
+                );
+                warn!("{}", msg);
+                // Still return Ok — the user may have cancelled the UAC prompt,
+                // and we'll re-check available languages on the frontend
+                Ok(())
+            }
+            Err(e) => Err(format!("Failed to launch installer: {}", e)),
+        }
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+// =============================================================================
 // TIMING CONSTANTS - Translation Loop & UI
 // =============================================================================
 // These control timing behavior in the translation loop. Grouped here for
@@ -1634,6 +1747,18 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
                     "⚠️ OCR language '{}' not available: {}. Falling back to user profile languages.",
                     source_language, e
                 );
+                let _ = app.emit(
+                    "capture-status",
+                    CaptureStatusPayload {
+                        using_fallback: true,
+                        message: format!(
+                            "OCR language '{}' is not installed. Using system default. \
+                             Install it: Windows Settings > Time & Language > Language & Region.",
+                            source_language
+                        ),
+                        is_error: false,
+                    },
+                );
                 match WindowsOcr::new() {
                     Ok(o) => o,
                     Err(e) => {
@@ -1786,6 +1911,19 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
                 .count();
             if significant_chars < 2 {
                 debug!("Noise/very short text detected, skipping");
+                tokio::time::sleep(Duration::from_millis(interval_ms as u64)).await;
+                continue;
+            }
+
+            // Additional garbage detection: skip OCR artifacts from credits, logos,
+            // and scrambled character recognition that would cause hallucinations.
+            if crate::llm::is_untranslatable_text(&current_text) {
+                let preview: String = current_text.chars().take(40).collect();
+                debug!(
+                    "Skipping untranslatable text ({} chars): {:?}",
+                    current_text.chars().count(),
+                    preview
+                );
                 tokio::time::sleep(Duration::from_millis(interval_ms as u64)).await;
                 continue;
             }

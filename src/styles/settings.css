@@ -481,3 +481,26 @@
     font-style: normal;
     font-weight: 600;
 }
+
+/* OCR language warning */
+.ocr-lang-warning {
+    color: #b8860b;
+    border-left: 3px solid #b8860b;
+    padding: 6px 10px;
+    margin-top: 6px;
+    font-size: var(--font-size-sm);
+    line-height: 1.4;
+    background: rgba(255, 200, 0, 0.08);
+    border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 4px;
+}
+
+.ocr-lang-warning .btn-sm {
+    padding: 2px 10px;
+    font-size: var(--font-size-xs);
+    border-radius: var(--radius-sm);
+    white-space: nowrap;
+}

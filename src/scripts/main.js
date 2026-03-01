@@ -41,6 +41,7 @@ const appState = {
         last: null,
         lastCheckedMs: 0,
     },
+    ocrLanguages: null, // Set of installed BCP-47 tags, populated by loadOcrLanguages()
 };
 
 // =============================================================================
@@ -58,6 +59,9 @@ async function initializeApp() {
 
         // Load saved settings
         await loadSettings();
+
+        // Load OCR language availability and update dropdown
+        await loadOcrLanguages();
 
         // Set up event listeners for buttons
         setupEventListeners();
@@ -199,6 +203,126 @@ async function loadSettings() {
     } catch (error) {
         console.error('Failed to load settings:', error);
         // Use defaults if loading fails
+    }
+}
+
+// =============================================================================
+// OCR LANGUAGE MANAGEMENT
+// =============================================================================
+
+const KNOWN_SOURCE_LANGUAGES = [
+    { value: 'en-US', label: 'English (US)' },
+    { value: 'ja-JP', label: 'Japanese' },
+    { value: 'zh-CN', label: 'Chinese (Simplified)' },
+    { value: 'zh-TW', label: 'Chinese (Traditional)' },
+    { value: 'ko-KR', label: 'Korean' },
+    { value: 'es-ES', label: 'Spanish' },
+    { value: 'fr-FR', label: 'French' },
+    { value: 'de-DE', label: 'German' },
+];
+
+/**
+ * Load installed OCR languages and update the source language dropdown
+ */
+async function loadOcrLanguages() {
+    try {
+        const langs = await TauriBridge.invoke('get_ocr_languages');
+        appState.ocrLanguages = new Set(langs);
+        console.log('OCR languages installed:', langs);
+    } catch (error) {
+        console.warn('Could not load OCR languages:', error);
+        // Treat failure as "unknown" — still populate from KNOWN_SOURCE_LANGUAGES
+        appState.ocrLanguages = new Set();
+    }
+
+    // Use saved setting as the selected value, since the HTML only has en-US
+    // as a static fallback and loadSettings() may have set a different value.
+    const currentValue = appState.settings?.sourceLanguage
+        || document.getElementById('source-language').value;
+    populateSourceLanguageDropdown(appState.ocrLanguages, currentValue);
+    checkOcrLanguageWarning(currentValue);
+}
+
+/**
+ * Rebuild the source language dropdown, marking uninstalled languages
+ */
+function populateSourceLanguageDropdown(installedSet, currentValue) {
+    const select = document.getElementById('source-language');
+    select.innerHTML = '';
+
+    for (const lang of KNOWN_SOURCE_LANGUAGES) {
+        const option = document.createElement('option');
+        option.value = lang.value;
+        const installed = installedSet.has(lang.value);
+        if (installed) {
+            option.textContent = lang.label;
+        } else {
+            option.textContent = `${lang.label} \u2014 not installed`;
+            option.dataset.notInstalled = 'true';
+        }
+        select.appendChild(option);
+    }
+
+    // Restore previously selected value
+    select.value = currentValue;
+    if (!select.value) {
+        select.value = 'en-US';
+    }
+}
+
+/**
+ * Show or hide the OCR language warning based on the selected language
+ */
+function checkOcrLanguageWarning(selectedValue) {
+    const warning = document.getElementById('ocr-lang-warning');
+    const warningText = document.getElementById('ocr-lang-warning-text');
+    const installBtn = document.getElementById('ocr-lang-install-btn');
+
+    if (!warning || !appState.ocrLanguages) return;
+
+    if (!appState.ocrLanguages.has(selectedValue)) {
+        const langName = KNOWN_SOURCE_LANGUAGES.find(l => l.value === selectedValue)?.label || selectedValue;
+        warningText.textContent = `${langName} OCR is not installed.`;
+        installBtn.textContent = 'Install';
+        installBtn.disabled = false;
+        warning.style.display = 'flex';
+    } else {
+        warning.style.display = 'none';
+    }
+}
+
+/**
+ * Install the currently selected OCR language pack via elevated PowerShell
+ */
+async function installOcrLanguage() {
+    const select = document.getElementById('source-language');
+    const languageTag = select.value;
+    const installBtn = document.getElementById('ocr-lang-install-btn');
+
+    try {
+        installBtn.textContent = 'Installing...';
+        installBtn.disabled = true;
+
+        await TauriBridge.invoke('install_ocr_language', { languageTag });
+
+        // Wait briefly for Windows to register the new capability
+        await new Promise(resolve => setTimeout(resolve, 2000));
+
+        // Refresh the language list
+        await loadOcrLanguages();
+
+        if (appState.ocrLanguages.has(languageTag)) {
+            showToast('OCR language pack installed successfully!', 'success');
+        } else {
+            showToast('Installation may have been cancelled or is still in progress.', 'warning');
+            installBtn.textContent = 'Install';
+            installBtn.disabled = false;
+        }
+    } catch (error) {
+        console.error('Failed to install OCR language:', error);
+        showToast('Failed to install language pack: ' + error.message, 'error');
+        installBtn.textContent = 'Install';
+        installBtn.disabled = false;
     }
 }
 
@@ -659,7 +783,13 @@ function setupEventListeners() {
     // Auto-save when language settings change to ensure translation direction is persisted
     document.getElementById('source-language').addEventListener('change', () => {
         console.log('Source language changed, auto-saving...');
+        checkOcrLanguageWarning(document.getElementById('source-language').value);
         scheduleAutoSave();
+    });
+
+    // Install OCR language pack button
+    document.getElementById('ocr-lang-install-btn').addEventListener('click', () => {
+        installOcrLanguage();
     });
     document.getElementById('target-language').addEventListener('change', () => {
         console.log('Target language changed, auto-saving...');

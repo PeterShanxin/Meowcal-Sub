@@ -65,6 +65,10 @@
         // Offline MT
         'detect_offline_mt_binary': { method: 'GET', path: '/offline-mt/detect' },
 
+        // OCR language management
+        'get_ocr_languages': { method: 'GET', path: '/ocr/languages' },
+        'install_ocr_language': { method: 'POST', path: '/ocr/install-language' },
+
         // Capture region
         'get_capture_region': { method: 'GET', path: '/capture-region' },
         'set_capture_region': { method: 'POST', path: '/capture-region' },
