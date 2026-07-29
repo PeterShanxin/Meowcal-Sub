@@ -18,6 +18,8 @@ document.addEventListener('DOMContentLoaded', () => {
     initOverlay();
 });
 
+const { getTranslationPresentation } = window.TranslationDisplay;
+
 // =============================================================================
 // GLOBAL STATE
 // =============================================================================
@@ -641,16 +643,33 @@ async function setupEventListeners(elements) {
 
         // Translation updates
         await window.__TAURI__.event.listen('translation-update', (event) => {
-            const { translated, timestamp, backendUsed, warnings } = event.payload;
-            console.log('🌐 Translation:', translated);
-            updateSubtitleText(subtitleText, translated, subtitleContainer);
-            updateSubtitleHint(
-                subtitleHint,
-                subtitleHintText,
-                backendUsed,
-                warnings,
-                subtitleContainer
-            );
+            const { translated, timestamp, backendUsed, warnings, displayState } = event.payload;
+            const presentation = getTranslationPresentation(displayState, backendUsed);
+            console.log('🌐 Translation state:', presentation.state);
+
+            if (presentation.replaceText) {
+                updateSubtitleText(subtitleText, translated, subtitleContainer);
+                updateSubtitleHint(
+                    subtitleHint,
+                    subtitleHintText,
+                    backendUsed,
+                    warnings
+                );
+            } else if (presentation.clearText) {
+                overlayState.currentText = '';
+                subtitleText.textContent = '';
+                subtitleContainer.classList.add('hidden');
+                subtitleContainer.classList.remove('visible');
+                clearSubtitleHint(subtitleHint, subtitleHintText);
+            } else {
+                setSubtitleHint(
+                    subtitleHint,
+                    subtitleHintText,
+                    presentation.hint,
+                    presentation.severity,
+                    presentation.persist
+                );
+            }
 
             // Reposition using the real subtitle container height (hint can change size).
             requestAnimationFrame(() => {
@@ -663,10 +682,10 @@ async function setupEventListeners(elements) {
                 const time = new Date(timestamp).toLocaleTimeString();
                 const backend = backendUsed || 'unknown';
                 const warningCount = Array.isArray(warnings) ? warnings.length : 0;
-                const backendLabel = backend === 'mock' ? 'mock (passthrough)' : backend;
+                const backendLabel = backend === 'mock' ? 'mock (source only)' : backend;
                 debugStatus.textContent = warningCount > 0
-                    ? `Backend: ${backendLabel} @ ${time} | warnings: ${warningCount}`
-                    : `Backend: ${backendLabel} @ ${time}`;
+                    ? `State: ${presentation.state} · ${backendLabel} @ ${time} | warnings: ${warningCount}`
+                    : `State: ${presentation.state} · ${backendLabel} @ ${time}`;
             }
         });
 
@@ -951,7 +970,7 @@ function setSubtitleHint(hintEl, hintTextEl, text, severity, persist) {
     }
 }
 
-function updateSubtitleHint(hintEl, hintTextEl, backendUsed, warnings, subtitleContainer) {
+function updateSubtitleHint(hintEl, hintTextEl, backendUsed, warnings) {
     const backendId = (backendUsed || '').toString().toLowerCase();
     const list = Array.isArray(warnings) ? warnings.filter(w => typeof w === 'string') : [];
 

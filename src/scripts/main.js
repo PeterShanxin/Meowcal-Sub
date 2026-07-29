@@ -21,7 +21,7 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 const { formatFoundryPhase, formatReadyState } = window.BackendStatusPresentation;
-
+const { isOcrLanguageAvailable } = window.OcrLanguageTags;
 // =============================================================================
 // GLOBAL STATE
 // =============================================================================
@@ -256,7 +256,7 @@ function populateSourceLanguageDropdown(installedSet, currentValue) {
     for (const lang of KNOWN_SOURCE_LANGUAGES) {
         const option = document.createElement('option');
         option.value = lang.value;
-        const installed = installedSet.has(lang.value);
+        const installed = isOcrLanguageAvailable(installedSet, lang.value);
         if (installed) {
             option.textContent = lang.label;
         } else {
@@ -283,7 +283,7 @@ function checkOcrLanguageWarning(selectedValue) {
 
     if (!warning || !appState.ocrLanguages) return;
 
-    if (!appState.ocrLanguages.has(selectedValue)) {
+    if (!isOcrLanguageAvailable(appState.ocrLanguages, selectedValue)) {
         const langName = KNOWN_SOURCE_LANGUAGES.find(l => l.value === selectedValue)?.label || selectedValue;
         warningText.textContent = `${langName} OCR is not installed.`;
         installBtn.textContent = 'Install';
@@ -314,7 +314,7 @@ async function installOcrLanguage() {
         // Refresh the language list
         await loadOcrLanguages();
 
-        if (appState.ocrLanguages.has(languageTag)) {
+        if (isOcrLanguageAvailable(appState.ocrLanguages, languageTag)) {
             showToast('OCR language pack installed successfully!', 'success');
         } else {
             showToast('Installation may have been cancelled or is still in progress.', 'warning');

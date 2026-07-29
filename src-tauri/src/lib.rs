@@ -27,6 +27,7 @@ pub mod config;
 
 /// Tauri commands - functions that JavaScript can call
 pub mod commands;
+mod event_payloads;
 
 /// HTTP server for browser dev mode
 pub mod http_server;

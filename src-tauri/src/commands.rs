@@ -15,13 +15,15 @@
 
 use crate::capture;
 use crate::config::{save_config, AppConfig, CaptureRegion};
+use crate::event_payloads::{CaptureStatusPayload, TranslationPayload};
 use crate::ipc::{
     IpcMessage, IpcServer, OverlaySettingsData, RegionData, SetRegionPayload, SettingsSyncPayload,
     SubtitleUpdatePayload,
 };
 use crate::llm::{
     BackendId, BackendInfo, FoundryLocalBackend, FoundryLocalPhase, TranslationDiagnostics,
-    TranslationDiagnosticsState, TranslationManager, TranslationOutcome, TranslatorBackend,
+    TranslationDiagnosticsState, TranslationDisplayState, TranslationManager, TranslationOutcome,
+    TranslatorBackend,
 };
 use crate::ocr::{PreprocessingConfig, WindowsOcr};
 use crate::overlay;
@@ -1324,34 +1326,6 @@ pub async fn close_area_selector(app: AppHandle, state: State<'_, AppState>) -> 
 // TRANSLATION COMMANDS
 // =============================================================================
 
-/// Payload sent to the frontend with translation results
-#[derive(Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct TranslationPayload {
-    /// The original text from OCR
-    pub original: String,
-    /// The translated text
-    pub translated: String,
-    /// Which backend produced the translation
-    pub backend_used: String,
-    /// Warnings from backend selection/fallback
-    pub warnings: Vec<String>,
-    /// Unix timestamp in milliseconds
-    pub timestamp: u64,
-}
-
-/// Payload sent to the frontend to report capture status
-#[derive(Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct CaptureStatusPayload {
-    /// Whether the capture is using the fallback method (GDI)
-    pub using_fallback: bool,
-    /// Human-readable message about capture status
-    pub message: String,
-    /// Is this an error state?
-    pub is_error: bool,
-}
-
 /// Result of a capture attempt with session state
 enum CaptureAttemptResult {
     /// Capture succeeded with the image data
@@ -2058,6 +2032,7 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
                 translated,
                 backend_used,
                 warnings,
+                display_state,
             } = outcome;
 
             // If stop was requested while the translation backend was running, don't emit results.
@@ -2200,6 +2175,7 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
                 translated: translated.clone(),
                 backend_used: backend_str.clone(),
                 warnings, // Move instead of clone - not used after this
+                display_state,
                 timestamp,
             };
 
@@ -2209,22 +2185,40 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
 
             // Send subtitle update to WinUI3 OverlayHost
             // Move strings since they're no longer needed after this
-            let subtitle_payload = SubtitleUpdatePayload {
-                text: translated,          // Move instead of clone
-                source_text: current_text, // Move instead of clone
-                timestamp: timestamp.to_string(),
-                backend_used: Some(backend_str), // Move instead of new allocation
-            };
+            if display_state == crate::llm::TranslationDisplayState::Translated {
+                let subtitle_payload = SubtitleUpdatePayload {
+                    text: translated,          // Move instead of clone
+                    source_text: current_text, // Move instead of clone
+                    timestamp: timestamp.to_string(),
+                    backend_used: Some(backend_str), // Move instead of new allocation
+                };
 
-            send_overlay_message(
-                &app,
-                IpcMessage::with_payload("Subtitle.Update", subtitle_payload),
-            )
-            .await;
+                send_overlay_message(
+                    &app,
+                    IpcMessage::with_payload("Subtitle.Update", subtitle_payload),
+                )
+                .await;
+            }
 
             // Wait for next iteration
             tokio::time::sleep(Duration::from_millis(interval_ms as u64)).await;
         }
+
+        let stopped_timestamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis() as u64;
+        let _ = app.emit(
+            "translation-update",
+            TranslationPayload {
+                original: String::new(),
+                translated: String::new(),
+                backend_used: BackendId::Mock.as_str().to_string(),
+                warnings: Vec::new(),
+                display_state: TranslationDisplayState::Stopped,
+                timestamp: stopped_timestamp,
+            },
+        );
 
         // Scopeguard handles cleanup: close_capture_session() and is_running reset
         info!("Translation loop ended");

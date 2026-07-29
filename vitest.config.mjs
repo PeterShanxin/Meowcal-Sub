@@ -9,7 +9,12 @@ export default defineConfig({
   test: {
     coverage: {
       provider: "v8",
-      include: ["scripts/serve-frontend.mjs", "src/scripts/backend-status.js"],
+      include: [
+        "scripts/serve-frontend.mjs",
+        "src/scripts/backend-status.js",
+        "src/scripts/ocr-language-tags.js",
+        "src/scripts/translation-display.js",
+      ],
       reporter: ["text", "json-summary"],
       thresholds: baseline.frontendCoverageMinimum,
     },
