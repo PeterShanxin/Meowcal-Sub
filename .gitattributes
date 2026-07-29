@@ -28,6 +28,7 @@
 
 # JavaScript/TypeScript
 *.js text eol=lf
+*.mjs text eol=lf
 *.ts text eol=lf
 *.jsx text eol=lf
 *.tsx text eol=lf
@@ -36,8 +37,9 @@
 *.html text eol=lf
 *.css text eol=lf
 
-# Documentation
+# Documentation and workflow configuration
 *.md text eol=lf
+*.yml text eol=lf
 
 # Visual Studio / Windows specific - keep as binary to avoid issues
 *.ico binary

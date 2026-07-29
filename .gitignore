@@ -12,7 +12,6 @@ todo/
 src-tauri/target/
 D:/cargo-build/
 **/*.rs.bk
-Cargo.lock
 
 # --- Tauri ---
 src-tauri/icons/icon.png.bak
@@ -23,10 +22,11 @@ nul
 
 # --- Node.js ---
 node_modules/
+test-results/
+coverage/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
-package-lock.json
 
 # --- IDE / Editor ---
 .idea/

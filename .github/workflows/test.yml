@@ -6,7 +6,6 @@ name: CI
 
 on:
   pull_request:
-    branches: [main]
   push:
     branches: [main]
 
@@ -17,9 +16,6 @@ jobs:
   lint:
     name: Lint & Format
     runs-on: windows-latest
-    defaults:
-      run:
-        working-directory: src-tauri
     steps:
       - uses: actions/checkout@v4
 
@@ -31,28 +27,13 @@ jobs:
         with:
           workspaces: src-tauri
 
-      - name: Create placeholder resources for Tauri build
+      - name: Run lint verification
         shell: pwsh
-        run: |
-          # Tauri's build script validates resources exist, even for linting.
-          # Create placeholder files so the build succeeds in CI.
-          New-Item -ItemType Directory -Force -Path resources
-          New-Item -ItemType File -Force -Path resources/OverlayHost.exe
-          New-Item -ItemType File -Force -Path resources/placeholder.dll
-          New-Item -ItemType File -Force -Path resources/placeholder.pri
-
-      - name: Check formatting
-        run: cargo fmt --check
-
-      - name: Run clippy
-        run: cargo clippy -- -D warnings
+        run: ./scripts/verify.ps1 -Stage Lint
 
   test:
     name: Tests
     runs-on: windows-latest
-    defaults:
-      run:
-        working-directory: src-tauri
     steps:
       - uses: actions/checkout@v4
 
@@ -62,18 +43,27 @@ jobs:
         with:
           workspaces: src-tauri
 
-      - name: Create placeholder resources for Tauri build
+      - name: Run test verification
         shell: pwsh
-        run: |
-          # Tauri's build script validates resources exist, even for tests.
-          # Create placeholder files so the build succeeds in CI.
-          New-Item -ItemType Directory -Force -Path resources
-          New-Item -ItemType File -Force -Path resources/OverlayHost.exe
-          New-Item -ItemType File -Force -Path resources/placeholder.dll
-          New-Item -ItemType File -Force -Path resources/placeholder.pri
+        run: ./scripts/verify.ps1 -Stage Test
 
-      - name: Run unit tests
-        run: cargo test --lib
+  frontend:
+    name: Frontend & Browser
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
 
-      - name: Run integration tests
-        run: cargo test --test integration_ipc
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Run frontend and browser verification
+        shell: pwsh
+        run: ./scripts/verify.ps1 -Stage Frontend
