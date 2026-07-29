@@ -67,23 +67,21 @@ resources first:
 .\scripts\build-overlayhost.ps1 -Architecture auto
 ```
 
-## Current verification
+## Verification
 
-Until issue #28 provides the root verification command, run:
+Run the authoritative repository gate from the root:
 
 ```powershell
-.\scripts\prepare-validation-resources.ps1
-Push-Location src-tauri
-cargo fmt --check
-cargo clippy -- -D warnings
-cargo test --lib
-cargo test --test integration_ipc
-Pop-Location
+.\scripts\verify.ps1
 ```
 
-These commands match the current required GitHub checks. Browser-mode,
-frontend, documentation, and maintainability gates are added in later Wave 1
-issues and must not be claimed before they land.
+Use `-Stage Lint` or `-Stage Test` only for focused local iteration. The default
+`All` stage is the contributor handoff gate and equals the union of the current
+required GitHub checks.
+
+Rust dependency resolution is locked by `src-tauri/Cargo.lock`; verification
+uses `--locked`. Browser-mode, frontend, documentation, and maintainability
+gates are added in later Wave 1 issues and must not be claimed before they land.
 
 ## Manual Windows validation
 

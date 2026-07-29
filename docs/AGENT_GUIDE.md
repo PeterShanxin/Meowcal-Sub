@@ -49,23 +49,23 @@ settings. Never infer merge permission from permission to open a PR.
 
 ## Verification
 
-Prepare ignored validation resources from the repository root:
+Run the authoritative gate from the repository root:
 
 ```powershell
-.\scripts\prepare-validation-resources.ps1
+.\scripts\verify.ps1
 ```
 
-Run the current Rust gate from `src-tauri`:
+For focused iteration only:
 
 ```powershell
-cargo fmt --check
-cargo clippy -- -D warnings
-cargo test --lib
-cargo test --test integration_ipc
+.\scripts\verify.ps1 -Stage Lint
+.\scripts\verify.ps1 -Stage Test
 ```
 
-Use the root verification command after issue #28 lands. A failed clean-checkout
-prerequisite is a repository defect, not a reason to skip verification.
+The default `All` stage is required before handoff. It runs its own contract
+tests, prepares validation resources, and uses the tracked Cargo lockfile. A
+failed clean-checkout prerequisite is a repository defect, not a reason to skip
+verification.
 
 Browser mode does not prove Tauri-only capture, OCR, selector, overlay, tray,
 window, installer, or runtime-process behavior.

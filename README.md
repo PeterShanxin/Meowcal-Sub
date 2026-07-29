@@ -76,22 +76,17 @@ Open `http://localhost:3000`. Browser mode cannot validate screen capture,
 Windows OCR, the area selector, native overlay behavior, tray behavior, or
 window/DPI lifecycle.
 
-## Current automated checks
+## Automated checks
 
 From a clean checkout:
 
 ```powershell
-.\scripts\prepare-validation-resources.ps1
-Push-Location src-tauri
-cargo fmt --check
-cargo clippy -- -D warnings
-cargo test --lib
-cargo test --test integration_ipc
-Pop-Location
+.\scripts\verify.ps1
 ```
 
-Issue #28 will replace this list with one root verification command and extend
-it with frontend, browser, documentation, and maintainability gates.
+This is the command used by contributors and split across the current required
+GitHub jobs. Frontend, browser, documentation, and maintainability stages are
+added by later Wave 1 work.
 
 ## Build installers
 

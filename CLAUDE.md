@@ -20,13 +20,7 @@ Do not implement the archived Python/OpenSubtitles MeoCoSub2 plan. Do not merge
 From the repository root:
 
 ```powershell
-.\scripts\prepare-validation-resources.ps1
-Push-Location src-tauri
-cargo fmt --check
-cargo clippy -- -D warnings
-cargo test --lib
-cargo test --test integration_ipc
-Pop-Location
+.\scripts\verify.ps1
 ```
 
 Use `.\dev-browser.cmd` for browser-only UI work and `.\dev-tauri.cmd` for the

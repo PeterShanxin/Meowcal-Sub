@@ -12,7 +12,6 @@ todo/
 src-tauri/target/
 D:/cargo-build/
 **/*.rs.bk
-Cargo.lock
 
 # --- Tauri ---
 src-tauri/icons/icon.png.bak
