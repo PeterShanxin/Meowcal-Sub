@@ -21,7 +21,7 @@
     "src-tauri/src/ocr/windows_ocr.rs": 454,
     "src/index.html": 565,
     "src/scripts/main.js": 2138,
-    "src/scripts/overlay.js": 1312,
+    "src/scripts/overlay.js": 1162,
     "src/scripts/selector.js": 820,
     "src/scripts/wizard.js": 531,
     "src/styles/main.css": 697,

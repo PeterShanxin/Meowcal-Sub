@@ -19,6 +19,7 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 const { getTranslationPresentation } = window.TranslationDisplay;
+const { clearSubtitleHint, setSubtitleHint, updateSubtitleHint } = window.OverlaySubtitleHint;
 
 // =============================================================================
 // GLOBAL STATE
@@ -53,7 +54,6 @@ const overlayState = {
 let clickThroughMonitor = null;
 let clickThroughBusy = false;
 let fadeTimer = null;
-let subtitleHintHideTimer = null;
 
 // Fade duration for "start/stop translation" show/hide transitions.
 // Keep this short to avoid delaying stop/start responsiveness.
@@ -882,156 +882,6 @@ function updateSubtitleText(textElement, newText, container) {
     container.classList.remove('hidden');
     container.classList.add('visible');
     scheduleWindowClipUpdate();
-}
-
-// =============================================================================
-// TRANSLATION HINTS (backend/fallback/errors)
-// =============================================================================
-
-function backendDisplayName(id) {
-    switch ((id || '').toLowerCase()) {
-        case 'foundry_local': return 'Foundry Local';
-        case 'mock': return 'Passthrough';
-        default: return id || 'Unknown';
-    }
-}
-
-function summarizeFoundryWarning(warning) {
-    const raw = (warning || '').toString();
-    const lower = raw.toLowerCase();
-
-    // Known structured warnings emitted by TranslationManager
-    if (lower.includes('recovered_after_retry')) return { text: 'Recovered after retry', severity: 'ok', blocking: false };
-    if (lower.includes('context_degraded')) return { text: 'Reduced context for speed', severity: 'warn', blocking: false };
-
-    // Errors/timeouts
-    if (lower.includes('timeout')) return { text: 'Timeout', severity: 'warn', blocking: true };
-    if (lower.includes('model not available') || lower.includes('no model available')) {
-        return { text: 'Model not running', severity: 'warn', blocking: true };
-    }
-    if (lower.includes('request failed') || lower.includes('error sending request')) {
-        return { text: 'Request failed', severity: 'error', blocking: true };
-    }
-
-    // Fallback: keep it short and avoid leaking URLs into the overlay.
-    let cleaned = raw.replace(/^foundry_local:\s*/i, '');
-    cleaned = cleaned.replace(/^api error:\s*/i, '');
-    cleaned = cleaned.replace(/https?:\/\/\S+/gi, '').trim();
-    cleaned = cleaned.replace(/\s+/g, ' ');
-    if (cleaned.length > 90) cleaned = cleaned.slice(0, 87) + '…';
-    return { text: cleaned || 'Error', severity: 'error', blocking: true };
-}
-
-function summarizeGenericWarning(warning) {
-    let cleaned = (warning || '').toString().trim();
-    cleaned = cleaned.replace(/https?:\/\/\S+/gi, '').trim();
-    cleaned = cleaned.replace(/\s+/g, ' ');
-    if (cleaned.length > 90) cleaned = cleaned.slice(0, 87) + '…';
-    return cleaned;
-}
-
-function clearSubtitleHint(hintEl, hintTextEl) {
-    if (subtitleHintHideTimer) {
-        clearTimeout(subtitleHintHideTimer);
-        subtitleHintHideTimer = null;
-    }
-
-    if (!hintEl) return;
-    hintEl.classList.remove('visible', 'hint-warn', 'hint-error', 'hint-ok');
-    if (hintTextEl) hintTextEl.textContent = '';
-}
-
-function setSubtitleHint(hintEl, hintTextEl, text, severity, persist) {
-    if (!hintEl || !hintTextEl) return;
-
-    if (!text) {
-        clearSubtitleHint(hintEl, hintTextEl);
-        return;
-    }
-
-    if (subtitleHintHideTimer) {
-        clearTimeout(subtitleHintHideTimer);
-        subtitleHintHideTimer = null;
-    }
-
-    hintTextEl.textContent = text;
-    hintEl.classList.add('visible');
-    hintEl.classList.remove('hint-warn', 'hint-error', 'hint-ok');
-
-    const sev = (severity || 'warn').toLowerCase();
-    if (sev === 'ok') hintEl.classList.add('hint-ok');
-    else if (sev === 'error') hintEl.classList.add('hint-error');
-    else hintEl.classList.add('hint-warn');
-
-    if (!persist) {
-        subtitleHintHideTimer = setTimeout(() => {
-            clearSubtitleHint(hintEl, hintTextEl);
-        }, 4000);
-    }
-}
-
-function updateSubtitleHint(hintEl, hintTextEl, backendUsed, warnings) {
-    const backendId = (backendUsed || '').toString().toLowerCase();
-    const list = Array.isArray(warnings) ? warnings.filter(w => typeof w === 'string') : [];
-
-    const foundryWarnings = list.filter(w => w.toLowerCase().startsWith('foundry_local:'));
-    const foundryBlocking = foundryWarnings.find(w => {
-        const lower = w.toLowerCase();
-        return !lower.includes('recovered_after_retry') && !lower.includes('context_degraded');
-    });
-    const hadFoundryProblem = Boolean(foundryBlocking);
-
-    // Prefer a Foundry warning (if present) as the "cause" line.
-    const primaryFoundry = foundryWarnings[0];
-    const primaryNonMock = list.find(w => !w.toLowerCase().startsWith('mock:'));
-
-    if (backendId === 'foundry_local') {
-        // Keep overlay clean when everything is OK.
-        if (list.length === 0) {
-            clearSubtitleHint(hintEl, hintTextEl);
-            return;
-        }
-
-        const summary = primaryFoundry ? summarizeFoundryWarning(primaryFoundry) : null;
-        if (!summary || !summary.text) {
-            clearSubtitleHint(hintEl, hintTextEl);
-            return;
-        }
-
-        setSubtitleHint(
-            hintEl,
-            hintTextEl,
-            `${backendDisplayName(backendId)} · ${summary.text}`,
-            summary.severity,
-            false
-        );
-        return;
-    }
-
-    // Any non-Foundry backend can be "primary" or "fallback" depending on user settings.
-    const labelPrefix = hadFoundryProblem ? 'Fallback' : 'Backend';
-    const backendLabel = backendDisplayName(backendId);
-
-    let severity = 'warn';
-    let cause = '';
-
-    if (primaryFoundry) {
-        const summary = summarizeFoundryWarning(primaryFoundry);
-        severity = summary.severity;
-        cause = `Foundry ${summary.text}`.trim();
-    } else if (primaryNonMock) {
-        cause = summarizeGenericWarning(primaryNonMock);
-    }
-
-    // For OCR fallback, keep the wording obvious.
-    const base = backendId === 'mock'
-        ? (hadFoundryProblem ? 'Fallback: OCR' : 'OCR (no translation backend)')
-        : `${labelPrefix}: ${backendLabel}`;
-
-    const text = cause ? `${base} · ${cause}` : base;
-
-    // Persist when not using Foundry so the user understands why the translation looks "untranslated".
-    setSubtitleHint(hintEl, hintTextEl, text, severity, true);
 }
 
 // =============================================================================

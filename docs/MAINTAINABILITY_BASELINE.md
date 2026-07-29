@@ -8,7 +8,7 @@ ratchets. Machine-readable values live in
 
 Measured on 2026-07-30 after the app-managed HY-MT MVP:
 
-- 50 production files under `src/` and `src-tauri/src/`;
+- 51 production files under `src/` and `src-tauri/src/`;
 - 400 lines maximum for a new `.rs`, `.js`, `.html`, or `.css` production file;
 - 20 explicit legacy files above that ceiling;
 - 13 existing ESLint warnings, with zero allowed errors;
@@ -37,7 +37,7 @@ machine-readable baseline. The largest and decomposition-owned hotspots are:
 | `src/scripts/main.js` | 2,138 | #33 |
 | `src-tauri/src/llm/foundry_local.rs` | 1,751 | #32 |
 | `src-tauri/src/llm/manager.rs` | 1,234 | #32 |
-| `src/scripts/overlay.js` | 1,312 | #34 |
+| `src/scripts/overlay.js` | 1,162 | #34 |
 | `src/scripts/selector.js` | 820 | #34 |
 | `src-tauri/src/llm/context.rs` | 732 | #32 |
 | `src-tauri/src/http_server.rs` | 730 | #31 adapter boundary |
