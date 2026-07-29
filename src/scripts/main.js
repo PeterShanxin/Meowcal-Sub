@@ -32,7 +32,6 @@ const appState = {
     captureRegion: null,
     settings: null,
     systemInfo: null,
-    downloadInfo: null,
     foundryAutoProbe: {
         inFlight: false,
         lastAttemptMs: 0,
@@ -332,8 +331,10 @@ async function installOcrLanguage() {
 function applyTranslationSettings(translation) {
     const config = normalizeTranslationConfig(translation);
 
-    document.getElementById('toggle-foundry-local').checked = config.enableFoundryLocal;
-    document.getElementById('toggle-mock-fallback').checked = config.allowMockFallback;
+    // Normal mode owns one curated translation path. Legacy settings cannot turn
+    // the engine off or re-enable raw-OCR passthrough.
+    document.getElementById('toggle-foundry-local').checked = true;
+    document.getElementById('toggle-mock-fallback').checked = false;
     document.getElementById('context-level').value = config.contextLevel;
     document.getElementById('context-recent-count').value = config.contextRecentCount;
     document.getElementById('context-budget-percent').value = config.contextBudgetPercent;
@@ -550,7 +551,7 @@ async function notifyOverlaySettingsChanged() {
 function normalizeTranslationConfig(translation) {
     const defaultConfig = {
         enableFoundryLocal: true,
-        allowMockFallback: true,
+        allowMockFallback: false,
         enableContextAware: true,
         contextLevel: 'memoryAndRecent',
         contextRecentCount: 3,
@@ -646,8 +647,8 @@ async function saveSettings(opts) {
     const translationConfig = normalizeTranslationConfig(appState.settings?.translation);
     const foundryModel = document.getElementById('foundry-local-model').value.trim();
 
-    translationConfig.enableFoundryLocal = document.getElementById('toggle-foundry-local').checked;
-    translationConfig.allowMockFallback = document.getElementById('toggle-mock-fallback').checked;
+    translationConfig.enableFoundryLocal = true;
+    translationConfig.allowMockFallback = false;
 
     const contextLevel = document.getElementById('context-level').value;
     translationConfig.contextLevel = contextLevel;
@@ -1701,147 +1702,6 @@ function updateStatusSummary(diagnostics) {
     const readyBackends = diagnostics.backends.filter(b => b.readyState === 'ready').length;
 
     summaryEl.textContent = `${readyBackends}/${totalBackends} Ready`;
-}
-
-async function handleOfflineMtDownload() {
-    try {
-        const info = await loadTranslateLocallyDownloadInfo();
-        if (!info) {
-            return;
-        }
-        populateDownloadModal(info);
-        openDownloadModal();
-    } catch (error) {
-        console.error('Failed to prepare download modal:', error);
-        showToast('Failed to load download options', 'error');
-    }
-}
-
-async function loadTranslateLocallyDownloadInfo() {
-    if (appState.downloadInfo) {
-        return appState.downloadInfo;
-    }
-
-    try {
-        const info = await TauriBridge.invoke('get_translate_locally_download_info');
-        appState.downloadInfo = info;
-        return info;
-    } catch (error) {
-        console.error('Failed to load download info:', error);
-        showToast('translateLocally download not available on this device', 'error');
-        return null;
-    }
-}
-
-function populateDownloadModal(info) {
-    const recommendation = document.getElementById('download-recommendation');
-    const optionSelect = document.getElementById('download-option');
-    const installDir = document.getElementById('download-install-dir');
-
-    if (!recommendation || !optionSelect || !installDir) {
-        return;
-    }
-
-    optionSelect.innerHTML = '';
-    info.options.forEach((option) => {
-        const opt = document.createElement('option');
-        opt.value = option.id;
-        opt.textContent = option.label;
-        optionSelect.appendChild(opt);
-    });
-
-    const recommendedId = info.recommendedId || (info.options[0] ? info.options[0].id : '');
-    optionSelect.value = recommendedId;
-    const recommendedOption = info.options.find((option) => option.id === recommendedId);
-    recommendation.textContent = recommendedOption?.label || 'Recommended build';
-
-    if (!installDir.value.trim()) {
-        installDir.value = info.defaultInstallDir || '';
-    }
-
-    updateDownloadOptionNotes();
-}
-
-function updateDownloadOptionNotes() {
-    const info = appState.downloadInfo;
-    const optionSelect = document.getElementById('download-option');
-    const notes = document.getElementById('download-option-notes');
-
-    if (!info || !optionSelect || !notes) {
-        return;
-    }
-
-    const selected = info.options.find((option) => option.id === optionSelect.value);
-    notes.textContent = selected?.notes || '';
-
-    const recommendation = document.getElementById('download-recommendation');
-    if (recommendation && info.recommendedId) {
-        const recommendedOption = info.options.find(
-            (option) => option.id === info.recommendedId
-        );
-        recommendation.textContent = recommendedOption?.label || 'Recommended build';
-    }
-}
-
-async function handleConfirmTranslateLocallyDownload() {
-    const optionSelect = document.getElementById('download-option');
-    const installDir = document.getElementById('download-install-dir');
-    const confirmButton = document.getElementById('btn-confirm-download');
-
-    if (!optionSelect || !installDir || !confirmButton) {
-        return;
-    }
-
-    const optionId = optionSelect.value;
-    const targetDir = installDir.value.trim();
-    if (!targetDir) {
-        showToast('Install folder is required', 'error');
-        return;
-    }
-
-    confirmButton.disabled = true;
-    const originalLabel = confirmButton.textContent;
-    confirmButton.textContent = 'Downloading...';
-
-    try {
-        const result = await TauriBridge.invoke('download_translate_locally', {
-            optionId,
-            installDir: targetDir,
-        });
-
-        const offlineInput = document.getElementById('offline-mt-path');
-        if (offlineInput) {
-            offlineInput.value = result.path;
-        }
-
-        if (appState.settings?.translation?.offlineMt) {
-            appState.settings.translation.offlineMt.binaryPath = result.path;
-        }
-
-        showToast(result.notes || 'translateLocally downloaded', 'success');
-        closeDownloadModal();
-        await refreshTranslationDiagnostics();
-    } catch (error) {
-        console.error('Download failed:', error);
-        showToast(`Download failed: ${String(error)}`, 'error');
-    } finally {
-        confirmButton.disabled = false;
-        confirmButton.textContent = originalLabel;
-    }
-}
-
-function openDownloadModal() {
-    const modal = document.getElementById('download-modal');
-    if (modal) {
-        modal.classList.remove('hidden');
-    }
-}
-
-function closeDownloadModal() {
-    const modal = document.getElementById('download-modal');
-    if (modal) {
-        modal.classList.add('hidden');
-    }
 }
 
 function openFoundryWarmupModal(status) {

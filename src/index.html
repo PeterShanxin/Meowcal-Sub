@@ -152,20 +152,12 @@
                     Tencent HY-MT runs privately on this PC. Setup downloads about 1.1 GB once.
                 </p>
 
-                <div class="toggle-wrapper hidden">
-                    <span class="toggle-label">Enable Local Translation Engine</span>
-                    <label class="toggle">
-                        <input type="checkbox" id="toggle-foundry-local" checked>
-                        <span class="toggle-slider"></span>
-                    </label>
-                </div>
-
-                <div class="settings-group hidden">
-                    <label class="setting-label" for="foundry-local-model">Model</label>
-                    <select id="foundry-local-model" class="select">
-                        <option value="">Auto (first available)</option>
-                    </select>
-                </div>
+                <!-- Internal compatibility controls. Normal mode always uses the curated engine. -->
+                <input type="checkbox" id="toggle-foundry-local" checked hidden>
+                <input type="checkbox" id="toggle-mock-fallback" hidden>
+                <select id="foundry-local-model" hidden>
+                    <option value="">Curated HY-MT</option>
+                </select>
 
                 <div class="backend-status-inline" id="foundry-status">
                     <span class="status-text">Checking Local Translation Engine...</span>
@@ -351,32 +343,6 @@
                 </div>
             </details>
 
-            <!-- Collapsible: Fallback Backends -->
-            <details class="settings-section hidden" id="fallback-backends-section">
-                <summary class="collapsible-header">
-                    <span class="section-title">
-                        <span class="section-icon">⚙</span>
-                        Fallback Backends
-                    </span>
-                    <span class="badge badge-count" id="fallback-count">1 configured</span>
-                </summary>
-                <div class="collapsible-content">
-                    <!-- Passthrough Fallback -->
-                    <div class="backend-card">
-                        <div class="toggle-wrapper">
-                            <span class="toggle-label">Allow Passthrough Fallback</span>
-                            <label class="toggle">
-                                <input type="checkbox" id="toggle-mock-fallback">
-                                <span class="toggle-slider"></span>
-                            </label>
-                        </div>
-                        <p class="setting-hint">
-                            If all backends fail, return OCR text without translation
-                        </p>
-                    </div>
-                </div>
-            </details>
-
             <!-- OCR Settings -->
             <details class="settings-section" id="ocr-section">
                 <summary class="collapsible-header">
@@ -466,18 +432,6 @@
                 </div>
             </details>
 
-            <!-- Collapsible: Backend Diagnostics -->
-            <details class="settings-section hidden" id="diagnostics-section">
-                <summary class="collapsible-header">
-                    <span class="section-title">Backend Status</span>
-                    <span class="status-summary" id="status-summary">Checking...</span>
-                </summary>
-                <div class="collapsible-content">
-                    <div class="backend-status" id="backend-status">
-                        <div class="backend-status-empty">Backend status not loaded yet.</div>
-                    </div>
-                </div>
-            </details>
         </section>
         
         <!-- Footer -->
@@ -486,51 +440,6 @@
             <p class="footer-hint">Minimize to system tray to keep running in background</p>
         </footer>
         
-    </div>
-
-    <!-- translateLocally Download Modal -->
-    <div class="modal hidden" id="download-modal" role="dialog" aria-modal="true">
-        <div class="modal-backdrop" id="download-backdrop"></div>
-        <div class="modal-content" role="document">
-            <div class="modal-header">
-                <h3>Download translateLocally</h3>
-            </div>
-            <div class="modal-body">
-                <div class="settings-group">
-                    <label class="setting-label">Recommended build</label>
-                    <div id="download-recommendation" class="setting-hint">Loading...</div>
-                </div>
-                <div class="settings-group">
-                    <label class="setting-label" for="download-option">
-                        Build to download
-                    </label>
-                    <select id="download-option" class="select"></select>
-                    <p class="setting-hint" id="download-option-notes"></p>
-                </div>
-                <div class="settings-group">
-                    <label class="setting-label" for="download-install-dir">
-                        Install folder
-                    </label>
-                    <input
-                        type="text"
-                        id="download-install-dir"
-                        class="text-input"
-                        placeholder="C:\\tools\\translateLocally"
-                    >
-                    <p class="setting-hint">
-                        The app saves the binary as translateLocally.exe (or use a full file path).
-                    </p>
-                </div>
-            </div>
-            <div class="modal-actions">
-                <button class="btn btn-outline btn-small" id="btn-cancel-download">
-                    Cancel
-                </button>
-                <button class="btn btn-primary btn-small" id="btn-confirm-download">
-                    Download
-                </button>
-            </div>
-        </div>
     </div>
 
     <div class="modal hidden" id="foundry-warmup-modal" role="dialog" aria-modal="true">
