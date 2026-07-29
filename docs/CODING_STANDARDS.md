@@ -87,3 +87,6 @@ subtitle behavior.
 - Keep package versions synchronized according to `CONTRIBUTING.md`.
 - Existing hotspot files are tracked debt. Touched production code must not
   increase an approved ceiling without an explicit reviewed exception.
+- New production files and legacy exceptions are enforced by
+  `config/maintainability-baseline.json`; update a reduced ceiling or warning
+  budget in the same pull request that creates the improvement.

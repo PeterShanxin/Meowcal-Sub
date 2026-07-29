@@ -9,9 +9,12 @@ Read these documents before changing the repository:
 
 1. [`docs/AGENT_GUIDE.md`](docs/AGENT_GUIDE.md) for the working contract;
 2. [`docs/CODING_STANDARDS.md`](docs/CODING_STANDARDS.md) for code and test rules;
-3. [`docs/adr/0001-curated-local-translation-stack.md`](docs/adr/0001-curated-local-translation-stack.md)
+3. [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) and
+   [`docs/MAINTAINABILITY_BASELINE.md`](docs/MAINTAINABILITY_BASELINE.md) for
+   current ownership and enforced ratchets;
+4. [`docs/adr/0001-curated-local-translation-stack.md`](docs/adr/0001-curated-local-translation-stack.md)
    for the accepted product architecture;
-4. current source, tests, and workflows for live behavior.
+5. current source, tests, and workflows for live behavior.
 
 Historical documents under `docs/plans/` and `docs/archive/` provide context.
 They are not normative and cannot override accepted ADRs or current guidance.
@@ -81,7 +84,9 @@ iteration. The default `All` stage is the contributor handoff gate and equals
 the union of the current required GitHub checks. The frontend stage installs
 the locked npm graph, checks formatting and lint, runs DOM-independent unit
 tests, exercises browser mode against the real Rust HTTP backend, and audits
-dependencies for high-severity vulnerabilities.
+dependencies for high-severity vulnerabilities. It also enforces production
+file ceilings, the frontend warning budget, and explicitly scoped coverage
+floors.
 
 Rust dependency resolution is locked by `src-tauri/Cargo.lock`; verification
 uses `--locked`. Frontend dependency resolution is locked by

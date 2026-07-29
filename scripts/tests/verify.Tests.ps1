@@ -134,6 +134,7 @@ exit /b 0
         "ci --ignore-scripts",
         "run format:check",
         "run lint",
+        "run maintainability",
         "run test:frontend",
         "run test:browser",
         "audit --audit-level=high"
@@ -151,6 +152,7 @@ exit /b 0
         "ci --ignore-scripts",
         "run format:check",
         "run lint",
+        "run maintainability",
         "run test:frontend",
         "run test:browser",
         "audit --audit-level=high"

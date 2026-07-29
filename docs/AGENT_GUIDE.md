@@ -6,7 +6,8 @@ to Meowcal Sub.
 ## Read order
 
 1. live source, tests, and `.github/workflows/`;
-2. this guide and `docs/CODING_STANDARDS.md`;
+2. this guide, `docs/CODING_STANDARDS.md`, `docs/ARCHITECTURE.md`, and
+   `docs/MAINTAINABILITY_BASELINE.md`;
 3. accepted ADRs under `docs/adr/`;
 4. `CONTRIBUTING.md`;
 5. historical plans only as non-normative context.
@@ -95,7 +96,8 @@ other required manual gates remain outstanding.
 
 - `README.md`: current user/developer entry point.
 - `CONTRIBUTING.md`, this guide, and `docs/CODING_STANDARDS.md`: normative.
-- `docs/ARCHITECTURE.md`: current architecture after issue #30 lands.
+- `docs/ARCHITECTURE.md`: current and target module ownership.
+- `docs/MAINTAINABILITY_BASELINE.md`: enforced ceilings and ratchet procedure.
 - `docs/adr/`: accepted or proposed cross-cutting decisions.
 - `docs/plans/`: dated plans and evidence, not standing policy.
 - `docs/archive/`: superseded historical context.

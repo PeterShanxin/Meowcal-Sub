@@ -118,6 +118,8 @@ The target boundaries and rationale are recorded in:
 
 - [approved product specification](docs/plans/2026-07-29-curated-local-translation-app-spec.md);
 - [ADR-0001](docs/adr/0001-curated-local-translation-stack.md);
+- [current architecture](docs/ARCHITECTURE.md);
+- [maintainability baseline](docs/MAINTAINABILITY_BASELINE.md);
 - [Wave 0 baseline](docs/plans/2026-07-29-wave-0-baseline.md).
 
 The implementation is intentionally migrating through small reviewable changes,
