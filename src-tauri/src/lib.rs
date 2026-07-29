@@ -25,6 +25,7 @@ pub mod overlay;
 /// App configuration - settings like language preferences
 pub mod config;
 pub mod engine_config;
+pub mod engine_manifest;
 
 /// Tauri commands - functions that JavaScript can call
 pub mod commands;
@@ -41,6 +42,7 @@ pub mod ipc;
 /// Synchronization utilities - safe mutex/RwLock handling with poison recovery
 pub mod sync_utils;
 pub mod window_lifecycle;
+pub mod wizard_contracts;
 
 // =============================================================================
 // RE-EXPORTS

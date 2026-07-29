@@ -1,7 +1,5 @@
-use crate::hy_mt_runtime::{
-    self, HyMtInstallPaths, HY_MT_MODEL_SHA256, HY_MT_MODEL_SIZE, HY_MT_MODEL_URL,
-    LLAMA_RUNTIME_SHA256, LLAMA_RUNTIME_SIZE,
-};
+use crate::engine_manifest::{DownloadArtifact, EngineManifest, InstalledExecutable};
+use crate::hy_mt_runtime::HyMtInstallPaths;
 use reqwest::Client;
 use sha2::{Digest, Sha256};
 use std::io::Read;
@@ -15,15 +13,12 @@ pub async fn install(
     app: &AppHandle,
     cache_dir: Option<String>,
 ) -> Result<HyMtInstallPaths, String> {
-    if hy_mt_runtime::LLAMA_RUNTIME_ASSET.is_empty() {
-        return Err(format!(
-            "ENGINE_UNSUPPORTED_ARCH: {}",
-            std::env::consts::ARCH
-        ));
-    }
-
+    let manifest = EngineManifest::shipped().map_err(|error| error.to_string())?;
+    let runtime = manifest
+        .runtime_for_current_arch()
+        .map_err(|error| error.to_string())?;
     let cache_root = resolve_cache_root(app, cache_dir)?;
-    let paths = HyMtInstallPaths::from_cache_root(cache_root);
+    let paths = HyMtInstallPaths::from_cache_root(cache_root, &manifest, runtime);
     fs::create_dir_all(&paths.runtime_dir)
         .await
         .map_err(|error| format!("ENGINE_CREATE_RUNTIME_DIR: {error}"))?;
@@ -38,46 +33,52 @@ pub async fn install(
 
     let runtime_verified = file_matches(
         &paths.runtime_archive,
-        LLAMA_RUNTIME_SIZE,
-        LLAMA_RUNTIME_SHA256,
+        runtime.archive.size_bytes,
+        &runtime.archive.sha256,
     )
     .await?;
     if !runtime_verified {
         emit_progress(app, "Downloading the translation runtime...");
         download_file(
             app,
-            &hy_mt_runtime::llama_runtime_url(),
+            &runtime.archive.url,
             &paths.runtime_archive,
-            Some(LLAMA_RUNTIME_SIZE),
+            Some(runtime.archive.size_bytes),
             "Runtime",
         )
         .await?;
-        verify_file(
-            &paths.runtime_archive,
-            LLAMA_RUNTIME_SIZE,
-            LLAMA_RUNTIME_SHA256,
-            "RUNTIME",
-        )
-        .await?;
+        verify_download(&paths.runtime_archive, &runtime.archive, "RUNTIME").await?;
     }
-    if paths.executable.is_file() {
+    let executable_verified = file_matches(
+        &paths.executable,
+        runtime.executable.size_bytes,
+        &runtime.executable.sha256,
+    )
+    .await?;
+    if executable_verified {
         emit_progress(app, "Translation runtime verified.");
     } else {
-        emit_progress(app, "Installing the translation runtime...");
+        emit_progress(app, "Installing or repairing the translation runtime...");
         extract_zip(&paths.runtime_archive, &paths.runtime_dir).await?;
         if !paths.executable.is_file() {
             return Err("ENGINE_RUNTIME_INVALID: executable missing after extraction".to_string());
         }
     }
+    verify_executable(&paths.executable, &runtime.executable).await?;
 
-    let model_verified = file_matches(&paths.model, HY_MT_MODEL_SIZE, HY_MT_MODEL_SHA256).await?;
+    let model_verified = file_matches(
+        &paths.model,
+        manifest.model.artifact.size_bytes,
+        &manifest.model.artifact.sha256,
+    )
+    .await?;
     if !model_verified {
         emit_progress(app, "Downloading Tencent HY-MT (about 1.1 GB)...");
         download_file(
             app,
-            HY_MT_MODEL_URL,
+            &manifest.model.artifact.url,
             &paths.model,
-            Some(HY_MT_MODEL_SIZE),
+            Some(manifest.model.artifact.size_bytes),
             "Model",
         )
         .await?;
@@ -86,7 +87,7 @@ pub async fn install(
     }
 
     emit_progress(app, "Verifying HY-MT...");
-    verify_file(&paths.model, HY_MT_MODEL_SIZE, HY_MT_MODEL_SHA256, "MODEL").await?;
+    verify_download(&paths.model, &manifest.model.artifact, "MODEL").await?;
     emit_progress(app, "Local Translation Engine verified.");
     Ok(paths)
 }
@@ -108,6 +109,24 @@ async fn file_matches(
         .await
         .map_err(|error| format!("ENGINE_VERIFY_TASK: {error}"))??;
     Ok(digest.eq_ignore_ascii_case(expected_hash))
+}
+
+async fn verify_download(
+    path: &Path,
+    artifact: &DownloadArtifact,
+    label: &str,
+) -> Result<(), String> {
+    verify_file(path, artifact.size_bytes, &artifact.sha256, label).await
+}
+
+async fn verify_executable(path: &Path, executable: &InstalledExecutable) -> Result<(), String> {
+    verify_file(
+        path,
+        executable.size_bytes,
+        &executable.sha256,
+        "RUNTIME_EXECUTABLE",
+    )
+    .await
 }
 
 async fn verify_file(
@@ -308,6 +327,30 @@ mod tests {
         assert!(!file_matches(&path, 7, &expected_hash)
             .await
             .expect("corrupt fixture should be classified"));
+
+        std::fs::remove_file(path).expect("fixture should be removable");
+    }
+
+    #[tokio::test]
+    async fn corrupt_runtime_executable_requires_repair() {
+        let manifest = EngineManifest::shipped().expect("manifest should validate");
+        let runtime = manifest
+            .runtime_for_current_arch()
+            .expect("current architecture should be supported");
+        let path = std::env::temp_dir().join(format!(
+            "meowcal-runtime-corrupt-{}.exe",
+            std::process::id()
+        ));
+        std::fs::write(&path, vec![0; runtime.executable.size_bytes as usize])
+            .expect("fixture should be writable");
+
+        assert!(!file_matches(
+            &path,
+            runtime.executable.size_bytes,
+            &runtime.executable.sha256
+        )
+        .await
+        .expect("corrupt executable should be classified"));
 
         std::fs::remove_file(path).expect("fixture should be removable");
     }

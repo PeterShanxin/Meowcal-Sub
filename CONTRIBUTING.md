@@ -12,8 +12,8 @@ Read these documents before changing the repository:
 3. [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) and
    [`docs/MAINTAINABILITY_BASELINE.md`](docs/MAINTAINABILITY_BASELINE.md) for
    current ownership and enforced ratchets;
-4. [`docs/adr/0001-curated-local-translation-stack.md`](docs/adr/0001-curated-local-translation-stack.md)
-   for the accepted product architecture;
+4. [`docs/adr/README.md`](docs/adr/README.md) for accepted cross-cutting
+   decisions and the ADR template;
 5. current source, tests, and workflows for live behavior.
 
 Historical documents under `docs/plans/` and `docs/archive/` provide context.
