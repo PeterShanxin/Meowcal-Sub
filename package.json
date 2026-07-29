@@ -3,15 +3,30 @@
   "version": "0.5.0",
   "description": "NPU-accelerated subtitle translation for Copilot+ PCs",
   "private": true,
+  "engines": {
+    "node": ">=24 <25",
+    "npm": ">=11 <12"
+  },
   "scripts": {
-    "dev:browser": "npx serve src -l 3000 -C",
-    "dev:backend": "cd src-tauri && cargo run -- --http-only",
+    "dev:browser": "node scripts/serve-frontend.mjs --port 3000",
+    "prepare:validation": "pwsh -NoProfile -File scripts/prepare-validation-resources.ps1",
+    "dev:backend": "npm run prepare:validation && cd src-tauri && cargo run --locked -- --http-only",
+    "format:check": "prettier --check \"src/**/*.{js,css,html}\" \"frontend-tests/**/*.{js,mjs}\" \"scripts/*.mjs\" \"*.{js,json,mjs}\"",
+    "lint": "eslint src/scripts frontend-tests scripts/*.mjs *.config.mjs --max-warnings 17",
+    "test:frontend": "vitest run",
+    "test:browser": "playwright test",
+    "frontend:check": "npm run format:check && npm run lint && npm run test:frontend && npm run test:browser",
     "tauri": "tauri",
     "tauri:dev": "tauri dev",
     "tauri:build": "tauri build"
   },
   "devDependencies": {
-    "serve": "^14.2.0"
+    "@eslint/js": "10.0.1",
+    "@playwright/test": "1.62.0",
+    "eslint": "10.8.0",
+    "globals": "17.8.0",
+    "prettier": "3.9.6",
+    "vitest": "4.1.10"
   },
   "keywords": [
     "tauri",

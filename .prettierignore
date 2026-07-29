@@ -1,0 +1,16 @@
+# Wave 1 baseline exceptions. New files are checked automatically.
+src/index.html
+src/overlay.html
+src/selector.html
+src/wizard.html
+src/scripts/main.js
+src/scripts/overlay.js
+src/scripts/selector.js
+src/scripts/settings.js
+src/scripts/tauri-bridge.js
+src/scripts/wizard.js
+src/styles/main.css
+src/styles/overlay.css
+src/styles/selector.css
+src/styles/settings.css
+src/styles/wizard.css

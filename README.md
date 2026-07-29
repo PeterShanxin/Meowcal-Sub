@@ -40,7 +40,7 @@ instructions.
 
 - Windows 11;
 - Rust stable with `rustfmt` and `clippy`;
-- Node.js 20 or later;
+- Node.js 24 with npm 11;
 - Visual Studio 2022 Build Tools with C++ and Windows SDK;
 - .NET 9 SDK for the optional WinUI `OverlayHost`.
 
@@ -84,9 +84,14 @@ From a clean checkout:
 .\scripts\verify.ps1
 ```
 
-This is the command used by contributors and split across the current required
-GitHub jobs. Frontend, browser, documentation, and maintainability stages are
-added by later Wave 1 work.
+This is the command used by contributors and split across the current GitHub
+jobs. It verifies Rust formatting, lint, and tests; frontend formatting, lint,
+and unit tests; the real browser-to-Rust health/settings bridge; and the locked
+frontend dependency graph.
+
+The browser smoke does not prove screen capture, Windows OCR, the native
+selector or overlay, tray behavior, installer behavior, or DPI/window
+lifecycle. Those remain manual Windows gates.
 
 ## Build installers
 

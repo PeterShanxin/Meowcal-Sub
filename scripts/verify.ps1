@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [ValidateSet("All", "Lint", "Test")]
+    [ValidateSet("All", "Lint", "Test", "Frontend")]
     [string]$Stage = "All"
 )
 
@@ -21,6 +21,22 @@ function Invoke-CargoStep {
     Write-Host ""
     Write-Host "==> $Name" -ForegroundColor Cyan
     & cargo @Arguments
+    $exitCode = $LASTEXITCODE
+    if ($exitCode -ne 0) {
+        Write-Host "$Name failed with exit code $exitCode." -ForegroundColor Red
+        exit $exitCode
+    }
+}
+
+function Invoke-NpmStep {
+    param(
+        [string]$Name,
+        [string[]]$Arguments
+    )
+
+    Write-Host ""
+    Write-Host "==> $Name" -ForegroundColor Cyan
+    & npm @Arguments
     $exitCode = $LASTEXITCODE
     if ($exitCode -ne 0) {
         Write-Host "$Name failed with exit code $exitCode." -ForegroundColor Red
@@ -56,6 +72,20 @@ try {
     }
 } finally {
     Pop-Location
+}
+
+if ($Stage -in @("All", "Frontend")) {
+    Push-Location $repositoryRoot
+    try {
+        Invoke-NpmStep "Install locked frontend dependencies" @("ci", "--ignore-scripts")
+        Invoke-NpmStep "Frontend format" @("run", "format:check")
+        Invoke-NpmStep "Frontend lint" @("run", "lint")
+        Invoke-NpmStep "Frontend unit tests" @("run", "test:frontend")
+        Invoke-NpmStep "Browser bridge smoke" @("run", "test:browser")
+        Invoke-NpmStep "Frontend dependency audit" @("audit", "--audit-level=high")
+    } finally {
+        Pop-Location
+    }
 }
 
 Write-Host ""

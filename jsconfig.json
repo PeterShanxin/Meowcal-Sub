@@ -10,11 +10,6 @@
       "/*": ["./*"]
     }
   },
-  "include": [
-    "src/scripts/**/*.js",
-    "src/**/*.html"
-  ],
-  "exclude": [
-    "node_modules"
-  ]
+  "include": ["src/scripts/**/*.js", "src/**/*.html"],
+  "exclude": ["node_modules"]
 }

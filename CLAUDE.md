@@ -23,6 +23,9 @@ From the repository root:
 .\scripts\verify.ps1
 ```
 
+Focused iteration may use `-Stage Lint`, `-Stage Test`, or `-Stage Frontend`.
+The default gate includes the real browser-to-Rust health/settings smoke.
+
 Use `.\dev-browser.cmd` for browser-only UI work and `.\dev-tauri.cmd` for the
 current ARM64 Tauri development flow. Browser mode does not prove Windows OCR,
 capture, selector, overlay, tray, installer, or DPI/window behavior.

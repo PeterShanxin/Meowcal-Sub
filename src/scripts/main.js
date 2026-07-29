@@ -20,6 +20,8 @@ document.addEventListener('DOMContentLoaded', () => {
     initializeApp();
 });
 
+const { formatFoundryPhase, formatReadyState } = window.BackendStatusPresentation;
+
 // =============================================================================
 // GLOBAL STATE
 // =============================================================================
@@ -1665,50 +1667,6 @@ function backendIdKey(id) {
             return 'mock';
         default:
             return id;
-    }
-}
-
-function formatReadyState(readyState) {
-    switch (readyState) {
-        case 'ready':
-            return { label: 'Ready', className: 'ready' };
-        case 'notReady':
-            return { label: 'Not Ready', className: 'not-ready' };
-        case 'notSupported':
-            return { label: 'Not Supported', className: 'not-supported' };
-        case 'error':
-            return { label: 'Error', className: 'error' };
-        default:
-            return { label: 'Unknown', className: 'error' };
-    }
-}
-
-/**
- * Format Foundry Local phase into display info
- * @param {string} phase - The phase from backend: notInstalled, notRunning, noModels, preparing, ready, error
- * @returns {{ label: string, className: string }}
- */
-function formatFoundryPhase(phase) {
-    switch (phase) {
-        case 'ready':
-            return { label: 'Ready', className: 'ready' };
-        case 'unchecked':
-            return { label: 'Not checked', className: 'unchecked' };
-        case 'preparing':
-            return { label: 'Preparing', className: 'preparing' };
-        case 'notRunning':
-        case 'notrunning':
-            return { label: 'Not Running', className: 'not-ready' };
-        case 'noModels':
-        case 'nomodels':
-            return { label: 'No Models', className: 'not-ready' };
-        case 'notInstalled':
-        case 'notinstalled':
-            return { label: 'Not Installed', className: 'not-supported' };
-        case 'error':
-            return { label: 'Error', className: 'error' };
-        default:
-            return { label: 'Unknown', className: 'error' };
     }
 }
 

@@ -46,3 +46,24 @@ jobs:
       - name: Run test verification
         shell: pwsh
         run: ./scripts/verify.ps1 -Stage Test
+
+  frontend:
+    name: Frontend & Browser
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Run frontend and browser verification
+        shell: pwsh
+        run: ./scripts/verify.ps1 -Stage Frontend

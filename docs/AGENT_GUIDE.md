@@ -60,12 +60,13 @@ For focused iteration only:
 ```powershell
 .\scripts\verify.ps1 -Stage Lint
 .\scripts\verify.ps1 -Stage Test
+.\scripts\verify.ps1 -Stage Frontend
 ```
 
 The default `All` stage is required before handoff. It runs its own contract
-tests, prepares validation resources, and uses the tracked Cargo lockfile. A
-failed clean-checkout prerequisite is a repository defect, not a reason to skip
-verification.
+tests, prepares validation resources, uses the tracked Cargo and npm lockfiles,
+and includes the real browser-to-Rust bridge smoke. A failed clean-checkout
+prerequisite is a repository defect, not a reason to skip verification.
 
 Browser mode does not prove Tauri-only capture, OCR, selector, overlay, tray,
 window, installer, or runtime-process behavior.

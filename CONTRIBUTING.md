@@ -22,7 +22,8 @@ They are not normative and cannot override accepted ADRs or current guidance.
   not a release claim.
 - Git and PowerShell 7.
 - Rust stable with `rustfmt` and `clippy`.
-- Node.js 20 or later.
+- Node.js 24 and npm 11. The supported major versions are declared in
+  `package.json` and `.node-version`.
 - Visual Studio 2022 Build Tools with Desktop development with C++ and the
   Windows SDK.
 - .NET 9 SDK when building the optional WinUI `OverlayHost`.
@@ -75,13 +76,16 @@ Run the authoritative repository gate from the root:
 .\scripts\verify.ps1
 ```
 
-Use `-Stage Lint` or `-Stage Test` only for focused local iteration. The default
-`All` stage is the contributor handoff gate and equals the union of the current
-required GitHub checks.
+Use `-Stage Lint`, `-Stage Test`, or `-Stage Frontend` only for focused local
+iteration. The default `All` stage is the contributor handoff gate and equals
+the union of the current required GitHub checks. The frontend stage installs
+the locked npm graph, checks formatting and lint, runs DOM-independent unit
+tests, exercises browser mode against the real Rust HTTP backend, and audits
+dependencies for high-severity vulnerabilities.
 
 Rust dependency resolution is locked by `src-tauri/Cargo.lock`; verification
-uses `--locked`. Browser-mode, frontend, documentation, and maintainability
-gates are added in later Wave 1 issues and must not be claimed before they land.
+uses `--locked`. Frontend dependency resolution is locked by
+`package-lock.json`; verification uses `npm ci`.
 
 ## Manual Windows validation
 
