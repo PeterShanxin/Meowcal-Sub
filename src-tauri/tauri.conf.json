@@ -25,7 +25,7 @@
         "center": true,
         "decorations": true,
         "transparent": false,
-        "visible": true
+        "visible": false
       },
       {
         "title": "Select Area",
@@ -63,7 +63,7 @@
         "resizable": false
       },
       {
-        "title": "Foundry Local Setup",
+        "title": "Local Translation Setup",
         "label": "foundry-wizard",
         "url": "wizard.html",
         "width": 620,
@@ -91,11 +91,7 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
-    "resources": [
-      "resources/OverlayHost.exe",
-      "resources/*.dll",
-      "resources/*.pri"
-    ],
+    "resources": ["resources/OverlayHost.exe", "resources/*.dll", "resources/*.pri"],
     "windows": {
       "certificateThumbprint": null,
       "digestAlgorithm": "sha256",

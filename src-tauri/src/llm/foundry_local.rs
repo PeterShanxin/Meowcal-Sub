@@ -3,6 +3,7 @@
 // =============================================================================
 
 use crate::config::FoundryLocalConfig;
+use crate::llm::subtitle_output::sanitize_subtitle_translation_output;
 use crate::llm::{
     build_subtitle_translation_prompt, BackendId, FoundryLocalPhase, LlmError, PromptRouterOptions,
     ReadyState, TranslatorBackend,
@@ -195,13 +196,21 @@ impl FoundryLocalBackend {
             .timeout(Duration::from_millis(config.timeout_ms as u64))
             .build()
             .unwrap_or_default();
+        let configured_url = config
+            .endpoint_url
+            .as_deref()
+            .map(str::trim)
+            .filter(|url| !url.is_empty())
+            .map(|url| url.trim_end_matches('/').to_string());
+        let has_configured_url = configured_url.is_some();
+        let configured_model = config.model.clone();
 
         Self {
             config,
             http_client,
-            service_url: RwLock::new(None),
-            service_available: AtomicBool::new(false),
-            cached_models: RwLock::new(Vec::new()),
+            service_url: RwLock::new(configured_url),
+            service_available: AtomicBool::new(has_configured_url),
+            cached_models: RwLock::new(configured_model.into_iter().collect()),
             api_namespace: AtomicU8::new(API_NAMESPACE_UNKNOWN),
         }
         // Note: Service detection happens lazily on first is_available() call
@@ -797,6 +806,15 @@ impl FoundryLocalBackend {
 
     /// Refresh service status and URL (read-only; does NOT start the service).
     pub fn refresh_service_status(&self) {
+        if let Some(url) = self.configured_endpoint_url() {
+            *write_or_recover(&self.service_url) = Some(url);
+            self.service_available.store(true, Ordering::SeqCst);
+            if let Some(model) = self.config.model.clone() {
+                *write_or_recover(&self.cached_models) = vec![model];
+            }
+            return;
+        }
+
         let previous_url = read_or_recover(&self.service_url).clone();
 
         if let Some(url) = Self::get_service_url_from_cli() {
@@ -845,6 +863,11 @@ impl FoundryLocalBackend {
     /// Use this for the explicit "Prepare Foundry" flow - regular status checks should
     /// call `refresh_service_status()` which is read-only.
     pub fn ensure_service_running(&self) -> bool {
+        if self.configured_endpoint_url().is_some() {
+            self.refresh_service_status();
+            return true;
+        }
+
         // Force refresh since we're actively trying to start/find the service
         if Self::get_service_url_from_cli_cached(true).is_some() {
             self.refresh_service_status();
@@ -876,6 +899,15 @@ impl FoundryLocalBackend {
     /// Get cached service URL
     fn get_service_url(&self) -> Option<String> {
         read_or_recover(&self.service_url).clone()
+    }
+
+    fn configured_endpoint_url(&self) -> Option<String> {
+        self.config
+            .endpoint_url
+            .as_deref()
+            .map(str::trim)
+            .filter(|url| !url.is_empty())
+            .map(|url| url.trim_end_matches('/').to_string())
     }
 
     async fn send_chat_completion(
@@ -963,7 +995,7 @@ impl FoundryLocalBackend {
 
         // Use configured model if set and available
         if let Some(ref model) = self.config.model {
-            if Self::model_in_cache(model, &models) {
+            if self.configured_endpoint_url().is_some() || Self::model_in_cache(model, &models) {
                 return Some(self.resolve_model_id(model, &models));
             }
         }
@@ -1626,7 +1658,7 @@ impl TranslatorBackend for FoundryLocalBackend {
                 role: "user".to_string(),
                 content: prompt,
             }],
-            temperature: 0.2, // Lower temperature for subtitle consistency
+            temperature: 0.0,
             max_tokens: 120,
         };
 
@@ -1702,77 +1734,6 @@ impl TranslatorBackend for FoundryLocalBackend {
         );
 
         Ok(translated)
-    }
-}
-
-fn sanitize_subtitle_translation_output(output: &str) -> String {
-    let trimmed = output.trim();
-    if trimmed.is_empty() {
-        return String::new();
-    }
-
-    // Strip common wrapping quotes (ASCII and Unicode curly quotes).
-    let trimmed = trimmed
-        .trim_matches('"') // ASCII double quote
-        .trim_matches('\'') // ASCII single quote
-        .trim_matches('\u{201C}') // Left double curly quote "
-        .trim_matches('\u{201D}') // Right double curly quote "
-        .trim_matches('`') // Backtick
-        .trim();
-
-    // If the model returned a labelled response, strip the label and keep the content.
-    // Pre-allocate with reasonable capacity for subtitle text (typically 1-3 lines)
-    let mut collected: Vec<String> = Vec::with_capacity(4);
-    let mut started = false;
-    for raw_line in trimmed.lines() {
-        let line = raw_line.trim();
-        if line.is_empty() {
-            if started {
-                break;
-            }
-            continue;
-        }
-
-        let lower = line.to_ascii_lowercase();
-        let is_header = lower.starts_with("translation")
-            || lower.starts_with("translated")
-            || lower.starts_with("output")
-            || line.starts_with("翻译")
-            || line.starts_with("译文");
-        let is_expl = lower.starts_with("explanation")
-            || lower.starts_with("note")
-            || line.starts_with("解释")
-            || line.starts_with("说明");
-
-        if !started {
-            if is_header {
-                // Try to keep anything after a colon on the same line.
-                if let Some((_, rest)) = line.split_once(':') {
-                    let rest = rest.trim();
-                    if !rest.is_empty() {
-                        collected.push(rest.to_string());
-                        started = true;
-                    }
-                }
-                continue;
-            }
-            if is_expl {
-                continue;
-            }
-            started = true;
-        }
-
-        if started && is_expl {
-            break;
-        }
-
-        collected.push(line.to_string());
-    }
-
-    if collected.is_empty() {
-        trimmed.to_string()
-    } else {
-        collected.join("\n")
     }
 }
 

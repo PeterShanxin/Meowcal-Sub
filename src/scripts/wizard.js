@@ -1,8 +1,8 @@
 // =============================================================================
-// WIZARD.JS - Foundry Local Setup Wizard
+// WIZARD.JS - Local Translation Engine Setup
 // =============================================================================
 // Controls the 4-step wizard flow:
-//   1. Install Foundry CLI (via winget)
+//   1. Explain the private local engine
 //   2. Configure cache directory
 //   3. Download a model
 //   4. Verify & done
@@ -17,16 +17,10 @@
 
     const state = {
         currentStep: 1,
-        foundryInstalled: false,
         selectedModel: null,
         modelDownloaded: false,
         downloadInProgress: false,
-        pollTimer: null,
-        pollStartTime: null,
     };
-
-    const POLL_INTERVAL_MS = 2000;
-    const INSTALL_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
 
     // =========================================================================
     // DOM HELPERS
@@ -96,22 +90,16 @@
         const btnNext = $('btn-wizard-next');
         const btnSkip = $('btn-wizard-skip');
         const btnRetry = $('btn-wizard-retry');
-        const btnManual = $('btn-wizard-manual');
         const btnCancel = $('btn-wizard-cancel');
 
         // Reset all optional buttons
         hide(btnSkip);
         hide(btnRetry);
-        hide(btnManual);
         btnNext.disabled = false;
 
         switch (state.currentStep) {
             case 1:
-                if (state.foundryInstalled) {
-                    btnNext.textContent = 'Next';
-                } else {
-                    btnNext.textContent = 'Install Foundry';
-                }
+                btnNext.textContent = 'Next';
                 break;
             case 2:
                 btnNext.textContent = 'Next';
@@ -123,8 +111,6 @@
                 if (!state.selectedModel) {
                     btnNext.disabled = true;
                 }
-                show(btnSkip);
-                $('btn-wizard-skip').textContent = 'Skip';
                 break;
             case 4:
                 btnNext.textContent = 'Close';
@@ -134,100 +120,12 @@
     }
 
     // =========================================================================
-    // STEP 1: INSTALL FOUNDRY CLI
+    // STEP 1: EXPLAIN THE CURATED LOCAL ENGINE
     // =========================================================================
 
     async function initStepInstall() {
-        hide('install-winget-ok');
-        hide('install-winget-missing');
-        hide('install-already-installed');
-        hide('install-progress');
-        hide('install-timeout-hint');
-
-        // Check if Foundry is already installed
-        try {
-            const installed = await TauriBridge.invoke('wizard_poll_foundry_installed');
-            if (installed) {
-                state.foundryInstalled = true;
-                show('install-already-installed');
-                updateButtons();
-                // Auto-advance after a brief pause
-                setTimeout(() => showStep(2), 1000);
-                return;
-            }
-        } catch (e) {
-            console.error('Failed to check Foundry status:', e);
-        }
-
-        // Check if winget is available
-        try {
-            const wingetOk = await TauriBridge.invoke('wizard_check_winget');
-            if (wingetOk) {
-                show('install-winget-ok');
-            } else {
-                show('install-winget-missing');
-                $('btn-wizard-next').disabled = true;
-            }
-        } catch (e) {
-            console.error('Failed to check winget:', e);
-            show('install-winget-missing');
-            $('btn-wizard-next').disabled = true;
-        }
-    }
-
-    async function doInstallFoundry() {
-        hide('install-winget-ok');
-        show('install-progress');
-        hide('install-timeout-hint');
-
-        const btnNext = $('btn-wizard-next');
-        btnNext.disabled = true;
-        btnNext.textContent = 'Installing...';
-        show('btn-wizard-manual');
-
-        try {
-            await TauriBridge.invoke('wizard_install_foundry');
-        } catch (e) {
-            console.error('Failed to launch installer:', e);
-        }
-
-        // Start polling for installation completion
-        state.pollStartTime = Date.now();
-        state.pollTimer = setInterval(async () => {
-            try {
-                const installed = await TauriBridge.invoke('wizard_poll_foundry_installed');
-                if (installed) {
-                    clearInterval(state.pollTimer);
-                    state.pollTimer = null;
-                    state.foundryInstalled = true;
-                    showStep(2);
-                    return;
-                }
-            } catch (e) {
-                console.error('Poll error:', e);
-            }
-
-            // Check for timeout -- stop polling and let user retry
-            if (Date.now() - state.pollStartTime > INSTALL_TIMEOUT_MS) {
-                clearInterval(state.pollTimer);
-                state.pollTimer = null;
-                show('install-timeout-hint');
-                // Re-enable the Next button so user can retry the install
-                const btnNext = $('btn-wizard-next');
-                btnNext.disabled = false;
-                btnNext.textContent = 'Retry Install';
-            }
-        }, POLL_INTERVAL_MS);
-    }
-
-    function handleManualInstall() {
-        // User says they installed it manually
-        if (state.pollTimer) {
-            clearInterval(state.pollTimer);
-            state.pollTimer = null;
-        }
-        state.foundryInstalled = true;
-        showStep(2);
+        show('install-already-installed');
+        updateButtons();
     }
 
     // =========================================================================
@@ -261,11 +159,13 @@
                 if (!homeDir.endsWith('\\') && !homeDir.endsWith('/')) {
                     homeDir += '\\';
                 }
-                return homeDir + '.foundry\\cache';
+                return homeDir + '.meowcal-cache';
             }
-        } catch (_) { /* fall through */ }
+        } catch {
+            // Fall through to the environment placeholder.
+        }
         // Fallback: show generic placeholder (actual path depends on user profile)
-        return '%USERPROFILE%\\.foundry\\cache';
+        return '%USERPROFILE%\\.meowcal-cache';
     }
 
     async function handleBrowseCache() {
@@ -284,7 +184,7 @@
                         const space = await TauriBridge.invoke('wizard_get_disk_space', { path: selected });
                         $('disk-space-value').textContent = space.availableDisplay;
                         $('disk-space-value').classList.toggle('warning', space.availableBytes < 5 * 1024 * 1024 * 1024);
-                    } catch (e) {
+                    } catch {
                         $('disk-space-value').textContent = 'Unknown';
                     }
                 }
@@ -329,34 +229,17 @@
         const listEl = $('model-list');
         listEl.innerHTML = '<div class="wizard-progress-box"><div class="wizard-spinner"></div><span>Loading available models...</span></div>';
 
-        // Start the Foundry service first so we can list models
-        try {
-            await TauriBridge.invoke('wizard_start_service');
-        } catch (e) {
-            console.warn('Service start hint:', e);
-        }
-
         try {
             const models = await TauriBridge.invoke('wizard_list_available_models');
 
             if (!models || models.length === 0) {
                 listEl.innerHTML = `
-                    <div class="wizard-warning-box">
-                        No cached models found. You can enter a model name manually below.
-                    </div>
-                    <div class="wizard-config-row">
-                        <label class="setting-label">Model ID</label>
-                        <input type="text" class="text-input" id="manual-model-input"
-                            placeholder="e.g., qwen2.5-0.5b-instruct">
+                    <div class="wizard-error-box">
+                        <strong>The supported translation engine is unavailable.</strong>
+                        <p>Close setup, check for an app update, then try Install / Repair again.</p>
                     </div>
                 `;
-                const manualInput = $('manual-model-input');
-                if (manualInput) {
-                    manualInput.addEventListener('input', () => {
-                        state.selectedModel = manualInput.value.trim() || null;
-                        $('btn-wizard-next').disabled = !state.selectedModel;
-                    });
-                }
+                $('btn-wizard-next').disabled = true;
                 return;
             }
 
@@ -381,7 +264,9 @@
                 card.innerHTML = `
                     <div class="wizard-model-radio"></div>
                     <div class="wizard-model-info">
-                        <div class="wizard-model-name">${escapeHtml(model.id)}${badges}</div>
+                        <div class="wizard-model-name">Tencent HY-MT 1.5${badges}</div>
+                        ${model.description ? `<div class="setting-hint">${escapeHtml(model.description)}</div>` : ''}
+                        ${model.downloadSize ? `<div class="setting-hint">Download: ${escapeHtml(model.downloadSize)}</div>` : ''}
                     </div>
                 `;
 
@@ -422,7 +307,10 @@
         $('terminal-output').textContent = '';
 
         try {
-            await TauriBridge.invoke('wizard_download_model', { modelId: state.selectedModel });
+            await TauriBridge.invoke('wizard_download_model', {
+                modelId: state.selectedModel,
+                cacheDir: $('cache-dir-path').value.trim() || null,
+            });
             // Note: success/failure handled by wizard-download-complete event
         } catch (e) {
             console.error('Download command failed:', e);
@@ -430,7 +318,6 @@
             state.downloadInProgress = false;
             btnNext.disabled = false;
             btnNext.textContent = 'Retry';
-            show('btn-wizard-skip');
         }
     }
 
@@ -445,18 +332,24 @@
 
         try {
             // Start the service
-            const serviceUrl = await TauriBridge.invoke('wizard_start_service');
+            await TauriBridge.invoke('wizard_start_service');
 
             // Brief wait for model warmup
             await new Promise(r => setTimeout(r, 2000));
 
             // Full probe: check CLI + service + model availability
-            const status = await TauriBridge.invoke('get_foundry_local_status');
+            const status = await TauriBridge.invoke('refresh_foundry_local_status');
+            const test = await TauriBridge.invoke('wizard_test_translation', {
+                sourceText: $('test-source-text').value.trim(),
+                sourceLanguage: 'zh-CN',
+                targetLanguage: 'en-US',
+            });
 
             hide('verify-progress');
 
             // Require CLI available AND service running (not just cliAvailable)
-            const ready = status && status.cliAvailable && status.serviceRunning;
+            const ready = status && status.serviceRunning && status.phase === 'ready'
+                && test && test.translatedText;
 
             if (ready) {
                 show('verify-success');
@@ -465,22 +358,23 @@
                 const summary = $('setup-summary');
                 let rows = '';
                 if (state.selectedModel) {
-                    rows += `<div class="wizard-summary-row"><span class="wizard-summary-label">Model</span><span class="wizard-summary-value">${escapeHtml(state.selectedModel)}</span></div>`;
-                }
-                if (serviceUrl) {
-                    rows += `<div class="wizard-summary-row"><span class="wizard-summary-label">Service URL</span><span class="wizard-summary-value">${escapeHtml(serviceUrl)}</span></div>`;
+                    rows += '<div class="wizard-summary-row"><span class="wizard-summary-label">Engine</span><span class="wizard-summary-value">Tencent HY-MT 1.5</span></div>';
                 }
                 if (status.phase) {
                     rows += `<div class="wizard-summary-row"><span class="wizard-summary-label">Status</span><span class="wizard-summary-value">${escapeHtml(status.phase)}</span></div>`;
                 }
                 summary.innerHTML = rows;
+                $('translation-test-result').innerHTML = `
+                    <div class="wizard-summary-row"><span class="wizard-summary-label">Translation</span><span class="wizard-summary-value">${escapeHtml(test.translatedText)}</span></div>
+                    <div class="wizard-summary-row"><span class="wizard-summary-label">Latency</span><span class="wizard-summary-value">${test.latencyMs} ms</span></div>
+                `;
             } else {
                 show('verify-error');
                 const reason = !status?.cliAvailable
-                    ? 'Foundry CLI is not available after installation.'
+                    ? 'The local translation runtime is not installed.'
                     : !status?.serviceRunning
-                        ? 'Foundry service is not running. Try restarting the wizard.'
-                        : 'Foundry is not fully ready. Check logs for details.';
+                        ? 'The Local Translation Engine is not running. Try again.'
+                        : 'The engine is not fully ready. Check the support code and retry.';
                 $('verify-error-message').textContent = reason;
             }
         } catch (e) {
@@ -521,16 +415,10 @@
     // =========================================================================
 
     function resetWizardState() {
-        if (state.pollTimer) {
-            clearInterval(state.pollTimer);
-            state.pollTimer = null;
-        }
         state.currentStep = 1;
-        state.foundryInstalled = false;
         state.selectedModel = null;
         state.modelDownloaded = false;
         state.downloadInProgress = false;
-        state.pollStartTime = null;
         $('terminal-output').textContent = '';
         showStep(1);
     }
@@ -541,14 +429,6 @@
             resetWizardState();
         });
 
-        // Clean up timers when the wizard window is hidden (X button close)
-        TauriBridge.event.listen('wizard-window-hidden', () => {
-            if (state.pollTimer) {
-                clearInterval(state.pollTimer);
-                state.pollTimer = null;
-            }
-        });
-
         // Streaming output from model download
         TauriBridge.event.listen('wizard-output', (event) => {
             const { stream, line } = event.payload;
@@ -557,7 +437,7 @@
 
         // Download complete
         TauriBridge.event.listen('wizard-download-complete', (event) => {
-            const { success, model, error } = event.payload;
+            const { success, error } = event.payload;
             state.downloadInProgress = false;
 
             if (success) {
@@ -571,7 +451,6 @@
                 const btnNext = $('btn-wizard-next');
                 btnNext.disabled = false;
                 btnNext.textContent = 'Retry';
-                show('btn-wizard-skip');
             }
         });
     }
@@ -585,11 +464,7 @@
         $('btn-wizard-next').addEventListener('click', async () => {
             switch (state.currentStep) {
                 case 1:
-                    if (state.foundryInstalled) {
-                        showStep(2);
-                    } else {
-                        await doInstallFoundry();
-                    }
+                    showStep(2);
                     break;
                 case 2:
                     showStep(3);
@@ -619,18 +494,11 @@
 
         // Cancel button
         $('btn-wizard-cancel').addEventListener('click', async () => {
-            if (state.pollTimer) {
-                clearInterval(state.pollTimer);
-                state.pollTimer = null;
-            }
             await TauriBridge.invoke('close_foundry_wizard', {
                 modelDownloaded: false,
                 selectedModel: null,
             });
         });
-
-        // Manual install button
-        $('btn-wizard-manual').addEventListener('click', handleManualInstall);
 
         // Retry button
         $('btn-wizard-retry').addEventListener('click', () => {

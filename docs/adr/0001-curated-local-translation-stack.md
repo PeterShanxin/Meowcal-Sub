@@ -96,6 +96,6 @@ Rejected for the initial redesign. It conflicts with the local privacy promise a
 
 For this epic, this ADR supersedes the product direction in:
 
-- `docs/plans/2026-03-04-meocosub2-design.md`
+- `docs/archive/plans/2026-03-04-meocosub2-design.md`
 
-The file should be retained or archived as historical context until its ownership is explicitly resolved.
+The archived file is retained as historical context.

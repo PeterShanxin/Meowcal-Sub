@@ -13,6 +13,7 @@ mod manager;
 mod mock;
 mod output_validation;
 mod prompt_router;
+mod subtitle_output;
 mod text_utils;
 
 pub use context::*;

@@ -140,25 +140,27 @@
                 </div>
             </div>
 
-            <h3 class="settings-subtitle">Translation Backend</h3>
+            <h3 class="settings-subtitle">Private Local Translation</h3>
 
-            <!-- Priority Card: Foundry Local (Primary Backend) -->
             <div class="settings-card priority-card">
                 <h4 class="card-title">
                     <span class="card-icon">⚡</span>
-                    Foundry Local
-                    <span class="badge badge-primary">Primary</span>
+                    Local Translation Engine
+                    <span class="badge badge-primary">Built in</span>
                 </h4>
+                <p class="setting-hint">
+                    Tencent HY-MT runs privately on this PC. Setup downloads about 1.1 GB once.
+                </p>
 
-                <div class="toggle-wrapper">
-                    <span class="toggle-label">Enable Foundry Local</span>
+                <div class="toggle-wrapper hidden">
+                    <span class="toggle-label">Enable Local Translation Engine</span>
                     <label class="toggle">
                         <input type="checkbox" id="toggle-foundry-local" checked>
                         <span class="toggle-slider"></span>
                     </label>
                 </div>
 
-                <div class="settings-group">
+                <div class="settings-group hidden">
                     <label class="setting-label" for="foundry-local-model">Model</label>
                     <select id="foundry-local-model" class="select">
                         <option value="">Auto (first available)</option>
@@ -166,31 +168,30 @@
                 </div>
 
                 <div class="backend-status-inline" id="foundry-status">
-                    <span class="status-text">Checking Foundry Local...</span>
+                    <span class="status-text">Checking Local Translation Engine...</span>
                 </div>
 
                 <div class="card-actions">
                     <button class="btn btn-primary btn-small" id="btn-foundry-make-ready">
-                        Make Foundry Ready
+                        Prepare Engine
                     </button>
                     <button class="btn btn-outline btn-small" id="btn-foundry-refresh">
-                        Refresh
+                        Check Again
                     </button>
                     <button class="btn btn-outline btn-small" id="btn-foundry-wizard">
-                        Setup Wizard
+                        Install / Repair
                     </button>
                 </div>
             </div>
 
-            <!-- Context-Aware Translation -->
             <div class="settings-card">
                 <h4 class="card-title">
                     <span class="card-icon">🧠</span>
-                    Context-Aware Translation
+                    Subtitle Continuity
                 </h4>
                 <p class="setting-hint">
-                    Uses a small rolling cache of recent OCR lines (source-only) to improve consistency and reduce drift within a session.
-                    Only affects Foundry Local.
+                    Optional. Remembers a few recent source lines for steadier names and recurring terms.
+                    Leave Off if you prefer the lowest latency.
                 </p>
                 <div class="settings-group">
                     <label class="setting-label" for="context-level">Context Level</label>
@@ -351,7 +352,7 @@
             </details>
 
             <!-- Collapsible: Fallback Backends -->
-            <details class="settings-section" id="fallback-backends-section">
+            <details class="settings-section hidden" id="fallback-backends-section">
                 <summary class="collapsible-header">
                     <span class="section-title">
                         <span class="section-icon">⚙</span>
@@ -466,7 +467,7 @@
             </details>
 
             <!-- Collapsible: Backend Diagnostics -->
-            <details class="settings-section" id="diagnostics-section">
+            <details class="settings-section hidden" id="diagnostics-section">
                 <summary class="collapsible-header">
                     <span class="section-title">Backend Status</span>
                     <span class="status-summary" id="status-summary">Checking...</span>
@@ -481,7 +482,7 @@
         
         <!-- Footer -->
         <footer class="app-footer">
-            <p>Meowcal Sub v0.1.0 • Made with 🐱 for Copilot+ PCs</p>
+            <p>Meowcal Sub • Made with 🐱 for Copilot+ PCs</p>
             <p class="footer-hint">Minimize to system tray to keep running in background</p>
         </footer>
         
@@ -532,27 +533,23 @@
         </div>
     </div>
 
-    <!-- Foundry Warmup Modal (shown when Foundry is enabled but not Ready on Start Translation) -->
     <div class="modal hidden" id="foundry-warmup-modal" role="dialog" aria-modal="true">
         <div class="modal-backdrop" id="foundry-warmup-backdrop"></div>
         <div class="modal-content" role="document">
             <div class="modal-header">
-                <h3>Foundry Local not ready</h3>
+                <h3>Local Translation Engine not ready</h3>
             </div>
             <div class="modal-body">
                 <div class="setting-hint" id="foundry-warmup-status">
-                    Checking Foundry Local...
+                    Checking the private translation engine...
                 </div>
             </div>
             <div class="modal-actions">
                 <button class="btn btn-outline btn-small" id="btn-foundry-warmup-cancel">
                     Cancel
                 </button>
-                <button class="btn btn-outline btn-small" id="btn-foundry-fallback-start">
-                    Start with fallback
-                </button>
                 <button class="btn btn-primary btn-small" id="btn-foundry-warmup-start">
-                    Warm up Foundry &amp; start
+                    Prepare engine &amp; start
                 </button>
             </div>
         </div>

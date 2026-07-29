@@ -1,11 +1,15 @@
 import { readdir, readFile } from "node:fs/promises";
+import { execFile } from "node:child_process";
 import path from "node:path";
+import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
+import { findRatchetRegressions } from "./maintainability-ratchet.mjs";
 
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const baselinePath = path.join(repositoryRoot, "config", "maintainability-baseline.json");
 const productionRoots = ["src", "src-tauri/src"];
 const productionExtensions = new Set([".css", ".html", ".js", ".rs"]);
+const execFileAsync = promisify(execFile);
 
 async function listProductionFiles(relativeDirectory) {
   const absoluteDirectory = path.join(repositoryRoot, relativeDirectory);
@@ -39,6 +43,27 @@ function requireNonNegativeInteger(value, name) {
 }
 
 const baseline = JSON.parse(await readFile(baselinePath, "utf8"));
+let previousBaseline = null;
+try {
+  const { stdout: headContents } = await execFileAsync(
+    "git",
+    ["show", "HEAD:config/maintainability-baseline.json"],
+    { cwd: repositoryRoot, encoding: "utf8" },
+  );
+  const headBaseline = JSON.parse(headContents);
+  if (JSON.stringify(headBaseline) !== JSON.stringify(baseline)) {
+    previousBaseline = headBaseline;
+  } else {
+    const { stdout: parentContents } = await execFileAsync(
+      "git",
+      ["show", "HEAD^:config/maintainability-baseline.json"],
+      { cwd: repositoryRoot, encoding: "utf8" },
+    );
+    previousBaseline = JSON.parse(parentContents);
+  }
+} catch {
+  console.warn("Previous maintainability baseline unavailable; checking current ceilings only.");
+}
 requireNonNegativeInteger(baseline.newProductionFileMaxLines, "newProductionFileMaxLines");
 requireNonNegativeInteger(baseline.eslintMaxWarnings, "eslintMaxWarnings");
 
@@ -51,7 +76,7 @@ for (const [metric, minimum] of Object.entries(baseline.frontendCoverageMinimum)
 
 const productionFiles = (await Promise.all(productionRoots.map(listProductionFiles))).flat();
 const measuredFiles = new Map();
-const violations = [];
+const violations = previousBaseline ? findRatchetRegressions(baseline, previousBaseline) : [];
 
 for (const relativePath of productionFiles) {
   const contents = await readFile(path.join(repositoryRoot, relativePath), "utf8");
@@ -61,6 +86,10 @@ for (const relativePath of productionFiles) {
 
   if (lineCount > ceiling) {
     violations.push(`${relativePath}: ${lineCount} lines exceeds ceiling ${ceiling}`);
+  } else if (Object.hasOwn(baseline.legacyFileMaxLines, relativePath) && lineCount < ceiling) {
+    violations.push(
+      `${relativePath}: lower the legacy ceiling from ${ceiling} to the measured ${lineCount} lines`,
+    );
   }
 }
 

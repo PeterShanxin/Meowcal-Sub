@@ -17,13 +17,13 @@
 
 ### Body
 
-```markdown
+````markdown
 ## Problem
 
 Meowcal Sub has required Rust CI checks, but collaboration and repository history contracts remain informal:
 
 - conventional commits are used but not specified or enforced;
-- package version sources disagree;
+- package versions are aligned, but their ownership and drift checks remain informal;
 - PR titles and bodies have no template/contract;
 - merge commits, squash, and rebase are all enabled;
 - merged branches are not deleted automatically;
@@ -92,7 +92,7 @@ C6 ADRs ------------------------------------------------------┘
 - Mandatory human approval while no independent eligible reviewer exists.
 - Rewriting Git history.
 - Converting every historical plan into an ADR.
-```
+````
 
 ---
 
@@ -112,12 +112,12 @@ C6 ADRs ------------------------------------------------------┘
 
 ### Body
 
-```markdown
+````markdown
 Parent: #[COLLABORATION_EPIC_NUMBER]
 
 ## Problem
 
-Commit messages generally resemble Conventional Commits, but no repository contract exists. Package metadata also disagrees: `package.json` and Tauri config use `0.5.0`, while Cargo uses `0.1.0`.
+Commit messages generally resemble Conventional Commits, but no repository contract exists. Package metadata is currently aligned at `0.5.0`, but no enforced ownership rule prevents future drift.
 
 ## Scope
 
@@ -136,7 +136,7 @@ Commit messages generally resemble Conventional Commits, but no repository contr
 - merge commits and automated commits have documented handling;
 - contributor and agent guidance link to one contract;
 - no historical commit rewriting is required.
-```
+````
 
 ---
 
@@ -156,7 +156,7 @@ Commit messages generally resemble Conventional Commits, but no repository contr
 
 ### Body
 
-```markdown
+````markdown
 Parent: #[COLLABORATION_EPIC_NUMBER]
 Depends on: #[C1_NUMBER]
 
@@ -184,7 +184,7 @@ Depends on: #[C1_NUMBER]
 - performance claims require comparable evidence;
 - issue closing keywords are deliberate;
 - contributor docs and CI agree.
-```
+````
 
 ---
 
@@ -204,7 +204,7 @@ Depends on: #[C1_NUMBER]
 
 ### Body
 
-```markdown
+````markdown
 Parent: #[COLLABORATION_EPIC_NUMBER]
 Depends on: #[C2_NUMBER]
 
@@ -241,7 +241,7 @@ Depends on: #[C2_NUMBER]
 - default/protected branches remain safe;
 - no existing history is rewritten;
 - test artifacts are cleaned up.
-```
+````
 
 ---
 
@@ -261,7 +261,7 @@ Depends on: #[C2_NUMBER]
 
 ### Body
 
-```markdown
+````markdown
 Parent: #[COLLABORATION_EPIC_NUMBER]
 
 ## Scope
@@ -293,7 +293,7 @@ Introduce the approved minimal labels for type, area, priority, epic, and manual
 - labels do not duplicate milestones;
 - every proposed child issue can be classified without inventing a new label;
 - disposable issues are closed and clearly marked as tests.
-```
+````
 
 ---
 
@@ -313,7 +313,7 @@ Introduce the approved minimal labels for type, area, priority, epic, and manual
 
 ### Body
 
-```markdown
+````markdown
 Parent: #[COLLABORATION_EPIC_NUMBER]
 
 ## Current state
@@ -343,7 +343,7 @@ Require one approval only when at least one independent eligible maintainer has 
 - stronger approval activation is documented and testable;
 - bypass scope and recovery procedure are explicit;
 - disposable artifacts are cleaned up.
-```
+````
 
 ---
 
@@ -363,7 +363,7 @@ Require one approval only when at least one independent eligible maintainer has 
 
 ### Body
 
-```markdown
+````markdown
 Parent: #[COLLABORATION_EPIC_NUMBER]
 
 ## Scope
@@ -385,4 +385,4 @@ Parent: #[COLLABORATION_EPIC_NUMBER]
 - no requirement converts all old plans into ADRs;
 - doc links are checked by the unified verification contract;
 - contributor and agent guidance reference the ADR policy.
-```
+````

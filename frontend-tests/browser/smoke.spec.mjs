@@ -48,3 +48,21 @@ test("browser mode reports Tauri-only capture as unavailable", async ({ request 
     browserMode: true,
   });
 });
+
+test("normal setup presents one private HY-MT engine without infrastructure choices", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await expect(page.getByRole("heading", { name: /Local Translation Engine/ })).toBeVisible();
+  await expect(page.getByText(/Tencent HY-MT runs privately/)).toBeVisible();
+  await expect(page.locator("body")).not.toContainText("Foundry Local");
+  await expect(page.locator("body")).not.toContainText("Model ID");
+  await expect(page.locator("body")).not.toContainText("endpoint");
+
+  await page.goto("/wizard.html");
+  await expect(page.getByText("Private translation on this PC")).toBeVisible();
+  await expect(page.locator("body")).toContainText("Tencent HY-MT 1.5");
+  await expect(page.locator("body")).not.toContainText("Foundry");
+  await expect(page.locator("body")).not.toContainText("winget");
+  await expect(page.locator("body")).not.toContainText("Model ID");
+});
