@@ -21,7 +21,7 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 const { formatFoundryPhase, formatReadyState } = window.BackendStatusPresentation;
-
+const { isOcrLanguageAvailable } = window.OcrLanguageTags;
 // =============================================================================
 // GLOBAL STATE
 // =============================================================================
@@ -256,7 +256,7 @@ function populateSourceLanguageDropdown(installedSet, currentValue) {
     for (const lang of KNOWN_SOURCE_LANGUAGES) {
         const option = document.createElement('option');
         option.value = lang.value;
-        const installed = installedSet.has(lang.value);
+        const installed = isOcrLanguageAvailable(installedSet, lang.value);
         if (installed) {
             option.textContent = lang.label;
         } else {
@@ -283,7 +283,7 @@ function checkOcrLanguageWarning(selectedValue) {
 
     if (!warning || !appState.ocrLanguages) return;
 
-    if (!appState.ocrLanguages.has(selectedValue)) {
+    if (!isOcrLanguageAvailable(appState.ocrLanguages, selectedValue)) {
         const langName = KNOWN_SOURCE_LANGUAGES.find(l => l.value === selectedValue)?.label || selectedValue;
         warningText.textContent = `${langName} OCR is not installed.`;
         installBtn.textContent = 'Install';
@@ -314,7 +314,7 @@ async function installOcrLanguage() {
         // Refresh the language list
         await loadOcrLanguages();
 
-        if (appState.ocrLanguages.has(languageTag)) {
+        if (isOcrLanguageAvailable(appState.ocrLanguages, languageTag)) {
             showToast('OCR language pack installed successfully!', 'success');
         } else {
             showToast('Installation may have been cancelled or is still in progress.', 'warning');
@@ -987,8 +987,6 @@ function setupEventListeners() {
         .addEventListener('click', closeFoundryWarmupModal);
     document.getElementById('btn-foundry-warmup-start')
         .addEventListener('click', handleWarmupFoundryAndStart);
-    document.getElementById('btn-foundry-fallback-start')
-        .addEventListener('click', handleStartWithFallbackNow);
 
     // Overlay appearance settings
     const overlayFontSize = document.getElementById('overlay-font-size');
@@ -1275,146 +1273,56 @@ function formatEpochMsDelta(epochMs) {
 
 function renderFoundryStatus(status) {
     const statusEl = document.getElementById('foundry-status');
-    if (!statusEl) {
-        return;
-    }
-
+    if (!statusEl) return;
     if (!status) {
-        statusEl.innerHTML = '<span class="status-text">Foundry Local status unavailable.</span>';
+        statusEl.innerHTML = '<span class="status-text">Engine status unavailable.</span>';
         return;
     }
 
     appState.foundryStatus.last = status;
-
-    const enabled = document.getElementById('toggle-foundry-local')?.checked === true;
-    const phase = (status.phase || '').toString();
-
-    const installedOk = status.cliAvailable === true;
-    const serviceOk = status.serviceRunning === true;
-
-    const installedStepClass = installedOk ? 'done' : 'error';
-    const serviceStepClass = serviceOk ? 'done' : '';
-
-    let modelStepClass = '';
-    if (phase === 'ready') {
-        modelStepClass = 'done';
-    } else if (phase === 'preparing' || phase === 'unchecked') {
-        modelStepClass = 'active';
-    } else if (phase === 'error') {
-        modelStepClass = 'error';
-    }
-
-    const installedPill = installedOk
-        ? '<span class="status-pill ready">● OK</span>'
-        : '<span class="status-pill error">● MISSING</span>';
-
-    const servicePill = serviceOk
-        ? '<span class="status-pill ready">● RUNNING</span>'
-        : '<span class="status-pill not-ready">● STOPPED</span>';
-
-    const modelInfo = formatFoundryPhase(phase);
-    const modelPill = `<span class="status-pill ${modelInfo.className}">● ${modelInfo.label.toUpperCase()}</span>`;
-
-    const serviceDesc = serviceOk
-        ? `Service URL: ${escapeHtml(status.serviceUrl || '')}`
-        : installedOk
-            ? 'Service not running. Click "Make Foundry Ready" to start it.'
-            : 'Install Foundry Local first (recommended: winget install Microsoft.FoundryLocal).';
-
-    const modelDesc = escapeHtml(status.notes || '');
-
-    const configuredRaw = status.configuredModel || '';
-    const resolvedRaw = status.selectedModel || '';
-
-    let modelDisplay = '(auto)';
-    if (!configuredRaw && resolvedRaw) {
-        modelDisplay = `(auto) \u2192 ${escapeHtml(resolvedRaw)}`;
-    } else if (configuredRaw && resolvedRaw && configuredRaw !== resolvedRaw) {
-        modelDisplay = `${escapeHtml(configuredRaw)} \u2192 ${escapeHtml(resolvedRaw)}`;
-    } else if (configuredRaw) {
-        modelDisplay = escapeHtml(configuredRaw);
-    } else if (resolvedRaw) {
-        modelDisplay = escapeHtml(resolvedRaw);
-    }
-
-    const probeAttemptMs = status.probe?.lastAttemptMs;
-    const checkedEpochMs = Number.isFinite(probeAttemptMs)
-        ? probeAttemptMs
-        : appState.foundryStatus.lastCheckedMs;
-    const lastChecked = formatEpochMsDelta(checkedEpochMs);
-
-    let lastError = '';
-    if (status.probe?.result === 'error') {
-        lastError = status.probe?.error || 'Unknown error';
-    } else if (status.probe?.result === 'timeout') {
-        lastError = 'Probe timed out (model likely warming up).';
-    }
-
-    const lastErrorRow = lastError
-        ? `
-            <div class="foundry-meta-row error">
-                <span class="foundry-meta-label">Last error</span>
-                <span class="foundry-meta-value" id="foundry-last-error">${escapeHtml(lastError)}</span>
-            </div>
-        `
-        : '';
-
-    const disabledNote = enabled
-        ? ''
-        : '<div class="foundry-step-desc">Foundry Local is currently disabled (toggle above).</div>';
-
-    const installBanner = !installedOk
-        ? `<div class="foundry-install-banner">
-            <strong>Foundry Local is not installed.</strong>
-            Click <em>Make Foundry Ready</em> to launch the setup wizard, or use the <em>Setup Wizard</em> button below.
-        </div>`
-        : '';
+    const phase = (status.phase || 'unchecked').toString();
+    const presentation = {
+        ready: ['ready', 'Ready', 'Your private translation engine is ready to use.'],
+        preparing: ['checking', 'Warming up', 'Preparing the engine for your first subtitle.'],
+        unchecked: ['checking', 'Checking', 'Checking the local translation engine.'],
+        notRunning: ['not-ready', 'Stopped', 'Installed and ready to start locally.'],
+        notInstalled: ['error', 'Setup required', 'Install the private translation engine to begin.'],
+        noModels: ['error', 'Repair required', 'The translation model is missing or incomplete.'],
+        error: ['error', 'Needs attention', 'The engine could not start. Try Repair.'],
+    }[phase] || ['not-ready', 'Not ready', 'Check the engine and try again.'];
+    const [pillClass, label, description] = presentation;
+    const lastChecked = formatEpochMsDelta(
+        Number.isFinite(status.probe?.lastAttemptMs)
+            ? status.probe.lastAttemptMs
+            : appState.foundryStatus.lastCheckedMs
+    );
 
     statusEl.innerHTML = `
-        ${installBanner}
         <div class="foundry-steps">
-            <div class="foundry-step ${installedStepClass}">
+            <div class="foundry-step ${phase === 'ready' ? 'done' : pillClass === 'error' ? 'error' : 'active'}">
                 <div class="foundry-step-dot"></div>
                 <div class="foundry-step-body">
                     <div class="foundry-step-title">
-                        <span>Installed</span>
-                        ${installedPill}
+                        <span>Local Translation Engine</span>
+                        <span class="status-pill ${pillClass}">● ${label.toUpperCase()}</span>
                     </div>
-                    <div class="foundry-step-desc">${installedOk ? 'Foundry CLI detected.' : 'Foundry CLI not found.'}</div>
-                </div>
-            </div>
-            <div class="foundry-step ${serviceStepClass}">
-                <div class="foundry-step-dot"></div>
-                <div class="foundry-step-body">
-                    <div class="foundry-step-title">
-                        <span>Service running</span>
-                        ${servicePill}
-                    </div>
-                    <div class="foundry-step-desc">${serviceDesc}</div>
-                </div>
-            </div>
-            <div class="foundry-step ${modelStepClass}">
-                <div class="foundry-step-dot"></div>
-                <div class="foundry-step-body">
-                    <div class="foundry-step-title">
-                        <span>Model ready (probe)</span>
-                        ${modelPill}
-                    </div>
-                    <div class="foundry-step-desc">${modelDesc}</div>
-                    ${disabledNote}
+                    <div class="foundry-step-desc">${description}</div>
                 </div>
             </div>
         </div>
         <div class="foundry-meta">
             <div class="foundry-meta-row">
-                <span class="foundry-meta-label">Model</span>
-                <span class="foundry-meta-value">${modelDisplay}</span>
+                <span class="foundry-meta-label">Engine</span>
+                <span class="foundry-meta-value">Tencent HY-MT 1.5</span>
+            </div>
+            <div class="foundry-meta-row">
+                <span class="foundry-meta-label">Privacy</span>
+                <span class="foundry-meta-value">Runs on this PC</span>
             </div>
             <div class="foundry-meta-row">
                 <span class="foundry-meta-label">Last checked</span>
                 <span class="foundry-meta-value" id="foundry-last-checked">${escapeHtml(lastChecked)}</span>
             </div>
-            ${lastErrorRow}
         </div>
     `;
 }
@@ -1425,7 +1333,7 @@ function renderFoundryStatusChecking(message) {
         return;
     }
 
-    const text = message || 'Checking Foundry Local...';
+    const text = message || 'Checking Local Translation Engine...';
     statusEl.innerHTML = `
         <div class="foundry-steps">
             <div class="foundry-step active">
@@ -1455,7 +1363,7 @@ function renderFoundryStatusError(error) {
                 <div class="foundry-step-dot"></div>
                 <div class="foundry-step-body">
                     <div class="foundry-step-title">
-                        <span>Foundry Local</span>
+                        <span>Local Translation Engine</span>
                         <span class="status-pill error">● ERROR</span>
                     </div>
                     <div class="foundry-step-desc">${escapeHtml(message)}</div>
@@ -1520,11 +1428,11 @@ async function handleFoundryRefresh() {
         const status = await refreshFoundryStatus({ probe: true, reason: 'manual' });
         void refreshTranslationDiagnostics();
         if (status?.phase === 'ready') {
-            showToast('Foundry Local ready!', 'success');
+            showToast('Local Translation Engine ready!', 'success');
         }
     } catch (e) {
         const message = e?.message ? e.message : String(e);
-        showToast(`Foundry refresh failed: ${message}`, 'error');
+        showToast(`Engine check failed: ${message}`, 'error');
     } finally {
         button.disabled = false;
         button.textContent = originalLabel;
@@ -1556,8 +1464,8 @@ async function handleFoundryMakeReady() {
         console.warn('Quick status check failed, continuing with make_foundry_ready:', e);
     }
 
-    button.textContent = 'Making ready...';
-    renderFoundryStatusChecking('Starting service (if needed) and warming up model...');
+    button.textContent = 'Preparing...';
+    renderFoundryStatusChecking('Starting the private engine and warming up HY-MT...');
 
     try {
         // Ensure the backend uses the currently selected model before warmup.
@@ -1567,7 +1475,7 @@ async function handleFoundryMakeReady() {
         void refreshTranslationDiagnostics();
 
         if (status?.phase === 'ready') {
-            showToast('Foundry Local ready!', 'success');
+            showToast('Local Translation Engine ready!', 'success');
         } else if (status?.notes) {
             showToast(status.notes, 'warning');
         }
@@ -1575,9 +1483,9 @@ async function handleFoundryMakeReady() {
         // The service may now expose more models; refresh the dropdown.
         await loadFoundryLocalModels(status?.selectedModel || null);
     } catch (e) {
-        console.error('Failed to make Foundry ready:', e);
+        console.error('Failed to prepare translation engine:', e);
         const message = e?.message ? e.message : String(e);
-        showToast(`Make Foundry Ready failed: ${message}`, 'error');
+        showToast(`Prepare Engine failed: ${message}`, 'error');
         renderFoundryStatusError(e);
     } finally {
         button.disabled = false;
@@ -1733,7 +1641,7 @@ function updateBackendStatusUI(diagnostics) {
 }
 
 /**
- * Update Foundry Local status inline display
+ * Update local translation engine status inline display
  */
 function updateFoundryStatusInline(diagnostics) {
     const statusEl = document.getElementById('foundry-status');
@@ -1741,7 +1649,7 @@ function updateFoundryStatusInline(diagnostics) {
 
     const foundry = diagnostics.backends.find(b => b.id === 'foundryLocal');
     if (!foundry) {
-        statusEl.innerHTML = '<span class="status-text">Foundry Local not found</span>';
+        statusEl.innerHTML = '<span class="status-text">Local Translation Engine not found</span>';
         return;
     }
 
@@ -1939,68 +1847,25 @@ function closeDownloadModal() {
 function openFoundryWarmupModal(status) {
     const modal = document.getElementById('foundry-warmup-modal');
     const body = document.getElementById('foundry-warmup-status');
-    if (!modal || !body) {
-        return;
-    }
+    if (!modal || !body) return;
 
     const phase = (status?.phase || 'error').toString();
-    const phaseInfo = formatFoundryPhase(phase);
-
-    const configuredRaw = status?.configuredModel || '';
-    const resolvedRaw = status?.selectedModel || '';
-    let modelDisplay = '(auto)';
-    if (!configuredRaw && resolvedRaw) {
-        modelDisplay = `(auto) \u2192 ${resolvedRaw}`;
-    } else if (configuredRaw && resolvedRaw && configuredRaw !== resolvedRaw) {
-        modelDisplay = `${configuredRaw} \u2192 ${resolvedRaw}`;
-    } else if (configuredRaw) {
-        modelDisplay = configuredRaw;
-    } else if (resolvedRaw) {
-        modelDisplay = resolvedRaw;
-    }
-    const lastError =
-        status?.probe?.result === 'error'
-            ? (status.probe.error || 'Unknown error')
-            : status?.probe?.result === 'timeout'
-                ? 'Probe timed out (model likely warming up).'
-                : '';
-
-    const installHint = !status?.cliAvailable
-        ? 'Install Foundry Local: winget install Microsoft.FoundryLocal'
-        : '';
-
-    const serviceHint = status?.cliAvailable && status?.serviceRunning !== true
-        ? 'Start the service with "Make Foundry Ready" (recommended) or: foundry service start'
-        : '';
-
-    const notes = status?.notes ? status.notes : 'Could not determine Foundry Local status.';
-
+    const message = {
+        notInstalled: 'The translation engine needs to be installed first.',
+        noModels: 'The HY-MT model is missing or incomplete. Run Repair.',
+        notRunning: 'The engine is installed and will be started now.',
+        preparing: 'The engine is warming up for its first subtitle.',
+        error: 'The engine needs attention. Try Prepare again or run Repair.',
+    }[phase] || 'The engine is not ready yet.';
     body.innerHTML = `
-        <div style="margin-bottom: 10px;">
-            Foundry Local is enabled, but the model is not ready yet.
-        </div>
-        <div style="margin-bottom: 10px;">
-            <span class="status-pill ${escapeHtml(phaseInfo.className)}">● ${escapeHtml(phaseInfo.label.toUpperCase())}</span>
-        </div>
-        <div class="setting-hint" style="margin-bottom: 10px;">
-            Model: ${escapeHtml(modelDisplay)}
-        </div>
-        <div class="setting-hint" style="margin-bottom: 10px;">
-            ${escapeHtml(notes)}
-        </div>
-        ${lastError ? `<div class="setting-hint" style="color:#f44336;">Last error: ${escapeHtml(lastError)}</div>` : ''}
-        ${installHint ? `<div class="setting-hint" style="margin-top:10px;">${escapeHtml(installHint)}</div>` : ''}
-        ${serviceHint ? `<div class="setting-hint" style="margin-top:6px;">${escapeHtml(serviceHint)}</div>` : ''}
+        <div style="margin-bottom: 10px;">${escapeHtml(message)}</div>
+        <div class="setting-hint">All translation stays on this PC.</div>
     `;
 
-    // Reset modal buttons in case a previous warmup attempt disabled them.
     const warmup = document.getElementById('btn-foundry-warmup-start');
-    const fallback = document.getElementById('btn-foundry-fallback-start');
     const cancel = document.getElementById('btn-foundry-warmup-cancel');
     if (warmup) warmup.disabled = false;
-    if (fallback) fallback.disabled = false;
     if (cancel) cancel.disabled = false;
-
     modal.classList.remove('hidden');
 }
 
@@ -2013,15 +1878,13 @@ function closeFoundryWarmupModal() {
 
 async function handleWarmupFoundryAndStart() {
     const warmup = document.getElementById('btn-foundry-warmup-start');
-    const fallback = document.getElementById('btn-foundry-fallback-start');
     const cancel = document.getElementById('btn-foundry-warmup-cancel');
     const body = document.getElementById('foundry-warmup-status');
 
     if (warmup) warmup.disabled = true;
-    if (fallback) fallback.disabled = true;
     if (cancel) cancel.disabled = true;
     if (body) {
-        body.textContent = 'Warming up Foundry Local... (this can take a bit on first run)';
+        body.textContent = 'Preparing the Local Translation Engine...';
     }
 
     try {
@@ -2035,25 +1898,17 @@ async function handleWarmupFoundryAndStart() {
             return;
         }
 
-        // Still not ready - keep the modal open and show details + allow fallback.
+        // Still not ready - keep the modal open and show repair guidance.
         openFoundryWarmupModal(status);
     } catch (e) {
-        console.error('Foundry warmup failed:', e);
+        console.error('Translation engine warmup failed:', e);
         if (body) {
             const message = e?.message ? e.message : String(e);
             body.textContent = `Warmup failed: ${message}`;
         }
-        if (fallback) fallback.disabled = false;
         if (cancel) cancel.disabled = false;
         if (warmup) warmup.disabled = false;
     }
-}
-
-async function handleStartWithFallbackNow() {
-    closeFoundryWarmupModal();
-    showToast('Starting with fallback (Foundry not ready).', 'warning');
-    await saveSettings({ silent: true, refreshDiagnostics: false });
-    await startTranslationNow();
 }
 
 /**

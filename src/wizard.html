@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Foundry Local Setup</title>
+    <title>Local Translation Setup</title>
     <link rel="stylesheet" href="styles/main.css">
     <link rel="stylesheet" href="styles/wizard.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
@@ -14,7 +14,7 @@
         <div class="wizard-step-bar">
             <div class="wizard-step-item active" data-step="1">
                 <div class="wizard-step-number">1</div>
-                <div class="wizard-step-label">Install</div>
+                <div class="wizard-step-label">Welcome</div>
             </div>
             <div class="wizard-step-connector"></div>
             <div class="wizard-step-item" data-step="2">
@@ -24,7 +24,7 @@
             <div class="wizard-step-connector"></div>
             <div class="wizard-step-item" data-step="3">
                 <div class="wizard-step-number">3</div>
-                <div class="wizard-step-label">Model</div>
+                <div class="wizard-step-label">Download</div>
             </div>
             <div class="wizard-step-connector"></div>
             <div class="wizard-step-item" data-step="4">
@@ -33,51 +33,16 @@
             </div>
         </div>
 
-        <!-- Step 1: Install Foundry CLI -->
+        <!-- Step 1: Explain the curated local engine -->
         <div class="wizard-panel" id="step-install">
-            <h2 class="wizard-panel-title">Install Foundry Local</h2>
+            <h2 class="wizard-panel-title">Private translation on this PC</h2>
             <p class="wizard-panel-desc">
-                Foundry Local is Microsoft's local LLM runtime that powers on-device AI translation.
-                It runs entirely on your machine for privacy and speed.
+                Meowcal Sub uses one supported engine: Tencent HY-MT 1.5.
+                The app installs and starts it for you; no account, cloud service, or command line is needed.
             </p>
-
-            <div id="install-winget-ok" style="display: none;">
-                <div class="wizard-command-preview">
-                    <div class="wizard-command-label">This command will be run in PowerShell:</div>
-                    <code class="wizard-command">winget install Microsoft.FoundryLocal --accept-source-agreements --accept-package-agreements</code>
-                </div>
-                <p class="setting-hint">
-                    A PowerShell window will open to run the installer.
-                    You may be prompted for administrator access (UAC).
-                </p>
-            </div>
-
-            <div id="install-winget-missing" class="wizard-error-box" style="display: none;">
-                <strong>winget is not available.</strong>
-                <p>
-                    The Windows Package Manager (winget) is required to install Foundry Local.
-                    Install "App Installer" from the Microsoft Store, then try again.
-                </p>
-            </div>
-
-            <div id="install-already-installed" style="display: none;">
+            <div id="install-already-installed">
                 <div class="wizard-success-box">
-                    Foundry Local CLI is already installed. Continuing to configuration...
-                </div>
-            </div>
-
-            <!-- Installation progress (shown after clicking Install) -->
-            <div id="install-progress" style="display: none;">
-                <div class="wizard-progress-box">
-                    <div class="wizard-spinner"></div>
-                    <div>
-                        <strong>Waiting for installation to complete...</strong>
-                        <p class="setting-hint">The PowerShell window is running the installer. This panel will auto-advance when done.</p>
-                    </div>
-                </div>
-                <div id="install-timeout-hint" class="wizard-error-box" style="display: none;">
-                    <strong>Installation is taking longer than expected.</strong>
-                    <p>If you've already installed Foundry manually, click "I installed it manually" below.</p>
+                    Your subtitles and translations stay on this computer.
                 </div>
             </div>
         </div>
@@ -86,8 +51,7 @@
         <div class="wizard-panel" id="step-configure" style="display: none;">
             <h2 class="wizard-panel-title">Model Storage</h2>
             <p class="wizard-panel-desc">
-                AI models will be downloaded and stored on your computer.
-                This shows where Foundry stores its models (typically 1-8 GB each).
+                Choose where the private translation engine is stored. Setup needs about 1.3 GB.
             </p>
 
             <div class="wizard-config-row">
@@ -104,16 +68,15 @@
             </div>
 
             <p class="setting-hint" id="cache-dir-hint">
-                Foundry manages its own cache location. This step shows where models
-                will be stored so you can verify sufficient disk space.
+                Meowcal Sub verifies downloaded files before activating the engine.
             </p>
         </div>
 
         <!-- Step 3: Download Model -->
         <div class="wizard-panel" id="step-model" style="display: none;">
-            <h2 class="wizard-panel-title">Download a Model</h2>
+            <h2 class="wizard-panel-title">Install the Translation Engine</h2>
             <p class="wizard-panel-desc">
-                Select an AI model to download. Smaller models are faster but less accurate.
+                Tencent HY-MT is selected automatically for subtitle translation.
             </p>
 
             <div id="hardware-info" class="wizard-hardware-badge" style="display: none;">
@@ -155,7 +118,7 @@
             <div id="verify-progress" style="display: none;">
                 <div class="wizard-progress-box">
                     <div class="wizard-spinner"></div>
-                    <span>Starting Foundry service and verifying...</span>
+                    <span>Starting HY-MT and translating a sample...</span>
                 </div>
             </div>
 
@@ -163,11 +126,16 @@
                 <div class="wizard-success-box wizard-success-large">
                     <div class="wizard-success-icon">&#10004;</div>
                     <div>
-                        <strong>Foundry Local is ready!</strong>
-                        <p>The service is running and your model is loaded. You can start translating now.</p>
+                        <strong>Local Translation Engine is ready!</strong>
+                        <p>A real sample translation passed. You can start watching now.</p>
                     </div>
                 </div>
                 <div class="wizard-summary" id="setup-summary"></div>
+                <div class="wizard-config-row">
+                    <label class="setting-label" for="test-source-text">Test subtitle</label>
+                    <input class="text-input" id="test-source-text" value="先不提时钟塔">
+                </div>
+                <div class="wizard-summary" id="translation-test-result"></div>
             </div>
 
             <div id="verify-error" class="wizard-error-box" style="display: none;">
@@ -182,8 +150,7 @@
             <div class="wizard-actions-right">
                 <button class="btn btn-outline btn-small" id="btn-wizard-skip" style="display: none;">Skip</button>
                 <button class="btn btn-outline btn-small" id="btn-wizard-retry" style="display: none;">Retry</button>
-                <button class="btn btn-outline btn-small" id="btn-wizard-manual" style="display: none;">I installed it manually</button>
-                <button class="btn btn-primary btn-small" id="btn-wizard-next">Install Foundry</button>
+                <button class="btn btn-primary btn-small" id="btn-wizard-next">Next</button>
             </div>
         </div>
     </div>

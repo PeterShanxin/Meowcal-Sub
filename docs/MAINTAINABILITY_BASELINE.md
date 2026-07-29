@@ -6,22 +6,24 @@ ratchets. Machine-readable values live in
 
 ## Enforced baseline
 
-Measured on 2026-07-29 after the frontend foundation:
+Measured on 2026-07-30 after the app-managed HY-MT MVP:
 
-- 40 production files under `src/` and `src-tauri/src/`;
+- 50 production files under `src/` and `src-tauri/src/`;
 - 400 lines maximum for a new `.rs`, `.js`, `.html`, or `.css` production file;
 - 20 explicit legacy files above that ceiling;
-- 17 existing ESLint warnings, with zero allowed errors;
-- frontend coverage floors of 77% statements, 69% branches, 77% functions, and
-  77% lines.
+- 13 existing ESLint warnings, with zero allowed errors;
+- frontend coverage floors of 84% statements, 74% branches, 88% functions, and
+  84% lines.
 
 Frontend coverage currently includes only:
 
 - `src/scripts/backend-status.js`;
+- `src/scripts/ocr-language-tags.js`;
+- `src/scripts/translation-display.js`;
 - `scripts/serve-frontend.mjs`.
 
-The measured result is 77.04% statements, 69.38% branches, 77.77% functions,
-and 77.04% lines. This is not a repository-wide coverage claim. Issue #35 owns
+The measured result is 84.46% statements, 74.46% branches, 88.88% functions,
+and 84.46% lines. This is not a repository-wide coverage claim. Issue #35 owns
 risk-based expansion after the decomposition lanes land.
 
 ## Legacy hotspot ceilings
@@ -31,16 +33,17 @@ machine-readable baseline. The largest and decomposition-owned hotspots are:
 
 | File | Ceiling | Reduction owner |
 |---|---:|---|
-| `src-tauri/src/commands.rs` | 2,899 | #31 |
-| `src/scripts/main.js` | 2,283 | #33 |
-| `src-tauri/src/llm/foundry_local.rs` | 1,790 | #32 |
-| `src-tauri/src/llm/manager.rs` | 1,314 | #32 |
-| `src/scripts/overlay.js` | 1,293 | #34 |
+| `src-tauri/src/commands.rs` | 2,889 | #31 |
+| `src/scripts/main.js` | 2,138 | #33 |
+| `src-tauri/src/llm/foundry_local.rs` | 1,751 | #32 |
+| `src-tauri/src/llm/manager.rs` | 1,234 | #32 |
+| `src/scripts/overlay.js` | 1,312 | #34 |
 | `src/scripts/selector.js` | 820 | #34 |
 | `src-tauri/src/llm/context.rs` | 732 | #32 |
-| `src-tauri/src/http_server.rs` | 732 | #31 adapter boundary |
-| `src-tauri/src/config.rs` | 682 | #31 |
-| `src/scripts/wizard.js` | 663 | #33 |
+| `src-tauri/src/http_server.rs` | 730 | #31 adapter boundary |
+| `src-tauri/src/config.rs` | 625 | #31 |
+| `src-tauri/src/main.rs` | 588 | #31 |
+| `src/scripts/wizard.js` | 531 | #33 |
 
 The remaining explicit exceptions are styles, HTML, and focused platform
 modules recorded in the JSON manifest. They have the same no-growth rule even
@@ -58,9 +61,11 @@ when no dedicated extraction issue is assigned.
   the relevant floor without claiming coverage outside the configured include
   list.
 
-The verifier fails when a file crosses its ceiling, an exception points to a
-missing file, a stale exception is at or below the new-file ceiling, lint
-exceeds its warning budget, or measured coverage drops below a floor.
+The verifier compares the edited baseline with the committed baseline (or the
+checked-out commit with its parent in CI). It rejects raised file/warning
+ceilings, lowered coverage floors, and new legacy exceptions. It also requires
+each legacy ceiling to equal the measured file length, so shrinkage cannot
+leave hidden regrowth headroom.
 
 ## Updating the baseline
 

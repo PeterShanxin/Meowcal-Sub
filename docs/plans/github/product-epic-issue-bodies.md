@@ -19,7 +19,7 @@ Placeholder tokens such as `[PRODUCT_EPIC_NUMBER]` and `[A2_NUMBER]` are replace
 
 ### Body
 
-```markdown
+````markdown
 ## Problem
 
 Meowcal Sub has a working Windows capture/OCR/overlay foundation and a proven local Tencent HY-MT prototype, but the product still exposes backend infrastructure and does not provide one reliable translation-engine lifecycle.
@@ -107,7 +107,7 @@ A4 evaluation set -----------------------------------------------------┘
 - `docs/plans/2026-07-29-curated-local-translation-app-spec.md`
 - `docs/adr/0001-curated-local-translation-stack.md`
 - `docs/plans/2026-07-29-wave-0-baseline.md`
-```
+````
 
 ---
 
@@ -119,7 +119,7 @@ Add one comment. Keep title, body, and open state unchanged.
 
 ### Comment
 
-```markdown
+````markdown
 ## Redesign placement
 
 This remains reproducible and is the first correctness item in the curated local translation redesign.
@@ -136,7 +136,7 @@ Additional acceptance evidence before closure:
 - the visible warning is manually rechecked after the behavior change.
 
 Do not close from unit tests alone; retain the live Windows gate.
-```
+````
 
 ---
 
@@ -156,7 +156,7 @@ Do not close from unit tests alone; retain the live Windows gate.
 
 ### Body
 
-```markdown
+````markdown
 Parent: #[PRODUCT_EPIC_NUMBER]
 
 ## Problem
@@ -202,7 +202,7 @@ Session evidence recorded 148 `too_long` rejections and only 2 timeouts. The mod
 - full Rust unit and integration suite;
 - opt-in live HY-MT evaluation set;
 - manual overlay check with at least one previously rejected short Chinese subtitle.
-```
+````
 
 ---
 
@@ -222,7 +222,7 @@ Session evidence recorded 148 `too_long` rejections and only 2 timeouts. The mod
 
 ### Body
 
-```markdown
+````markdown
 Parent: #[PRODUCT_EPIC_NUMBER]
 
 ## Problem
@@ -266,7 +266,7 @@ This creates latency, repeated identical work, and misleading overlay output.
 - frontend payload/presentation tests;
 - simulated timeout, connection reset, deterministic rejection, and recovery;
 - manual overlay check for temporary engine unavailability.
-```
+````
 
 ---
 
@@ -286,7 +286,7 @@ This creates latency, repeated identical work, and misleading overlay output.
 
 ### Body
 
-```markdown
+````markdown
 Parent: #[PRODUCT_EPIC_NUMBER]
 
 ## Problem
@@ -324,7 +324,7 @@ Use authored or explicitly approved samples. Do not commit private production sc
 - the previously rejected `先不提时钟塔` case is included;
 - CI runs deterministic fixtures;
 - live-engine results are captured as explicit release evidence.
-```
+````
 
 ---
 
@@ -344,7 +344,7 @@ Use authored or explicitly approved samples. Do not commit private production sc
 
 ### Body
 
-```markdown
+````markdown
 Parent: #[PRODUCT_EPIC_NUMBER]
 
 ## Problem
@@ -386,7 +386,7 @@ Define whether the manifest ships with the app, can be refreshed, and how authen
 ## Decision required
 
 Before implementation, document and review the manifest authenticity/update model. A plain unsigned remote manifest is not sufficient for executable replacement.
-```
+````
 
 ---
 
@@ -406,7 +406,7 @@ Before implementation, document and review the manifest authenticity/update mode
 
 ### Body
 
-```markdown
+````markdown
 Parent: #[PRODUCT_EPIC_NUMBER]
 Depends on: #[A5_NUMBER]
 
@@ -445,7 +445,7 @@ Users need one reliable app-owned setup path. The prototype can download and has
 - cancellation leaves a recoverable state;
 - logs redact private screen text and contain support codes;
 - clean install, adopt, corrupt, repair, failed-upgrade, and rollback tests pass.
-```
+````
 
 ---
 
@@ -465,7 +465,7 @@ Users need one reliable app-owned setup path. The prototype can download and has
 
 ### Body
 
-```markdown
+````markdown
 Parent: #[PRODUCT_EPIC_NUMBER]
 Depends on: #[A5_NUMBER], #[A6_NUMBER]
 
@@ -502,7 +502,7 @@ The prototype starts `llama-server.exe` on fixed port 11436 and health-checks it
 - repair/update cannot replace files used by an unmanaged process;
 - sleep/resume and app restart are tested;
 - process and port tests are deterministic where mocked and manually verified on Windows.
-```
+````
 
 ---
 
@@ -522,7 +522,7 @@ The prototype starts `llama-server.exe` on fixed port 11436 and health-checks it
 
 ### Body
 
-```markdown
+````markdown
 Parent: #[PRODUCT_EPIC_NUMBER]
 Depends on: #[A6_NUMBER], #[A7_NUMBER]
 
@@ -564,7 +564,7 @@ Developer mode:
 - developer mode is opt-in and reversible;
 - keyboard/focus and readable status/error behavior are manually checked;
 - screenshots and a full first-run recording accompany the PR.
-```
+````
 
 ---
 
@@ -584,7 +584,7 @@ Developer mode:
 
 ### Body
 
-```markdown
+````markdown
 Parent: #[PRODUCT_EPIC_NUMBER]
 
 ## Problem
@@ -616,7 +616,7 @@ The Tauri config creates the main window visible and centered. Rust setup later 
 - single monitor, mixed-DPI, negative coordinates, unplugged monitor, maximized, and corrupt config cases are covered;
 - unit tests cover bound selection/clamping;
 - manual Windows recordings prove first and returning launch behavior.
-```
+````
 
 ---
 
@@ -636,7 +636,7 @@ The Tauri config creates the main window visible and centered. Rust setup later 
 
 ### Body
 
-```markdown
+````markdown
 Parent: #[PRODUCT_EPIC_NUMBER]
 Depends on: #[A2_NUMBER], #[A3_NUMBER], #[A7_NUMBER]
 
@@ -672,7 +672,7 @@ This is not capture-to-overlay evidence.
 - optimization PRs include before/after data using the same protocol;
 - production logs do not contain source/translated screen text by default;
 - documented budget exceptions name owner and follow-up.
-```
+````
 
 ---
 
@@ -692,7 +692,7 @@ This is not capture-to-overlay evidence.
 
 ### Body
 
-```markdown
+````markdown
 Parent: #[PRODUCT_EPIC_NUMBER]
 Depends on: #15, #[A2_NUMBER], #[A3_NUMBER], #[A4_NUMBER], #[A6_NUMBER], #[A7_NUMBER], #[A8_NUMBER], #[A9_NUMBER], #[A10_NUMBER]
 
@@ -738,4 +738,4 @@ Prove the approved user promise on supported Windows hardware after the final be
 - code, UI, config, CI, docs, packaging, and GitHub status contain no known contradiction;
 - remaining risks are explicit and accepted;
 - parent epic closes only after this evidence is attached.
-```
+````

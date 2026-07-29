@@ -4,17 +4,17 @@ Meowcal Sub is a Windows desktop application that captures a subtitle region,
 recognizes text with Windows OCR, translates locally, and displays the result in
 a floating overlay.
 
-The approved redesign makes Tencent HY-MT the only supported translation engine
-in normal mode. The app-managed download, repair, rollback, and guided setup are
-being delivered through tracked waves; the current beta does not yet satisfy
-that complete product promise.
+Tencent HY-MT is the only supported translation engine in normal mode. The
+current MVP provides app-managed download, integrity verification, startup,
+health checks, repair, shutdown, and a real sample translation. Rollback,
+upgrade recovery, x64 evidence, and the full episode release gate remain open.
 
 ## Status
 
 - Windows-only beta.
 - Tauri 2, Rust, and vanilla HTML/CSS/JavaScript.
 - Windows OCR and local translation; capture text stays on the device.
-- Current generic Foundry-style setup is transitional.
+- Guided setup installs the supported HY-MT model and matching local runtime.
 - Offline MT and Phi Silica backends described by older documentation were
   removed and are not supported.
 - Known correctness and lifecycle work is tracked by
@@ -32,9 +32,8 @@ part of the redesign.
 4. Select the subtitle region.
 5. Start translation and position the overlay.
 
-The normal-mode HY-MT guided setup described in the approved specification is
-not complete yet. Follow the open epic rather than relying on old backend setup
-instructions.
+If setup reports a support code, use **Install / Repair** and retain the code
+when filing a problem.
 
 ## Development prerequisites
 

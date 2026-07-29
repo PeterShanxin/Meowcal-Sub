@@ -24,18 +24,23 @@ pub mod overlay;
 
 /// App configuration - settings like language preferences
 pub mod config;
+pub mod engine_config;
 
 /// Tauri commands - functions that JavaScript can call
 pub mod commands;
+mod event_payloads;
 
 /// HTTP server for browser dev mode
 pub mod http_server;
+pub mod hy_mt_installer;
+pub mod hy_mt_runtime;
 
 /// IPC (Inter-Process Communication) with WinUI3 OverlayHost
 pub mod ipc;
 
 /// Synchronization utilities - safe mutex/RwLock handling with poison recovery
 pub mod sync_utils;
+pub mod window_lifecycle;
 
 // =============================================================================
 // RE-EXPORTS

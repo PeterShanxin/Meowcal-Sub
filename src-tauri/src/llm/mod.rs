@@ -11,7 +11,9 @@ mod context;
 mod foundry_local;
 mod manager;
 mod mock;
+mod output_validation;
 mod prompt_router;
+mod subtitle_output;
 mod text_utils;
 
 pub use context::*;
@@ -181,6 +183,21 @@ pub struct TranslationOutcome {
     pub translated: String,
     pub backend_used: BackendId,
     pub warnings: Vec<String>,
+    pub display_state: TranslationDisplayState,
+}
+
+/// Stable UI state for a translation attempt.
+///
+/// Source text may still be present in `translated` for compatibility, but the
+/// frontend must only present it as a translation when this is `Translated`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum TranslationDisplayState {
+    Translated,
+    Warming,
+    TemporarilyUnavailable,
+    SourceOnly,
+    Stopped,
 }
 
 /// Diagnostics snapshot returned to the frontend.

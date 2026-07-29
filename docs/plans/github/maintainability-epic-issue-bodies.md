@@ -19,14 +19,14 @@ Replace placeholder tokens after GitHub assigns issue numbers.
 
 ### Body
 
-```markdown
+````markdown
 ## Problem
 
 Meowcal Sub has a working Rust/Tauri core, but contributor and verification foundations do not match its product risk:
 
 - fresh local checks fail unless ignored Tauri resources are manually recreated;
 - CI knows this workaround but local documentation does not;
-- `package.json` and Tauri config are `0.5.0` while Cargo remains `0.1.0`;
+- package versions were aligned at `0.5.0`, but no gate prevents future drift;
 - frontend code has no lint, format, or test gate on `main`;
 - README and agent guidance describe removed Offline MT and Phi Silica modules;
 - central Rust and JavaScript files combine adapters, state machines, I/O, and presentation;
@@ -115,7 +115,7 @@ After B4:
 - Repository-wide rewrite.
 - Automatic release/versioning.
 - Pretending browser mode validates Tauri-only Windows behavior.
-```
+````
 
 ---
 
@@ -135,7 +135,7 @@ After B4:
 
 ### Body
 
-```markdown
+````markdown
 Parent: #[MAINTAINABILITY_EPIC_NUMBER]
 
 ## Scope
@@ -166,7 +166,7 @@ Parent: #[MAINTAINABILITY_EPIC_NUMBER]
 - every documented command executed;
 - documentation link/consistency review;
 - no product behavior changes.
-```
+````
 
 ---
 
@@ -186,7 +186,7 @@ Parent: #[MAINTAINABILITY_EPIC_NUMBER]
 
 ### Body
 
-```markdown
+````markdown
 Parent: #[MAINTAINABILITY_EPIC_NUMBER]
 Depends on: #[B1_NUMBER]
 
@@ -215,7 +215,7 @@ CI must call or exactly mirror the same contract. Local and cloud steps must not
 - the command works from a clean checkout in PowerShell;
 - an intentional failure proves each stage is wired;
 - output identifies skipped manual/Tauri-only gates rather than implying coverage.
-```
+````
 
 ---
 
@@ -235,7 +235,7 @@ CI must call or exactly mirror the same contract. Local and cloud steps must not
 
 ### Body
 
-```markdown
+````markdown
 Parent: #[MAINTAINABILITY_EPIC_NUMBER]
 Depends on: #[B2_NUMBER]
 
@@ -262,7 +262,7 @@ Depends on: #[B2_NUMBER]
 - no test claims to validate real capture/OCR/overlay when browser mode returns 501;
 - dependencies are pinned reproducibly;
 - all new frontend modules meet the coding standard.
-```
+````
 
 ---
 
@@ -282,7 +282,7 @@ Depends on: #[B2_NUMBER]
 
 ### Body
 
-```markdown
+````markdown
 Parent: #[MAINTAINABILITY_EPIC_NUMBER]
 Depends on: #[B3_NUMBER]
 
@@ -306,7 +306,7 @@ Depends on: #[B3_NUMBER]
 - verifier is proven to fail by temporarily lowering/raising a threshold;
 - shared config/event modules have one owner before parallel work;
 - no decomposition begins until this issue lands.
-```
+````
 
 ---
 
@@ -326,7 +326,7 @@ Depends on: #[B3_NUMBER]
 
 ### Body
 
-```markdown
+````markdown
 Parent: #[MAINTAINABILITY_EPIC_NUMBER]
 Depends on: #[B4_NUMBER]
 
@@ -357,7 +357,7 @@ Do not own engine/translation internals (B6) or frontend modules (B7/B8).
 - format, clippy, tests, bridge contract, and doc checks pass;
 - manual start/stop/settings/tray/capture smoke matches the pre-refactor baseline;
 - no unrelated engine or frontend files are co-edited.
-```
+````
 
 ---
 
@@ -377,7 +377,7 @@ Do not own engine/translation internals (B6) or frontend modules (B7/B8).
 
 ### Body
 
-```markdown
+````markdown
 Parent: #[MAINTAINABILITY_EPIC_NUMBER]
 Depends on: #[B4_NUMBER] and the shared product contracts from the correctness/engine waves
 
@@ -403,7 +403,7 @@ Do not own generic Tauri lifecycle (B5) or frontend presentation (B7/B8).
 - tests preserve approved product behavior and failure states;
 - no private screen text enters production logs by default;
 - manual translation regression is repeated after final structural change.
-```
+````
 
 ---
 
@@ -423,7 +423,7 @@ Do not own generic Tauri lifecycle (B5) or frontend presentation (B7/B8).
 
 ### Body
 
-```markdown
+````markdown
 Parent: #[MAINTAINABILITY_EPIC_NUMBER]
 Depends on: #[B4_NUMBER] and stable engine/setup contracts
 
@@ -449,7 +449,7 @@ Do not own backend state machines or overlay/selector code.
 - browser unit/smoke checks cover supported paths;
 - Tauri manual setup/start/stop/settings regression passes;
 - visible changes, if any, are split into a separate scope and manual gate.
-```
+````
 
 ---
 
@@ -469,7 +469,7 @@ Do not own backend state machines or overlay/selector code.
 
 ### Body
 
-```markdown
+````markdown
 Parent: #[MAINTAINABILITY_EPIC_NUMBER]
 Depends on: #[B4_NUMBER] and stable pipeline/display payloads
 
@@ -492,7 +492,7 @@ Do not own backend capture, translation, or main/setup modules.
 - event listeners and timers have explicit cleanup ownership;
 - mixed-DPI, drag, resize, click-through, clipping, and region persistence are manually regressed;
 - visible behavior remains unchanged unless separately scoped.
-```
+````
 
 ---
 
@@ -512,7 +512,7 @@ Do not own backend capture, translation, or main/setup modules.
 
 ### Body
 
-```markdown
+````markdown
 Parent: #[MAINTAINABILITY_EPIC_NUMBER]
 Depends on: #[B5_NUMBER], #[B6_NUMBER], #[B7_NUMBER], #[B8_NUMBER]
 
@@ -536,4 +536,4 @@ Depends on: #[B5_NUMBER], #[B6_NUMBER], #[B7_NUMBER], #[B8_NUMBER]
 - all normative links resolve;
 - final manual Windows regression passes;
 - parent epic closes with before/after measurements.
-```
+````

@@ -15,17 +15,20 @@
 
 use crate::capture;
 use crate::config::{save_config, AppConfig, CaptureRegion};
+use crate::event_payloads::{CaptureStatusPayload, TranslationPayload};
 use crate::ipc::{
     IpcMessage, IpcServer, OverlaySettingsData, RegionData, SetRegionPayload, SettingsSyncPayload,
     SubtitleUpdatePayload,
 };
 use crate::llm::{
     BackendId, BackendInfo, FoundryLocalBackend, FoundryLocalPhase, TranslationDiagnostics,
-    TranslationDiagnosticsState, TranslationManager, TranslationOutcome, TranslatorBackend,
+    TranslationDiagnosticsState, TranslationDisplayState, TranslationManager, TranslationOutcome,
+    TranslatorBackend,
 };
 use crate::ocr::{PreprocessingConfig, WindowsOcr};
 use crate::overlay;
 use crate::sync_utils::lock_or_recover;
+use crate::{hy_mt_installer, hy_mt_runtime};
 use reqwest::Client;
 use scopeguard::defer;
 use serde::Serialize;
@@ -460,6 +463,9 @@ pub async fn get_foundry_local_status(
         let guard = lock_or_recover(&state.config);
         guard.translation.foundry_local.clone()
     };
+    if let Some(status) = managed_hy_mt_status(&config, false).await {
+        return Ok(status);
+    }
 
     async_runtime::spawn_blocking(move || build_foundry_local_status_no_probe(config))
         .await
@@ -477,6 +483,9 @@ pub async fn list_foundry_local_models(state: State<'_, AppState>) -> Result<Vec
         let guard = lock_or_recover(&state.config);
         guard.translation.foundry_local.clone()
     };
+    if config.managed_runtime.is_some() {
+        return Ok(config.model.clone().into_iter().collect());
+    }
 
     let backend = FoundryLocalBackend::new(config);
     backend.refresh_service_status();
@@ -494,6 +503,9 @@ pub async fn refresh_foundry_local_status(
         let guard = lock_or_recover(&state.config);
         guard.translation.foundry_local.clone()
     };
+    if let Some(status) = managed_hy_mt_status(&config, false).await {
+        return Ok(status);
+    }
     let configured_model = config.model.clone();
 
     // Build basic status synchronously
@@ -581,6 +593,9 @@ pub async fn prepare_foundry_local(
         let guard = lock_or_recover(&state.config);
         guard.translation.foundry_local.clone()
     };
+    if let Some(status) = managed_hy_mt_status(&config, true).await {
+        return Ok(status);
+    }
     let configured_model = config.model.clone();
 
     // Build basic status synchronously (this will attempt to start service if needed)
@@ -662,6 +677,9 @@ pub async fn make_foundry_ready(state: State<'_, AppState>) -> Result<FoundryLoc
         let guard = lock_or_recover(&state.config);
         guard.translation.foundry_local.clone()
     };
+    if let Some(status) = managed_hy_mt_status(&config, true).await {
+        return Ok(status);
+    }
     let configured_model = config.model.clone();
     let configured_timeout_ms = config.timeout_ms as u64;
     let steady_probe_timeout_ms = configured_timeout_ms.clamp(5_000, SLOW_PROBE_TIMEOUT_MS);
@@ -789,6 +807,62 @@ pub async fn make_foundry_ready(state: State<'_, AppState>) -> Result<FoundryLoc
         notes,
         phase,
         probe: backend.probe_snapshot(),
+    })
+}
+
+async fn managed_hy_mt_status(
+    config: &crate::config::FoundryLocalConfig,
+    start_if_needed: bool,
+) -> Option<FoundryLocalStatus> {
+    let runtime = config.managed_runtime.as_ref()?;
+    let executable_ready = PathBuf::from(&runtime.executable_path).is_file();
+    let model_ready = PathBuf::from(&runtime.model_path)
+        .metadata()
+        .map(|metadata| metadata.len() == hy_mt_runtime::HY_MT_MODEL_SIZE)
+        .unwrap_or(false);
+    let service_running = if executable_ready && model_ready {
+        if start_if_needed {
+            hy_mt_runtime::ensure_ready(runtime, Duration::from_secs(90))
+                .await
+                .is_ok()
+        } else {
+            hy_mt_runtime::is_healthy(runtime).await
+        }
+    } else {
+        false
+    };
+    let phase = if !executable_ready {
+        FoundryLocalPhase::NotInstalled
+    } else if !model_ready {
+        FoundryLocalPhase::NoModels
+    } else if service_running {
+        FoundryLocalPhase::Ready
+    } else {
+        FoundryLocalPhase::NotRunning
+    };
+    let notes = match phase {
+        FoundryLocalPhase::Ready => "Local Translation Engine is ready.".to_string(),
+        FoundryLocalPhase::NotInstalled => "Translation runtime is missing.".to_string(),
+        FoundryLocalPhase::NoModels => "HY-MT model is missing or incomplete.".to_string(),
+        FoundryLocalPhase::NotRunning => "Translation engine is installed but stopped.".to_string(),
+        _ => "Local Translation Engine is configured.".to_string(),
+    };
+
+    Some(FoundryLocalStatus {
+        cli_available: executable_ready,
+        service_running,
+        service_url: Some(hy_mt_runtime::endpoint_url(runtime)),
+        models: config
+            .model
+            .clone()
+            .into_iter()
+            .filter(|_| model_ready)
+            .collect(),
+        configured_model: config.model.clone(),
+        selected_model: config.model.clone(),
+        notes,
+        phase,
+        probe: None,
     })
 }
 
@@ -1041,6 +1115,10 @@ pub async fn save_settings(
     // Update the in-memory config
     {
         let mut config = lock_or_recover(&state.config);
+        updated
+            .translation
+            .foundry_local
+            .preserve_managed_runtime_from(&config.translation.foundry_local);
         *config = updated.clone();
     }
 
@@ -1323,34 +1401,6 @@ pub async fn close_area_selector(app: AppHandle, state: State<'_, AppState>) -> 
 // =============================================================================
 // TRANSLATION COMMANDS
 // =============================================================================
-
-/// Payload sent to the frontend with translation results
-#[derive(Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct TranslationPayload {
-    /// The original text from OCR
-    pub original: String,
-    /// The translated text
-    pub translated: String,
-    /// Which backend produced the translation
-    pub backend_used: String,
-    /// Warnings from backend selection/fallback
-    pub warnings: Vec<String>,
-    /// Unix timestamp in milliseconds
-    pub timestamp: u64,
-}
-
-/// Payload sent to the frontend to report capture status
-#[derive(Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct CaptureStatusPayload {
-    /// Whether the capture is using the fallback method (GDI)
-    pub using_fallback: bool,
-    /// Human-readable message about capture status
-    pub message: String,
-    /// Is this an error state?
-    pub is_error: bool,
-}
 
 /// Result of a capture attempt with session state
 enum CaptureAttemptResult {
@@ -2058,6 +2108,7 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
                 translated,
                 backend_used,
                 warnings,
+                display_state,
             } = outcome;
 
             // If stop was requested while the translation backend was running, don't emit results.
@@ -2200,6 +2251,7 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
                 translated: translated.clone(),
                 backend_used: backend_str.clone(),
                 warnings, // Move instead of clone - not used after this
+                display_state,
                 timestamp,
             };
 
@@ -2209,22 +2261,40 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
 
             // Send subtitle update to WinUI3 OverlayHost
             // Move strings since they're no longer needed after this
-            let subtitle_payload = SubtitleUpdatePayload {
-                text: translated,          // Move instead of clone
-                source_text: current_text, // Move instead of clone
-                timestamp: timestamp.to_string(),
-                backend_used: Some(backend_str), // Move instead of new allocation
-            };
+            if display_state == crate::llm::TranslationDisplayState::Translated {
+                let subtitle_payload = SubtitleUpdatePayload {
+                    text: translated,          // Move instead of clone
+                    source_text: current_text, // Move instead of clone
+                    timestamp: timestamp.to_string(),
+                    backend_used: Some(backend_str), // Move instead of new allocation
+                };
 
-            send_overlay_message(
-                &app,
-                IpcMessage::with_payload("Subtitle.Update", subtitle_payload),
-            )
-            .await;
+                send_overlay_message(
+                    &app,
+                    IpcMessage::with_payload("Subtitle.Update", subtitle_payload),
+                )
+                .await;
+            }
 
             // Wait for next iteration
             tokio::time::sleep(Duration::from_millis(interval_ms as u64)).await;
         }
+
+        let stopped_timestamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis() as u64;
+        let _ = app.emit(
+            "translation-update",
+            TranslationPayload {
+                original: String::new(),
+                translated: String::new(),
+                backend_used: BackendId::Mock.as_str().to_string(),
+                warnings: Vec::new(),
+                display_state: TranslationDisplayState::Stopped,
+                timestamp: stopped_timestamp,
+            },
+        );
 
         // Scopeguard handles cleanup: close_capture_session() and is_running reset
         info!("Translation loop ended");
@@ -2530,6 +2600,15 @@ pub struct WizardModelInfo {
     pub id: String,
     pub recommended: bool,
     pub hardware_tag: Option<String>,
+    pub description: Option<String>,
+    pub download_size: Option<String>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WizardTranslationTest {
+    pub translated_text: String,
+    pub latency_ms: u64,
 }
 
 /// Hardware information for model recommendations
@@ -2591,193 +2670,104 @@ pub fn close_foundry_wizard(
     Ok(())
 }
 
-/// Check whether winget is available on this system
-#[tauri::command]
-pub async fn wizard_check_winget() -> Result<bool, String> {
-    async_runtime::spawn_blocking(|| {
-        #[cfg(windows)]
-        {
-            use std::os::windows::process::CommandExt;
-            const CREATE_NO_WINDOW: u32 = 0x08000000;
-            std::process::Command::new("winget")
-                .arg("--version")
-                .stdout(std::process::Stdio::null())
-                .stderr(std::process::Stdio::null())
-                .creation_flags(CREATE_NO_WINDOW)
-                .status()
-                .map(|s| s.success())
-                .unwrap_or(false)
-        }
-        #[cfg(not(windows))]
-        {
-            false
-        }
-    })
-    .await
-    .map_err(|e| e.to_string())
-}
-
-/// Spawn a visible PowerShell window that runs `winget install Microsoft.FoundryLocal`
-#[tauri::command]
-pub async fn wizard_install_foundry() -> Result<(), String> {
-    async_runtime::spawn_blocking(|| {
-        let mut cmd = std::process::Command::new("powershell");
-        cmd.args([
-            "-NoProfile",
-            "-Command",
-            "Write-Host 'Installing Foundry Local via winget...' -ForegroundColor Cyan; \
-             Write-Host ''; \
-             winget install Microsoft.FoundryLocal --accept-source-agreements --accept-package-agreements; \
-             Write-Host ''; \
-             Write-Host 'Done! You can close this window.' -ForegroundColor Green; \
-             Start-Sleep -Seconds 5",
-        ]);
-        // Do NOT set CREATE_NO_WINDOW -- we want the user to see the installer progress
-        cmd.spawn()
-            .map_err(|e| format!("Failed to launch installer: {}", e))?;
-        Ok::<(), String>(())
-    })
-    .await
-    .map_err(|e| e.to_string())?
-}
-
-/// Poll whether Foundry CLI is now installed
-#[tauri::command]
-pub async fn wizard_poll_foundry_installed() -> Result<bool, String> {
-    async_runtime::spawn_blocking(FoundryLocalBackend::is_cli_available)
-        .await
-        .map_err(|e| e.to_string())
-}
-
-/// List available models from Foundry cache for the wizard
+/// Return the one curated engine used by normal mode.
 #[tauri::command]
 pub async fn wizard_list_available_models() -> Result<Vec<WizardModelInfo>, String> {
-    async_runtime::spawn_blocking(|| {
-        let models = FoundryLocalBackend::get_cached_models_from_cli();
-
-        let is_arm64 = cfg!(target_arch = "aarch64");
-        let is_npu = is_arm64 && cfg!(target_os = "windows");
-
-        // Use the existing auto-model selection heuristic to find the recommended model
-        let auto_pick = FoundryLocalBackend::choose_auto_model(&models);
-
-        models
-            .into_iter()
-            .map(|id| {
-                let recommended = auto_pick.as_deref() == Some(id.as_str());
-                let hardware_tag = if is_npu && id.to_lowercase().contains("npu") {
-                    Some("NPU".to_string())
-                } else {
-                    None
-                };
-                WizardModelInfo {
-                    id,
-                    recommended,
-                    hardware_tag,
-                }
-            })
-            .collect()
-    })
-    .await
-    .map_err(|e| e.to_string())
+    Ok(vec![WizardModelInfo {
+        id: hy_mt_runtime::HY_MT_MODEL_ID.to_string(),
+        recommended: true,
+        hardware_tag: Some(if cfg!(target_arch = "aarch64") {
+            "ARM64 GPU".to_string()
+        } else {
+            "Windows GPU".to_string()
+        }),
+        description: Some("Tencent HY-MT 1.5, tuned for fast subtitle translation.".to_string()),
+        download_size: Some("About 1.1 GB".to_string()),
+    }])
 }
 
-/// Download a model using `foundry cache download`, streaming output as events
 #[tauri::command]
-pub async fn wizard_download_model(app: AppHandle, model_id: String) -> Result<(), String> {
-    use tokio::io::{AsyncBufReadExt, BufReader};
-    use tokio::process::Command as TokioCommand;
-
-    // C1: Validate model_id to prevent injection of unexpected CLI arguments
-    if model_id.is_empty()
-        || model_id.len() > 200
-        || model_id.contains(|c: char| !c.is_alphanumeric() && !"-._/:".contains(c))
-    {
-        return Err(format!("Invalid model ID: '{}'", model_id));
+pub async fn wizard_download_model(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    model_id: String,
+    cache_dir: Option<String>,
+) -> Result<(), String> {
+    if model_id != hy_mt_runtime::HY_MT_MODEL_ID {
+        return Err("ENGINE_UNSUPPORTED_MODEL".to_string());
     }
 
-    info!("Wizard: downloading model '{}'", model_id);
-
-    let mut child = TokioCommand::new("foundry")
-        .args(["cache", "download", &model_id])
-        .stdout(std::process::Stdio::piped())
-        .stderr(std::process::Stdio::piped())
-        .spawn()
-        .map_err(|e| format!("Failed to start model download: {}", e))?;
-
-    let stdout = child.stdout.take();
-    let stderr = child.stderr.take();
-
-    // Stream stdout lines as targeted events to the wizard window only
-    if let Some(stdout) = stdout {
-        let app_out = app.clone();
-        tokio::spawn(async move {
-            let reader = BufReader::new(stdout);
-            let mut lines = reader.lines();
-            while let Ok(Some(line)) = lines.next_line().await {
-                let _ = app_out.emit_to(
-                    "foundry-wizard",
-                    "wizard-output",
-                    serde_json::json!({"stream": "stdout", "line": line}),
-                );
-            }
-        });
+    match hy_mt_installer::install(&app, cache_dir).await {
+        Ok(paths) => {
+            let runtime = paths.managed_config();
+            let updated = {
+                let mut config = lock_or_recover(&state.config);
+                config.translation.enable_foundry_local = true;
+                config.translation.allow_mock_fallback = false;
+                config.translation.foundry_local.model =
+                    Some(hy_mt_runtime::HY_MT_MODEL_ID.to_string());
+                config.translation.foundry_local.endpoint_url =
+                    Some(hy_mt_runtime::endpoint_url(&runtime));
+                config.translation.foundry_local.managed_runtime = Some(runtime);
+                config.clone()
+            };
+            save_config(&app, &updated)?;
+            let _ = app.emit_to(
+                "foundry-wizard",
+                "wizard-download-complete",
+                serde_json::json!({"success": true, "model": model_id}),
+            );
+        }
+        Err(error) => {
+            warn!("Local Translation Engine install failed: {}", error);
+            let _ = app.emit_to(
+                "foundry-wizard",
+                "wizard-download-complete",
+                serde_json::json!({"success": false, "error": error}),
+            );
+        }
     }
-
-    // Stream stderr lines as targeted events to the wizard window only
-    if let Some(stderr) = stderr {
-        let app_err = app.clone();
-        tokio::spawn(async move {
-            let reader = BufReader::new(stderr);
-            let mut lines = reader.lines();
-            while let Ok(Some(line)) = lines.next_line().await {
-                let _ = app_err.emit_to(
-                    "foundry-wizard",
-                    "wizard-output",
-                    serde_json::json!({"stream": "stderr", "line": line}),
-                );
-            }
-        });
-    }
-
-    // Wait for process to complete
-    let status = child
-        .wait()
-        .await
-        .map_err(|e| format!("Model download failed: {}", e))?;
-
-    if status.success() {
-        info!("Wizard: model '{}' downloaded successfully", model_id);
-        let _ = app.emit_to(
-            "foundry-wizard",
-            "wizard-download-complete",
-            serde_json::json!({"success": true, "model": model_id}),
-        );
-    } else {
-        let msg = format!("Model download exited with code: {:?}", status.code());
-        warn!("Wizard: {}", msg);
-        let _ = app.emit_to(
-            "foundry-wizard",
-            "wizard-download-complete",
-            serde_json::json!({"success": false, "error": msg}),
-        );
-    }
-    // Always return Ok -- success/failure communicated via events to avoid dual error reporting
     Ok(())
 }
 
-/// Start the Foundry service and return the service URL
 #[tauri::command]
-pub async fn wizard_start_service() -> Result<String, String> {
-    async_runtime::spawn_blocking(|| {
-        let config = crate::config::FoundryLocalConfig::default();
-        let backend = FoundryLocalBackend::new(config);
-        backend.ensure_service_running();
-        FoundryLocalBackend::get_service_url_from_cli()
-            .ok_or_else(|| "Service started but URL not found".to_string())
+pub async fn wizard_start_service(state: State<'_, AppState>) -> Result<String, String> {
+    let runtime = {
+        let config = lock_or_recover(&state.config);
+        config
+            .translation
+            .foundry_local
+            .managed_runtime
+            .clone()
+            .ok_or_else(|| "ENGINE_NOT_INSTALLED".to_string())?
+    };
+    hy_mt_runtime::ensure_ready(&runtime, Duration::from_secs(90)).await
+}
+
+#[tauri::command]
+pub async fn wizard_test_translation(
+    state: State<'_, AppState>,
+    source_text: String,
+    source_language: String,
+    target_language: String,
+) -> Result<WizardTranslationTest, String> {
+    let config = {
+        let config = lock_or_recover(&state.config);
+        config.translation.foundry_local.clone()
+    };
+    let backend = FoundryLocalBackend::new(config);
+    let started = Instant::now();
+    let translated_text = backend
+        .translate(&source_text, &source_language, &target_language)
+        .await
+        .map_err(|error| error.to_string())?;
+    if translated_text.trim().is_empty() || translated_text.trim() == source_text.trim() {
+        return Err("ENGINE_SAMPLE_TRANSLATION_FAILED".to_string());
+    }
+    Ok(WizardTranslationTest {
+        translated_text,
+        latency_ms: started.elapsed().as_millis() as u64,
     })
-    .await
-    .map_err(|e| e.to_string())?
 }
 
 /// Get available disk space for a given path

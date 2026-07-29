@@ -23,7 +23,7 @@
 use tauri::{
     menu::{Menu, MenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
-    Emitter, Manager, PhysicalPosition, PhysicalSize,
+    Emitter, Manager,
 };
 use tracing::{info, warn};
 use tracing_subscriber::{EnvFilter, FmtSubscriber};
@@ -275,12 +275,10 @@ fn main() {
             // Foundry setup wizard commands
             commands::open_foundry_wizard,
             commands::close_foundry_wizard,
-            commands::wizard_check_winget,
-            commands::wizard_install_foundry,
-            commands::wizard_poll_foundry_installed,
             commands::wizard_list_available_models,
             commands::wizard_download_model,
             commands::wizard_start_service,
+            commands::wizard_test_translation,
             commands::wizard_get_disk_space,
             commands::wizard_get_hardware_info,
         ])
@@ -310,19 +308,14 @@ fn main() {
                 *lock_or_recover(&state.capture_scale_factor) = scale_factor.unwrap_or(1.0);
             }
 
-            // Apply window preferences if available
-            if let Some(window) = app.get_webview_window("main") {
-                let prefs = &loaded_config.window_preferences;
-                if let (Some(width), Some(height)) = (prefs.width, prefs.height) {
-                    let _ = window.set_size(PhysicalSize::new(width, height));
-                }
-                if let (Some(x), Some(y)) = (prefs.x, prefs.y) {
-                    let _ = window.set_position(PhysicalPosition::new(x, y));
-                }
-                if prefs.is_maximized {
-                    let _ = window.maximize();
-                }
-            }
+            meowcal_sub::hy_mt_runtime::start_configured(
+                loaded_config.translation.foundry_local.managed_runtime.clone(),
+            );
+
+            meowcal_sub::window_lifecycle::restore_and_show_main(
+                app.handle(),
+                &loaded_config.window_preferences,
+            );
 
             // --- Spawn OverlayHost.exe + start IPC server (WinUI features) ---
             //
@@ -498,6 +491,9 @@ fn main() {
                     }
                 }
                 tauri::WindowEvent::Destroyed => {
+                    if window.label() == "main" {
+                        meowcal_sub::hy_mt_runtime::shutdown_owned();
+                    }
                     if let Some(overlay_process) = window.try_state::<OverlayHostProcess>() {
                         if let Some(mut child) = lock_or_recover(&overlay_process.0).take() {
                             let _ = child.kill();

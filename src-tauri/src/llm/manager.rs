@@ -2,15 +2,14 @@
 // MANAGER.RS - Translation Backend Selection + Fallback
 // =============================================================================
 
-use super::text_utils::is_cjk_char;
+use super::output_validation::{quality_issue_message, validate_translation_output};
 use crate::config::{ContextLevel, TranslationConfig};
 use crate::llm::{
     BackendId, BackendInfo, FoundryLocalBackend, LlmError, MockBackend, PromptRouterOptions,
     ReadyState, TranslationContext, TranslationDiagnostics, TranslationDiagnosticsState,
-    TranslationOutcome, TranslatorBackend,
+    TranslationDisplayState, TranslationOutcome, TranslatorBackend,
 };
 use crate::sync_utils::{lock_or_recover, read_or_recover, write_or_recover};
-use std::collections::HashSet;
 use std::sync::atomic::{AtomicU8, Ordering};
 use std::sync::{Arc, Mutex, RwLock};
 use std::time::Instant;
@@ -23,9 +22,6 @@ const MAX_TRANSLATION_INPUT_CHARS: usize = 2000;
 const FOUNDRY_TRANSIENT_MAX_RETRIES: usize = 2;
 const FOUNDRY_TRANSIENT_RETRY_DELAY_MS: u64 = 600;
 const CONTEXT_SLOW_DEGRADE_MS: u128 = 1800;
-const MAX_SUBTITLE_OUTPUT_CHARS: usize = 120;
-const MAX_SUBTITLE_OUTPUT_RATIO: usize = 4;
-const MIN_SHORT_SOURCE_OUTPUT_CHARS: usize = 24;
 
 // =============================================================================
 // CONTEXT TIER - State machine for context degradation
@@ -252,6 +248,7 @@ impl TranslationManager {
                 translated: String::new(),
                 backend_used: BackendId::Mock,
                 warnings: Vec::new(),
+                display_state: TranslationDisplayState::SourceOnly,
             };
         }
 
@@ -273,6 +270,7 @@ impl TranslationManager {
                 translated: text.to_string(),
                 backend_used: BackendId::Mock,
                 warnings: vec![warning],
+                display_state: TranslationDisplayState::SourceOnly,
             };
         }
 
@@ -291,6 +289,17 @@ impl TranslationManager {
         });
 
         for id in order {
+            if !self.is_enabled(id) {
+                warnings.push(format!("{}: disabled", id.as_str()));
+                lock_or_recover(&self.diagnostics).record_error(id, "disabled", None);
+                debug!(
+                    backend_id = id.as_str(),
+                    error_code = "disabled",
+                    "Translation backend skipped"
+                );
+                continue;
+            }
+
             let backend = match self.backend_by_id(id) {
                 Some(b) => b,
                 None => {
@@ -303,21 +312,6 @@ impl TranslationManager {
                     continue;
                 }
             };
-
-            if !self.is_enabled(id) {
-                warnings.push(format!("{}: disabled", id.as_str()));
-                self.diagnostics
-                    .lock()
-                    .unwrap()
-                    .record_error(id, "disabled", None);
-                debug!(
-                    backend_id = id.as_str(),
-                    ready_state = ?backend.ready_state(),
-                    error_code = "disabled",
-                    "Translation backend skipped"
-                );
-                continue;
-            }
 
             if !backend.is_available() {
                 warnings.push(format!("{}: not_available", id.as_str()));
@@ -421,10 +415,16 @@ impl TranslationManager {
                         error_code = "",
                         "Translation backend used"
                     );
+                    let display_state = if id == BackendId::Mock {
+                        Self::fallback_display_state(&warnings)
+                    } else {
+                        TranslationDisplayState::Translated
+                    };
                     return TranslationOutcome {
                         translated,
                         backend_used: id,
                         warnings,
+                        display_state,
                     };
                 }
                 Ok(Err(err)) => {
@@ -469,10 +469,12 @@ impl TranslationManager {
                             .unwrap()
                             .record_success(BackendId::Mock, 0);
                         warnings.push("mock: fallback used".to_string());
+                        let display_state = Self::fallback_display_state(&warnings);
                         return TranslationOutcome {
                             translated,
                             backend_used: BackendId::Mock,
                             warnings,
+                            display_state,
                         };
                     }
                     Err(err) => {
@@ -494,11 +496,38 @@ impl TranslationManager {
             "no_backend_available",
             None,
         );
+        let display_state = Self::fallback_display_state(&warnings);
         TranslationOutcome {
             translated: text.to_string(),
             backend_used: BackendId::Mock,
             warnings,
+            display_state,
         }
+    }
+
+    fn fallback_display_state(warnings: &[String]) -> TranslationDisplayState {
+        let foundry_warnings: Vec<String> = warnings
+            .iter()
+            .filter(|warning| warning.starts_with("foundry_local:"))
+            .map(|warning| warning.to_ascii_lowercase())
+            .collect();
+
+        if foundry_warnings
+            .iter()
+            .any(|warning| warning.contains("not_ready"))
+        {
+            return TranslationDisplayState::Warming;
+        }
+
+        if foundry_warnings.iter().any(|warning| {
+            !warning.contains("disabled")
+                && !warning.contains("not_available")
+                && !warning.contains("fallback used")
+        }) {
+            return TranslationDisplayState::TemporarilyUnavailable;
+        }
+
+        TranslationDisplayState::SourceOnly
     }
 
     /// Check if text is duplicate (for deduplication in capture loop)
@@ -641,162 +670,6 @@ impl TranslationManager {
         matches!(id, BackendId::FoundryLocal)
     }
 
-    fn validate_foundry_translation_output(
-        source_text: &str,
-        translated: &str,
-        target_language: &str,
-    ) -> Result<(), &'static str> {
-        let source_chars = source_text.chars().count().max(1);
-        let translated_chars = translated.chars().count();
-
-        if translated_chars == 0 {
-            return Err("empty_output");
-        }
-
-        let ratio_limit = source_chars
-            .saturating_mul(MAX_SUBTITLE_OUTPUT_RATIO)
-            .max(MIN_SHORT_SOURCE_OUTPUT_CHARS);
-        if translated_chars > MAX_SUBTITLE_OUTPUT_CHARS || translated_chars > ratio_limit {
-            return Err("too_long");
-        }
-
-        if Self::looks_repetition_loop(translated) {
-            return Err("repetition_loop");
-        }
-
-        if Self::is_english_target(target_language)
-            && Self::is_probably_non_english_for_en_target(translated)
-        {
-            return Err("wrong_language");
-        }
-
-        Ok(())
-    }
-
-    fn looks_repetition_loop(text: &str) -> bool {
-        let tokens = Self::tokenize_for_repetition(text);
-        if tokens.len() < 8 {
-            return false;
-        }
-
-        // Catch obvious loops like "I'm / I'm / I'm ...".
-        let mut streak = 1usize;
-        let mut max_streak = 1usize;
-        for i in 1..tokens.len() {
-            if tokens[i] == tokens[i - 1] {
-                streak += 1;
-                max_streak = max_streak.max(streak);
-            } else {
-                streak = 1;
-            }
-        }
-        if max_streak >= 4 {
-            return true;
-        }
-
-        // Catch low-diversity rambling outputs.
-        let unique: HashSet<&str> = tokens.iter().map(String::as_str).collect();
-        if unique.len().saturating_mul(3) <= tokens.len() {
-            return true;
-        }
-
-        // Catch repeated slash-separated phrase lists.
-        if text.matches('/').count() >= 5 {
-            let parts: Vec<String> = text
-                .split('/')
-                .map(|part| part.trim().to_ascii_lowercase())
-                .filter(|part| !part.is_empty())
-                .collect();
-            if parts.len() >= 5 {
-                let unique_parts: HashSet<&str> = parts.iter().map(String::as_str).collect();
-                if unique_parts.len().saturating_mul(2) <= parts.len() {
-                    return true;
-                }
-            }
-        }
-
-        false
-    }
-
-    fn tokenize_for_repetition(text: &str) -> Vec<String> {
-        text.split(|ch: char| !(ch.is_alphanumeric() || is_cjk_char(ch)))
-            .map(|token| token.trim().to_ascii_lowercase())
-            .filter(|token| !token.is_empty())
-            .collect()
-    }
-
-    fn is_english_target(target_language: &str) -> bool {
-        target_language
-            .split('-')
-            .next()
-            .map(|lang| lang.eq_ignore_ascii_case("en"))
-            .unwrap_or(false)
-    }
-
-    fn is_probably_non_english_for_en_target(text: &str) -> bool {
-        let mut alphabetic_total = 0usize;
-        let mut latin_letters = 0usize;
-        let mut cjk_letters = 0usize;
-        let mut non_whitespace_chars = 0usize;
-
-        // Keep this as a single pass because it's on a hot translation path.
-        for ch in text.chars() {
-            if !ch.is_whitespace() {
-                non_whitespace_chars += 1;
-            }
-            if ch.is_alphabetic() {
-                alphabetic_total += 1;
-                if ch.is_ascii_alphabetic() {
-                    latin_letters += 1;
-                }
-            }
-            if is_cjk_char(ch) {
-                cjk_letters += 1;
-            }
-        }
-
-        if cjk_letters == 0 {
-            return false;
-        }
-
-        // Pure CJK output is almost certainly not an English subtitle.
-        if latin_letters == 0 {
-            return true;
-        }
-
-        // Avoid false positives on short mixed-language snippets like "OK 好".
-        if non_whitespace_chars < 6 && cjk_letters <= 1 {
-            return false;
-        }
-        if non_whitespace_chars < 10 && cjk_letters < 3 {
-            return false;
-        }
-
-        // Require meaningful CJK presence before rejecting as wrong language.
-        if cjk_letters.saturating_mul(100) < non_whitespace_chars.saturating_mul(30) {
-            return false;
-        }
-
-        if alphabetic_total == 0 {
-            return true;
-        }
-
-        latin_letters.saturating_mul(10) < alphabetic_total.saturating_mul(7)
-    }
-
-    fn quality_issue_message(reason: &str) -> String {
-        match reason {
-            "too_long" => "Translation output rejected as corrupted (overlong output).",
-            "repetition_loop" => "Translation output rejected as corrupted (repetitive output).",
-            "wrong_language" => {
-                "Translation output rejected as corrupted (incorrect output language)."
-            }
-            "empty_output" => "Translation output rejected as corrupted (empty output).",
-            _ => "Translation output rejected as corrupted.",
-        }
-        .to_string()
-    }
-
     /// Attempt translation with Foundry Local, degrading context tier on slow responses/timeouts.
     ///
     /// Returns `Some(outcome)` on success, `None` if all context tiers failed (caller should
@@ -885,6 +758,7 @@ impl TranslationManager {
                         translated,
                         backend_used: id,
                         warnings: std::mem::take(warnings),
+                        display_state: TranslationDisplayState::Translated,
                     });
                 }
                 TierAttemptResult::Timeout { total_exhausted } => {
@@ -981,9 +855,10 @@ impl TranslationManager {
 
             match result {
                 Ok(Ok(translated)) => {
-                    if let Err(reason) = Self::validate_foundry_translation_output(
+                    if let Err(reason) = validate_translation_output(
                         text,
                         &translated,
+                        source_language,
                         target_language,
                     ) {
                         lock_or_recover(&self.diagnostics).record_error(
@@ -996,26 +871,14 @@ impl TranslationManager {
                             ready_state = ?ready_state,
                             latency_ms,
                             error_code = "low_quality_output",
-                            quality_issue = reason,
+                            quality_issue = reason.code(),
                             attempt,
                             max_attempts,
                             "Translation output rejected"
                         );
 
-                        if attempt < max_attempts {
-                            warnings.push(format!("{}: low_quality_output_retry", id.as_str()));
-                            let delay = Duration::from_millis(
-                                FOUNDRY_TRANSIENT_RETRY_DELAY_MS.saturating_mul(attempt as u64) / 2,
-                            );
-                            let remaining = total_timeout.saturating_sub(started.elapsed());
-                            if remaining > delay {
-                                tokio::time::sleep(delay).await;
-                            }
-                            continue;
-                        }
-
                         return TierAttemptResult::Error(LlmError::TranslationError(
-                            Self::quality_issue_message(reason),
+                            quality_issue_message(reason),
                         ));
                     }
 
@@ -1116,6 +979,7 @@ mod tests {
     use crate::config::{ContextLevel, TranslationConfig};
     use crate::llm::LlmError;
     use async_trait::async_trait;
+    use std::sync::atomic::AtomicUsize;
 
     struct TestBackend {
         id: BackendId,
@@ -1123,6 +987,44 @@ mod tests {
         ready_state: ReadyState,
         response: Result<String, LlmError>,
         delay_ms: u64,
+    }
+
+    struct CountingBackend {
+        calls: Arc<AtomicUsize>,
+        response: Result<String, LlmError>,
+    }
+
+    #[async_trait]
+    impl TranslatorBackend for CountingBackend {
+        fn id(&self) -> BackendId {
+            BackendId::FoundryLocal
+        }
+
+        fn name(&self) -> &'static str {
+            "Counting Foundry"
+        }
+
+        fn is_available(&self) -> bool {
+            true
+        }
+
+        fn ready_state(&self) -> ReadyState {
+            ReadyState::Ready
+        }
+
+        fn notes(&self) -> String {
+            String::new()
+        }
+
+        async fn translate(
+            &self,
+            _text: &str,
+            _source_language: &str,
+            _target_language: &str,
+        ) -> Result<String, LlmError> {
+            self.calls.fetch_add(1, Ordering::SeqCst);
+            self.response.clone()
+        }
     }
 
     #[async_trait]
@@ -1207,6 +1109,10 @@ mod tests {
 
         assert_eq!(outcome.backend_used, BackendId::Mock);
         assert_eq!(outcome.translated, "mock_response");
+        assert_eq!(
+            outcome.display_state,
+            TranslationDisplayState::TemporarilyUnavailable
+        );
     }
 
     #[tokio::test]
@@ -1240,75 +1146,89 @@ mod tests {
 
         assert_eq!(outcome.backend_used, BackendId::Mock);
         assert_eq!(outcome.translated, "fast");
+        assert_eq!(
+            outcome.display_state,
+            TranslationDisplayState::TemporarilyUnavailable
+        );
     }
 
-    #[test]
-    fn test_validate_foundry_output_rejects_too_long() {
-        let source = "你好";
-        let translated = "a".repeat(150);
-        let result =
-            TranslationManager::validate_foundry_translation_output(source, &translated, "en-US");
-        assert_eq!(result, Err("too_long"));
+    #[tokio::test]
+    async fn test_zh_cn_to_en_validation_rejection_is_not_retried() {
+        let calls = Arc::new(AtomicUsize::new(0));
+        let backends: Vec<Box<dyn TranslatorBackend>> = vec![
+            Box::new(CountingBackend {
+                calls: Arc::clone(&calls),
+                response: Ok("a".repeat(150)),
+            }),
+            Box::new(TestBackend {
+                id: BackendId::Mock,
+                available: true,
+                ready_state: ReadyState::Ready,
+                response: Ok("你好".to_string()),
+                delay_ms: 0,
+            }),
+        ];
+
+        let diagnostics = Arc::new(Mutex::new(TranslationDiagnosticsState::default()));
+        let manager = TranslationManager::with_backends(base_config(), backends, diagnostics, 500);
+        let outcome = manager
+            .translate_with_fallback("你好", "zh-CN", "en-US")
+            .await;
+
+        assert_eq!(calls.load(Ordering::SeqCst), 1);
+        assert_eq!(
+            outcome.display_state,
+            TranslationDisplayState::TemporarilyUnavailable
+        );
+        assert_eq!(outcome.translated, "你好");
     }
 
-    #[test]
-    fn test_validate_foundry_output_allows_short_source_with_normal_english_expansion() {
-        let source = "谢谢";
-        let translated = "Thank you.";
-        let result =
-            TranslationManager::validate_foundry_translation_output(source, translated, "en-US");
-        assert!(result.is_ok());
+    #[tokio::test]
+    async fn test_not_ready_foundry_reports_warming_without_translation() {
+        let backends: Vec<Box<dyn TranslatorBackend>> = vec![
+            Box::new(TestBackend {
+                id: BackendId::FoundryLocal,
+                available: true,
+                ready_state: ReadyState::NotReady,
+                response: Ok("unused".to_string()),
+                delay_ms: 0,
+            }),
+            Box::new(TestBackend {
+                id: BackendId::Mock,
+                available: true,
+                ready_state: ReadyState::Ready,
+                response: Ok("你好".to_string()),
+                delay_ms: 0,
+            }),
+        ];
+
+        let diagnostics = Arc::new(Mutex::new(TranslationDiagnosticsState::default()));
+        let manager = TranslationManager::with_backends(base_config(), backends, diagnostics, 500);
+        let outcome = manager
+            .translate_with_fallback("你好", "zh-CN", "en-US")
+            .await;
+
+        assert_eq!(outcome.display_state, TranslationDisplayState::Warming);
     }
 
-    #[test]
-    fn test_validate_foundry_output_rejects_empty_output() {
-        let source = "你好";
-        let result = TranslationManager::validate_foundry_translation_output(source, "", "en-US");
-        assert_eq!(result, Err("empty_output"));
-    }
+    #[tokio::test]
+    async fn test_disabled_foundry_reports_source_only() {
+        let mut config = base_config();
+        config.enable_foundry_local = false;
+        let backends: Vec<Box<dyn TranslatorBackend>> = vec![Box::new(TestBackend {
+            id: BackendId::Mock,
+            available: true,
+            ready_state: ReadyState::Ready,
+            response: Ok("你好".to_string()),
+            delay_ms: 0,
+        })];
 
-    #[test]
-    fn test_validate_foundry_output_rejects_repetition_loop() {
-        let source = "这是一个足够长的字幕文本用于测试";
-        let translated = "go go go go go go go go";
-        let result =
-            TranslationManager::validate_foundry_translation_output(source, translated, "en-US");
-        assert_eq!(result, Err("repetition_loop"));
-    }
+        let diagnostics = Arc::new(Mutex::new(TranslationDiagnosticsState::default()));
+        let manager = TranslationManager::with_backends(config, backends, diagnostics, 500);
+        let outcome = manager
+            .translate_with_fallback("你好", "zh-CN", "en-US")
+            .await;
 
-    #[test]
-    fn test_validate_foundry_output_rejects_non_english_when_target_en() {
-        let source = "需要鳗鱼。";
-        let translated = "需要鲨鱼。";
-        let result =
-            TranslationManager::validate_foundry_translation_output(source, translated, "en-US");
-        assert_eq!(result, Err("wrong_language"));
-    }
-
-    #[test]
-    fn test_validate_foundry_output_allows_short_mixed_text_for_en() {
-        let source = "需要";
-        let translated = "OK 好";
-        let result =
-            TranslationManager::validate_foundry_translation_output(source, translated, "en-US");
-        assert!(result.is_ok());
-    }
-
-    #[test]
-    fn test_validate_foundry_output_does_not_apply_wrong_language_for_non_english_target() {
-        let source = "Need eel.";
-        let translated = "需要鲨鱼。";
-        let result =
-            TranslationManager::validate_foundry_translation_output(source, translated, "zh-CN");
-        assert!(result.is_ok());
-    }
-
-    #[test]
-    fn test_validate_foundry_output_accepts_normal_subtitle() {
-        let source = "孩子们听到了";
-        let translated = "The children heard it.";
-        let result =
-            TranslationManager::validate_foundry_translation_output(source, translated, "en-US");
-        assert!(result.is_ok());
+        assert_eq!(outcome.display_state, TranslationDisplayState::SourceOnly);
     }
 }
