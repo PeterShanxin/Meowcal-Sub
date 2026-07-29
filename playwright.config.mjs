@@ -24,7 +24,7 @@ export default defineConfig({
       command: "npm run dev:backend",
       url: "http://127.0.0.1:3001/api/health",
       name: "Rust browser backend",
-      timeout: 180_000,
+      timeout: 900_000,
       reuseExistingServer: false,
     },
     {
