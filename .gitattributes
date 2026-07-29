@@ -1,7 +1,56 @@
-*.css text eol=lf
-*.html text eol=lf
-*.js text eol=lf
+# =============================================================================
+# Meowcal-Sub .gitattributes
+# =============================================================================
+# Line ending configuration for consistent cross-platform development
+# =============================================================================
+
+# Force consistent line endings for all text files
+* text=auto
+
+# Rust/Cargo files - use LF line endings (Unix standard)
+*.toml text eol=lf
+*.rs text eol=lf
+
+# Shell scripts - use LF for Unix compatibility
+*.sh text eol=lf
+
+# PowerShell scripts - use CRLF for Windows compatibility
+*.ps1 text eol=crlf
+*.psm1 text eol=crlf
+
+# Batch files - use CRLF for Windows compatibility
+*.cmd text eol=crlf
+*.bat text eol=crlf
+
+# JSON/JSONC files
 *.json text eol=lf
-*.md text eol=lf
+*.jsonc text eol=lf
+
+# JavaScript/TypeScript
+*.js text eol=lf
 *.mjs text eol=lf
+*.ts text eol=lf
+*.jsx text eol=lf
+*.tsx text eol=lf
+
+# Web files
+*.html text eol=lf
+*.css text eol=lf
+
+# Documentation and workflow configuration
+*.md text eol=lf
 *.yml text eol=lf
+
+# Visual Studio / Windows specific - keep as binary to avoid issues
+*.ico binary
+*.icns binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.pdf binary
+
+# Windows resource files
+*.resx text eol=crlf
+*.xaml text eol=crlf
+*.cs text eol=crlf
