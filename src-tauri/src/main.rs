@@ -23,7 +23,7 @@
 use tauri::{
     menu::{Menu, MenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
-    Emitter, Manager,
+    Manager,
 };
 use tracing::{info, warn};
 use tracing_subscriber::{EnvFilter, FmtSubscriber};
@@ -241,7 +241,7 @@ fn main() {
     }
 
     // --- Step 2: Build and run the Tauri app ---
-    tauri::Builder::default()
+    let app = tauri::Builder::default()
         // Register our custom commands (functions that JavaScript can call)
         .invoke_handler(tauri::generate_handler![
             commands::get_settings,
@@ -470,30 +470,13 @@ fn main() {
             info!("✅ System tray set up successfully!");
             Ok(())
         })
-        // Add cleanup on window close
+        // Keep long-lived windows available from the tray.
         .on_window_event(|window, event| {
             match event {
                 tauri::WindowEvent::CloseRequested { api, .. } => {
-                    // For the wizard window, hide instead of destroying so it can be re-opened
-                    // Emit the same close event so the main window can refresh status
-                    if window.label() == "foundry-wizard" {
-                        api.prevent_close();
-                        let _ = window.emit("wizard-window-hidden", ());
-                        let _ = window.app_handle().emit(
-                            "foundry-wizard-closed",
-                            serde_json::json!({
-                                "modelDownloaded": false,
-                                "selectedModel": null,
-                                "closedViaX": true
-                            }),
-                        );
-                        let _ = window.hide();
-                    }
+                    meowcal_sub::window_lifecycle::handle_close_requested(window, api);
                 }
                 tauri::WindowEvent::Destroyed => {
-                    if window.label() == "main" {
-                        meowcal_sub::hy_mt_runtime::shutdown_owned();
-                    }
                     if let Some(overlay_process) = window.try_state::<OverlayHostProcess>() {
                         if let Some(mut child) = lock_or_recover(&overlay_process.0).take() {
                             let _ = child.kill();
@@ -504,9 +487,20 @@ fn main() {
                 _ => {}
             }
         })
-        // Run the app!
-        .run(tauri::generate_context!())
-        .expect("Failed to run Meowcal Sub");
+        .build(tauri::generate_context!())
+        .expect("Failed to build Meowcal Sub");
+
+    app.run(|app_handle, event| {
+        if matches!(event, tauri::RunEvent::Exit) {
+            meowcal_sub::hy_mt_runtime::shutdown_owned();
+            if let Some(overlay_process) = app_handle.try_state::<OverlayHostProcess>() {
+                if let Some(mut child) = lock_or_recover(&overlay_process.0).take() {
+                    let _ = child.kill();
+                    info!("🛑 Killed OverlayHost process");
+                }
+            }
+        }
+    });
 }
 
 // =============================================================================

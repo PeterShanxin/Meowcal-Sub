@@ -42,7 +42,7 @@ machine-readable baseline. The largest and decomposition-owned hotspots are:
 | `src-tauri/src/llm/context.rs` | 732 | #32 |
 | `src-tauri/src/http_server.rs` | 730 | #31 adapter boundary |
 | `src-tauri/src/config.rs` | 625 | #31 |
-| `src-tauri/src/main.rs` | 588 | #31 |
+| `src-tauri/src/main.rs` | 582 | #31 |
 | `src/scripts/wizard.js` | 531 | #33 |
 
 The remaining explicit exceptions are styles, HTML, and focused platform
