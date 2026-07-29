@@ -28,6 +28,9 @@ use crate::llm::{
 use crate::ocr::{PreprocessingConfig, WindowsOcr};
 use crate::overlay;
 use crate::sync_utils::lock_or_recover;
+use crate::wizard_contracts::{
+    WizardDiskSpace, WizardHardwareInfo, WizardModelInfo, WizardTranslationTest,
+};
 use crate::{hy_mt_installer, hy_mt_runtime};
 use reqwest::Client;
 use scopeguard::defer;
@@ -816,9 +819,12 @@ async fn managed_hy_mt_status(
 ) -> Option<FoundryLocalStatus> {
     let runtime = config.managed_runtime.as_ref()?;
     let executable_ready = PathBuf::from(&runtime.executable_path).is_file();
+    let expected_model_size = crate::engine_manifest::EngineManifest::shipped()
+        .map(|manifest| manifest.model.artifact.size_bytes)
+        .unwrap_or_default();
     let model_ready = PathBuf::from(&runtime.model_path)
         .metadata()
-        .map(|metadata| metadata.len() == hy_mt_runtime::HY_MT_MODEL_SIZE)
+        .map(|metadata| expected_model_size > 0 && metadata.len() == expected_model_size)
         .unwrap_or(false);
     let service_running = if executable_ready && model_ready {
         if start_if_needed {
@@ -2593,44 +2599,6 @@ pub fn set_overlay_window_clip(
 // FOUNDRY SETUP WIZARD COMMANDS
 // =============================================================================
 
-/// Model information returned by the wizard
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct WizardModelInfo {
-    pub id: String,
-    pub recommended: bool,
-    pub hardware_tag: Option<String>,
-    pub description: Option<String>,
-    pub download_size: Option<String>,
-}
-
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct WizardTranslationTest {
-    pub translated_text: String,
-    pub latency_ms: u64,
-}
-
-/// Hardware information for model recommendations
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct WizardHardwareInfo {
-    pub arch: String,
-    pub is_arm64: bool,
-    pub has_npu: bool,
-    pub has_gpu: bool,
-    pub gpu_name: String,
-    pub recommendation: String,
-}
-
-/// Disk space information
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct WizardDiskSpace {
-    pub available_bytes: u64,
-    pub available_display: String,
-}
-
 /// Show the foundry-wizard window, resetting state for a fresh run
 #[tauri::command]
 pub fn open_foundry_wizard(app: AppHandle) -> Result<(), String> {
@@ -2673,14 +2641,19 @@ pub fn close_foundry_wizard(
 /// Return the one curated engine used by normal mode.
 #[tauri::command]
 pub async fn wizard_list_available_models() -> Result<Vec<WizardModelInfo>, String> {
+    let manifest =
+        crate::engine_manifest::EngineManifest::shipped().map_err(|error| error.to_string())?;
+    let runtime = manifest
+        .runtime_for_current_arch()
+        .map_err(|error| error.to_string())?;
     Ok(vec![WizardModelInfo {
-        id: hy_mt_runtime::HY_MT_MODEL_ID.to_string(),
+        id: manifest.model.id.clone(),
         recommended: true,
-        hardware_tag: Some(if cfg!(target_arch = "aarch64") {
-            "ARM64 GPU".to_string()
-        } else {
-            "Windows GPU".to_string()
-        }),
+        hardware_tag: Some(format!(
+            "{} {}",
+            std::env::consts::ARCH,
+            runtime.acceleration
+        )),
         description: Some("Tencent HY-MT 1.5, tuned for fast subtitle translation.".to_string()),
         download_size: Some("About 1.1 GB".to_string()),
     }])
@@ -2693,19 +2666,20 @@ pub async fn wizard_download_model(
     model_id: String,
     cache_dir: Option<String>,
 ) -> Result<(), String> {
-    if model_id != hy_mt_runtime::HY_MT_MODEL_ID {
+    let manifest =
+        crate::engine_manifest::EngineManifest::shipped().map_err(|error| error.to_string())?;
+    if model_id != manifest.model.id {
         return Err("ENGINE_UNSUPPORTED_MODEL".to_string());
     }
 
     match hy_mt_installer::install(&app, cache_dir).await {
         Ok(paths) => {
-            let runtime = paths.managed_config();
+            let runtime = paths.managed_config(&manifest);
             let updated = {
                 let mut config = lock_or_recover(&state.config);
                 config.translation.enable_foundry_local = true;
                 config.translation.allow_mock_fallback = false;
-                config.translation.foundry_local.model =
-                    Some(hy_mt_runtime::HY_MT_MODEL_ID.to_string());
+                config.translation.foundry_local.model = Some(manifest.model.id.clone());
                 config.translation.foundry_local.endpoint_url =
                     Some(hy_mt_runtime::endpoint_url(&runtime));
                 config.translation.foundry_local.managed_runtime = Some(runtime);

@@ -33,7 +33,7 @@ machine-readable baseline. The largest and decomposition-owned hotspots are:
 
 | File | Ceiling | Reduction owner |
 |---|---:|---|
-| `src-tauri/src/commands.rs` | 2,889 | #31 |
+| `src-tauri/src/commands.rs` | 2,863 | #31 |
 | `src/scripts/main.js` | 2,138 | #33 |
 | `src-tauri/src/llm/foundry_local.rs` | 1,751 | #32 |
 | `src-tauri/src/llm/manager.rs` | 1,234 | #32 |

@@ -1,0 +1,102 @@
+{
+  "schemaVersion": 1,
+  "manifestId": "meowcal-hymt-engine-v1",
+  "engineVersion": "1.0.0",
+  "minimumAppVersion": "0.5.0",
+  "authenticity": {
+    "mode": "embeddedApplicationRelease",
+    "remoteRefresh": false,
+    "policy": "Manifest changes ship only inside a reviewed, signed Meowcal Sub application release."
+  },
+  "model": {
+    "id": "HY-MT1.5-1.8B-Q4_K_M",
+    "name": "Tencent HY-MT1.5 1.8B",
+    "quantization": "Q4_K_M",
+    "installDirectory": "hy-mt1.5-1.8b-q4",
+    "artifact": {
+      "fileName": "HY-MT1.5-1.8B-Q4_K_M.gguf",
+      "url": "https://huggingface.co/tencent/HY-MT1.5-1.8B-GGUF/resolve/main/HY-MT1.5-1.8B-Q4_K_M.gguf",
+      "sizeBytes": 1133080512,
+      "sha256": "4383ac0c3c8e476de98ff979c2a3f069f8c4fb385e7860cf2d28da896cc477c7",
+      "licenseId": "tencent-hy-community"
+    }
+  },
+  "runtimes": [
+    {
+      "id": "llama-b10155-opencl-adreno-arm64",
+      "architecture": "aarch64",
+      "acceleration": "opencl-adreno",
+      "installDirectory": "llama-b10155-opencl-adreno-arm64",
+      "archive": {
+        "fileName": "llama-b10155-bin-win-opencl-adreno-arm64.zip",
+        "url": "https://github.com/ggml-org/llama.cpp/releases/download/b10155/llama-b10155-bin-win-opencl-adreno-arm64.zip",
+        "sizeBytes": 12868798,
+        "sha256": "1b0ead2eec5489574dd6889390ee24c6c0cd8bd20d68cd4f6a28930c7ada9b07",
+        "licenseId": "llama-cpp-mit"
+      },
+      "executable": {
+        "relativePath": "llama-server.exe",
+        "sizeBytes": 9728,
+        "sha256": "8cbee8b90be86469a3597da85be8ed2a16791676bdcd95dc4788d134320b8d14"
+      }
+    },
+    {
+      "id": "llama-b10155-vulkan-x64",
+      "architecture": "x86_64",
+      "acceleration": "vulkan",
+      "installDirectory": "llama-b10155-vulkan-x64",
+      "archive": {
+        "fileName": "llama-b10155-bin-win-vulkan-x64.zip",
+        "url": "https://github.com/ggml-org/llama.cpp/releases/download/b10155/llama-b10155-bin-win-vulkan-x64.zip",
+        "sizeBytes": 33576473,
+        "sha256": "d9d6c72ab8922123b7fb040b4178105e96f15e296cc4b6c3153b938a1c7ff0b4",
+        "licenseId": "llama-cpp-mit"
+      },
+      "executable": {
+        "relativePath": "llama-server.exe",
+        "sizeBytes": 9216,
+        "sha256": "ab6a049eec02268e5a5fd240b74ef451170ab9a19f3ac7d830b9389dfc1b5b31"
+      }
+    }
+  ],
+  "requirements": {
+    "minimumWindowsBuild": 22000,
+    "minimumRamBytes": 8589934592,
+    "minimumFreeDiskBytes": 3221225472
+  },
+  "launch": {
+    "host": "127.0.0.1",
+    "preferredPort": 11436,
+    "portPolicy": "dynamicLoopback",
+    "contextSize": 2048,
+    "gpuLayers": 99,
+    "extraArgs": ["--jinja", "--no-webui"]
+  },
+  "rollback": {
+    "retainLastKnownGood": true,
+    "minimumEngineVersion": "1.0.0",
+    "compatibleEngineVersions": ["1.0.0"]
+  },
+  "licenses": [
+    {
+      "id": "tencent-hy-community",
+      "name": "Tencent HY Community License Agreement",
+      "url": "https://huggingface.co/tencent/HY-MT1.5-1.8B/blob/main/LICENSE",
+      "distributionReview": "requiredBeforeRelease"
+    },
+    {
+      "id": "llama-cpp-mit",
+      "name": "llama.cpp MIT License",
+      "url": "https://github.com/ggml-org/llama.cpp/blob/master/LICENSE",
+      "distributionReview": "recorded"
+    }
+  ],
+  "supportCodes": [
+    "ENGINE_MANIFEST_INVALID",
+    "ENGINE_UNSUPPORTED_ARCH",
+    "ENGINE_INCOMPATIBLE",
+    "ENGINE_DISK_SPACE",
+    "ENGINE_ARTIFACT_INTEGRITY",
+    "ENGINE_ROLLBACK_REJECTED"
+  ]
+}
