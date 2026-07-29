@@ -33,13 +33,7 @@ jobs:
 
       - name: Create placeholder resources for Tauri build
         shell: pwsh
-        run: |
-          # Tauri's build script validates resources exist, even for linting.
-          # Create placeholder files so the build succeeds in CI.
-          New-Item -ItemType Directory -Force -Path resources
-          New-Item -ItemType File -Force -Path resources/OverlayHost.exe
-          New-Item -ItemType File -Force -Path resources/placeholder.dll
-          New-Item -ItemType File -Force -Path resources/placeholder.pri
+        run: ../scripts/prepare-validation-resources.ps1
 
       - name: Check formatting
         run: cargo fmt --check
@@ -64,13 +58,7 @@ jobs:
 
       - name: Create placeholder resources for Tauri build
         shell: pwsh
-        run: |
-          # Tauri's build script validates resources exist, even for tests.
-          # Create placeholder files so the build succeeds in CI.
-          New-Item -ItemType Directory -Force -Path resources
-          New-Item -ItemType File -Force -Path resources/OverlayHost.exe
-          New-Item -ItemType File -Force -Path resources/placeholder.dll
-          New-Item -ItemType File -Force -Path resources/placeholder.pri
+        run: ../scripts/prepare-validation-resources.ps1
 
       - name: Run unit tests
         run: cargo test --lib
