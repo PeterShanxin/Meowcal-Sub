@@ -11,6 +11,17 @@ pub struct ManagedLocalRuntimeConfig {
 }
 
 impl FoundryLocalConfig {
+    pub fn effective_endpoint_url(&self) -> Option<String> {
+        if let Some(runtime) = self.managed_runtime.as_ref() {
+            return Some(crate::hy_mt_runtime::endpoint_url(runtime));
+        }
+        self.endpoint_url
+            .as_deref()
+            .map(str::trim)
+            .filter(|url| !url.is_empty())
+            .map(|url| url.trim_end_matches('/').to_string())
+    }
+
     pub fn is_translation_only_model(&self) -> bool {
         self.managed_runtime
             .as_ref()

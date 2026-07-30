@@ -196,12 +196,7 @@ impl FoundryLocalBackend {
             .timeout(Duration::from_millis(config.timeout_ms as u64))
             .build()
             .unwrap_or_default();
-        let configured_url = config
-            .endpoint_url
-            .as_deref()
-            .map(str::trim)
-            .filter(|url| !url.is_empty())
-            .map(|url| url.trim_end_matches('/').to_string());
+        let configured_url = config.effective_endpoint_url();
         let has_configured_url = configured_url.is_some();
         let configured_model = config.model.clone();
 
@@ -902,12 +897,7 @@ impl FoundryLocalBackend {
     }
 
     fn configured_endpoint_url(&self) -> Option<String> {
-        self.config
-            .endpoint_url
-            .as_deref()
-            .map(str::trim)
-            .filter(|url| !url.is_empty())
-            .map(|url| url.trim_end_matches('/').to_string())
+        self.config.effective_endpoint_url()
     }
 
     async fn send_chat_completion(
