@@ -4,6 +4,8 @@ use serde::Serialize;
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct TranslationPayload {
+    pub session_id: u64,
+    pub capture_id: u64,
     pub original: String,
     pub translated: String,
     pub backend_used: String,

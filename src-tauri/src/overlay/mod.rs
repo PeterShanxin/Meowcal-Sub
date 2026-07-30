@@ -291,7 +291,7 @@ impl OverlayManager {
     }
 
     pub fn set_text(&self, text: &str) {
-        debug!("Updating overlay text: {}", text);
+        debug!("Updating overlay text ({} chars)", text.chars().count());
     }
 
     pub fn is_visible(&self) -> bool {

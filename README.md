@@ -21,9 +21,9 @@ release gate remain open.
 - Known correctness and lifecycle work is tracked by
   [Product epic #26](https://github.com/PeterShanxin/Meowcal-Sub/issues/26).
 
-Do not use this beta for sensitive material unless you also accept that debug
-logs can contain OCR and translated text. Production privacy-safe logging is
-part of the redesign.
+Production logs record support codes, stage timings, IDs, and character counts,
+not captured or translated subtitle text. Review any support bundle before
+sharing because configuration and environment metadata are still included.
 
 ## Use the current beta
 
@@ -147,7 +147,8 @@ Session logs are written under:
 
 When reporting a problem, include the app commit/version, Windows build,
 architecture, exact reproduction steps, and the relevant log. Review logs
-before sharing because the current beta can record OCR and translated text.
+before sharing because they include configuration and environment metadata
+even though subtitle text is excluded.
 
 Common build failures:
 

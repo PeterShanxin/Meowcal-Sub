@@ -1,19 +1,3 @@
-// =============================================================================
-// MAIN.JS - Application Entry Point (JavaScript)
-// =============================================================================
-// This is the main JavaScript file that runs when the app loads.
-// 
-// It handles:
-// 1. Initializing the UI
-// 2. Communicating with the Rust backend via Tauri
-// 3. Updating the UI based on app state
-//
-// TAURI BASICS:
-// - `invoke('command_name', { args })` calls a Rust function
-// - Results come back as Promises, so we use async/await
-// - The `__TAURI__` global is provided by Tauri
-// =============================================================================
-
 // Wait for the page to fully load before running our code
 document.addEventListener('DOMContentLoaded', () => {
     console.log('🐱 Meowcal Sub UI loaded!');
@@ -32,6 +16,7 @@ const appState = {
     captureRegion: null,
     settings: null,
     systemInfo: null,
+    lastPipelinePosition: null,
     foundryAutoProbe: {
         inFlight: false,
         lastAttemptMs: 0,
@@ -1196,10 +1181,15 @@ function handleClearRegion() {
 async function setupTranslationUpdateListener() {
     try {
         await TauriBridge.event.listen('translation-update', (event) => {
-            const { original, translated, timestamp } = event.payload;
+            if (!window.PipelineUpdate.shouldAccept(appState.lastPipelinePosition, event.payload)) {
+                console.debug('Discarded stale translation update');
+                return;
+            }
+            appState.lastPipelinePosition =
+                window.PipelineUpdate.position(event.payload) || appState.lastPipelinePosition;
+            const { translated, timestamp } = event.payload;
             console.log('🌐 Translation update:', {
-                original,
-                translated,
+                translatedCharacters: String(translated || '').length,
                 timestamp: new Date(timestamp).toLocaleTimeString(),
             });
 

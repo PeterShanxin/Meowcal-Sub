@@ -1,17 +1,3 @@
-// =============================================================================
-// OVERLAY.JS - Overlay Window Controller
-// =============================================================================
-// This script controls the overlay window which displays:
-// 1. A border around the capture region (with resize handles)
-// 2. Translated subtitles below/above the capture region
-//
-// Features:
-// - Smart click-through management (clickable when hovered, click-through otherwise)
-// - Capture frame auto-fades after inactivity, reappears on hover
-// - 8 resize handles for live region resizing
-// - Drag to reposition when hovering inside the frame
-// =============================================================================
-
 // Wait for Tauri to be ready
 document.addEventListener('DOMContentLoaded', () => {
     console.log('🎬 Overlay loaded!');
@@ -37,6 +23,7 @@ const overlayState = {
     textColor: '#FFFFFF',
     backgroundColor: 'rgba(0, 0, 0, 0.75)',
     showDiagnostics: false, // Whether to show the diagnostics panel
+    lastPipelinePosition: null,
     settingsOpen: false,
     isDragging: false,
     isResizing: false,
@@ -643,6 +630,16 @@ async function setupEventListeners(elements) {
 
         // Translation updates
         await window.__TAURI__.event.listen('translation-update', (event) => {
+            if (!window.PipelineUpdate.shouldAccept(
+                overlayState.lastPipelinePosition,
+                event.payload
+            )) {
+                console.debug('Discarded stale overlay update');
+                return;
+            }
+            overlayState.lastPipelinePosition =
+                window.PipelineUpdate.position(event.payload) ||
+                overlayState.lastPipelinePosition;
             const { translated, timestamp, backendUsed, warnings, displayState } = event.payload;
             const presentation = getTranslationPresentation(displayState, backendUsed);
             console.log('🌐 Translation state:', presentation.state);
