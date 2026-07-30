@@ -10,6 +10,7 @@ $env:CARGO_TERM_COLOR = "always"
 $repositoryRoot = Split-Path -Parent $PSScriptRoot
 $resourceScript = Join-Path $PSScriptRoot "prepare-validation-resources.ps1"
 $contractTest = Join-Path $PSScriptRoot "tests\verify.Tests.ps1"
+$engineSupportTest = Join-Path $PSScriptRoot "tests\engine-support.Tests.ps1"
 $rustDirectory = Join-Path $repositoryRoot "src-tauri"
 
 function Invoke-CargoStep {
@@ -47,6 +48,11 @@ function Invoke-NpmStep {
 if ($env:MEOWCAL_VERIFY_CONTRACT_ACTIVE -ne "1") {
     Write-Host "==> Verification contract tests" -ForegroundColor Cyan
     & pwsh -NoProfile -File $contractTest
+    if ($LASTEXITCODE -ne 0) {
+        exit $LASTEXITCODE
+    }
+    Write-Host "==> Engine support contract tests" -ForegroundColor Cyan
+    & pwsh -NoProfile -File $engineSupportTest
     if ($LASTEXITCODE -ne 0) {
         exit $LASTEXITCODE
     }

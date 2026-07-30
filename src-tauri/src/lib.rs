@@ -24,8 +24,11 @@ pub mod overlay;
 
 /// App configuration - settings like language preferences
 pub mod config;
+pub mod engine_artifact_io;
 pub mod engine_config;
+pub mod engine_install_transaction;
 pub mod engine_manifest;
+pub mod engine_preflight;
 
 /// Tauri commands - functions that JavaScript can call
 pub mod commands;
