@@ -279,22 +279,12 @@ impl FoundryLocalBackend {
                     Ok(resp)
                 } else {
                     let status = resp.status();
-                    let body = resp.text().await.unwrap_or_default();
-                    Err(LlmError::ApiError(format!(
-                        "API error {}: {}",
-                        status,
-                        body.chars().take(200).collect::<String>()
-                    )))
+                    Err(LlmError::ApiError(format!("API error {status}")))
                 }
             }
             Ok(resp) => {
                 let status = resp.status();
-                let body = resp.text().await.unwrap_or_default();
-                Err(LlmError::ApiError(format!(
-                    "API error {}: {}",
-                    status,
-                    body.chars().take(200).collect::<String>()
-                )))
+                Err(LlmError::ApiError(format!("API error {status}")))
             }
             Err(e) => Err(LlmError::ApiError(format!("Request failed: {}", e))),
         }
@@ -338,24 +328,14 @@ impl FoundryLocalBackend {
                     Ok(resp)
                 } else {
                     let status = resp.status();
-                    let body = resp.text().await.unwrap_or_default();
-                    warn!("Foundry Local returned error {}: {}", status, body);
-                    Err(LlmError::ApiError(format!(
-                        "API error {}: {}",
-                        status,
-                        body.chars().take(200).collect::<String>()
-                    )))
+                    warn!("Local translation endpoint returned HTTP {}", status);
+                    Err(LlmError::ApiError(format!("API error {status}")))
                 }
             }
             Ok(resp) => {
                 let status = resp.status();
-                let body = resp.text().await.unwrap_or_default();
-                warn!("Foundry Local returned error {}: {}", status, body);
-                Err(LlmError::ApiError(format!(
-                    "API error {}: {}",
-                    status,
-                    body.chars().take(200).collect::<String>()
-                )))
+                warn!("Local translation endpoint returned HTTP {}", status);
+                Err(LlmError::ApiError(format!("API error {status}")))
             }
             Err(e) => {
                 warn!("Foundry Local request failed: {}", e);
@@ -1657,7 +1637,7 @@ impl TranslatorBackend for FoundryLocalBackend {
         debug!("Sending translation request to Foundry Local: {}", url);
         info!(
             target: "translation_io",
-            source_text = %text,
+            source_chars = text.chars().count(),
             source_lang = %source_language,
             target_lang = %target_language,
             model = %request.model,
@@ -1717,7 +1697,6 @@ impl TranslatorBackend for FoundryLocalBackend {
         );
         info!(
             target: "translation_io",
-            translated_text = %translated,
             source_chars = text.chars().count(),
             translated_chars = translated.chars().count(),
             "Translation response"

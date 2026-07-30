@@ -13,6 +13,7 @@ export default defineConfig({
         "scripts/serve-frontend.mjs",
         "src/scripts/backend-status.js",
         "src/scripts/ocr-language-tags.js",
+        "src/scripts/pipeline-update.js",
         "src/scripts/translation-display.js",
         "src/scripts/wizard-state.js",
       ],

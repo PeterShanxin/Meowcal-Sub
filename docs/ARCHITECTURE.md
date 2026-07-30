@@ -46,18 +46,18 @@ Source OCR is never represented as successful translation.
 
 ## Ownership boundaries
 
-| Boundary | Current owner | Target owner and rule |
-|---|---|---|
-| Tauri commands | `src-tauri/src/commands.rs` | Thin adapters only; application services own behavior |
-| Browser routes | `src-tauri/src/http_server.rs` | Adapter parity with supported Tauri contracts; explicit `501` for native-only behavior |
-| App/window lifecycle | `src-tauri/src/main.rs`, `commands.rs` | One lifecycle service owns restore/show ordering, tray, and shutdown |
-| Persisted configuration | `src-tauri/src/config.rs` | One versioned config service owns defaults, validation, migration, and writes |
-| Capture and OCR | `capture/`, `ocr/`, session code in `commands.rs` | Separate capture/OCR services; pipeline orchestrator owns sequencing |
-| Translation | `llm/manager.rs` | Pipeline service owns attempts and typed outcomes; validators do not own transport |
-| Engine runtime | `llm/foundry_local.rs`, command helpers | Curated engine service owns manifest, install, process, health, repair, rollback |
-| Native overlay IPC | `ipc/`, `overlay/`, `commands.rs` | `ipc/protocol.rs` owns payload schema; adapters do not redefine it |
-| Main/setup UI | `src/scripts/main.js`, `wizard.js` | Bootstrap and DOM adapters around testable setup/session presentation modules |
-| Overlay/selector UI | `overlay.js`, `selector.js` | Separate geometry/state owners with thin bridge and DOM adapters |
+| Boundary                | Current owner                                     | Target owner and rule                                                                  |
+| ----------------------- | ------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| Tauri commands          | `src-tauri/src/commands.rs`                       | Thin adapters only; application services own behavior                                  |
+| Browser routes          | `src-tauri/src/http_server.rs`                    | Adapter parity with supported Tauri contracts; explicit `501` for native-only behavior |
+| App/window lifecycle    | `src-tauri/src/main.rs`, `commands.rs`            | One lifecycle service owns restore/show ordering, tray, and shutdown                   |
+| Persisted configuration | `src-tauri/src/config.rs`                         | One versioned config service owns defaults, validation, migration, and writes          |
+| Capture and OCR         | `capture/`, `ocr/`, session code in `commands.rs` | Separate capture/OCR services; pipeline orchestrator owns sequencing                   |
+| Translation             | `llm/manager.rs`                                  | Pipeline service owns attempts and typed outcomes; validators do not own transport     |
+| Engine runtime          | `llm/foundry_local.rs`, command helpers           | Curated engine service owns manifest, install, process, health, repair, rollback       |
+| Native overlay IPC      | `ipc/`, `overlay/`, `commands.rs`                 | `ipc/protocol.rs` owns payload schema; adapters do not redefine it                     |
+| Main/setup UI           | `src/scripts/main.js`, `wizard.js`                | Bootstrap and DOM adapters around testable setup/session presentation modules          |
+| Overlay/selector UI     | `overlay.js`, `selector.js`                       | Separate geometry/state owners with thin bridge and DOM adapters                       |
 
 ## Shared contracts
 
@@ -81,6 +81,10 @@ Shared contracts have one owner before parallel decomposition begins:
   `package.json` and `src-tauri/Cargo.toml` are synchronized mirrors.
 - Display state: the pipeline owns translated/source-only/failure semantics.
   The overlay renders the supplied state and cannot relabel OCR as translation.
+- Pipeline ordering: `pipeline_session.rs` owns monotonic session/capture IDs.
+  Region changes and stop requests invalidate in-flight work; Rust and frontend
+  consumers reject stale results. Completed frames log privacy-safe
+  capture/OCR/model/overlay/total timings without subtitle text.
 
 ## Dependency direction
 

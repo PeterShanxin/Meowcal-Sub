@@ -1,18 +1,3 @@
-// =============================================================================
-// COMMANDS.RS - Tauri IPC Commands
-// =============================================================================
-// These are functions that JavaScript can call from the web UI!
-//
-// The #[tauri::command] attribute is magic - it automatically:
-// 1. Converts JavaScript arguments to Rust types
-// 2. Converts Rust return values to JavaScript types
-// 3. Handles errors gracefully
-//
-// In JavaScript, you call these like:
-//   const result = await invoke('get_settings');
-//   await invoke('save_settings', { settings: { ... } });
-// =============================================================================
-
 use crate::capture;
 use crate::config::{save_config, AppConfig, CaptureRegion};
 use crate::event_payloads::{CaptureStatusPayload, TranslationPayload};
@@ -27,6 +12,7 @@ use crate::llm::{
 };
 use crate::ocr::{PreprocessingConfig, WindowsOcr};
 use crate::overlay;
+use crate::pipeline_session::PipelineClock;
 use crate::sync_utils::lock_or_recover;
 use crate::wizard_contracts::WizardTranslationTest;
 use crate::{hy_mt_installer, hy_mt_runtime};
@@ -94,6 +80,8 @@ pub struct AppState {
     pub stop_signal: Mutex<Option<watch::Sender<bool>>>,
     /// Diagnostics for translation backends
     pub translation_diagnostics: Arc<Mutex<TranslationDiagnosticsState>>,
+    /// Monotonic session/capture identities used to suppress stale async results.
+    pub pipeline_clock: Arc<PipelineClock>,
 
     /// Latest "desktop snapshot" for the area selector window.
     ///
@@ -113,6 +101,7 @@ impl Default for AppState {
             capture_scale_factor: Mutex::new(1.0),
             stop_signal: Mutex::new(None),
             translation_diagnostics: Arc::new(Mutex::new(TranslationDiagnosticsState::default())),
+            pipeline_clock: Arc::new(PipelineClock::default()),
             selector_snapshot: Mutex::new(None),
         }
     }
@@ -1187,6 +1176,7 @@ pub fn set_capture_region(
 
     let mut capture_scale_factor = lock_or_recover(&state.capture_scale_factor);
     *capture_scale_factor = scale_factor;
+    state.pipeline_clock.invalidate_capture();
 
     Ok(())
 }
@@ -1601,21 +1591,11 @@ impl Drop for CompressionFlagGuard {
     }
 }
 
-/// Start the translation process
-///
-/// This will:
-/// 1. Capture the screen region periodically
-/// 2. Run OCR on each capture
-/// 3. Translate the recognized text
-/// 4. Send results back to the overlay UI via events
-///
-/// Called from JavaScript: `await invoke('start_translation');`
 #[tauri::command]
 pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Result<(), String> {
     info!(">>> START_TRANSLATION COMMAND CALLED <<<");
     info!("Starting translation...");
 
-    // Get the capture region
     let region = {
         let region_guard = lock_or_recover(&state.capture_region);
         match *region_guard {
@@ -1624,7 +1604,6 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
         }
     };
 
-    // Mark as running only after we know we have a region (prevents "stuck running" on early return).
     {
         let mut is_running = lock_or_recover(&state.is_running);
         if *is_running {
@@ -1632,8 +1611,9 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
         }
         *is_running = true;
     }
+    let pipeline_clock = Arc::clone(&state.pipeline_clock);
+    let session_id = pipeline_clock.begin_session();
 
-    // Get the capture scale factor (logical -> physical pixels)
     let scale_factor = {
         let scale_guard = lock_or_recover(&state.capture_scale_factor);
         *scale_guard
@@ -1644,7 +1624,6 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
         scale_factor, region, capture_region
     );
 
-    // Get settings from config
     let (interval_ms, source_language, target_language, translation_config) = {
         let config = lock_or_recover(&state.config);
         (
@@ -1655,7 +1634,6 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
         )
     };
 
-    // Extract OCR-specific settings
     let ocr_confidence_threshold = translation_config.ocr.confidence_threshold;
     let ocr_preprocessing_enabled = translation_config.ocr.preprocessing_enabled;
     let ocr_grayscale = translation_config.ocr.grayscale;
@@ -1665,16 +1643,10 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
     let ocr_multi_pass_count = translation_config.ocr.multi_pass_count;
     let ocr_validation_strictness = translation_config.ocr.validation_strictness;
 
-    // Calculate effective confidence threshold: use explicit threshold if set,
-    // otherwise fall back to strictness-based default.
-    // Using max() ensures strictness acts as a minimum floor - the effective
-    // threshold is always at least as strict as the strictness setting.
     let strictness_threshold = ocr_validation_strictness.threshold();
     let effective_confidence_threshold = if ocr_confidence_threshold > 0.0 {
-        // If user explicitly set a threshold, use that (floored by strictness)
         ocr_confidence_threshold.max(strictness_threshold)
     } else {
-        // Default to strictness-based threshold
         strictness_threshold
     };
 
@@ -1694,24 +1666,18 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
     let context_enabled = translation_config.enable_context_aware;
     let translation_config_for_summary = translation_config.clone();
 
-    // Create a stop signal channel
-    // The sender stays here, the receiver goes to the spawned task
     let (stop_tx, mut stop_rx) = watch::channel(false);
 
-    // Store the sender so stop_translation can use it
     {
         let mut stop_signal = lock_or_recover(&state.stop_signal);
         *stop_signal = Some(stop_tx);
     }
-
-    // Note: is_running is already set to true above (atomic check-and-set)
 
     info!(
         "✅ Translation started! Interval: {}ms, Target: {}",
         interval_ms, target_language
     );
 
-    // Show the overlay and send the capture region to it (legacy WebView overlay)
     if let Err(e) = overlay::show_overlay(&app) {
         warn!("⚠️ Failed to show overlay: {}", e);
     }
@@ -1719,16 +1685,13 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
         warn!("⚠️ Failed to update overlay region: {}", e);
     }
 
-    // Send messages to WinUI3 OverlayHost
     send_overlay_message(&app, IpcMessage::new("Overlay.Show")).await;
 
-    // Send initial region if set
     let payload = SetRegionPayload {
         region: RegionData::from(&region),
     };
     send_overlay_message(&app, IpcMessage::with_payload("Overlay.SetRegion", payload)).await;
 
-    // Send initial settings to overlay
     let settings_payload = {
         let config = lock_or_recover(&state.config);
         SettingsSyncPayload {
@@ -1741,7 +1704,6 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
     )
     .await;
 
-    // Initialize translation backend manager
     let diagnostics = state.translation_diagnostics.clone();
     let translation_manager = Arc::new(TranslationManager::new(
         translation_config,
@@ -1752,18 +1714,12 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
     let context_generation = Arc::new(AtomicU64::new(0));
     let last_summary_scheduled_ms = Arc::new(AtomicU64::new(0));
 
-    // Clone app handle for use inside the async block to access state
     let app_for_region = app.clone();
 
-    // Spawn the background translation loop with panic monitoring.
-    // If the task panics, we log it and the scopeguard (defer!) still runs for cleanup.
     let translation_handle = tokio::spawn(async move {
-        // Scope guard ensures is_running is reset even if the task panics (in debug builds).
-        // This replaces the manual reset_running_state() calls with RAII-style cleanup.
         let app_for_guard = app.clone();
         defer! {
             let state = app_for_guard.state::<AppState>();
-            // Use lock_or_recover to ensure cleanup succeeds even if mutex is poisoned
             *lock_or_recover(&state.is_running) = false;
             capture::close_capture_session();
             info!("Translation loop cleanup complete");
@@ -1772,8 +1728,6 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
         info!("Translation loop started");
         info!("Initializing OCR engine (language={})", source_language);
 
-        // Ensure WinRT is initialized on this worker thread before calling OCR/capture APIs.
-        // This prevents "nothing happens" failures when the runtime isn't set up on the thread.
         #[cfg(target_os = "windows")]
         {
             use windows::Win32::System::WinRT::{RoInitialize, RO_INIT_MULTITHREADED};
@@ -1782,7 +1736,6 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
             }
         }
 
-        // Initialize OCR engine using the configured source language
         let ocr = match WindowsOcr::with_language(&source_language) {
             Ok(o) => {
                 info!("OCR initialized with language: {}", source_language);
@@ -1809,14 +1762,12 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
                     Ok(o) => o,
                     Err(e) => {
                         warn!("❌ Failed to initialize OCR: {}", e);
-                        // Scopeguard handles cleanup automatically on early return
                         return;
                     }
                 }
             }
         };
 
-        // Keep track of last OCR text to avoid duplicate processing
         let mut last_text = String::new();
         let mut last_backend_used = BackendId::Mock;
         let mut last_attempt_at = Instant::now()
@@ -1824,7 +1775,6 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
             .unwrap_or_else(Instant::now);
         let mut last_capture_region: Option<CaptureRegion> = None;
 
-        // Initialize capture session state
         let use_persistent = match capture::init_capture_session() {
             Ok(_) => {
                 info!("✅ Persistent capture session initialized");
@@ -1841,13 +1791,11 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
         let mut capture_state = CaptureSessionState::new(use_persistent);
 
         loop {
-            // Check if we should stop
             if *stop_rx.borrow() {
                 info!("🛑 Stop signal received, exiting loop");
                 break;
             }
 
-            // Also check for channel changes (non-blocking)
             if stop_rx.has_changed().unwrap_or(false) {
                 let _ = stop_rx.borrow_and_update();
                 if *stop_rx.borrow() {
@@ -1856,12 +1804,10 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
                 }
             }
 
-            // Re-read the capture region from state (allows live resize/reposition)
             let current_capture_region = {
                 let state = app_for_region.state::<AppState>();
                 let region_opt = *lock_or_recover(&state.capture_region);
                 let scale = *lock_or_recover(&state.capture_scale_factor);
-                // Mutex guards are dropped here before any await
                 match region_opt {
                     Some(r) => {
                         let scaled = r.scaled(scale);
@@ -1872,8 +1818,6 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
                                 .clamp_to_bounds(screen_width, screen_height)
                                 .unwrap_or(scaled)
                         } else {
-                            // Keep the original region if it's completely outside the primary screen.
-                            // This preserves multi-monitor behavior for GDI fallback captures.
                             scaled
                         }
                     }
@@ -1903,8 +1847,10 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
             last_capture_region = Some(current_capture_region);
 
             debug!("📸 Capturing region: {:?}", current_capture_region);
+            let frame_started = Instant::now();
+            let token = pipeline_clock.next_capture(session_id);
 
-            // Step 1: Capture screen region with session fallback handling
+            let capture_started = Instant::now();
             let capture_result =
                 match try_capture(&current_capture_region, &mut capture_state, &app) {
                     CaptureAttemptResult::Success(result) => result,
@@ -1913,16 +1859,23 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
                         continue;
                     }
                 };
+            let capture_ms = capture_started.elapsed().as_millis() as u64;
 
-            // If stop was requested while we were capturing, don't do any more work or emit updates.
             if *stop_rx.borrow() {
                 info!("🛑 Stop signal received, aborting current frame");
                 break;
             }
+            if !pipeline_clock.is_current(token) {
+                info!(
+                    session_id,
+                    capture_id = token.capture_id,
+                    "Discarding stale capture before OCR"
+                );
+                continue;
+            }
 
-            // Step 2: Run OCR
+            let ocr_started = Instant::now();
             let ocr_result = if ocr_enable_multi_pass {
-                // Multi-pass OCR: run multiple passes with different preprocessing and pick best
                 match ocr
                     .recognize_multi_pass(
                         &capture_result.data,
@@ -1978,39 +1931,41 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
                     }
                 }
             };
+            let ocr_ms = ocr_started.elapsed().as_millis() as u64;
 
-            // If stop was requested while OCR was running, skip translation and exit cleanly.
-            if *stop_rx.borrow() {
-                info!("🛑 Stop signal received, aborting current frame");
-                break;
+            if *stop_rx.borrow() || !pipeline_clock.is_current(token) {
+                info!(
+                    session_id,
+                    capture_id = token.capture_id,
+                    "Discarding stale capture after OCR"
+                );
+                if *stop_rx.borrow() {
+                    break;
+                }
+                continue;
             }
 
-            // Skip if empty or same as last frame
             if ocr_result.is_empty() {
                 debug!("[FILTER: empty] No text detected, skipping");
                 tokio::time::sleep(Duration::from_millis(interval_ms as u64)).await;
                 continue;
             }
 
-            // Get confidence score from OCR result
             let confidence = ocr_result.confidence.unwrap_or(0.0);
             let current_text = ocr_result.text.trim().to_string();
 
-            // Verbose OCR logging: show first 100 chars of OCR output
-            let text_preview: String = current_text.chars().take(100).collect();
             debug!(
-                "OCR output ({} chars, confidence: {:.2}): {:?}",
+                "OCR output accepted for filtering ({} chars, confidence: {:.2})",
                 current_text.chars().count(),
-                confidence,
-                text_preview
+                confidence
             );
 
-            // Confidence threshold check - skip if below threshold
             if confidence < effective_confidence_threshold {
-                let preview: String = current_text.chars().take(40).collect();
                 debug!(
-                    "[FILTER: low_confidence] ({:.2} < {:.2}): {:?}",
-                    confidence, effective_confidence_threshold, preview
+                    "[FILTER: low_confidence] ({:.2} < {:.2}, {} chars)",
+                    confidence,
+                    effective_confidence_threshold,
+                    current_text.chars().count()
                 );
                 tokio::time::sleep(Duration::from_millis(interval_ms as u64)).await;
                 continue;
@@ -2026,16 +1981,11 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
                 continue;
             }
 
-            // Additional garbage detection: skip OCR artifacts from credits, logos,
-            // and scrambled character recognition that would cause hallucinations.
-            // Filter reason: untranslatable text
             if crate::llm::is_untranslatable_text(&current_text) {
-                let preview: String = current_text.chars().take(40).collect();
                 debug!(
-                    "[FILTER: untranslatable] OCR text ({} chars, confidence: {:.2}): {:?}",
+                    "[FILTER: untranslatable] OCR text ({} chars, confidence: {:.2})",
                     current_text.chars().count(),
-                    confidence,
-                    preview
+                    confidence
                 );
                 tokio::time::sleep(Duration::from_millis(interval_ms as u64)).await;
                 continue;
@@ -2055,8 +2005,6 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
                     continue;
                 }
 
-                // If we fell back to passthrough last time, retry occasionally so we can recover
-                // once the LLM backend becomes ready (avoid spamming requests every frame).
                 if now.duration_since(last_attempt_at)
                     < Duration::from_millis(MOCK_RETRY_COOLDOWN_MS)
                 {
@@ -2069,8 +2017,6 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
                     continue;
                 }
 
-                // Cooldown expired: allow a retry even if context dedup would normally skip this
-                // line (otherwise we can get stuck in mock mode until OCR text changes).
                 force_retry_duplicate = true;
             }
 
@@ -2092,22 +2038,32 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
             last_attempt_at = now;
             info!("📝 OCR detected ({} chars)", current_text.chars().count());
 
-            // Step 3: Translate via backend manager with fallback
-            // Get context prompt if available
             let context_prompt = translation_manager.get_context_prompt();
 
-            // Update subtitle context cache AFTER building the context prompt so we don't include
-            // the current OCR line in the "recent lines" block (it will be translated separately).
             translation_manager.record_ocr_line(&current_text);
 
-            let outcome = translation_manager
-                .translate_with_context(
-                    &current_text,
-                    &source_language,
-                    &target_language,
-                    context_prompt.as_deref(),
-                )
-                .await;
+            let model_started = Instant::now();
+            let translation = translation_manager.translate_with_context(
+                &current_text,
+                &source_language,
+                &target_language,
+                context_prompt.as_deref(),
+            );
+            let outcome = tokio::select! {
+                outcome = translation => outcome,
+                changed = stop_rx.changed() => {
+                    if changed.is_ok() && *stop_rx.borrow() {
+                        info!(
+                            session_id,
+                            capture_id = token.capture_id,
+                            "Cancelled in-flight translation"
+                        );
+                        break;
+                    }
+                    continue;
+                }
+            };
+            let model_ms = model_started.elapsed().as_millis() as u64;
             let TranslationOutcome {
                 translated,
                 backend_used,
@@ -2116,9 +2072,16 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
             } = outcome;
 
             // If stop was requested while the translation backend was running, don't emit results.
-            if *stop_rx.borrow() {
-                info!("🛑 Stop signal received, discarding in-flight translation result");
-                break;
+            if *stop_rx.borrow() || !pipeline_clock.is_current(token) {
+                info!(
+                    session_id,
+                    capture_id = token.capture_id,
+                    "Discarding stale in-flight translation result"
+                );
+                if *stop_rx.borrow() {
+                    break;
+                }
+                continue;
             }
 
             last_backend_used = backend_used;
@@ -2242,6 +2205,7 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
             );
 
             // Step 4: Emit event to frontend
+            let overlay_started = Instant::now();
             let timestamp = SystemTime::now()
                 .duration_since(UNIX_EPOCH)
                 .unwrap_or_default()
@@ -2251,6 +2215,8 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
             let backend_str = backend_used.as_str().to_string();
 
             let payload = TranslationPayload {
+                session_id,
+                capture_id: token.capture_id,
                 original: current_text.clone(),
                 translated: translated.clone(),
                 backend_used: backend_str.clone(),
@@ -2279,8 +2245,18 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
                 )
                 .await;
             }
+            let overlay_ms = overlay_started.elapsed().as_millis() as u64;
+            info!(
+                session_id,
+                capture_id = token.capture_id,
+                capture_ms,
+                ocr_ms,
+                model_ms,
+                overlay_ms,
+                total_ms = frame_started.elapsed().as_millis() as u64,
+                "pipeline_frame_complete"
+            );
 
-            // Wait for next iteration
             tokio::time::sleep(Duration::from_millis(interval_ms as u64)).await;
         }
 
@@ -2288,19 +2264,23 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
             .duration_since(UNIX_EPOCH)
             .unwrap_or_default()
             .as_millis() as u64;
-        let _ = app.emit(
-            "translation-update",
-            TranslationPayload {
-                original: String::new(),
-                translated: String::new(),
-                backend_used: BackendId::Mock.as_str().to_string(),
-                warnings: Vec::new(),
-                display_state: TranslationDisplayState::Stopped,
-                timestamp: stopped_timestamp,
-            },
-        );
+        if pipeline_clock.is_session_current(session_id) {
+            let stopped_token = pipeline_clock.next_capture(session_id);
+            let _ = app.emit(
+                "translation-update",
+                TranslationPayload {
+                    session_id,
+                    capture_id: stopped_token.capture_id,
+                    original: String::new(),
+                    translated: String::new(),
+                    backend_used: BackendId::Mock.as_str().to_string(),
+                    warnings: Vec::new(),
+                    display_state: TranslationDisplayState::Stopped,
+                    timestamp: stopped_timestamp,
+                },
+            );
+        }
 
-        // Scopeguard handles cleanup: close_capture_session() and is_running reset
         info!("Translation loop ended");
     });
 
@@ -2341,6 +2321,7 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
 #[tauri::command]
 pub async fn stop_translation(state: State<'_, AppState>, app: AppHandle) -> Result<(), String> {
     info!("Stopping translation...");
+    let stopped_session_id = state.pipeline_clock.invalidate_session();
 
     // Send the stop signal
     {
@@ -2376,6 +2357,22 @@ pub async fn stop_translation(state: State<'_, AppState>, app: AppHandle) -> Res
     } else {
         warn!("⚠️ Overlay window not found");
     }
+    let _ = app.emit(
+        "translation-update",
+        TranslationPayload {
+            session_id: stopped_session_id,
+            capture_id: 0,
+            original: String::new(),
+            translated: String::new(),
+            backend_used: BackendId::Mock.as_str().to_string(),
+            warnings: Vec::new(),
+            display_state: TranslationDisplayState::Stopped,
+            timestamp: SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_millis() as u64,
+        },
+    );
 
     info!("✅ Translation stopped!");
     Ok(())
