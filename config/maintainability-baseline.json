@@ -14,7 +14,7 @@
     "src-tauri/src/config.rs": 625,
     "src-tauri/src/http_server.rs": 730,
     "src-tauri/src/llm/context.rs": 732,
-    "src-tauri/src/llm/foundry_local.rs": 1751,
+    "src-tauri/src/llm/foundry_local.rs": 1741,
     "src-tauri/src/llm/manager.rs": 1234,
     "src-tauri/src/llm/prompt_router.rs": 471,
     "src-tauri/src/main.rs": 582,
