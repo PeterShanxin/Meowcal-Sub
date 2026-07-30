@@ -6,8 +6,9 @@ a floating overlay.
 
 Tencent HY-MT is the only supported translation engine in normal mode. The
 current MVP provides app-managed download, integrity verification, startup,
-health checks, repair, shutdown, and a real sample translation. Rollback,
-upgrade recovery, x64 evidence, and the full episode release gate remain open.
+health checks, repair, transactional promotion, last-known-good rollback,
+shutdown, and a real sample translation. x64 evidence and the full episode
+release gate remain open.
 
 ## Status
 
@@ -34,6 +35,18 @@ part of the redesign.
 
 If setup reports a support code, use **Install / Repair** and retain the code
 when filing a problem.
+
+The normal setup stays inside the app. For unattended recovery or support:
+
+```powershell
+.\scripts\support-engine.ps1 -Action InstallRepair -Unattended
+.\scripts\support-engine.ps1 -Action Verify
+.\scripts\support-engine.ps1 -Action CollectLogs
+```
+
+The support script uses the same embedded manifest, sizes, SHA-256 hashes,
+architecture selection, preflight requirements, and rollback layout as the
+app. It is not an alternative model-selection interface.
 
 ## Development prerequisites
 
@@ -84,9 +97,9 @@ From a clean checkout:
 ```
 
 This is the command used by contributors and split across the current GitHub
-jobs. It verifies Rust formatting, lint, and tests; frontend formatting, lint,
-and unit tests; the real browser-to-Rust health/settings bridge; and the locked
-frontend dependency graph.
+jobs. It verifies Rust formatting, lint, and tests; the engine support-script
+contract; frontend formatting, lint, and unit tests; the real browser-to-Rust
+health/settings bridge; and the locked frontend dependency graph.
 
 The browser smoke does not prove screen capture, Windows OCR, the native
 selector or overlay, tray behavior, installer behavior, or DPI/window

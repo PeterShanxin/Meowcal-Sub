@@ -110,8 +110,10 @@ windows = { version = "0.61", features = [
 
     # File system APIs (disk space detection for wizard)
     "Win32_Storage_FileSystem",
+    "Win32_System_SystemInformation",
 ] }
 windows-core = "0.61"      # Core Windows types
+windows-version = "0.1"
 
 # --- Image Processing ---
 # For OCR image preprocessing (grayscale, contrast enhancement)

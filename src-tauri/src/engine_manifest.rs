@@ -78,6 +78,15 @@ pub enum Architecture {
     X86_64,
 }
 
+impl Architecture {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Aarch64 => "aarch64",
+            Self::X86_64 => "x86_64",
+        }
+    }
+}
+
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SystemRequirements {

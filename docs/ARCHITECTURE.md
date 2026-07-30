@@ -72,9 +72,11 @@ Shared contracts have one owner before parallel decomposition begins:
   `tauri-bridge.js` is the single frontend transport adapter. A command or event
   change updates Rust, bridge mapping, browser parity or explicit limitation,
   and contract tests in the same pull request.
-- Engine state: the curated engine service will own one versioned lifecycle
-  state. UI modules render that state and never infer readiness from process
-  names, ports, or model IDs.
+- Engine install state: `engine_install_transaction.rs` owns the versioned
+  active/last-known-good record, candidate promotion, interrupted-install
+  recovery, and rollback. `engine_preflight.rs` owns Windows, RAM, and storage
+  compatibility checks. UI modules never infer readiness from process names,
+  ports, or model IDs.
 - Product version: `src-tauri/tauri.conf.json` is the product version record.
   `package.json` and `src-tauri/Cargo.toml` are synchronized mirrors.
 - Display state: the pipeline owns translated/source-only/failure semantics.
