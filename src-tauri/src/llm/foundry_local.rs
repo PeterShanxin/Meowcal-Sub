@@ -1,7 +1,3 @@
-// =============================================================================
-// FOUNDRY_LOCAL.RS - Foundry Local Backend (OpenAI-compatible API)
-// =============================================================================
-
 use crate::config::FoundryLocalConfig;
 use crate::llm::subtitle_output::sanitize_subtitle_translation_output;
 use crate::llm::{
@@ -18,9 +14,6 @@ use std::sync::{OnceLock, RwLock};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tracing::{debug, info, warn};
 
-// Foundry can crash/restart during warmup; keep cooldown short so "Make Foundry Ready"
-// can retry without feeling stuck. 6 seconds aligns with the make_foundry_ready loop
-// (900ms sleep * 6 iterations = 5.4s) to allow quick retries.
 const START_ATTEMPT_COOLDOWN_MS: u64 = 6_000;
 static LAST_START_ATTEMPT_MS: AtomicU64 = AtomicU64::new(0);
 
@@ -46,8 +39,6 @@ const API_NAMESPACE_V1: u8 = 2;
 
 const AUTO_MODEL_GROUP_WEIGHT: u32 = 120;
 
-// Cache probe success across backend instances. Diagnostics frequently create fresh
-// FoundryLocalBackend values, so per-instance caches won't persist long enough.
 struct ProbeCache {
     last_success_ms: AtomicU64,
     last_attempt_ms: AtomicU64,
@@ -160,6 +151,9 @@ struct ChatCompletionRequest {
     model: String,
     messages: Vec<ChatMessage>,
     temperature: f32,
+    top_k: u32,
+    top_p: f32,
+    repeat_penalty: f32,
     max_tokens: u32,
 }
 
@@ -1442,6 +1436,9 @@ impl FoundryLocalBackend {
                 },
             ],
             temperature: 0.3,
+            top_k: 20,
+            top_p: 0.6,
+            repeat_penalty: 1.05,
             max_tokens: 150,
         };
 
@@ -1628,7 +1625,10 @@ impl TranslatorBackend for FoundryLocalBackend {
                 role: "user".to_string(),
                 content: prompt,
             }],
-            temperature: 0.0,
+            temperature: 0.7,
+            top_k: 20,
+            top_p: 0.6,
+            repeat_penalty: 1.05,
             max_tokens: 120,
         };
 

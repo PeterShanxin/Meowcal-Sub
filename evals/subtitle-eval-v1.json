@@ -1,0 +1,187 @@
+{
+  "schemaVersion": 1,
+  "datasetId": "meowcal-subtitle-eval-v1",
+  "provenance": "Project-authored, privacy-safe fixtures",
+  "cases": [
+    {
+      "id": "zh-clock-tower-regression",
+      "sourceLanguage": "zh-CN",
+      "targetLanguage": "en-US",
+      "sourceText": "先不提时钟塔",
+      "tags": ["simplified-chinese", "short", "regression"],
+      "expectedAction": "translate",
+      "acceptableOutputs": [
+        "Let's not talk about the clock tower for now.",
+        "Let's leave the clock tower aside for now."
+      ],
+      "maxOutputLines": 1
+    },
+    {
+      "id": "zh-short-thanks",
+      "sourceLanguage": "zh-CN",
+      "targetLanguage": "en-US",
+      "sourceText": "谢谢",
+      "tags": ["simplified-chinese", "short"],
+      "expectedAction": "translate",
+      "acceptableOutputs": ["Thank you.", "Thanks."],
+      "maxOutputLines": 1
+    },
+    {
+      "id": "zh-long-dialogue",
+      "sourceLanguage": "zh-CN",
+      "targetLanguage": "en-US",
+      "sourceText": "如果我们现在回去，就再也没有机会知道事情的真相了。",
+      "tags": ["simplified-chinese", "long", "punctuation"],
+      "expectedAction": "translate",
+      "acceptableOutputs": [
+        "If we go back now, we'll never get another chance to learn the truth.",
+        "If we turn back now, we may never know the truth."
+      ],
+      "maxOutputLines": 2
+    },
+    {
+      "id": "ja-short-stop",
+      "sourceLanguage": "ja-JP",
+      "targetLanguage": "en-US",
+      "sourceText": "もういい",
+      "tags": ["japanese", "short"],
+      "expectedAction": "translate",
+      "acceptableOutputs": ["That's enough.", "Enough already."],
+      "maxOutputLines": 1
+    },
+    {
+      "id": "zh-spaced-ocr",
+      "sourceLanguage": "zh-CN",
+      "targetLanguage": "en-US",
+      "sourceText": "看 来 你 很 喜 欢 这 里",
+      "tags": ["simplified-chinese", "spaced-cjk", "ocr-shape"],
+      "expectedAction": "translate",
+      "acceptableOutputs": [
+        "It seems you really like it here.",
+        "Looks like you like this place a lot."
+      ],
+      "maxOutputLines": 1
+    },
+    {
+      "id": "mixed-cjk-region",
+      "sourceLanguage": "zh-CN",
+      "targetLanguage": "en-US",
+      "sourceText": "欢迎回来、お兄ちゃん。",
+      "tags": ["mixed-chinese-japanese", "honorific", "punctuation"],
+      "expectedAction": "translate",
+      "acceptableOutputs": ["Welcome back, big brother.", "Welcome home, Onii-chan."],
+      "maxOutputLines": 1
+    },
+    {
+      "id": "zh-multiline",
+      "sourceLanguage": "zh-CN",
+      "targetLanguage": "en-US",
+      "sourceText": "别回头。\n继续往前走。",
+      "tags": ["simplified-chinese", "multiline", "punctuation"],
+      "expectedAction": "translate",
+      "acceptableOutputs": [
+        "Don't look back.\nKeep moving forward.",
+        "Don't turn around. Keep going."
+      ],
+      "maxOutputLines": 2
+    },
+    {
+      "id": "ja-name-honorific",
+      "sourceLanguage": "ja-JP",
+      "targetLanguage": "en-US",
+      "sourceText": "佐藤さん、本当にありがとうございました。",
+      "tags": ["japanese", "name", "honorific", "punctuation"],
+      "expectedAction": "translate",
+      "acceptableOutputs": ["Sato-san, thank you very much.", "Mr. Sato, thank you so much."],
+      "maxOutputLines": 1
+    },
+    {
+      "id": "zh-idiom",
+      "sourceLanguage": "zh-CN",
+      "targetLanguage": "en-US",
+      "sourceText": "事到如今，只能破釜沉舟了。",
+      "tags": ["simplified-chinese", "idiom"],
+      "expectedAction": "translate",
+      "acceptableOutputs": [
+        "At this point, we have no choice but to go all in.",
+        "Now we must burn our bridges and fight."
+      ],
+      "maxOutputLines": 2
+    },
+    {
+      "id": "zh-recurring-term",
+      "sourceLanguage": "zh-CN",
+      "targetLanguage": "en-US",
+      "sourceText": "灵脉正在衰弱，我们必须守住灵脉。",
+      "tags": ["simplified-chinese", "recurring-term", "consistency"],
+      "expectedAction": "translate",
+      "acceptableOutputs": [
+        "The spirit vein is weakening. We must protect it.",
+        "The ley line is fading; we have to defend it."
+      ],
+      "maxOutputLines": 2
+    },
+    {
+      "id": "zh-desktop-contamination",
+      "sourceLanguage": "zh-CN",
+      "targetLanguage": "en-US",
+      "sourceText": "别告诉任何人\nNETFLIX 08:30",
+      "tags": ["simplified-chinese", "desktop-text-contamination", "multiline"],
+      "expectedAction": "translate",
+      "acceptableOutputs": ["Don't tell anyone.", "Don't tell anybody."],
+      "maxOutputLines": 2
+    },
+    {
+      "id": "ocr-symbol-noise",
+      "sourceLanguage": "zh-CN",
+      "targetLanguage": "en-US",
+      "sourceText": "| / 1 _",
+      "tags": ["ocr-noise", "filter"],
+      "expectedAction": "filter",
+      "acceptableOutputs": [],
+      "maxOutputLines": 0
+    }
+  ],
+  "rejectionFixtures": [
+    {
+      "id": "empty-output",
+      "sourceLanguage": "zh-CN",
+      "targetLanguage": "en-US",
+      "sourceText": "你好",
+      "output": "",
+      "expectedReason": "empty_output"
+    },
+    {
+      "id": "runaway-output",
+      "sourceLanguage": "zh-CN",
+      "targetLanguage": "en-US",
+      "sourceText": "你好",
+      "output": "This output keeps expanding far beyond any plausible subtitle and repeats unnecessary explanatory material until it exceeds the language-aware limit for a short source phrase by a very large margin.",
+      "expectedReason": "too_long"
+    },
+    {
+      "id": "repetition-loop",
+      "sourceLanguage": "zh-CN",
+      "targetLanguage": "en-US",
+      "sourceText": "这是一个足够长的字幕文本用于测试",
+      "output": "go go go go go go go go",
+      "expectedReason": "repetition_loop"
+    },
+    {
+      "id": "prompt-echo",
+      "sourceLanguage": "zh-CN",
+      "targetLanguage": "en-US",
+      "sourceText": "你好",
+      "output": "You are a subtitle translator. Translate the subtitle into English. Subtitle: 你好",
+      "expectedReason": "prompt_echo"
+    },
+    {
+      "id": "wrong-language",
+      "sourceLanguage": "zh-CN",
+      "targetLanguage": "en-US",
+      "sourceText": "需要鳗鱼。",
+      "output": "需要鲨鱼。",
+      "expectedReason": "wrong_language"
+    }
+  ]
+}

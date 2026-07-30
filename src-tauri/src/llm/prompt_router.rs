@@ -69,34 +69,30 @@ pub fn build_subtitle_translation_prompt(
         (PromptTemplateLanguage::Chinese, Some(ctx)) => (
             true,
             format!(
-                "{ctx}\n你是字幕翻译器。参考上面的字幕历史，将下面的字幕翻译成{target_label}。\
-                 只输出翻译结果，不要翻译或重复上文，不要解释。\
-                 字幕：{clipped_source}"
+                "{ctx}\n参考上面的信息，把下面的文本翻译成{target_label}，\
+                 注意不需要翻译上文，也不要额外解释：\n{clipped_source}"
             ),
         ),
         (PromptTemplateLanguage::English, Some(ctx)) => (
             true,
             format!(
-                "{ctx}\nYou are a subtitle translator. Based on the context above, \
-                 translate the following subtitle into {target_label}. \
-                 Output ONLY the translation. Do NOT repeat or translate the context. No explanations.\n\
-                 Subtitle: {clipped_source}"
+                "{ctx}\nBased on the information above, translate the text below into \
+                 {target_label}. Do not translate the context or add explanations:\n\
+                 {clipped_source}"
             ),
         ),
         (PromptTemplateLanguage::Chinese, None) => (
             false,
             format!(
-                "你是字幕翻译器。将下面的字幕翻译成{target_label}。\
-                 只输出翻译结果，不要解释，不要重复原文。\
-                 字幕：{clipped_source}"
+                "将以下文本翻译为{target_label}，注意只需要输出翻译后的结果，\
+                 不要额外解释：\n\n{clipped_source}"
             ),
         ),
         (PromptTemplateLanguage::English, None) => (
             false,
             format!(
-                "You are a subtitle translator. Translate the subtitle into {target_label}. \
-                 Output ONLY the translation, no explanation, no repeating the source.\n\
-                 Subtitle: {clipped_source}"
+                "Translate the following segment into {target_label}, without additional explanation.\
+                 \n\n{clipped_source}"
             ),
         ),
     };
@@ -329,7 +325,7 @@ mod tests {
         .unwrap();
 
         assert_eq!(built.template_language, PromptTemplateLanguage::Chinese);
-        assert!(built.prompt.starts_with("你是字幕翻译器"));
+        assert!(built.prompt.starts_with("将以下文本翻译为中文"));
     }
 
     #[test]
@@ -348,7 +344,7 @@ mod tests {
         .unwrap();
 
         assert_eq!(built.template_language, PromptTemplateLanguage::Chinese);
-        assert!(built.prompt.starts_with("你是字幕翻译器"));
+        assert!(built.prompt.starts_with("将以下文本翻译为英语"));
     }
 
     #[test]
@@ -367,7 +363,9 @@ mod tests {
         .unwrap();
 
         assert_eq!(built.template_language, PromptTemplateLanguage::English);
-        assert!(built.prompt.starts_with("You are a subtitle translator"));
+        assert!(built
+            .prompt
+            .starts_with("Translate the following segment into English"));
     }
 
     #[test]
@@ -386,7 +384,7 @@ mod tests {
         .unwrap();
 
         assert!(built.used_context);
-        assert!(built.prompt.contains("参考上面的字幕历史"));
+        assert!(built.prompt.contains("参考上面的信息"));
         assert!(built.prompt.contains("Alice is here."));
     }
 
@@ -435,8 +433,7 @@ mod tests {
     }
 
     #[test]
-    fn prompt_templates_contain_role_and_delimiter() {
-        // Chinese template
+    fn prompt_templates_match_hy_mt_contract() {
         let built = build_subtitle_translation_prompt(
             "你好世界",
             Some("zh-CN"),
@@ -449,10 +446,11 @@ mod tests {
             },
         )
         .unwrap();
-        assert!(built.prompt.contains("字幕翻译器"));
-        assert!(built.prompt.contains("字幕："));
+        assert_eq!(
+            built.prompt,
+            "将以下文本翻译为英语，注意只需要输出翻译后的结果，不要额外解释：\n\n你好世界"
+        );
 
-        // English template
         let built = build_subtitle_translation_prompt(
             "こんにちは",
             Some("ja-JP"),
@@ -465,7 +463,9 @@ mod tests {
             },
         )
         .unwrap();
-        assert!(built.prompt.contains("subtitle translator"));
-        assert!(built.prompt.contains("Subtitle:"));
+        assert_eq!(
+            built.prompt,
+            "Translate the following segment into English, without additional explanation.\n\nこんにちは"
+        );
     }
 }
