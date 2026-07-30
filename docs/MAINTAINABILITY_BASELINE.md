@@ -8,22 +8,23 @@ ratchets. Machine-readable values live in
 
 Measured on 2026-07-30 after the app-managed HY-MT MVP:
 
-- 51 production files under `src/` and `src-tauri/src/`;
+- 58 production files under `src/` and `src-tauri/src/`;
 - 400 lines maximum for a new `.rs`, `.js`, `.html`, or `.css` production file;
-- 20 explicit legacy files above that ceiling;
-- 13 existing ESLint warnings, with zero allowed errors;
-- frontend coverage floors of 84% statements, 74% branches, 88% functions, and
-  84% lines.
+- 18 explicit legacy files above that ceiling;
+- 11 existing ESLint warnings, with zero allowed errors;
+- frontend coverage floors of 87% statements, 77% branches, 91% functions, and
+  87% lines.
 
 Frontend coverage currently includes only:
 
 - `src/scripts/backend-status.js`;
 - `src/scripts/ocr-language-tags.js`;
 - `src/scripts/translation-display.js`;
+- `src/scripts/wizard-state.js`;
 - `scripts/serve-frontend.mjs`.
 
-The measured result is 84.46% statements, 74.46% branches, 88.88% functions,
-and 84.46% lines. This is not a repository-wide coverage claim. Issue #35 owns
+The measured result is 87.78% statements, 77.95% branches, 91.30% functions,
+and 87.09% lines. This is not a repository-wide coverage claim. Issue #35 owns
 risk-based expansion after the decomposition lanes land.
 
 ## Legacy hotspot ceilings
@@ -33,17 +34,16 @@ machine-readable baseline. The largest and decomposition-owned hotspots are:
 
 | File | Ceiling | Reduction owner |
 |---|---:|---|
-| `src-tauri/src/commands.rs` | 2,863 | #31 |
+| `src-tauri/src/commands.rs` | 2,725 | #31 |
 | `src/scripts/main.js` | 2,138 | #33 |
 | `src-tauri/src/llm/foundry_local.rs` | 1,741 | #32 |
 | `src-tauri/src/llm/manager.rs` | 1,234 | #32 |
 | `src/scripts/overlay.js` | 1,162 | #34 |
 | `src/scripts/selector.js` | 820 | #34 |
 | `src-tauri/src/llm/context.rs` | 732 | #32 |
-| `src-tauri/src/http_server.rs` | 730 | #31 adapter boundary |
+| `src-tauri/src/http_server.rs` | 727 | #31 adapter boundary |
 | `src-tauri/src/config.rs` | 625 | #31 |
-| `src-tauri/src/main.rs` | 582 | #31 |
-| `src/scripts/wizard.js` | 531 | #33 |
+| `src-tauri/src/main.rs` | 578 | #31 |
 
 The remaining explicit exceptions are styles, HTML, and focused platform
 modules recorded in the JSON manifest. They have the same no-growth rule even

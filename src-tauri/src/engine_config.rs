@@ -1,5 +1,6 @@
 use crate::config::FoundryLocalConfig;
 use serde::{Deserialize, Serialize};
+use std::path::{Path, PathBuf};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -35,6 +36,23 @@ impl FoundryLocalConfig {
             self.managed_runtime = current.managed_runtime.clone();
         }
     }
+
+    pub fn managed_cache_root(&self) -> Option<PathBuf> {
+        let runtime = self.managed_runtime.as_ref()?;
+        let executable_root = engine_root(Path::new(&runtime.executable_path))?;
+        let model_root = engine_root(Path::new(&runtime.model_path))?;
+        (executable_root == model_root)
+            .then(|| executable_root.parent().map(Path::to_path_buf))
+            .flatten()
+    }
+}
+
+fn engine_root(path: &Path) -> Option<&Path> {
+    path.ancestors().find(|ancestor| {
+        ancestor
+            .file_name()
+            .is_some_and(|name| name == "meowcal-sub")
+    })
 }
 
 #[cfg(test)]
@@ -94,5 +112,27 @@ mod tests {
             backend.selected_model().as_deref(),
             Some("HY-MT1.5-1.8B-Q4_K_M")
         );
+    }
+
+    #[test]
+    fn repair_reuses_the_app_managed_cache_root() {
+        let mut config = managed_config();
+        let runtime = config.managed_runtime.as_mut().unwrap();
+        runtime.executable_path =
+            r"D:\foundry-cache\meowcal-sub\runtime\engine\server.exe".to_string();
+        runtime.model_path = r"D:\foundry-cache\meowcal-sub\models\model\model.gguf".to_string();
+        assert_eq!(
+            config.managed_cache_root(),
+            Some(PathBuf::from(r"D:\foundry-cache"))
+        );
+    }
+
+    #[test]
+    fn mismatched_managed_paths_are_not_adopted() {
+        let mut config = managed_config();
+        let runtime = config.managed_runtime.as_mut().unwrap();
+        runtime.executable_path = r"D:\one\meowcal-sub\runtime\server.exe".to_string();
+        runtime.model_path = r"E:\two\meowcal-sub\models\model.gguf".to_string();
+        assert_eq!(config.managed_cache_root(), None);
     }
 }

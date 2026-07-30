@@ -14,6 +14,7 @@ export default defineConfig({
         "src/scripts/backend-status.js",
         "src/scripts/ocr-language-tags.js",
         "src/scripts/translation-display.js",
+        "src/scripts/wizard-state.js",
       ],
       reporter: ["text", "json-summary"],
       thresholds: baseline.frontendCoverageMinimum,

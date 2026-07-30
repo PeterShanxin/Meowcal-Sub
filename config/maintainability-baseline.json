@@ -1,33 +1,31 @@
 {
   "schemaVersion": 1,
   "newProductionFileMaxLines": 400,
-  "eslintMaxWarnings": 13,
+  "eslintMaxWarnings": 11,
   "frontendCoverageMinimum": {
-    "branches": 74,
-    "functions": 88,
-    "lines": 84,
-    "statements": 84
+    "branches": 77,
+    "functions": 91,
+    "lines": 87,
+    "statements": 87
   },
   "legacyFileMaxLines": {
     "src-tauri/src/capture/graphics_capture.rs": 522,
-    "src-tauri/src/commands.rs": 2863,
+    "src-tauri/src/commands.rs": 2725,
     "src-tauri/src/config.rs": 625,
-    "src-tauri/src/http_server.rs": 730,
+    "src-tauri/src/http_server.rs": 727,
     "src-tauri/src/llm/context.rs": 732,
     "src-tauri/src/llm/foundry_local.rs": 1741,
     "src-tauri/src/llm/manager.rs": 1234,
     "src-tauri/src/llm/prompt_router.rs": 471,
-    "src-tauri/src/main.rs": 581,
+    "src-tauri/src/main.rs": 578,
     "src-tauri/src/ocr/windows_ocr.rs": 454,
     "src/index.html": 474,
     "src/scripts/main.js": 1998,
     "src/scripts/overlay.js": 1162,
     "src/scripts/selector.js": 820,
-    "src/scripts/wizard.js": 531,
     "src/styles/main.css": 697,
     "src/styles/overlay.css": 745,
     "src/styles/selector.css": 414,
-    "src/styles/settings.css": 506,
-    "src/styles/wizard.css": 449
+    "src/styles/settings.css": 506
   }
 }

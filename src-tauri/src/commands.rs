@@ -28,9 +28,7 @@ use crate::llm::{
 use crate::ocr::{PreprocessingConfig, WindowsOcr};
 use crate::overlay;
 use crate::sync_utils::lock_or_recover;
-use crate::wizard_contracts::{
-    WizardDiskSpace, WizardHardwareInfo, WizardModelInfo, WizardTranslationTest,
-};
+use crate::wizard_contracts::WizardTranslationTest;
 use crate::{hy_mt_installer, hy_mt_runtime};
 use reqwest::Client;
 use scopeguard::defer;
@@ -2638,39 +2636,21 @@ pub fn close_foundry_wizard(
     Ok(())
 }
 
-/// Return the one curated engine used by normal mode.
 #[tauri::command]
-pub async fn wizard_list_available_models() -> Result<Vec<WizardModelInfo>, String> {
-    let manifest =
-        crate::engine_manifest::EngineManifest::shipped().map_err(|error| error.to_string())?;
-    let runtime = manifest
-        .runtime_for_current_arch()
-        .map_err(|error| error.to_string())?;
-    Ok(vec![WizardModelInfo {
-        id: manifest.model.id.clone(),
-        recommended: true,
-        hardware_tag: Some(format!(
-            "{} {}",
-            std::env::consts::ARCH,
-            runtime.acceleration
-        )),
-        description: Some("Tencent HY-MT 1.5, tuned for fast subtitle translation.".to_string()),
-        download_size: Some("About 1.1 GB".to_string()),
-    }])
-}
-
-#[tauri::command]
-pub async fn wizard_download_model(
+pub async fn wizard_install_engine(
     app: AppHandle,
     state: State<'_, AppState>,
-    model_id: String,
-    cache_dir: Option<String>,
 ) -> Result<(), String> {
     let manifest =
         crate::engine_manifest::EngineManifest::shipped().map_err(|error| error.to_string())?;
-    if model_id != manifest.model.id {
-        return Err("ENGINE_UNSUPPORTED_MODEL".to_string());
-    }
+    let cache_dir = {
+        let config = lock_or_recover(&state.config);
+        config
+            .translation
+            .foundry_local
+            .managed_cache_root()
+            .map(|path| path.to_string_lossy().to_string())
+    };
 
     match hy_mt_installer::install(&app, cache_dir).await {
         Ok(paths) => {
@@ -2689,7 +2669,7 @@ pub async fn wizard_download_model(
             let _ = app.emit_to(
                 "foundry-wizard",
                 "wizard-download-complete",
-                serde_json::json!({"success": true, "model": model_id}),
+                serde_json::json!({"success": true}),
             );
         }
         Err(error) => {
@@ -2742,122 +2722,4 @@ pub async fn wizard_test_translation(
         translated_text,
         latency_ms: started.elapsed().as_millis() as u64,
     })
-}
-
-/// Get available disk space for a given path
-#[tauri::command]
-pub fn wizard_get_disk_space(path: String) -> Result<WizardDiskSpace, String> {
-    #[cfg(windows)]
-    {
-        use std::ffi::OsStr;
-        use std::os::windows::ffi::OsStrExt;
-        use windows::core::PCWSTR;
-        use windows::Win32::Storage::FileSystem::GetDiskFreeSpaceExW;
-
-        // Validate: require absolute local drive path (e.g. C:\...)
-        // Reject UNC paths, drive-relative paths (C:foo), and non-drive paths
-        if path.starts_with("\\\\") {
-            return Err("UNC paths are not supported, only local drives".to_string());
-        }
-        let bytes = path.as_bytes();
-        let valid_drive = bytes.len() >= 3
-            && bytes[0].is_ascii_alphabetic()
-            && bytes[1] == b':'
-            && (bytes[2] == b'\\' || bytes[2] == b'/');
-        if !valid_drive {
-            return Err("Only absolute local drive paths (e.g. C:\\) are supported".to_string());
-        }
-
-        let wide_path: Vec<u16> = OsStr::new(&path)
-            .encode_wide()
-            .chain(std::iter::once(0))
-            .collect();
-
-        let mut free_bytes_available: u64 = 0;
-
-        unsafe {
-            GetDiskFreeSpaceExW(
-                PCWSTR(wide_path.as_ptr()),
-                Some(&mut free_bytes_available as *mut u64),
-                None,
-                None,
-            )
-            .map_err(|e| format!("GetDiskFreeSpaceExW failed: {}", e))?;
-        }
-
-        let gb = free_bytes_available as f64 / (1024.0 * 1024.0 * 1024.0);
-        let display = if gb >= 1.0 {
-            format!("{:.1} GB", gb)
-        } else {
-            let mb = free_bytes_available as f64 / (1024.0 * 1024.0);
-            format!("{:.0} MB", mb)
-        };
-
-        Ok(WizardDiskSpace {
-            available_bytes: free_bytes_available,
-            available_display: display,
-        })
-    }
-    #[cfg(not(windows))]
-    {
-        let _ = path;
-        Err("Disk space detection is only available on Windows".to_string())
-    }
-}
-
-/// Get hardware information for model recommendations
-#[tauri::command]
-pub fn wizard_get_hardware_info() -> WizardHardwareInfo {
-    let is_arm64 = cfg!(target_arch = "aarch64");
-    let has_npu = is_arm64 && cfg!(target_os = "windows");
-
-    // Detect GPU by querying WMIC (works on all Windows editions)
-    let (has_gpu, gpu_name) = {
-        #[cfg(windows)]
-        {
-            use std::os::windows::process::CommandExt;
-            const CREATE_NO_WINDOW: u32 = 0x08000000;
-            match std::process::Command::new("wmic")
-                .args(["path", "win32_VideoController", "get", "name"])
-                .creation_flags(CREATE_NO_WINDOW)
-                .output()
-            {
-                Ok(output) => {
-                    let text = String::from_utf8_lossy(&output.stdout);
-                    // Skip header line ("Name") and blank lines
-                    let gpu = text
-                        .lines()
-                        .find(|l| {
-                            let trimmed = l.trim();
-                            !trimmed.is_empty() && !trimmed.eq_ignore_ascii_case("name")
-                        })
-                        .map(|l| l.trim().to_string());
-                    let detected = gpu.is_some();
-                    (detected, gpu.unwrap_or_default())
-                }
-                Err(_) => (false, String::new()),
-            }
-        }
-        #[cfg(not(windows))]
-        {
-            (false, String::new())
-        }
-    };
-
-    let recommendation = if has_npu {
-        "npu".to_string()
-    } else if has_gpu {
-        "gpu".to_string()
-    } else {
-        "cpu".to_string()
-    };
-
-    WizardHardwareInfo {
-        arch: std::env::consts::ARCH.to_string(),
-        is_arm64,
-        has_npu,
-        has_gpu,
-        gpu_name,
-        recommendation,
-    }
 }

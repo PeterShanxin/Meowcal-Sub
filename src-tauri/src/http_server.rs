@@ -704,12 +704,9 @@ pub fn create_router(state: HttpAppState) -> Router {
         // Wizard endpoints (Tauri-only, return 501 in browser mode)
         .route("/api/wizard/open", post(wizard_not_available))
         .route("/api/wizard/close", post(wizard_not_available))
-        .route("/api/wizard/models", get(wizard_not_available))
-        .route("/api/wizard/download-model", post(wizard_not_available))
+        .route("/api/wizard/install-engine", post(wizard_not_available))
         .route("/api/wizard/start-service", post(wizard_not_available))
         .route("/api/wizard/test-translation", post(wizard_not_available))
-        .route("/api/wizard/disk-space", get(wizard_not_available))
-        .route("/api/wizard/hardware-info", get(wizard_not_available))
         .layer(cors)
         .with_state(state)
 }

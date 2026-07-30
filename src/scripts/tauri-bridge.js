@@ -70,12 +70,9 @@
         // Curated engine setup wizard (Tauri-only, returns 501 in browser mode)
         'open_foundry_wizard':           { method: 'POST', path: '/wizard/open' },
         'close_foundry_wizard':          { method: 'POST', path: '/wizard/close' },
-        'wizard_list_available_models':  { method: 'GET',  path: '/wizard/models' },
-        'wizard_download_model':         { method: 'POST', path: '/wizard/download-model' },
+        'wizard_install_engine':         { method: 'POST', path: '/wizard/install-engine' },
         'wizard_start_service':          { method: 'POST', path: '/wizard/start-service' },
         'wizard_test_translation':       { method: 'POST', path: '/wizard/test-translation' },
-        'wizard_get_disk_space':         { method: 'GET',  path: '/wizard/disk-space' },
-        'wizard_get_hardware_info':      { method: 'GET',  path: '/wizard/hardware-info' },
 
         // Tauri-only (will return graceful error)
         'open_area_selector': { method: 'POST', path: '/area-selector' },
