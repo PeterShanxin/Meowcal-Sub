@@ -329,10 +329,9 @@ impl TranslationConfig {
         if self.foundry_local.timeout_ms < 15_000 {
             self.foundry_local.timeout_ms = 30_000;
         }
-        if self.foundry_local.managed_runtime.is_some() {
-            self.enable_foundry_local = true;
-            self.allow_mock_fallback = false;
-        }
+        // Migrate legacy backend settings to the single curated engine.
+        self.enable_foundry_local = true;
+        self.allow_mock_fallback = false;
 
         // OCR config normalization
         self.ocr.confidence_threshold = self.ocr.confidence_threshold.clamp(0.0, 1.0);
@@ -537,7 +536,8 @@ impl Default for TranslationConfig {
     fn default() -> Self {
         Self {
             enable_foundry_local: true,
-            allow_mock_fallback: true,
+            // Never present untranslated OCR as a successful translation.
+            allow_mock_fallback: false,
             enable_context_aware: true, // Enabled by default
             context_level: ContextLevel::MemoryAndRecent,
             context_recent_count: default_context_recent_count(),

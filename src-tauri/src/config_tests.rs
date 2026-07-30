@@ -25,7 +25,7 @@ fn test_capture_region_invalid() {
 fn test_translation_config_defaults() {
     let config = TranslationConfig::default();
     assert!(config.enable_foundry_local);
-    assert!(config.allow_mock_fallback);
+    assert!(!config.allow_mock_fallback);
     assert!(config.enable_context_aware);
     assert_eq!(config.context_level, ContextLevel::MemoryAndRecent);
     assert_eq!(config.context_recent_count, 3);
@@ -61,4 +61,18 @@ fn test_translation_config_missing_field_uses_default() {
     }"#;
     let config: TranslationConfig = serde_json::from_str(json).unwrap();
     assert!(config.enable_context_aware);
+}
+
+#[test]
+fn test_legacy_backend_choices_migrate_to_curated_engine() {
+    let mut config = TranslationConfig {
+        enable_foundry_local: false,
+        allow_mock_fallback: true,
+        ..TranslationConfig::default()
+    };
+
+    config.normalize();
+
+    assert!(config.enable_foundry_local);
+    assert!(!config.allow_mock_fallback);
 }

@@ -56,6 +56,8 @@ test("normal setup presents one private HY-MT engine without infrastructure choi
   await expect(page.getByRole("heading", { name: /Local Translation Engine/ })).toBeVisible();
   await expect(page.getByText(/Tencent HY-MT runs privately/)).toBeVisible();
   await expect(page.locator("body")).not.toContainText("Foundry Local");
+  await expect(page.locator("body")).not.toContainText("Passthrough");
+  await expect(page.locator("body")).not.toContainText("translateLocally");
   await expect(page.locator("body")).not.toContainText("Model ID");
   await expect(page.locator("body")).not.toContainText("endpoint");
 
