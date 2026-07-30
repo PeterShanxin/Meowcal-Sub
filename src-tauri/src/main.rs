@@ -272,12 +272,9 @@ fn main() {
             // Foundry setup wizard commands
             commands::open_foundry_wizard,
             commands::close_foundry_wizard,
-            commands::wizard_list_available_models,
-            commands::wizard_download_model,
+            commands::wizard_install_engine,
             commands::wizard_start_service,
             commands::wizard_test_translation,
-            commands::wizard_get_disk_space,
-            commands::wizard_get_hardware_info,
         ])
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())

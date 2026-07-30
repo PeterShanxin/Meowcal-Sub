@@ -62,9 +62,23 @@ test("normal setup presents one private HY-MT engine without infrastructure choi
   await expect(page.locator("body")).not.toContainText("endpoint");
 
   await page.goto("/wizard.html");
-  await expect(page.getByText("Private translation on this PC")).toBeVisible();
-  await expect(page.locator("body")).toContainText("Tencent HY-MT 1.5");
+  await expect(page.getByText("Private subtitle translation")).toBeVisible();
+  await expect(page.locator("body")).toContainText("Tencent HY-MT");
   await expect(page.locator("body")).not.toContainText("Foundry");
   await expect(page.locator("body")).not.toContainText("winget");
   await expect(page.locator("body")).not.toContainText("Model ID");
+});
+
+test("guided engine setup has one install action and no infrastructure choices", async ({
+  page,
+}) => {
+  await page.goto("/wizard.html");
+
+  await expect(page.getByRole("heading", { name: "Private subtitle translation" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Install translation engine" })).toBeVisible();
+  await expect(page.locator("body")).not.toContainText(
+    /\b(?:Foundry|endpoint|port|model ID|cache directory)\b|llama\.cpp/i,
+  );
+  await expect(page.locator(".wizard-step-item")).toHaveCount(3);
+  await expect(page.getByRole("heading", { name: "Private subtitle translation" })).toBeFocused();
 });
