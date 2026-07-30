@@ -92,7 +92,6 @@ pub struct OverlayConfig {
     pub show_diagnostics: bool,
 }
 
-/// Window size/position preferences
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase", default)]
 pub struct WindowPreferences {
@@ -100,6 +99,7 @@ pub struct WindowPreferences {
     pub height: Option<u32>,
     pub x: Option<i32>,
     pub y: Option<i32>,
+    pub scale_factor: Option<f64>,
     pub is_maximized: bool,
 }
 

@@ -17,7 +17,7 @@
     "src-tauri/src/llm/foundry_local.rs": 1741,
     "src-tauri/src/llm/manager.rs": 1234,
     "src-tauri/src/llm/prompt_router.rs": 471,
-    "src-tauri/src/main.rs": 582,
+    "src-tauri/src/main.rs": 581,
     "src-tauri/src/ocr/windows_ocr.rs": 454,
     "src/index.html": 474,
     "src/scripts/main.js": 1998,
