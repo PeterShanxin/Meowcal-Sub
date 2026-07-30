@@ -105,6 +105,17 @@ The browser smoke does not prove screen capture, Windows OCR, the native
 selector or overlay, tray behavior, installer behavior, or DPI/window
 lifecycle. Those remain manual Windows gates.
 
+Run the privacy-safe subtitle regression set without starting the model:
+
+```powershell
+npm run eval:subtitles
+```
+
+An opt-in live run validates the installed app-managed engine and writes a
+report containing only case IDs, output shape, validator decisions, and
+latency. See [evals/README.md](evals/README.md) for the command and grading
+contract.
+
 ## Build installers
 
 Build real overlay resources before packaging:

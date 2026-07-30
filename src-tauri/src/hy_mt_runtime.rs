@@ -97,6 +97,9 @@ async fn is_endpoint_healthy(endpoint: &str) -> bool {
 
 pub fn start(runtime: &ManagedLocalRuntimeConfig) -> Result<String, String> {
     let manifest = EngineManifest::shipped().map_err(|error| error.to_string())?;
+    let runtime_spec = manifest
+        .runtime_for_current_arch()
+        .map_err(|error| error.to_string())?;
     if runtime.kind != "hy-mt" {
         return Err(format!(
             "Unsupported managed runtime kind '{}'",
@@ -159,7 +162,7 @@ pub fn start(runtime: &ManagedLocalRuntimeConfig) -> Result<String, String> {
         .args(["--host", &manifest.launch.host])
         .args(["--port", &port])
         .args(["-c", &manifest.launch.context_size.to_string()])
-        .args(["-ngl", &manifest.launch.gpu_layers.to_string()])
+        .args(["-ngl", &runtime_spec.gpu_layers.to_string()])
         .args(&manifest.launch.extra_args)
         .stdin(Stdio::null())
         .stdout(Stdio::from(stdout))
@@ -307,6 +310,10 @@ mod tests {
         assert!(package.archive.file_name.ends_with(".zip"));
         assert!(package.archive.url.contains(&package.archive.file_name));
         assert!(package.executable.relative_path.ends_with(".exe"));
+        assert_eq!(
+            package.gpu_layers,
+            if cfg!(target_arch = "aarch64") { 0 } else { 99 }
+        );
     }
 
     #[test]

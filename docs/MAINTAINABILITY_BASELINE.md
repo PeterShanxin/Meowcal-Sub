@@ -6,9 +6,9 @@ ratchets. Machine-readable values live in
 
 ## Enforced baseline
 
-Measured on 2026-07-31 after the app-managed HY-MT pipeline lifecycle milestone:
+Measured on 2026-07-31 after the HY-MT subtitle evaluation milestone:
 
-- 60 production files under `src/` and `src-tauri/src/`;
+- 62 production files under `src/` and `src-tauri/src/`;
 - 400 lines maximum for a new `.rs`, `.js`, `.html`, or `.css` production file;
 - 18 explicit legacy files above that ceiling;
 - 11 existing ESLint warnings, with zero allowed errors;

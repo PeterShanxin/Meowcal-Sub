@@ -11,7 +11,7 @@ mod context;
 mod foundry_local;
 mod manager;
 mod mock;
-mod output_validation;
+pub(crate) mod output_validation;
 mod prompt_router;
 mod subtitle_output;
 mod text_utils;

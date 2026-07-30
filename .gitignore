@@ -24,6 +24,7 @@ nul
 node_modules/
 test-results/
 coverage/
+eval-results/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*

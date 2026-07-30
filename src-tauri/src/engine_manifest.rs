@@ -57,6 +57,7 @@ pub struct RuntimeSpec {
     pub id: String,
     pub architecture: Architecture,
     pub acceleration: String,
+    pub gpu_layers: u32,
     pub install_directory: String,
     pub archive: DownloadArtifact,
     pub executable: InstalledExecutable,
@@ -102,7 +103,6 @@ pub struct LaunchPolicy {
     pub preferred_port: u16,
     pub port_policy: String,
     pub context_size: u32,
-    pub gpu_layers: u32,
     pub extra_args: Vec<String>,
 }
 

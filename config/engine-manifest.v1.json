@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "manifestId": "meowcal-hymt-engine-v1",
-  "engineVersion": "1.0.0",
+  "engineVersion": "1.0.1",
   "minimumAppVersion": "0.5.0",
   "authenticity": {
     "mode": "embeddedApplicationRelease",
@@ -25,7 +25,8 @@
     {
       "id": "llama-b10155-opencl-adreno-arm64",
       "architecture": "aarch64",
-      "acceleration": "opencl-adreno",
+      "acceleration": "cpu",
+      "gpuLayers": 0,
       "installDirectory": "llama-b10155-opencl-adreno-arm64",
       "archive": {
         "fileName": "llama-b10155-bin-win-opencl-adreno-arm64.zip",
@@ -44,6 +45,7 @@
       "id": "llama-b10155-vulkan-x64",
       "architecture": "x86_64",
       "acceleration": "vulkan",
+      "gpuLayers": 99,
       "installDirectory": "llama-b10155-vulkan-x64",
       "archive": {
         "fileName": "llama-b10155-bin-win-vulkan-x64.zip",
@@ -69,13 +71,12 @@
     "preferredPort": 11436,
     "portPolicy": "dynamicLoopback",
     "contextSize": 2048,
-    "gpuLayers": 99,
     "extraArgs": ["--jinja", "--no-webui"]
   },
   "rollback": {
     "retainLastKnownGood": true,
     "minimumEngineVersion": "1.0.0",
-    "compatibleEngineVersions": ["1.0.0"]
+    "compatibleEngineVersions": ["1.0.0", "1.0.1"]
   },
   "licenses": [
     {

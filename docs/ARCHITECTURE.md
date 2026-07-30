@@ -77,6 +77,11 @@ Shared contracts have one owner before parallel decomposition begins:
   recovery, and rollback. `engine_preflight.rs` owns Windows, RAM, and storage
   compatibility checks. UI modules never infer readiness from process names,
   ports, or model IDs.
+- Engine execution policy: the embedded manifest selects acceleration per
+  architecture. ARM64 uses the validated CPU path because the current Adreno
+  OpenCL path corrupts HY-MT output; x64 retains Vulkan acceleration. Runtime
+  code cannot replace this evidence-backed policy with a global GPU-layer
+  default.
 - Product version: `src-tauri/tauri.conf.json` is the product version record.
   `package.json` and `src-tauri/Cargo.toml` are synchronized mirrors.
 - Display state: the pipeline owns translated/source-only/failure semantics.
@@ -85,6 +90,11 @@ Shared contracts have one owner before parallel decomposition begins:
   Region changes and stop requests invalidate in-flight work; Rust and frontend
   consumers reject stale results. Completed frames log privacy-safe
   capture/OCR/model/overlay/total timings without subtitle text.
+- Subtitle evaluation: `subtitle_eval.rs` and
+  `evals/subtitle-eval-v1.json` own the deterministic validator contract and
+  opt-in live engine gate. Reports exclude source and translated text while
+  recording architecture, engine/model identity, output shape, decisions, and
+  latency.
 
 ## Dependency direction
 
