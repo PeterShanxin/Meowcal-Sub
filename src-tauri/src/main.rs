@@ -1,14 +1,11 @@
 // =============================================================================
 // MAIN.RS - Application Entry Point
 // =============================================================================
-// This is where the app starts! Think of it like index.js or main.py.
-//
 // What happens when the app launches:
 // 1. Set up logging (so we can see debug messages)
 // 2. Create the Tauri app with our custom commands
 // 3. Set up the system tray icon
 // 4. Start the main window
-//
 // BROWSER DEV MODE:
 // Run with --http-only flag to start only the HTTP server (no Tauri window).
 // This allows testing the frontend in a browser.
@@ -284,8 +281,8 @@ fn main() {
         ])
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
-        // Register our app state (shared across all commands)
         .manage(AppState::default())
+        .on_page_load(meowcal_sub::window_lifecycle::handle_page_load)
         // Set up the system tray icon
         .setup(move |app| {
             info!("Setting up system tray...");
@@ -472,6 +469,7 @@ fn main() {
         })
         // Keep long-lived windows available from the tray.
         .on_window_event(|window, event| {
+            meowcal_sub::window_lifecycle::handle_geometry_event(window, event);
             match event {
                 tauri::WindowEvent::CloseRequested { api, .. } => {
                     meowcal_sub::window_lifecycle::handle_close_requested(window, api);
@@ -492,6 +490,7 @@ fn main() {
 
     app.run(|app_handle, event| {
         if matches!(event, tauri::RunEvent::Exit) {
+            meowcal_sub::window_lifecycle::persist_main_geometry_from_app(app_handle);
             meowcal_sub::hy_mt_runtime::shutdown_owned();
             if let Some(overlay_process) = app_handle.try_state::<OverlayHostProcess>() {
                 if let Some(mut child) = lock_or_recover(&overlay_process.0).take() {

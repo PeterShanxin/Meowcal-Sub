@@ -22,7 +22,7 @@
         "width": 480,
         "height": 600,
         "resizable": true,
-        "center": true,
+        "center": false,
         "decorations": true,
         "transparent": false,
         "visible": false
