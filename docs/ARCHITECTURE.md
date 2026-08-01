@@ -55,6 +55,7 @@ Source OCR is never represented as successful translation.
 | Capture and OCR         | `capture/`, `ocr/`, session code in `commands.rs` | Separate capture/OCR services; pipeline orchestrator owns sequencing                   |
 | Translation             | `llm/manager.rs`                                  | Pipeline service owns attempts and typed outcomes; validators do not own transport     |
 | Engine runtime          | `llm/foundry_local.rs`, command helpers           | Curated engine service owns manifest, install, process, health, repair, rollback       |
+| Compatibility downloads | `legacy_translate_locally.rs`                    | Kept outside normal-mode adapters; legacy/developer compatibility only                  |
 | Native overlay IPC      | `ipc/`, `overlay/`, `commands.rs`                 | `ipc/protocol.rs` owns payload schema; adapters do not redefine it                     |
 | Main/setup UI           | `src/scripts/main.js`, `wizard.js`                | Bootstrap and DOM adapters around testable setup/session presentation modules          |
 | Overlay/selector UI     | `overlay.js`, `selector.js`                       | Separate geometry/state owners with thin bridge and DOM adapters                       |

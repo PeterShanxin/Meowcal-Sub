@@ -28,9 +28,9 @@ use tracing_subscriber::{EnvFilter, FmtSubscriber};
 // Import our custom modules
 use meowcal_sub::commands::{self, AppState};
 use meowcal_sub::config::load_config;
-use meowcal_sub::http_server;
 use meowcal_sub::ipc::{IpcMessage, IpcServer};
 use meowcal_sub::sync_utils::lock_or_recover;
+use meowcal_sub::{http_server, legacy_translate_locally};
 use std::path::PathBuf;
 use std::process::{Child, Command};
 use std::sync::{Arc, Mutex};
@@ -256,9 +256,9 @@ fn main() {
             commands::install_ocr_language,
             commands::list_translation_backends,
             commands::get_translation_diagnostics,
-            commands::open_translate_locally_download,
-            commands::get_translate_locally_download_info,
-            commands::download_translate_locally,
+            legacy_translate_locally::open_translate_locally_download,
+            legacy_translate_locally::get_translate_locally_download_info,
+            legacy_translate_locally::download_translate_locally,
             commands::translate_once,
             // Foundry Local commands
             commands::get_foundry_local_status,
