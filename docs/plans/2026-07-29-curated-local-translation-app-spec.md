@@ -492,3 +492,25 @@ Approval of this spec confirms:
 4. OpenSubtitles and batch subtitle acquisition stay out of this epic.
 5. Repository foundation lands before broad decomposition.
 6. Product changes ship through sequenced waves and separate manual gates.
+
+## 19. Approved UI Direction Amendment — 2026-08-01
+
+The app-managed engine MVP is now mature enough that the next visible product
+wave is a deliberate UI redesign, not further accumulation of backend controls.
+
+Before changing production UI, present three independent Windows desktop
+concepts grounded in the current app. They must vary hierarchy and interaction
+structure while preserving the same primary journey: select a subtitle area,
+see one private-engine readiness state, start watching, and stop watching.
+
+Normal mode must not expose Foundry, model files, model aliases, endpoint URLs,
+ports, runtime paths, or backend toggles. Setup and repair details use progressive
+disclosure. Developer diagnostics remain a separate, disabled-by-default area.
+
+The user selects or combines a visual direction before implementation. That
+selection becomes the visual acceptance target for a separate behavior-visible
+wave, followed by fresh Windows validation for keyboard/focus, resize, first
+launch, returning launch, setup, start/stop, and repair states.
+
+The model-independent continuation prompt is
+`docs/plans/2026-08-01-curated-redesign-execution-goal.md`.

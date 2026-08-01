@@ -49,12 +49,18 @@ episode regression remain release blockers.
 
 ## Next execution order
 
-1. Run clean Windows install/adopt/repair/upgrade/restart/sleep and OCR alias
+1. Present three grounded Windows desktop UI directions and stop for the user's
+   selection before changing production UI. Record the chosen direction as the
+   acceptance target for the next visible wave.
+2. Implement the selected UI direction and run a fresh focused Windows manual
+   gate for first/returning launch, keyboard/focus, resize, setup, start/stop,
+   and repair states.
+3. Run clean Windows install/adopt/repair/upgrade/restart/sleep and OCR alias
    rehearsals against the shipped engine manifest and support script.
-2. Capture x64 runtime and performance evidence on a real x64 device; the
+4. Capture x64 runtime and performance evidence on a real x64 device; the
    native x64 package workflow is now proven, but ARM64 evidence must not be
    reused for runtime or performance claims.
-3. Finish repository governance and bounded decomposition without weakening
+5. Finish repository governance and bounded decomposition without weakening
    ratchets.
-4. Run the final ARM64/x64 matrix and real 30-minute episode regression after
+6. Run the final ARM64/x64 matrix and real 30-minute episode regression after
    the last visible behavior change.
