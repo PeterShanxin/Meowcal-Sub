@@ -13,6 +13,12 @@ identifiers.
   -ReportPath .\docs\evidence\2026-07-31-arm64-subtitle-eval.json
 ```
 
+`2026-08-01-arm64-subtitle-eval-after-extract.json` is a follow-up run after
+the compatibility-command extraction. All 33 translated attempts passed the
+quality grader, but this run measured p50 807 ms and p95 1,842 ms, just over
+the approved warm-model budgets. It records a current budget exception, not a
+performance improvement claim.
+
 `2026-08-01-arm64-package.json` records the locally generated ARM64 MSI and
 NSIS artifacts. Reproduce it with:
 
