@@ -39,6 +39,6 @@ The package report proves artifact generation and hashes only. Installation,
 upgrade, repair, uninstall, and first-run behavior remain manual Windows gates.
 
 The `Windows Packages` workflow also produced the native x64 MSI and NSIS
-artifact bundle on `1d65aa4` (run `30695886191`, artifact
+artifact bundle on `2883966` (run `30699524713`, artifact
 `meowcal-sub-x64-packages`). This proves x64 package generation only; it does
 not prove x64 runtime behavior, performance, or installer lifecycle behavior.
