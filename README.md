@@ -118,15 +118,19 @@ contract.
 
 ## Build installers
 
-Build real overlay resources before packaging:
+Build architecture-matched installers with the guarded release settings:
 
 ```powershell
-.\scripts\build-overlayhost.ps1 -Architecture auto
-npx --yes @tauri-apps/cli@2 build --bundles nsis,msi
+.\scripts\build-package.ps1 -Architecture auto
 ```
 
-Generated bundles are under `src-tauri/target/release/bundle/`. Packaging is not
-a release, and installer behavior still requires the manual Windows gate.
+Use `-Architecture x64` or `-Architecture arm64` to make the target explicit.
+The ARM64 path serializes release compilation and disables LTO/stripping because
+the current ARM64 Rust compiler can crash under the default parallel profile.
+Generated bundles are under the selected Cargo target directory. Packaging is
+not a release, and installer behavior still requires the manual Windows gate.
+The `Windows Packages` workflow produces x64 bundles on a native Windows x64
+runner; package generation does not replace x64 runtime or performance testing.
 
 ## Architecture
 

@@ -1,0 +1,44 @@
+name: Windows Packages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  package-x64:
+    name: x64 MSI and NSIS bundles
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Install locked frontend dependencies
+        shell: pwsh
+        run: npm ci --ignore-scripts
+
+      - name: Build x64 packages
+        shell: pwsh
+        run: .\scripts\build-package.ps1 -Architecture x64 -CargoTargetDir "$env:GITHUB_WORKSPACE\package-output"
+
+      - name: Upload x64 packages
+        uses: actions/upload-artifact@v4
+        with:
+          name: meowcal-sub-x64-packages
+          path: package-output/x86_64-pc-windows-msvc/release/bundle/*/*
+          if-no-files-found: error

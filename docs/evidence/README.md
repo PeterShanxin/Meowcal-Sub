@@ -12,3 +12,13 @@ identifiers.
 .\scripts\run-subtitle-eval.ps1 -Live -Runs 3 `
   -ReportPath .\docs\evidence\2026-07-31-arm64-subtitle-eval.json
 ```
+
+`2026-08-01-arm64-package.json` records the locally generated ARM64 MSI and
+NSIS artifacts. Reproduce it with:
+
+```powershell
+.\scripts\build-package.ps1 -Architecture arm64
+```
+
+The package report proves artifact generation and hashes only. Installation,
+upgrade, repair, uninstall, and first-run behavior remain manual Windows gates.

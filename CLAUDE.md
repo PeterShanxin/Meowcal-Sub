@@ -30,6 +30,9 @@ Use `.\dev-browser.cmd` for browser-only UI work and `.\dev-tauri.cmd` for the
 current ARM64 Tauri development flow. Browser mode does not prove Windows OCR,
 capture, selector, overlay, tray, installer, or DPI/window behavior.
 
+Use `.\scripts\build-package.ps1 -Architecture auto` for architecture-matched
+MSI/NSIS bundles. The script applies the verified ARM64 compiler safeguards.
+
 ## Non-negotiable rules
 
 - Work in an isolated worktree and preserve unrelated changes.

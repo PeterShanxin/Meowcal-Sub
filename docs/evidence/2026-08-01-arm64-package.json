@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "generatedAtUtc": "2026-08-01T07:50:34Z",
+  "architecture": "aarch64",
+  "productVersion": "0.5.0",
+  "target": "arm64",
+  "build": {
+    "overlayHost": "succeeded",
+    "cargoBuildJobs": 1,
+    "releaseCodegenUnits": 1,
+    "releaseLto": false,
+    "releaseStrip": false,
+    "incremental": false
+  },
+  "artifacts": [
+    {
+      "file": "Meowcal Sub_0.5.0_arm64-setup.exe",
+      "bytes": 20895804,
+      "sha256": "CF107AF6CD88E1745953FBDE769D9BC5F7DD98AB4DCA7C49C85D9DAAAC69CA82"
+    },
+    {
+      "file": "Meowcal Sub_0.5.0_arm64_en-US.msi",
+      "bytes": 32854016,
+      "sha256": "C43E31CCCB4DD8EA2E38E4CEC20D4A491824D1B88B1D265BD9D8AFE2236EC37E"
+    }
+  ],
+  "manualStatus": "artifact-built-not-installed"
+}
