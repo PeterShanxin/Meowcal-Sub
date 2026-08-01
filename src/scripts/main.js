@@ -1879,7 +1879,9 @@ async function startTranslationNow() {
 }
 
 /**
- * Start translation (UX gate: if Foundry is enabled but not Ready, prompt user)
+ * Start translation. The curated local engine is started automatically when it
+ * is installed but idle; the setup/repair modal is reserved for missing or
+ * unhealthy files so a normal session does not require an extra warm-up click.
  */
 async function handleStartTranslation() {
     console.log('Start translation clicked');
@@ -1889,10 +1891,32 @@ async function handleStartTranslation() {
 
     const foundryEnabled = document.getElementById('toggle-foundry-local')?.checked === true;
     if (foundryEnabled) {
-        const status = await refreshFoundryStatus({ probe: true, reason: 'start-translation' });
+        let status = await refreshFoundryStatus({ probe: true, reason: 'start-translation' });
         if (!status || status.phase !== 'ready') {
-            openFoundryWarmupModal(status);
-            return;
+            const needsAutomaticStart = status?.phase === 'notRunning' || status?.phase === 'preparing';
+            if (needsAutomaticStart) {
+                const startButton = document.getElementById('btn-start');
+                if (startButton) {
+                    startButton.disabled = true;
+                }
+                renderFoundryStatusChecking('Starting the private translation engine...');
+                try {
+                    status = await TauriBridge.invoke('make_foundry_ready');
+                    renderFoundryStatus(status);
+                } catch (e) {
+                    console.error('Failed to start the private translation engine:', e);
+                    status = null;
+                }
+            }
+
+            if (!status || status.phase !== 'ready') {
+                const startButton = document.getElementById('btn-start');
+                if (startButton) {
+                    startButton.disabled = !appState.captureRegion;
+                }
+                openFoundryWarmupModal(status);
+                return;
+            }
         }
     }
 
