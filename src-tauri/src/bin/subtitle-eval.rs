@@ -2,7 +2,7 @@ use meowcal_sub::config::AppConfig;
 use meowcal_sub::llm::{FoundryLocalBackend, TranslatorBackend};
 use meowcal_sub::subtitle_eval::{
     build_live_report, grade_live_output, load_dataset, run_deterministic, ExpectedAction,
-    LiveCaseResult, SubtitleEvalDataset,
+    LiveCaseResult, LiveEvalMetadata, SubtitleEvalCase, SubtitleEvalDataset,
 };
 use std::env;
 use std::fs;
@@ -93,6 +93,37 @@ async fn run_live(
     engine_version: String,
     model_id: String,
 ) -> Result<meowcal_sub::subtitle_eval::LiveEvalReport, String> {
+    // The approved latency budgets are explicitly for a warm model. Exercise
+    // one fixed, privacy-safe Chinese-to-English sample before measuring the
+    // dataset, and keep this cold-start timing separate in the report.
+    let warmup_started = Instant::now();
+    let warmup_output = backend
+        .translate("你好", "zh-CN", "en-US")
+        .await
+        .map_err(|error| format!("warmup: {error}"))?;
+    let warmup_case = SubtitleEvalCase {
+        id: "warmup-sample".to_string(),
+        source_language: "zh-CN".to_string(),
+        target_language: "en-US".to_string(),
+        source_text: "你好".to_string(),
+        tags: vec!["warmup".to_string()],
+        expected_action: ExpectedAction::Translate,
+        acceptable_outputs: Vec::new(),
+        max_output_lines: 1,
+    };
+    let warmup = grade_live_output(
+        &warmup_case,
+        0,
+        &warmup_output,
+        warmup_started.elapsed().as_millis() as u64,
+    );
+    if !warmup.passed {
+        return Err(format!(
+            "warmup output rejected: {}",
+            warmup.reason.as_deref().unwrap_or("unknown")
+        ));
+    }
+
     let mut results: Vec<LiveCaseResult> = Vec::new();
     for run in 1..=runs {
         for case in dataset
@@ -120,11 +151,15 @@ async fn run_live(
     Ok(build_live_report(
         dataset,
         results,
-        chrono::Utc::now().to_rfc3339(),
-        env::consts::ARCH.to_string(),
-        engine_version,
-        model_id,
-        runs,
+        LiveEvalMetadata {
+            generated_at_utc: chrono::Utc::now().to_rfc3339(),
+            architecture: env::consts::ARCH.to_string(),
+            engine_version,
+            model_id,
+            runs,
+            warmup_latency_ms: warmup.latency_ms,
+            warmup_passed: warmup.passed,
+        },
     ))
 }
 

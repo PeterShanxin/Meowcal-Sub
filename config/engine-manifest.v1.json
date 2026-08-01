@@ -71,7 +71,7 @@
     "preferredPort": 11436,
     "portPolicy": "dynamicLoopback",
     "contextSize": 2048,
-    "extraArgs": ["--jinja", "--no-webui"]
+    "extraArgs": ["--jinja", "--no-webui", "--parallel", "1"]
   },
   "rollback": {
     "retainLastKnownGood": true,

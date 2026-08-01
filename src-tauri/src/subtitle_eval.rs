@@ -81,6 +81,11 @@ pub struct LiveEvalReport {
     pub engine_version: String,
     pub model_id: String,
     pub runs: usize,
+    /// Latency of the fixed sample request used to warm the runtime before
+    /// measured subtitle requests begin. This is reported separately so the
+    /// warm-model budgets are not confused with first-load latency.
+    pub warmup_latency_ms: u64,
+    pub warmup_passed: bool,
     pub passed: bool,
     pub translated_attempts: usize,
     pub filtered_cases: usize,
@@ -89,6 +94,17 @@ pub struct LiveEvalReport {
     pub p50_within_budget: bool,
     pub p95_within_budget: bool,
     pub results: Vec<LiveCaseResult>,
+}
+
+#[derive(Debug, Clone)]
+pub struct LiveEvalMetadata {
+    pub generated_at_utc: String,
+    pub architecture: String,
+    pub engine_version: String,
+    pub model_id: String,
+    pub runs: usize,
+    pub warmup_latency_ms: u64,
+    pub warmup_passed: bool,
 }
 
 pub fn load_dataset(json: &str) -> Result<SubtitleEvalDataset, String> {
@@ -210,11 +226,7 @@ pub fn grade_live_output(
 pub fn build_live_report(
     dataset: &SubtitleEvalDataset,
     results: Vec<LiveCaseResult>,
-    generated_at_utc: String,
-    architecture: String,
-    engine_version: String,
-    model_id: String,
-    runs: usize,
+    metadata: LiveEvalMetadata,
 ) -> LiveEvalReport {
     let mut latencies: Vec<u64> = results.iter().map(|result| result.latency_ms).collect();
     latencies.sort_unstable();
@@ -223,11 +235,13 @@ pub fn build_live_report(
     LiveEvalReport {
         schema_version: 1,
         dataset_id: dataset.dataset_id.clone(),
-        generated_at_utc,
-        architecture,
-        engine_version,
-        model_id,
-        runs,
+        generated_at_utc: metadata.generated_at_utc,
+        architecture: metadata.architecture,
+        engine_version: metadata.engine_version,
+        model_id: metadata.model_id,
+        runs: metadata.runs,
+        warmup_latency_ms: metadata.warmup_latency_ms,
+        warmup_passed: metadata.warmup_passed,
         passed: results.iter().all(|result| result.passed),
         translated_attempts: results.len(),
         filtered_cases: dataset
@@ -319,5 +333,28 @@ mod tests {
     fn latency_percentiles_use_nearest_rank() {
         assert_eq!(percentile(&[100, 200, 300, 400], 50), 200);
         assert_eq!(percentile(&[100, 200, 300, 400], 95), 400);
+    }
+
+    #[test]
+    fn live_report_keeps_warmup_separate_from_measured_attempts() {
+        let dataset = shipped_dataset();
+        let case = &dataset.cases[0];
+        let result = grade_live_output(case, 1, &case.acceptable_outputs[0], 700);
+        let report = build_live_report(
+            &dataset,
+            vec![result],
+            LiveEvalMetadata {
+                generated_at_utc: "now".to_string(),
+                architecture: "aarch64".to_string(),
+                engine_version: "1.0.1".to_string(),
+                model_id: "HY-MT".to_string(),
+                runs: 1,
+                warmup_latency_ms: 2_000,
+                warmup_passed: true,
+            },
+        );
+        assert_eq!(report.warmup_latency_ms, 2_000);
+        assert!(report.warmup_passed);
+        assert_eq!(report.p50_latency_ms, 700);
     }
 }

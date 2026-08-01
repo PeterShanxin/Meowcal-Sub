@@ -2,7 +2,7 @@
 
 **Audit date:** 2026-08-01
 
-**Code baseline:** `f62de5a7c07718ae30e7db3d0760d130bb187efd`
+**Code baseline:** `74c9af3304a068ef206460cce2c12524f8c5ef59`
 
 **Approved contract:** `2026-07-29-curated-local-translation-app-spec.md`
 
@@ -25,7 +25,7 @@ episode regression remain release blockers.
 | 2 — Critical correctness | Automated complete; manual gate open | Windows OCR aliases, language-aware HY-MT validation, deterministic rejection classification, explicit display states, representative dataset and live evaluation | Live OCR alias and overlay failure-path verification |
 | 3 — Curated HY-MT engine | Automated complete; manual gate open | Typed embedded manifest, per-architecture selection, preflight, transactional install/repair/rollback, dynamic loopback port, exact process ownership, support script, licenses, and tests | Clean Windows install/adopt/repair/upgrade/restart/sleep rehearsal |
 | 4 — Product UX | Normal-mode MVP complete; manual gate open | One private Tencent HY-MT setup, shared readiness, guided install/repair/sample translation, infrastructure choices removed | Keyboard/focus, first-run/returning-launch recording, and developer-mode decision |
-| 5 — Lifecycle and performance | Automated complete; manual gate open | Hidden-first DPI-aware startup, session/capture IDs, cancellation, stale suppression, dedupe, stage timings, privacy-safe logs, and ARM64 live quality reports; latest follow-up measured p50 807 ms / p95 1,842 ms, over the warm-model budgets | Whole-pipeline ARM64 capture evidence, x64 budget, monitor/sleep matrix, and a documented resolution for the current ARM64 model-budget exception |
+| 5 — Lifecycle and performance | Automated complete; manual gate open | Hidden-first DPI-aware startup, session/capture IDs, cancellation, stale suppression, dedupe, stage timings, privacy-safe logs, and explicit warm-up evaluation; comparable ARM64 runs measured auto-slot p50 841 ms / p95 4,091 ms versus single-slot p50 660 ms / p95 3,558 ms, with 33/33 quality passes | Whole-pipeline ARM64 capture evidence, x64 budget, monitor/sleep matrix, and a documented resolution for the remaining ARM64 p95 budget exception |
 | 6 — Modular decomposition | In progress | New engine, installer, validation, lifecycle, display and overlay-hint modules; legacy compatibility boundary extracted; `commands.rs` now meets its 2,432-line ceiling | `foundry_local.rs`, `manager.rs`, `main.js`, and remaining overlay/selector boundaries still exceed the reviewed ceiling |
 | 7 — Release closure | Open | Clean automated gate and CI pass on the MVP; ARM64 direct model and tray-lifecycle smoke evidence; native x64 MSI/NSIS workflow succeeded on `1d65aa4` (run `30695886191`) | Clean installer/adopt/repair/rollback/upgrade rehearsal, x64 runtime/performance evidence, full monitor and sleep/resume matrix, uninstall, and a fresh 30-minute episode regression after the final behavior change |
 
@@ -41,7 +41,7 @@ episode regression remain release blockers.
 | Raw OCR is not mislabeled as translation | Proven by typed display-state tests; live failure-path manual proof outstanding |
 | Main window shows once at valid final position | Hidden-before-show implemented; bounds validation and mixed-DPI manual proof outstanding |
 | Exactly one app-owned runtime exists | Exact child ownership, dynamic port, concurrent-start tests, and ARM64 smoke pass; collision/restart/sleep-resume manual proof outstanding |
-| ARM64 and x64 performance results | ARM64 live model quality reports exist, but the latest p50/p95 misses budget; whole-pipeline ARM64 and all x64 runtime/performance evidence missing |
+| ARM64 and x64 performance results | ARM64 direct-model before/after reports exist; single-slot runtime brings p50 within budget but p95 remains over budget; whole-pipeline ARM64 and all x64 runtime/performance evidence missing |
 | Unified verification matches CI and ratchets can fail | Current command/CI parity and negative ratchet contract tests pass |
 | Core monoliths shrink or retain explicit exceptions | Enforced and shrinking, but decomposition is unfinished |
 | Full episode regression passes | Missing and must be performed after the final visible change |

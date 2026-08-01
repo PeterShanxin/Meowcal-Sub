@@ -82,7 +82,10 @@ Shared contracts have one owner before parallel decomposition begins:
   architecture. ARM64 uses the validated CPU path because the current Adreno
   OpenCL path corrupts HY-MT output; x64 retains Vulkan acceleration. Runtime
   code cannot replace this evidence-backed policy with a global GPU-layer
-  default.
+  default. The manifest also limits the app-owned server to one request slot;
+  subtitle translation is serialized intentionally to avoid the ARM64 runtime's
+  unstable automatic multi-slot latency. This remains subject to x64 and
+  capture-to-overlay validation.
 - Product version: `src-tauri/tauri.conf.json` is the product version record.
   `package.json` and `src-tauri/Cargo.toml` are synchronized mirrors.
 - Display state: the pipeline owns translated/source-only/failure semantics.

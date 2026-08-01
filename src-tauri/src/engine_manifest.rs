@@ -348,6 +348,7 @@ mod tests {
         assert!(manifest.runtime_for(Architecture::Aarch64).is_ok());
         assert!(manifest.runtime_for(Architecture::X86_64).is_ok());
         assert_eq!(manifest.launch.host, "127.0.0.1");
+        assert!(manifest.launch.extra_args.contains(&"--parallel".into()));
         assert!(!manifest.authenticity.remote_refresh);
     }
 
