@@ -2,7 +2,7 @@
 
 **Audit date:** 2026-08-01
 
-**Code baseline:** `74c9af3304a068ef206460cce2c12524f8c5ef59`
+**Code baseline:** `02946e2076bbaecbe252de48f0d22ad60e9ddded`
 
 **Approved contract:** `2026-07-29-curated-local-translation-app-spec.md`
 
