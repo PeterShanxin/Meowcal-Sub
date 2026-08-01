@@ -15,10 +15,14 @@ jobs:
   validate:
     name: Validate release contract
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     outputs:
       version: ${{ steps.version.outputs.version }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - uses: actions/setup-node@v4
         with:
@@ -44,6 +48,47 @@ jobs:
             throw "Product version does not match the requested release."
           }
           "version=$env:RELEASE_VERSION" >> $env:GITHUB_OUTPUT
+
+      - name: Reserve immutable release tag
+        shell: pwsh
+        env:
+          RELEASE_SHA: ${{ github.sha }}
+          RELEASE_VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          $tag = "v$env:RELEASE_VERSION"
+
+          function Test-ReservedTag {
+            git fetch --force origin "refs/tags/$tag:refs/tags/$tag" *> $null
+            if ($LASTEXITCODE -ne 0) {
+              return $false
+            }
+
+            $tagSha = (git rev-list -n 1 $tag).Trim()
+            if ($tagSha -ne $env:RELEASE_SHA) {
+              throw "Tag $tag already points to $tagSha, not $env:RELEASE_SHA."
+            }
+            return $true
+          }
+
+          if (Test-ReservedTag) {
+            Write-Host "Tag $tag already reserves this release commit."
+            exit 0
+          }
+
+          git tag --delete $tag *> $null
+          git tag $tag $env:RELEASE_SHA
+          if ($LASTEXITCODE -ne 0) {
+            throw "Failed to create local tag $tag."
+          }
+
+          git push origin "refs/tags/$tag"
+          if ($LASTEXITCODE -ne 0) {
+            if (Test-ReservedTag) {
+              Write-Host "Another run reserved $tag for this release commit."
+              exit 0
+            }
+            throw "Failed to reserve tag $tag."
+          }
 
   package-x64:
     name: Package x64
@@ -111,8 +156,6 @@ jobs:
 
       - name: Create draft GitHub release
         shell: pwsh
-        env:
-          RELEASE_SHA: ${{ github.sha }}
         run: |
           $tag = "v$env:RELEASE_VERSION"
           gh release view $tag --repo $env:GITHUB_REPOSITORY *> $null
@@ -135,7 +178,7 @@ jobs:
 
           gh release create $tag @assets `
             --repo $env:GITHUB_REPOSITORY `
-            --target $env:RELEASE_SHA `
+            --verify-tag `
             --title "Meowcal Sub $tag" `
             --notes-file $notesPath `
             --draft `
