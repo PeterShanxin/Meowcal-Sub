@@ -40,8 +40,9 @@ Python/OpenSubtitles MeoCoSub2 direction remains out of scope.
 
 ## Current delivery mode
 
-- Authoritative implementation worktree:
-  `D:\CodexWorktrees\meowcal-main-merge`.
+- The curated MVP is integrated on `main`. Start every new implementation lane
+  from current `origin/main` in a fresh isolated worktree; do not revive the
+  removed MVP integration worktree.
 - Preserve unrelated user changes in every other checkout and worktree.
 - Continue with small, coherent checkpoint commits.
 - The user authorized direct integration for this large MVP redesign. Do not
@@ -51,6 +52,22 @@ Python/OpenSubtitles MeoCoSub2 direction remains out of scope.
   requirement-specific evidence.
 - A behavior change invalidates earlier manual validation for the behavior it
   affects. Re-run the relevant Windows gate.
+
+## v0.6 release preparation
+
+- `0.6.0` is the next product version. It is a minor release of the same
+  product, not a new `0.1` lineage and not yet the `1.0` stability promise.
+- `.github/workflows/package.yml` is the reusable architecture-aware package
+  workflow. It must continue to produce MSI and NSIS artifacts for an explicitly
+  validated `x64` or `arm64` input.
+- `.github/workflows/release.yml` may prepare a draft release only from `main`,
+  only when every product version record matches the requested version, and
+  only after both architecture package jobs succeed.
+- Draft release assets must include both installer formats for ARM64 and x64
+  plus SHA-256 checksums. Keep release permissions read-only except for the
+  final draft-creation job.
+- Do not publish the draft as a stable GitHub release until clean install,
+  upgrade, x64 runtime, and the final real 30-minute episode gate pass.
 
 ## Non-negotiable product contracts
 

@@ -9,7 +9,7 @@
 # Basic info about our app
 name = "meowcal-sub"        # The app name (used in binary and imports)
 default-run = "meowcal-sub"
-version = "0.5.0"           # Version number (semantic versioning: major.minor.patch)
+version = "0.6.0"           # Version number (semantic versioning: major.minor.patch)
 edition = "2021"            # Rust edition (like ES6 vs ES2020 in JavaScript)
 description = "NPU-accelerated subtitle translation for Copilot+ PCs"
 authors = ["PeterShanxin"]
