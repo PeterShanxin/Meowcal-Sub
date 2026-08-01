@@ -2,7 +2,7 @@
 
 **Audit date:** 2026-08-01
 
-**Product-code baseline:** `164ed46` (`fix: start managed engine from translation action`)
+**Product-code baseline:** `8c12412` (`fix: start managed engine without warmup prompt`)
 
 **Approved contract:** `2026-07-29-curated-local-translation-app-spec.md`
 
