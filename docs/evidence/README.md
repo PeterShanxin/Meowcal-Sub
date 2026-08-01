@@ -46,7 +46,9 @@ does not prove OCR, capture, translation, overlay, or episode behavior.
 `2026-08-01-arm64-managed-start-smoke.json` records the stronger Tauri path:
 with the app-owned runtime stopped, clicking Start Translation started and
 warmed HY-MT, entered the running state without showing the warm-up modal, and
-stopped cleanly. OCR, overlay, and episode validation remain separate gates.
+stopped the pipeline cleanly. The normal tray-close behavior keeps the app
+alive; explicit process cleanup was verified separately. OCR, overlay, and
+episode validation remain separate gates.
 
 `2026-08-01-arm64-ocr-alias-smoke.json` records the live Windows OCR readiness
 check: the app selected `zh-CN` while Windows reported the equivalent installed

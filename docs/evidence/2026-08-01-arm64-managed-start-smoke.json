@@ -20,7 +20,8 @@
   },
   "stop": {
     "translationStopped": true,
-    "ownedRuntimeAfterWindowClose": false
+    "trayCloseKeepsAppAlive": true,
+    "ownedRuntimeAfterExplicitCleanup": false
   },
-  "manualStatus": "passed-managed-start-stop; OCR-overlay-and-episode-not-exercised"
+  "manualStatus": "passed-managed-start-stop; explicit-process-cleanup-verified; OCR-overlay-and-episode-not-exercised"
 }
