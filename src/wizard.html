@@ -3,96 +3,17 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Local Translation Setup</title>
-    <link rel="stylesheet" href="styles/main.css" />
-    <link rel="stylesheet" href="styles/wizard.css" />
+    <meta name="color-scheme" content="dark" />
+    <title>Set up Meowcal Sub</title>
+    <link rel="icon" href="./assets/meowcal-icon.png" />
+    <link rel="stylesheet" href="./styles/phosphor-subset.css" />
+    <link rel="stylesheet" href="./styles/tokens.css" />
+    <link rel="stylesheet" href="./styles/app-shell.css" />
+    <link rel="stylesheet" href="./styles/wizard-next.css" />
+    <link rel="stylesheet" href="./styles/wizard-content.css" />
   </head>
   <body>
-    <main id="wizard">
-      <ol class="wizard-step-bar" aria-label="Translation engine setup progress">
-        <li class="wizard-step-item active" data-step="1">
-          <span class="wizard-step-number" aria-hidden="true">1</span><span>About</span>
-        </li>
-        <li class="wizard-step-connector" aria-hidden="true"></li>
-        <li class="wizard-step-item" data-step="2">
-          <span class="wizard-step-number" aria-hidden="true">2</span><span>Install</span>
-        </li>
-        <li class="wizard-step-connector" aria-hidden="true"></li>
-        <li class="wizard-step-item" data-step="3">
-          <span class="wizard-step-number" aria-hidden="true">3</span><span>Ready</span>
-        </li>
-      </ol>
-
-      <section class="wizard-panel" id="step-about">
-        <h1 class="wizard-panel-title" tabindex="-1">Private subtitle translation</h1>
-        <p class="wizard-panel-desc">
-          Meowcal Sub installs the supported Tencent HY-MT translation engine and
-          keeps captured subtitles on this PC. No account, cloud service, model
-          choice, or command line is required.
-        </p>
-        <div class="wizard-facts">
-          <div><strong>Download</strong><span>About 1.1 GB</span></div>
-          <div><strong>Storage</strong><span>3 GB free during setup</span></div>
-          <div><strong>Compatibility</strong><span>Windows 11, 8 GB RAM</span></div>
-          <div><strong>First setup</strong><span>Usually several minutes</span></div>
-        </div>
-        <p class="wizard-note">
-          Setup verifies every file, starts the engine locally, and checks a real
-          Chinese-to-English sample before reporting Ready.
-        </p>
-      </section>
-
-      <section class="wizard-panel" id="step-install" hidden>
-        <h1 class="wizard-panel-title" tabindex="-1">Installing translation engine</h1>
-        <p class="wizard-panel-desc">
-          Keep Meowcal Sub open. An interrupted download can resume, and an existing
-          verified installation is reused.
-        </p>
-        <div class="wizard-progress-box" id="install-progress" role="status" aria-live="polite">
-          <div class="wizard-spinner" aria-hidden="true"></div>
-          <div>
-            <strong id="install-status">Checking this PC…</strong>
-            <p id="install-detail">Preparing the supported engine.</p>
-          </div>
-        </div>
-        <div class="wizard-error-box" id="install-error" role="alert" hidden>
-          <strong>Translation engine needs attention</strong>
-          <p id="install-error-message"></p>
-          <code id="install-support-code"></code>
-        </div>
-        <details class="wizard-details">
-          <summary>Setup details</summary>
-          <pre id="setup-output" aria-live="polite"></pre>
-        </details>
-      </section>
-
-      <section class="wizard-panel" id="step-ready" hidden>
-        <h1 class="wizard-panel-title" tabindex="-1">Ready to watch</h1>
-        <div class="wizard-success-box">
-          <span class="wizard-success-icon" aria-hidden="true">✓</span>
-          <div>
-            <strong>Private translation is ready</strong>
-            <p>A real sample translation passed on this PC.</p>
-          </div>
-        </div>
-        <div class="wizard-summary" aria-live="polite">
-          <div><span>Status</span><strong>Ready</strong></div>
-          <div><span>Sample</span><strong id="sample-result">Checking…</strong></div>
-          <div><span>Latency</span><strong id="sample-latency">—</strong></div>
-        </div>
-        <p class="wizard-note">
-          Close setup, select the subtitle area, then choose Start Translation.
-        </p>
-      </section>
-
-      <footer class="wizard-actions">
-        <button class="btn btn-outline btn-small" id="btn-cancel">Cancel</button>
-        <button class="btn btn-primary btn-small" id="btn-primary">Install translation engine</button>
-      </footer>
-    </main>
-
-    <script src="scripts/tauri-bridge.js"></script>
-    <script src="scripts/wizard-state.js"></script>
-    <script src="scripts/wizard.js"></script>
+    <meowcal-setup></meowcal-setup>
+    <script type="module" src="./entries/wizard.ts"></script>
   </body>
 </html>

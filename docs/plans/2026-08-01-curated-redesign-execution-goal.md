@@ -12,6 +12,21 @@ Chinese or Japanese subtitle region, and watches a TV series with private,
 low-latency English translation from Tencent HY-MT. The user does not need to
 understand Foundry, llama.cpp, GGUF files, endpoints, ports, or command lines.
 
+## Selected visual and frontend direction
+
+- Use the seven approved reference screens under `D:\Downloads\ref` as the
+  visual baseline.
+- Preserve the calm deep-navy cinematic atmosphere, restrained glass, thin
+  luminous borders, and subtle cat identity.
+- Improve the references by tightening oversized headings, excess glow,
+  repeated cards, empty space, contrast, realistic desktop density, and
+  familiar Windows interaction patterns.
+- ADR-0003 is approved: keep Tauri/Rust, add a Vite multi-page build, use
+  TypeScript controllers and Lit 3 custom elements for Home and setup, and
+  preserve the proven overlay/selector paths during the MVP migration.
+- Normal mode has one contextual primary action and never exposes Foundry,
+  endpoint, port, model-selection, prompt-budget, or raw OCR tuning concepts.
+
 ## Canonical sources, in order
 
 1. Live code and Git state in the implementation worktree.
@@ -55,27 +70,28 @@ Python/OpenSubtitles MeoCoSub2 direction remains out of scope.
 - Do not claim the redesign complete without x64 evidence and a final real
   30-minute episode regression.
 
-## Immediate next stage — visual direction and sensible UI redesign
+## Immediate next stage — finish the selected UI MVP
 
-This stage comes before further broad production-UI implementation.
+The user approved the compact cinematic Windows utility direction and the
+incremental Lit implementation. Do not restart concept generation.
 
-1. Audit the current first launch, returning launch, select-region, readiness,
-   start, stop, repair, and failure paths.
-2. Preserve the core flow: select subtitle area, see one private-engine status,
-   start watching, stop watching.
-3. Generate exactly three independent Windows desktop concepts grounded in the
-   current app and its orange/coral identity. The concepts must differ in
-   information hierarchy and interaction structure, not only color.
-4. Normal mode must not expose Foundry, model names, endpoint URLs, ports,
-   runtime files, or backend toggles.
-5. Each concept must show realistic states for ready, setup required, starting,
-   translating, and repair required without turning the main screen into a
-   diagnostics dashboard.
-6. Stop after presenting the three concepts. Do not implement the production UI
-   until the user selects or combines a direction.
-7. Record the selected direction as a visual target and acceptance checklist.
-8. Implement it as a separate behavior-visible wave, then run fresh keyboard,
-   focus, resize, first-launch, returning-launch, and Windows manual validation.
+1. Finish native Tauri visual QA for Home ready/setup/starting/running/repair,
+   the four setup steps, Overlay appearance, and Settings at realistic Windows
+   sizes and high-DPI scaling.
+2. Compare each implementation state with the approved `D:\Downloads\ref`
+   source in one same-viewport comparison; fix every visible P0-P2 issue.
+3. Preserve the compact Home contract: readiness, language pair, selected area,
+   one contextual primary action, and one quiet local-processing line.
+4. Keep normal mode free of Foundry, model names, endpoint URLs, ports, runtime
+   files, backend toggles, raw OCR tuning, and capture dimensions.
+5. Verify first launch, returning launch, restore-without-jump, keyboard focus,
+   resize, setup recovery, start/stop, and overlay adjustment in the native app.
+6. Run deterministic tests and one centralized repository validation after the
+   last visual fix. Do not repeat full suites inside individual implementation
+   lanes.
+7. Record exact screenshots and iteration evidence in `design-qa.md`.
+8. Commit and directly integrate this authorized MVP only after the native gate
+   passes; the user's real episode test remains the final product gate.
 
 ## Remaining release work after visual selection
 
@@ -101,21 +117,33 @@ Work in this order unless new evidence changes the dependency:
 
 At the start of every continuation:
 
-1. Read this file, the approved spec, the completion audit, `CLAUDE.md`, and
-   `docs/AGENT_GUIDE.md`.
-2. Run `git status --short --branch`, `git log -5 --oneline --decorate`, and
-   inspect the exact files named by the next incomplete requirement.
-3. State one bounded outcome for the current checkpoint and the evidence that
-   will prove it. Do not start an unrelated cleanup.
-4. Inspect before editing. Do not infer current behavior from old chat text.
-5. Add or update a failing test when the behavior can be automated.
-6. Make the smallest coherent implementation that moves the full product goal
-   forward; do not substitute a narrower product contract.
-7. Run focused tests, then the repository verifier appropriate to the touched
-   area.
-8. Manually verify visible Windows behavior when required.
-9. Update the completion audit with exact evidence and exact missing proof.
+1. Read `CLAUDE.md`, this file, and only the reference directly named by the
+   next incomplete requirement. Load the approved spec or completion audit only
+   when a contract is unclear or evidence must be updated.
+2. Run `git status --short --branch` and inspect only the exact target files,
+   contracts, and focused tests. Do not replay broad conversation history or
+   re-audit the whole repository for a known task.
+3. Classify the task before model work: exact one-file/config/CSS work uses the
+   weakest execution level; known bugs with a focused test use a small bounded
+   worker; unknown root cause, shared interfaces, security, migration,
+   concurrency, or deployment require stronger planning or verification.
+4. State one bounded outcome, owned files, forbidden files, focused validation,
+   and the evidence that proves completion.
+5. Add or update a failing test when behavior can be automated, then make the
+   smallest coherent implementation that preserves the full product contract.
+6. Workers run focused tests only and return a compact changed-files/test/risk
+   summary. They do not run installs, full suites, or broad exploration.
+7. Use at most one automatic repair. Escalate uncertainty instead of repeating
+   worker loops.
+8. Run one centralized repository validation after all accepted lanes finish.
+9. Manually verify visible Windows behavior and update exact evidence when the
+   checkpoint changes user-facing behavior.
 10. Commit only scoped files. Push only according to the current delivery mode.
+
+Parallel workers are allowed only for at most two disjoint file sets with
+stable contracts and independent focused tests. Shared interfaces, generated
+sources, or ordering dependencies must remain sequential. Parallelism optimizes
+latency, not total token use.
 
 When something fails:
 

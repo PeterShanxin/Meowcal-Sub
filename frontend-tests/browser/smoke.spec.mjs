@@ -53,17 +53,23 @@ test("normal setup presents one private HY-MT engine without infrastructure choi
   page,
 }) => {
   await page.goto("/");
-  await expect(page.getByRole("heading", { name: /Local Translation Engine/ })).toBeVisible();
-  await expect(page.getByText(/Tencent HY-MT runs privately/)).toBeVisible();
+  await expect(page).toHaveTitle("Meowcal Sub");
+  await expect(page.getByRole("navigation", { name: "Main navigation" })).toBeVisible();
+  await expect(page.getByLabel("Original subtitle language")).toBeVisible();
+  await expect(page.getByLabel("Translation language")).toBeVisible();
   await expect(page.locator("body")).not.toContainText("Foundry Local");
   await expect(page.locator("body")).not.toContainText("Passthrough");
   await expect(page.locator("body")).not.toContainText("translateLocally");
   await expect(page.locator("body")).not.toContainText("Model ID");
   await expect(page.locator("body")).not.toContainText("endpoint");
 
+  await page.getByRole("button", { name: "Settings" }).click();
+  await expect(page.getByText("Keep running in the tray")).toHaveCount(0);
+  await expect(page.getByText("Start with Windows")).toHaveCount(0);
+
   await page.goto("/wizard.html");
-  await expect(page.getByText("Private subtitle translation")).toBeVisible();
-  await expect(page.locator("body")).toContainText("Tencent HY-MT");
+  await expect(page.getByRole("heading", { name: "Welcome to Meowcal Sub" })).toBeVisible();
+  await expect(page.getByText("Everything stays on this PC")).toBeVisible();
   await expect(page.locator("body")).not.toContainText("Foundry");
   await expect(page.locator("body")).not.toContainText("winget");
   await expect(page.locator("body")).not.toContainText("Model ID");
@@ -74,11 +80,16 @@ test("guided engine setup has one install action and no infrastructure choices",
 }) => {
   await page.goto("/wizard.html");
 
-  await expect(page.getByRole("heading", { name: "Private subtitle translation" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Install translation engine" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Welcome to Meowcal Sub" })).toBeVisible();
+  await expect(page.getByRole("button", { name: /Continue/ })).toBeVisible();
   await expect(page.locator("body")).not.toContainText(
     /\b(?:Foundry|endpoint|port|model ID|cache directory)\b|llama\.cpp/i,
   );
-  await expect(page.locator(".wizard-step-item")).toHaveCount(3);
-  await expect(page.getByRole("heading", { name: "Private subtitle translation" })).toBeFocused();
+  await expect(page.locator(".step-dots i")).toHaveCount(4);
+  await expect(page.getByRole("heading", { name: "Welcome to Meowcal Sub" })).toBeFocused();
+
+  await page.getByRole("button", { name: /Continue/ }).click();
+  await expect(page.getByRole("heading", { name: "Choose your languages" })).toBeVisible();
+  await expect(page.getByLabel("Original subtitles")).toBeVisible();
+  await expect(page.getByLabel("Translate into")).toBeVisible();
 });

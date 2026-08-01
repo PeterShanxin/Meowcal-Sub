@@ -32,8 +32,10 @@ subtitle behavior.
 
 ## Frontend
 
-- Use standards-based vanilla JavaScript modules until a framework change is
-  separately approved.
+- ADR-0003 owns the approved incremental frontend stack: Vite multi-page output,
+  TypeScript state/controllers, and Lit custom elements for migrated surfaces.
+  Keep selector/overlay legacy behavior behind dedicated Vite entries until #34
+  migrates them deliberately; do not create a second state owner.
 - Route backend calls through `src/scripts/tauri-bridge.js`.
 - Keep DOM lookup/event wiring separate from state transitions and presentation
   helpers.

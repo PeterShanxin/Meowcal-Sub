@@ -1,0 +1,14 @@
+{
+    "$schema": "../gen/schemas/desktop-schema.json",
+    "identifier": "overlay-selector",
+    "description": "Background and focus permissions for the selector and overlay windows",
+    "windows": [
+        "selector",
+        "overlay"
+    ],
+    "permissions": [
+        "core:webview:allow-set-webview-background-color",
+        "core:window:allow-set-background-color",
+        "core:window:allow-set-focus"
+    ]
+}

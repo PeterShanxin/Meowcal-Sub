@@ -12,10 +12,10 @@ const result = spawnSync(
   process.execPath,
   [
     eslintEntry,
-    "src/scripts",
+    "src",
     "frontend-tests",
     "scripts/*.mjs",
-    "*.config.mjs",
+    "*.config.{mjs,mts}",
     "--max-warnings",
     String(baseline.eslintMaxWarnings),
   ],

@@ -1,0 +1,244 @@
+.home-screen {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: var(--space-4) clamp(24px, 6vw, 64px) var(--space-3);
+}
+
+.hero-block {
+  max-width: 620px;
+  text-align: center;
+}
+
+.state-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 30px;
+  padding: 5px 12px;
+  color: var(--accent);
+  background: rgba(110, 168, 255, 0.09);
+  border: 1px solid rgba(110, 168, 255, 0.15);
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.state-pill i,
+.support-line i {
+  font-size: 8px;
+}
+
+.state-pill.state-running {
+  color: var(--success);
+  background: rgba(85, 214, 153, 0.1);
+  border-color: rgba(85, 214, 153, 0.18);
+}
+
+.state-pill.state-attention {
+  color: var(--warning);
+}
+
+.hero-block h1 {
+  margin: var(--space-3) 0 var(--space-2);
+  font-size: clamp(28px, 4.5vw, 34px);
+  line-height: 1.12;
+  letter-spacing: -0.035em;
+}
+
+.hero-block p {
+  max-width: 560px;
+  margin: 0 auto;
+  color: var(--text-2);
+  font-size: 15px;
+  line-height: 1.55;
+}
+
+.session-panel {
+  width: min(100%, 620px);
+  margin-top: var(--space-4);
+}
+
+.language-pair {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  gap: var(--space-3);
+  align-items: end;
+}
+
+.language-pair label {
+  display: grid;
+  gap: 6px;
+  color: var(--text-3);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.language-pair select,
+.settings-screen select {
+  width: 100%;
+  min-height: 46px;
+  padding: 0 42px 0 var(--space-4);
+  color: var(--text-1);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  box-shadow: var(--shadow-control);
+  cursor: pointer;
+}
+
+.language-arrow {
+  margin-bottom: 15px;
+  color: var(--text-3);
+  font-size: 20px;
+}
+
+.region-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: var(--space-4);
+  align-items: center;
+  width: 100%;
+  min-height: 64px;
+  margin-top: var(--space-3);
+  padding: 10px var(--space-3);
+  color: var(--text-1);
+  text-align: left;
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-panel);
+  box-shadow: var(--shadow-control);
+  cursor: pointer;
+  transition:
+    border-color var(--motion-fast),
+    background-color var(--motion-fast);
+}
+
+.region-row:hover {
+  background: var(--surface-2);
+  border-color: var(--border-strong);
+}
+
+.region-icon {
+  display: grid;
+  width: 42px;
+  height: 42px;
+  place-items: center;
+  color: var(--accent);
+  background: var(--accent-soft);
+  border-radius: 12px;
+  font-size: 22px;
+}
+
+.region-copy {
+  display: grid;
+  gap: 3px;
+}
+
+.region-copy strong {
+  font-size: 15px;
+}
+
+.region-copy small {
+  color: var(--text-3);
+  font-size: 12px;
+}
+
+.region-action {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--accent);
+  font-size: 14px;
+}
+
+.primary-zone {
+  display: grid;
+  justify-items: center;
+  width: min(100%, 620px);
+  margin-top: 14px;
+}
+
+.primary-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-3);
+  min-width: min(100%, 360px);
+  min-height: 50px;
+  padding: 0 var(--space-6);
+  color: #fff;
+  background: var(--accent-strong);
+  border: 1px solid rgba(208, 226, 255, 0.58);
+  border-radius: 14px;
+  box-shadow: 0 12px 30px rgba(35, 106, 215, 0.28);
+  cursor: pointer;
+  font-size: 17px;
+  font-weight: 650;
+  transition:
+    background-color var(--motion-fast),
+    transform var(--motion-fast);
+}
+
+.primary-action:hover:not(:disabled) {
+  background: #4d91f5;
+  transform: translateY(-1px);
+}
+
+.primary-action i {
+  font-size: 21px;
+}
+
+.primary-action .ph-spinner-gap {
+  animation: meowcal-spin 1.2s linear infinite;
+}
+
+.support-line {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+  color: var(--text-3);
+  font-size: 12px;
+}
+
+.tone-success {
+  color: var(--success);
+}
+
+.tone-warning {
+  color: var(--warning);
+}
+
+.tone-danger {
+  color: var(--danger);
+}
+
+.tone-accent {
+  color: var(--accent);
+}
+
+.session-summary {
+  display: none;
+}
+
+@keyframes meowcal-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (max-height: 650px) {
+  .home-screen {
+    padding-top: var(--space-4);
+  }
+
+  .hero-block h1 {
+    margin-top: var(--space-3);
+    font-size: 30px;
+  }
+
+  .session-panel {
+    margin-top: var(--space-4);
+  }
+}

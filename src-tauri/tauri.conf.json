@@ -4,9 +4,10 @@
   "version": "0.5.0",
   "identifier": "com.meowcal.sub",
   "build": {
-    "frontendDist": "../src",
-    "beforeDevCommand": "",
-    "beforeBuildCommand": ""
+    "frontendDist": "../dist",
+    "devUrl": "http://127.0.0.1:1420",
+    "beforeDevCommand": "npm run dev:tauri-web",
+    "beforeBuildCommand": "npm run build:web"
   },
   "app": {
     "withGlobalTauri": true,
@@ -17,10 +18,12 @@
     },
     "windows": [
       {
-        "title": "Meowcal Sub - Setup",
+        "title": "Meowcal Sub",
         "label": "main",
-        "width": 480,
-        "height": 600,
+        "width": 680,
+        "height": 500,
+        "minWidth": 560,
+        "minHeight": 430,
         "resizable": true,
         "center": false,
         "decorations": true,
@@ -66,8 +69,10 @@
         "title": "Local Translation Setup",
         "label": "foundry-wizard",
         "url": "wizard.html",
-        "width": 620,
-        "height": 540,
+        "width": 680,
+        "height": 500,
+        "minWidth": 560,
+        "minHeight": 430,
         "resizable": true,
         "center": true,
         "decorations": true,

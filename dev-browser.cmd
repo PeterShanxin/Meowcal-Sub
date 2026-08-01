@@ -24,7 +24,7 @@ if not exist "%CARGO_TARGET_DIR%" mkdir "%CARGO_TARGET_DIR%"
 
 REM Start the HTTP backend in a new window
 echo [1/2] Starting HTTP backend server (port 3001)...
-start "Meowcal Sub Backend" cmd /k "cd /d %~dp0src-tauri && cargo run -- --http-only"
+start "Meowcal Sub Backend" cmd /k "cd /d %~dp0 && npm run dev:backend"
 
 REM Wait a few seconds for the backend to start
 echo Waiting for backend to initialize...
@@ -39,6 +39,6 @@ echo =====================================================================
 echo.
 
 cd /d %~dp0
-npx serve src -l 3000 -C
+call npm run dev:browser
 
 endlocal

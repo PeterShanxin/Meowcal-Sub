@@ -13,6 +13,7 @@ use crate::llm::{
 use crate::ocr::{PreprocessingConfig, WindowsOcr};
 use crate::overlay;
 use crate::pipeline_session::PipelineClock;
+use crate::startup_gate::StartupGate;
 use crate::sync_utils::lock_or_recover;
 use crate::wizard_contracts::WizardTranslationTest;
 use crate::{hy_mt_installer, hy_mt_runtime};
@@ -56,14 +57,11 @@ async fn send_overlay_message(app: &AppHandle, message: IpcMessage) {
     }
 }
 
-// =============================================================================
-// APP STATE
-// =============================================================================
-// This holds the current state of our application.
-// It's shared across all commands and persists while the app is running.
+// Shared application state that persists across Tauri commands.
 
 /// The application state, managed by Tauri
 pub struct AppState {
+    pub startup_gate: StartupGate,
     /// Current app configuration (settings)
     pub config: Mutex<AppConfig>,
     /// Whether translation is currently active
@@ -92,6 +90,7 @@ pub struct AppState {
 impl Default for AppState {
     fn default() -> Self {
         Self {
+            startup_gate: StartupGate::default(),
             config: Mutex::new(AppConfig::default()),
             is_running: Mutex::new(false),
             capture_region: Mutex::new(None),
@@ -298,7 +297,6 @@ const OVERLAY_HIDE_FADE_MS: u64 = 220;
 // FOUNDRY LOCAL COMMANDS
 // =============================================================================
 
-/// Foundry Local service status
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct FoundryLocalStatus {
@@ -322,6 +320,7 @@ pub struct FoundryLocalStatus {
 pub async fn get_foundry_local_status(
     state: State<'_, AppState>,
 ) -> Result<FoundryLocalStatus, String> {
+    state.startup_gate.wait_until_ready().await?;
     let config = {
         let guard = lock_or_recover(&state.config);
         guard.translation.foundry_local.clone()
@@ -773,10 +772,11 @@ fn build_foundry_local_status_no_probe(
 ///
 /// Called from JavaScript: `const settings = await invoke('get_settings');`
 #[tauri::command]
-pub fn get_settings(state: State<'_, AppState>) -> AppConfig {
+pub async fn get_settings(state: State<'_, AppState>) -> Result<AppConfig, String> {
+    state.startup_gate.wait_until_ready().await?;
     info!("Getting settings...");
     let config = lock_or_recover(&state.config);
-    config.clone()
+    Ok(config.clone())
 }
 
 /// Save new app settings

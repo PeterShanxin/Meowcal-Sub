@@ -16,6 +16,7 @@ source and normative guidance remain authoritative for implementation details.
 |---|---|---|
 | [0001](0001-curated-local-translation-stack.md) | Accepted | Curated Tauri/Rust/Windows OCR and Tencent HY-MT product stack |
 | [0002](0002-shipped-engine-manifest-authenticity.md) | Accepted | Shipped engine manifest and application-release trust boundary |
+| [0003](0003-incremental-lit-frontend.md) | Accepted | Incremental Vite, TypeScript, and Lit frontend architecture |
 
 Use [the template](template.md) for a new decision. Number ADRs sequentially
 and update this index in the same change.

@@ -1,0 +1,322 @@
+.wizard-content {
+  width: min(100%, 620px);
+  margin-inline: auto;
+  padding: var(--space-6) var(--space-6) var(--space-4);
+  overflow: auto;
+}
+
+.wizard-eyebrow {
+  display: block;
+  color: var(--accent);
+  font-size: 13px;
+  font-weight: 650;
+  text-align: center;
+}
+
+.wizard-content h1 {
+  margin: var(--space-3) 0 var(--space-2);
+  font-size: clamp(30px, 5vw, 40px);
+  line-height: 1.12;
+  letter-spacing: -0.035em;
+  text-align: center;
+}
+
+/* Step headings receive programmatic focus for screen-reader announcements. They are not
+   interactive controls, so the global keyboard focus ring would be misleading here. */
+.wizard-content h1:focus {
+  outline: none;
+}
+
+.wizard-lead {
+  max-width: 560px;
+  margin: 0 auto var(--space-5);
+  color: var(--text-2);
+  font-size: 14px;
+  line-height: 1.55;
+  text-align: center;
+}
+
+.setup-benefits {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.setup-benefits > div {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr);
+  gap: var(--space-3);
+  align-items: center;
+  min-height: 66px;
+  padding: var(--space-3) var(--space-4);
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+}
+
+.setup-benefits i {
+  display: grid;
+  width: 40px;
+  height: 40px;
+  place-items: center;
+  color: var(--accent);
+  background: var(--accent-soft);
+  border-radius: 11px;
+  font-size: 22px;
+}
+
+.setup-benefits span {
+  display: grid;
+  gap: 3px;
+}
+
+.setup-benefits strong {
+  font-size: 14px;
+}
+
+.setup-benefits small {
+  color: var(--text-3);
+  font-size: 12px;
+}
+
+.compatibility,
+.next-step {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  margin: var(--space-4) 0 0;
+  color: var(--text-3);
+  font-size: 12px;
+}
+
+.compatibility i,
+.next-step i {
+  color: var(--accent);
+  font-size: 17px;
+}
+
+.wizard-language-pair {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  gap: var(--space-3);
+  align-items: end;
+}
+
+.wizard-language-pair label {
+  display: grid;
+  gap: var(--space-2);
+  color: var(--text-3);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.wizard-language-pair select {
+  width: 100%;
+  min-height: 50px;
+  padding: 0 var(--space-4);
+  color: var(--text-1);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+}
+
+.wizard-language-pair > i {
+  margin-bottom: 16px;
+  color: var(--text-3);
+}
+
+.ocr-readiness {
+  margin-top: var(--space-4);
+  padding: var(--space-4);
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-panel);
+}
+
+.ocr-readiness > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+
+.ocr-readiness span {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.ocr-readiness strong {
+  font-size: 13px;
+}
+
+.ocr-readiness strong.ready {
+  color: var(--success);
+}
+
+.ocr-readiness strong.missing {
+  color: var(--warning);
+}
+
+.ocr-readiness p {
+  margin: var(--space-3) 0;
+  color: var(--text-3);
+  font-size: 12px;
+}
+
+.progress-track {
+  height: 6px;
+  margin-bottom: var(--space-4);
+  overflow: hidden;
+  background: rgba(141, 154, 180, 0.16);
+  border-radius: 999px;
+}
+
+.progress-track span {
+  display: block;
+  width: 62%;
+  height: 100%;
+  background: var(--accent-strong);
+  border-radius: inherit;
+}
+
+.setup-stages {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.setup-stages li {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) auto;
+  gap: var(--space-3);
+  align-items: center;
+  min-height: 48px;
+  color: var(--text-3);
+  border-bottom: 1px solid rgba(191, 211, 255, 0.09);
+}
+
+.setup-stages li.active,
+.setup-stages li.complete {
+  color: var(--text-1);
+}
+
+.setup-stages li.active i {
+  color: var(--accent);
+  animation: meowcal-spin 1.2s linear infinite;
+}
+
+.setup-stages li.complete i {
+  color: var(--success);
+}
+
+.setup-stages li.error i {
+  color: var(--danger);
+}
+
+.setup-stages small {
+  color: var(--text-3);
+  font-size: 11px;
+  text-transform: capitalize;
+}
+
+.setup-details {
+  margin-top: var(--space-3);
+  color: var(--text-3);
+  font-size: 12px;
+}
+
+.setup-details summary {
+  cursor: pointer;
+}
+
+.setup-details pre {
+  max-height: 100px;
+  overflow: auto;
+  padding: var(--space-3);
+  color: var(--text-2);
+  background: rgba(2, 8, 20, 0.5);
+  border-radius: 9px;
+  font:
+    11px/1.5 Consolas,
+    monospace;
+  white-space: pre-wrap;
+}
+
+.setup-success {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: var(--space-4);
+  max-width: 520px;
+  margin: var(--space-7) auto;
+  padding: var(--space-5);
+  background: rgba(85, 214, 153, 0.08);
+  border: 1px solid rgba(85, 214, 153, 0.24);
+  border-radius: var(--radius-panel);
+}
+
+.setup-success > i {
+  color: var(--success);
+  font-size: 36px;
+}
+
+.setup-success strong {
+  font-size: 16px;
+}
+
+.setup-success p {
+  margin: var(--space-2) 0;
+  color: var(--text-1);
+  font-size: 15px;
+}
+
+.setup-success small {
+  color: var(--text-3);
+}
+
+@media (max-width: 520px) {
+  .wizard-language-pair {
+    grid-template-columns: 1fr;
+  }
+
+  .wizard-language-pair > i {
+    display: none;
+  }
+}
+
+@media (max-height: 620px) {
+  .wizard-content {
+    padding: 20px var(--space-6) 12px;
+  }
+
+  .wizard-content h1 {
+    margin: var(--space-2) 0 4px;
+    font-size: 32px;
+  }
+
+  .wizard-lead {
+    margin-bottom: var(--space-3);
+    line-height: 1.4;
+  }
+
+  .setup-benefits {
+    gap: 6px;
+  }
+
+  .setup-benefits > div {
+    min-height: 56px;
+    padding: var(--space-2) var(--space-3);
+  }
+
+  .setup-benefits i {
+    width: 36px;
+    height: 36px;
+  }
+
+  .compatibility,
+  .next-step {
+    margin-top: var(--space-2);
+  }
+}

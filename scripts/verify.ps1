@@ -86,6 +86,8 @@ if ($Stage -in @("All", "Frontend")) {
         Invoke-NpmStep "Install locked frontend dependencies" @("ci", "--ignore-scripts")
         Invoke-NpmStep "Frontend format" @("run", "format:check")
         Invoke-NpmStep "Frontend lint" @("run", "lint")
+        Invoke-NpmStep "Frontend typecheck" @("run", "typecheck")
+        Invoke-NpmStep "Frontend production build" @("run", "build:web")
         Invoke-NpmStep "Maintainability ratchets" @("run", "maintainability")
         Invoke-NpmStep "Frontend unit tests" @("run", "test:frontend")
         Invoke-NpmStep "Browser bridge smoke" @("run", "test:browser")
