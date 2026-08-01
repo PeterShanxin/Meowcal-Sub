@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "generatedAtUtc": "2026-08-01T12:51:32Z",
+  "architecture": "aarch64",
+  "windows": {
+    "caption": "Microsoft Windows 11 Professional",
+    "build": "26200"
+  },
+  "binary": {
+    "productVersion": "0.5.0",
+    "target": "aarch64-pc-windows-msvc",
+    "builtAtUtc": "2026-08-01T12:40:27Z"
+  },
+  "scenario": "launch-window-smoke",
+  "observed": {
+    "title": "Meowcal Sub - Setup",
+    "responding": true,
+    "bounds": {
+      "left": 573,
+      "top": 124,
+      "right": 1066,
+      "bottom": 760
+    }
+  },
+  "manualStatus": "window-only-smoke; translation-flow-and-overlay-not-exercised"
+}
