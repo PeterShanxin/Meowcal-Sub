@@ -4,15 +4,53 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      architecture:
+        description: Windows architecture to package
+        required: true
+        default: x64
+        type: choice
+        options:
+          - x64
+          - arm64
+  workflow_call:
+    inputs:
+      architecture:
+        description: Windows architecture to package
+        required: true
+        type: string
 
 permissions:
   contents: read
 
 jobs:
-  package-x64:
-    name: x64 MSI and NSIS bundles
-    runs-on: windows-latest
+  package:
+    name: ${{ inputs.architecture || 'x64' }} MSI and NSIS bundles
+    runs-on: ${{ inputs.architecture == 'arm64' && 'windows-11-arm' || 'windows-latest' }}
     steps:
+      - name: Resolve package contract
+        id: package
+        shell: pwsh
+        env:
+          REQUESTED_ARCHITECTURE: ${{ inputs.architecture }}
+        run: |
+          $architecture = $env:REQUESTED_ARCHITECTURE
+          if ([string]::IsNullOrWhiteSpace($architecture)) {
+            $architecture = "x64"
+          }
+
+          $targets = @{
+            x64 = "x86_64-pc-windows-msvc"
+            arm64 = "aarch64-pc-windows-msvc"
+          }
+          if (-not $targets.ContainsKey($architecture)) {
+            throw "Unsupported package architecture: $architecture"
+          }
+
+          "architecture=$architecture" >> $env:GITHUB_OUTPUT
+          "target=$($targets[$architecture])" >> $env:GITHUB_OUTPUT
+          "artifact=meowcal-sub-$architecture-packages" >> $env:GITHUB_OUTPUT
+
       - uses: actions/checkout@v4
 
       - uses: actions/setup-node@v4
@@ -22,23 +60,33 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@stable
         with:
-          targets: x86_64-pc-windows-msvc
+          targets: ${{ steps.package.outputs.target }}
 
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: src-tauri
+          shared-key: package-${{ steps.package.outputs.architecture }}
 
       - name: Install locked frontend dependencies
         shell: pwsh
         run: npm ci --ignore-scripts
 
-      - name: Build x64 packages
+      - name: Verify synchronized product version
         shell: pwsh
-        run: .\scripts\build-package.ps1 -Architecture x64 -CargoTargetDir "$env:GITHUB_WORKSPACE\package-output"
+        run: npm run version:check
 
-      - name: Upload x64 packages
+      - name: Build Windows packages
+        shell: pwsh
+        env:
+          PACKAGE_ARCHITECTURE: ${{ steps.package.outputs.architecture }}
+        run: >-
+          .\scripts\build-package.ps1
+          -Architecture $env:PACKAGE_ARCHITECTURE
+          -CargoTargetDir "$env:GITHUB_WORKSPACE\package-output"
+
+      - name: Upload Windows packages
         uses: actions/upload-artifact@v4
         with:
-          name: meowcal-sub-x64-packages
-          path: package-output/x86_64-pc-windows-msvc/release/bundle/*/*
+          name: ${{ steps.package.outputs.artifact }}
+          path: package-output/${{ steps.package.outputs.target }}/release/bundle/*/*
           if-no-files-found: error

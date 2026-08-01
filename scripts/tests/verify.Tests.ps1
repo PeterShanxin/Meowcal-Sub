@@ -132,6 +132,7 @@ exit /b 0
     Assert-Lines @() $frontend.CargoCommands "Frontend stage cargo"
     Assert-Lines @(
         "ci --ignore-scripts",
+        "run version:check",
         "run format:check",
         "run lint",
         "run typecheck",
@@ -152,6 +153,7 @@ exit /b 0
     ) $all.CargoCommands "All stage cargo"
     Assert-Lines @(
         "ci --ignore-scripts",
+        "run version:check",
         "run format:check",
         "run lint",
         "run typecheck",
@@ -174,9 +176,17 @@ exit /b 0
     Assert-Equal 29 $npmFailure.ExitCode "Npm failure propagation."
     Assert-Lines @(
         "ci --ignore-scripts",
+        "run version:check",
         "run format:check",
         "run lint"
     ) $npmFailure.NpmCommands "Npm failure short-circuit"
+
+    $versionFailure = Invoke-VerifyUnderTest -Stage Frontend -NpmFailOn "run version:check"
+    Assert-Equal 29 $versionFailure.ExitCode "Version failure propagation."
+    Assert-Lines @(
+        "ci --ignore-scripts",
+        "run version:check"
+    ) $versionFailure.NpmCommands "Version failure short-circuit"
 
     Write-Host "verify.ps1 contract tests passed."
 } finally {

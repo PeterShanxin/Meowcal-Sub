@@ -84,6 +84,7 @@ if ($Stage -in @("All", "Frontend")) {
     Push-Location $repositoryRoot
     try {
         Invoke-NpmStep "Install locked frontend dependencies" @("ci", "--ignore-scripts")
+        Invoke-NpmStep "Product version synchronization" @("run", "version:check")
         Invoke-NpmStep "Frontend format" @("run", "format:check")
         Invoke-NpmStep "Frontend lint" @("run", "lint")
         Invoke-NpmStep "Frontend typecheck" @("run", "typecheck")

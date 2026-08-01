@@ -1,0 +1,145 @@
+name: Prepare Draft Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Semantic version without the v prefix, for example 0.6.0
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: Validate release contract
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Validate branch and synchronized version
+        id: version
+        shell: pwsh
+        env:
+          RELEASE_VERSION: ${{ inputs.version }}
+          RELEASE_REF: ${{ github.ref }}
+        run: |
+          if ($env:RELEASE_REF -ne "refs/heads/main") {
+            throw "Draft releases must be prepared from main, not $env:RELEASE_REF."
+          }
+          if ($env:RELEASE_VERSION -notmatch '^\d+\.\d+\.\d+$') {
+            throw "Version must use major.minor.patch without a v prefix."
+          }
+
+          node scripts/check-version-sync.mjs --expected $env:RELEASE_VERSION
+          if ($LASTEXITCODE -ne 0) {
+            throw "Product version does not match the requested release."
+          }
+          "version=$env:RELEASE_VERSION" >> $env:GITHUB_OUTPUT
+
+  package-x64:
+    name: Package x64
+    needs: validate
+    uses: ./.github/workflows/package.yml
+    with:
+      architecture: x64
+    permissions:
+      contents: read
+
+  package-arm64:
+    name: Package ARM64
+    needs: validate
+    uses: ./.github/workflows/package.yml
+    with:
+      architecture: arm64
+    permissions:
+      contents: read
+
+  draft-release:
+    name: Create draft release
+    needs:
+      - validate
+      - package-x64
+      - package-arm64
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      RELEASE_VERSION: ${{ needs.validate.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download package artifacts
+        uses: actions/download-artifact@v5
+        with:
+          path: release-assets
+          merge-multiple: true
+
+      - name: Verify assets and write checksums
+        shell: pwsh
+        run: |
+          $installers = @(Get-ChildItem release-assets -Recurse -File |
+            Where-Object { $_.Extension -eq ".msi" -or $_.Name -like "*-setup.exe" })
+          if ($installers.Count -ne 4) {
+            throw "Expected four installers (MSI and NSIS for x64 and ARM64), found $($installers.Count)."
+          }
+
+          $architectures = @("x64", "arm64")
+          foreach ($architecture in $architectures) {
+            $matches = @($installers | Where-Object { $_.Name -like "*$architecture*" })
+            if ($matches.Count -ne 2) {
+              throw "Expected two $architecture installers, found $($matches.Count)."
+            }
+          }
+
+          $checksumLines = $installers |
+            Sort-Object Name |
+            ForEach-Object {
+              $hash = (Get-FileHash -Algorithm SHA256 -LiteralPath $_.FullName).Hash.ToLowerInvariant()
+              "$hash  $($_.Name)"
+            }
+          Set-Content -LiteralPath release-assets/SHA256SUMS.txt -Value $checksumLines -Encoding utf8NoBOM
+
+      - name: Create draft GitHub release
+        shell: pwsh
+        env:
+          RELEASE_SHA: ${{ github.sha }}
+        run: |
+          $tag = "v$env:RELEASE_VERSION"
+          gh release view $tag --repo $env:GITHUB_REPOSITORY *> $null
+          if ($LASTEXITCODE -eq 0) {
+            throw "Release $tag already exists; refusing to overwrite it."
+          }
+
+          $notesPath = "docs/releases/$tag.md"
+          if (-not (Test-Path -LiteralPath $notesPath -PathType Leaf)) {
+            throw "Missing release notes: $notesPath"
+          }
+
+          $assets = @(Get-ChildItem release-assets -Recurse -File |
+            Where-Object {
+              $_.Extension -eq ".msi" -or
+              $_.Name -like "*-setup.exe" -or
+              $_.Name -eq "SHA256SUMS.txt"
+            } |
+            ForEach-Object FullName)
+
+          gh release create $tag @assets `
+            --repo $env:GITHUB_REPOSITORY `
+            --target $env:RELEASE_SHA `
+            --title "Meowcal Sub $tag" `
+            --notes-file $notesPath `
+            --draft `
+            --latest=false
+          if ($LASTEXITCODE -ne 0) {
+            throw "Failed to create draft release $tag."
+          }
