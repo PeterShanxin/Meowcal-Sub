@@ -70,11 +70,11 @@ impl WindowsOcr {
     pub fn with_language(language_tag: &str) -> Result<Self, OcrError> {
         info!("Initializing Windows OCR with language: {}", language_tag);
 
-        // Create a Windows Language object from the tag
-        let language = Language::CreateLanguage(&language_tag.into()).map_err(|e| {
+        let canonical_tag = crate::ocr::normalize_language_tag(language_tag);
+        let language = Language::CreateLanguage(&canonical_tag.clone().into()).map_err(|e| {
             OcrError::LanguageNotSupported(format!(
                 "Invalid language tag '{}': {}",
-                language_tag, e
+                canonical_tag, e
             ))
         })?;
 
@@ -84,7 +84,7 @@ impl WindowsOcr {
         {
             return Err(OcrError::LanguageNotSupported(format!(
                 "Language '{}' is not installed for OCR. Install it in Windows Settings.",
-                language_tag
+                canonical_tag
             )));
         }
 
@@ -92,7 +92,7 @@ impl WindowsOcr {
         let engine = OcrEngine::TryCreateFromLanguage(&language)
             .map_err(|e| OcrError::InitError(format!("Failed to create OCR engine: {}", e)))?;
 
-        info!("OCR engine created successfully for '{}'", language_tag);
+        info!("OCR engine created successfully for '{}'", canonical_tag);
         Ok(Self { engine })
     }
 

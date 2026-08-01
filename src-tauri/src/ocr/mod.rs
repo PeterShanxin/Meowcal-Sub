@@ -9,9 +9,11 @@
 // - Supports many languages
 // =============================================================================
 
+mod language;
 mod preprocessing;
 mod windows_ocr;
 
+pub use language::normalize_language_tag;
 pub use preprocessing::*;
 pub use windows_ocr::*;
 
