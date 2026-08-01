@@ -2,7 +2,7 @@
 
 **Audit date:** 2026-08-01
 
-**Product-code baseline:** `ff145e4b55f5422759a25935fcd0fe16ca1411e6`
+**Product-code baseline:** `164ed46` (`fix: start managed engine from translation action`)
 
 **Approved contract:** `2026-07-29-curated-local-translation-app-spec.md`
 
@@ -24,7 +24,7 @@ episode regression remain release blockers.
 | 1 — Repository foundation | Substantially complete | Normative contributor/agent/coding/architecture docs, unified verifier, frontend tests, browser smoke, dependency audit, maintainability and coverage ratchets | Governance templates/settings and final live-settings reconciliation |
 | 2 — Critical correctness | Automated complete; manual gate open | Rust WinRT-boundary OCR alias normalization, frontend alias matching, language-aware HY-MT validation, deterministic rejection classification, explicit display states, representative dataset and live evaluation | Live `zh-Hans-CN -> zh-CN` OCR creation and overlay failure-path verification |
 | 3 — Curated HY-MT engine | Automated complete; manual gate open | Typed embedded manifest, per-architecture selection, preflight, transactional install/repair/rollback, dynamic loopback port, exact process ownership, support script, licenses, and tests | Clean Windows install/adopt/repair/upgrade/restart/sleep rehearsal |
-| 4 — Product UX | Normal-mode MVP complete; manual gate open | One private Tencent HY-MT setup, shared readiness, guided install/repair/sample translation, infrastructure choices removed | Keyboard/focus, first-run/returning-launch recording, and developer-mode decision |
+| 4 — Product UX | Normal-mode MVP complete; manual gate open | One private Tencent HY-MT setup, shared readiness, guided install/repair/sample translation, automatic start/warm-up from the normal Start Translation action when the managed files are present, infrastructure choices removed | Keyboard/focus, first-run/returning-launch recording, and developer-mode decision |
 | 5 — Lifecycle and performance | Automated complete; manual gate open | Hidden-first DPI-aware startup, session/capture IDs, cancellation, stale suppression, dedupe, stage timings, privacy-safe logs, and explicit warm-up evaluation; comparable ARM64 runs measured auto-slot p50 841 ms / p95 4,091 ms versus single-slot p50 660 ms / p95 3,558 ms, with 33/33 quality passes | Whole-pipeline ARM64 capture evidence, x64 budget, monitor/sleep matrix, and a documented resolution for the remaining ARM64 p95 budget exception |
 | 6 — Modular decomposition | In progress | New engine, installer, validation, lifecycle, display and overlay-hint modules; legacy compatibility boundary extracted; `commands.rs` now meets its 2,432-line ceiling | `foundry_local.rs`, `manager.rs`, `main.js`, and remaining overlay/selector boundaries still exceed the reviewed ceiling |
 | 7 — Release closure | Open | Clean automated gate and CI pass on the MVP; ARM64 direct model and tray-lifecycle smoke evidence; native x64 MSI/NSIS workflow succeeded on `1d65aa4` (run `30695886191`) | Clean installer/adopt/repair/rollback/upgrade rehearsal, x64 runtime/performance evidence, full monitor and sleep/resume matrix, uninstall, and a fresh 30-minute episode regression after the final behavior change |
