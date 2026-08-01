@@ -90,6 +90,9 @@ Shared contracts have one owner before parallel decomposition begins:
   `package.json` and `src-tauri/Cargo.toml` are synchronized mirrors.
 - Display state: the pipeline owns translated/source-only/failure semantics.
   The overlay renders the supplied state and cannot relabel OCR as translation.
+- OCR language tags: `ocr::language` owns Windows alias normalization at the
+  WinRT boundary; UI availability matching and migrated config values therefore
+  share the same `zh-CN`/`zh-Hans-*` compatibility contract.
 - Pipeline ordering: `pipeline_session.rs` owns monotonic session/capture IDs.
   Region changes and stop requests invalidate in-flight work; Rust and frontend
   consumers reject stale results. Completed frames log privacy-safe
