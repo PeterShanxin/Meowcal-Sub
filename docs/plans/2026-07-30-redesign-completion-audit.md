@@ -2,7 +2,7 @@
 
 **Audit date:** 2026-08-01
 
-**Code baseline:** `e6021a9645fc5350a0b8e21c203ccee2240b62d9`
+**Code baseline:** `f62de5a7c07718ae30e7db3d0760d130bb187efd`
 
 **Approved contract:** `2026-07-29-curated-local-translation-app-spec.md`
 
@@ -11,9 +11,10 @@ complete only when its full automated and named manual evidence exists.
 
 ## Current result
 
-The repository has a working ARM64 HY-MT MVP and a substantially stronger
-foundation. The approved redesign is not complete. x64 validation, the full
-Windows matrix, and a 30-minute episode regression remain release blockers.
+The repository has a working ARM64 HY-MT MVP, native package definitions, and a
+substantially stronger foundation. The approved redesign is not complete. x64
+runtime/performance validation, the full Windows matrix, and a 30-minute
+episode regression remain release blockers.
 
 ## Wave evidence
 
@@ -26,7 +27,7 @@ Windows matrix, and a 30-minute episode regression remain release blockers.
 | 4 — Product UX | Normal-mode MVP complete; manual gate open | One private Tencent HY-MT setup, shared readiness, guided install/repair/sample translation, infrastructure choices removed | Keyboard/focus, first-run/returning-launch recording, and developer-mode decision |
 | 5 — Lifecycle and performance | Automated complete; manual gate open | Hidden-first DPI-aware startup, session/capture IDs, cancellation, stale suppression, dedupe, stage timings, privacy-safe logs, and ARM64 live budget report | Whole-pipeline ARM64 capture evidence, x64 budget, monitor/sleep matrix |
 | 6 — Modular decomposition | In progress | New engine, installer, validation, lifecycle, display and overlay-hint modules; downward file ratchets | `commands.rs`, `foundry_local.rs`, `manager.rs`, `main.js`, and remaining overlay/selector boundaries still exceed the reviewed ceiling |
-| 7 — Release closure | Open | Clean automated gate and CI pass on the MVP; ARM64 direct model and tray-lifecycle smoke evidence | Clean installer/adopt/repair/rollback/upgrade rehearsal, x64 device evidence, full monitor and sleep/resume matrix, uninstall, and a fresh 30-minute episode regression after the final behavior change |
+| 7 — Release closure | Open | Clean automated gate and CI pass on the MVP; ARM64 direct model and tray-lifecycle smoke evidence; native x64 MSI/NSIS workflow succeeded on `f62de5a` (run `30691128927`) | Clean installer/adopt/repair/rollback/upgrade rehearsal, x64 runtime/performance evidence, full monitor and sleep/resume matrix, uninstall, and a fresh 30-minute episode regression after the final behavior change |
 
 ## Definition-of-done audit
 
@@ -50,8 +51,9 @@ Windows matrix, and a 30-minute episode regression remain release blockers.
 
 1. Run clean Windows install/adopt/repair/upgrade/restart/sleep and OCR alias
    rehearsals against the shipped engine manifest and support script.
-2. Capture x64 runtime/package and performance evidence on a real x64 device;
-   ARM64 evidence must not be reused for that claim.
+2. Capture x64 runtime and performance evidence on a real x64 device; the
+   native x64 package workflow is now proven, but ARM64 evidence must not be
+   reused for runtime or performance claims.
 3. Finish repository governance and bounded decomposition without weakening
    ratchets.
 4. Run the final ARM64/x64 matrix and real 30-minute episode regression after
