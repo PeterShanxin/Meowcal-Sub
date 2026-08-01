@@ -43,6 +43,11 @@ current ARM64 Tauri debug binary after the managed-start UI change. The window
 created once at a responding final rectangle; this is only a window smoke and
 does not prove OCR, capture, translation, overlay, or episode behavior.
 
+`2026-08-01-arm64-managed-start-smoke.json` records the stronger Tauri path:
+with the app-owned runtime stopped, clicking Start Translation started and
+warmed HY-MT, entered the running state without showing the warm-up modal, and
+stopped cleanly. OCR, overlay, and episode validation remain separate gates.
+
 The `Windows Packages` workflow also produced the native x64 MSI and NSIS
 artifact bundle on `2883966` (run `30699524713`, artifact
 `meowcal-sub-x64-packages`). This proves x64 package generation only; it does

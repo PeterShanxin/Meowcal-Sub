@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "generatedAtUtc": "2026-08-01T12:59:38Z",
+  "testedCommit": "8c12412",
+  "architecture": "aarch64",
+  "windowsBuild": "26200",
+  "scenario": "managed-start-from-not-running",
+  "before": {
+    "enginePhase": "notRunning",
+    "serviceRunning": false,
+    "captureRegionAvailable": true,
+    "startButtonEnabled": true
+  },
+  "action": "clicked Start Translation in the Tauri window",
+  "after": {
+    "enginePhase": "ready",
+    "serviceRunning": true,
+    "translationRunning": true,
+    "warmupModalShown": false
+  },
+  "stop": {
+    "translationStopped": true,
+    "ownedRuntimeAfterWindowClose": false
+  },
+  "manualStatus": "passed-managed-start-stop; OCR-overlay-and-episode-not-exercised"
+}
