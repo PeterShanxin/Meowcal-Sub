@@ -1,5 +1,6 @@
 import js from "@eslint/js";
 import globals from "globals";
+import tseslint from "typescript-eslint";
 
 const recommendedWarnings = Object.fromEntries(
   Object.keys(js.configs.recommended.rules).map((ruleName) => [ruleName, "warn"]),
@@ -8,6 +9,26 @@ const recommendedWarnings = Object.fromEntries(
 export default [
   {
     ignores: ["node_modules/**", "src-tauri/**", "test-results/**", "playwright-report/**"],
+  },
+  {
+    files: ["src/**/*.ts", "frontend-tests/**/*.ts", "vite.config.mts"],
+    languageOptions: {
+      parser: tseslint.parser,
+      parserOptions: {
+        ecmaVersion: "latest",
+        sourceType: "module",
+      },
+      globals: {
+        ...globals.browser,
+        ...globals.node,
+      },
+    },
+    plugins: {
+      "@typescript-eslint": tseslint.plugin,
+    },
+    rules: {
+      ...tseslint.configs.recommended.rules,
+    },
   },
   {
     files: ["src/scripts/**/*.js"],

@@ -8,8 +8,9 @@ Rust, Windows OCR, and one app-managed Tencent HY-MT engine in normal mode.
 
 The desktop process owns the application lifecycle, Windows integration, and
 translation session. Four webviews provide the setup/main window, selector,
-subtitle overlay, and setup wizard. Browser development mode serves the same
-static frontend and maps its bridge calls to a loopback-only Rust HTTP adapter.
+subtitle overlay, and setup wizard. Vite builds them as a static multi-page
+frontend. Browser development mode serves the same entries and maps bridge
+calls to a loopback-only Rust HTTP adapter.
 
 ```text
 main/setup UI ─┐
@@ -57,7 +58,7 @@ Source OCR is never represented as successful translation.
 | Engine runtime          | `llm/foundry_local.rs`, command helpers           | Curated engine service owns manifest, install, process, health, repair, rollback       |
 | Compatibility downloads | `legacy_translate_locally.rs`                    | Kept outside normal-mode adapters; legacy/developer compatibility only                  |
 | Native overlay IPC      | `ipc/`, `overlay/`, `commands.rs`                 | `ipc/protocol.rs` owns payload schema; adapters do not redefine it                     |
-| Main/setup UI           | `src/scripts/main.js`, `wizard.js`                | Bootstrap and DOM adapters around testable setup/session presentation modules          |
+| Main/setup UI           | Lit components and TypeScript controllers         | One reactive snapshot drives Home/setup/settings presentation; bridge adapters stay thin |
 | Overlay/selector UI     | `overlay.js`, `selector.js`                       | Separate geometry/state owners with thin bridge and DOM adapters                       |
 
 ## Shared contracts
@@ -102,6 +103,10 @@ Shared contracts have one owner before parallel decomposition begins:
   opt-in live engine gate. Reports exclude source and translated text while
   recording architecture, engine/model identity, output shape, decisions, and
   latency.
+- Frontend rendering: ADR-0003 owns Vite, TypeScript, and Lit for migrated
+  main/setup surfaces. `app-controller.ts` owns their asynchronous UI snapshot;
+  components render it and dispatch intent. Overlay and selector retain their
+  existing owners until #34 migrates them deliberately.
 
 ## Dependency direction
 

@@ -1,0 +1,102 @@
+@font-face {
+  font-family: "Phosphor";
+  src: url("../../node_modules/@phosphor-icons/web/src/regular/Phosphor.woff2") format("woff2");
+  font-display: block;
+  font-style: normal;
+  font-weight: normal;
+}
+
+@font-face {
+  font-family: "Phosphor-Fill";
+  src: url("../../node_modules/@phosphor-icons/web/src/fill/Phosphor-Fill.woff2") format("woff2");
+  font-display: block;
+  font-style: normal;
+  font-weight: normal;
+}
+
+.ph,
+.ph-fill {
+  speak: never;
+  font-style: normal;
+  font-variant: normal;
+  font-weight: normal;
+  line-height: 1;
+  text-transform: none;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.ph {
+  font-family: "Phosphor" !important;
+}
+
+.ph-fill {
+  font-family: "Phosphor-Fill" !important;
+}
+
+.ph-arrow-right::before {
+  content: "\e06c";
+}
+.ph-caret-right::before {
+  content: "\e13a";
+}
+.ph-check::before {
+  content: "\e182";
+}
+.ph-check-circle::before {
+  content: "\e184";
+}
+.ph-circle::before {
+  content: "\e18a";
+}
+.ph-clock::before {
+  content: "\e19a";
+}
+.ph-download-simple::before {
+  content: "\e20c";
+}
+.ph-gear::before {
+  content: "\e270";
+}
+.ph-hard-drives::before {
+  content: "\e2a0";
+}
+.ph-house::before {
+  content: "\e2c2";
+}
+.ph-info::before {
+  content: "\e2ce";
+}
+.ph-lock-key::before {
+  content: "\e2fe";
+}
+.ph-paint-brush::before {
+  content: "\e6f0";
+}
+.ph-play::before {
+  content: "\e3d0";
+}
+.ph-selection::before {
+  content: "\e69a";
+}
+.ph-shield-check::before {
+  content: "\e40c";
+}
+.ph-spinner-gap::before {
+  content: "\e66c";
+}
+.ph-stop::before {
+  content: "\e46c";
+}
+.ph-text-aa::before {
+  content: "\e6ee";
+}
+.ph-translate::before {
+  content: "\e4a2";
+}
+.ph-warning-circle::before {
+  content: "\e4e2";
+}
+.ph-wrench::before {
+  content: "\e5d4";
+}

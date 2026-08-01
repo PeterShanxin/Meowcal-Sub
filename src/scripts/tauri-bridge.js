@@ -125,7 +125,14 @@
         }
 
         // Handle special response transformations
-        let result = await httpRequest(mapping.method, mapping.path, mapping.method === 'POST' ? args : null);
+        const requestBody = command === 'save_settings' && args.settings
+            ? args.settings
+            : args;
+        let result = await httpRequest(
+            mapping.method,
+            mapping.path,
+            mapping.method === 'POST' ? requestBody : null,
+        );
 
         // Transform responses to match Tauri format
         if (command === 'list_foundry_local_models') {
