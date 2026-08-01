@@ -48,6 +48,11 @@ with the app-owned runtime stopped, clicking Start Translation started and
 warmed HY-MT, entered the running state without showing the warm-up modal, and
 stopped cleanly. OCR, overlay, and episode validation remain separate gates.
 
+`2026-08-01-arm64-ocr-alias-smoke.json` records the live Windows OCR readiness
+check: the app selected `zh-CN` while Windows reported the equivalent installed
+tag `zh-Hans-CN`, with no false "not installed" warning. Recognition and overlay
+rendering remain separate gates.
+
 The `Windows Packages` workflow also produced the native x64 MSI and NSIS
 artifact bundle on `2883966` (run `30699524713`, artifact
 `meowcal-sub-x64-packages`). This proves x64 package generation only; it does
