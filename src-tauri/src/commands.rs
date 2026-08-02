@@ -1,14 +1,13 @@
 use crate::capture;
 use crate::config::{save_config, AppConfig, CaptureRegion};
-use crate::event_payloads::{CaptureStatusPayload, TranslationPayload};
+use crate::event_payloads::{CaptureStatusPayload, TranslationPayload, EMPTY_OCR_CLEAR_FRAMES};
 use crate::ipc::{
     IpcMessage, IpcServer, OverlaySettingsData, RegionData, SetRegionPayload, SettingsSyncPayload,
     SubtitleUpdatePayload,
 };
 use crate::llm::{
     BackendId, BackendInfo, FoundryLocalBackend, FoundryLocalPhase, TranslationDiagnostics,
-    TranslationDiagnosticsState, TranslationDisplayState, TranslationManager, TranslationOutcome,
-    TranslatorBackend,
+    TranslationDiagnosticsState, TranslationManager, TranslationOutcome, TranslatorBackend,
 };
 use crate::ocr::{PreprocessingConfig, WindowsOcr};
 use crate::overlay;
@@ -1344,7 +1343,6 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
         )
     };
 
-    let ocr_confidence_threshold = translation_config.ocr.confidence_threshold;
     let ocr_preprocessing_enabled = translation_config.ocr.preprocessing_enabled;
     let ocr_grayscale = translation_config.ocr.grayscale;
     let ocr_contrast_enhancement = translation_config.ocr.contrast_enhancement;
@@ -1353,16 +1351,10 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
     let ocr_multi_pass_count = translation_config.ocr.multi_pass_count;
     let ocr_validation_strictness = translation_config.ocr.validation_strictness;
 
-    let strictness_threshold = ocr_validation_strictness.threshold();
-    let effective_confidence_threshold = if ocr_confidence_threshold > 0.0 {
-        ocr_confidence_threshold.max(strictness_threshold)
-    } else {
-        strictness_threshold
-    };
+    let min_significant_chars = ocr_validation_strictness.min_significant_chars();
 
     debug!(
-        "OCR settings: confidence_threshold={:.2}, preprocessing={}, grayscale={}, contrast={}, binarize={}, multi_pass={}, pass_count={}, strictness={:?}, effective_threshold={:.2}",
-        ocr_confidence_threshold,
+        "OCR settings: preprocessing={}, grayscale={}, contrast={}, binarize={}, multi_pass={}, pass_count={}, strictness={:?}, min_significant_chars={}",
         ocr_preprocessing_enabled,
         ocr_grayscale,
         ocr_contrast_enhancement,
@@ -1370,7 +1362,7 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
         ocr_enable_multi_pass,
         ocr_multi_pass_count,
         ocr_validation_strictness,
-        effective_confidence_threshold
+        min_significant_chars
     );
 
     let context_enabled = translation_config.enable_context_aware;
@@ -1484,6 +1476,10 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
             .checked_sub(Duration::from_millis(MOCK_RETRY_COOLDOWN_MS))
             .unwrap_or_else(Instant::now);
         let mut last_capture_region: Option<CaptureRegion> = None;
+        let mut empty_ocr_frames: u32 = 0;
+        // The loop runs several times a second. Re-emitting the same notice every
+        // pass would flood the overlay, so only a change of reason is reported.
+        let mut last_notice: Option<&'static str> = None;
 
         let use_persistent = match capture::init_capture_session() {
             Ok(_) => {
@@ -1657,46 +1653,58 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
 
             if ocr_result.is_empty() {
                 debug!("[FILTER: empty] No text detected, skipping");
+                empty_ocr_frames = empty_ocr_frames.saturating_add(1);
+
+                // A subtitle that leaves the region must leave the overlay too.
+                // Waiting a few frames keeps single-frame OCR misses from
+                // flickering the line away between subtitle changes.
+                if empty_ocr_frames >= EMPTY_OCR_CLEAR_FRAMES && last_notice != Some("empty") {
+                    last_notice = Some("empty");
+                    // The cleared line has to be translatable again: without this
+                    // the duplicate filter would suppress the identical subtitle
+                    // when it returns, leaving the overlay permanently blank.
+                    last_text.clear();
+                    let _ = app.emit(
+                        "translation-update",
+                        TranslationPayload::no_subtitle_text(session_id, token.capture_id),
+                    );
+                }
+
                 tokio::time::sleep(Duration::from_millis(interval_ms as u64)).await;
                 continue;
             }
 
-            let confidence = ocr_result.confidence.unwrap_or(0.0);
+            empty_ocr_frames = 0;
+
             let current_text = ocr_result.text.trim().to_string();
 
             debug!(
-                "OCR output accepted for filtering ({} chars, confidence: {:.2})",
-                current_text.chars().count(),
-                confidence
+                "OCR output accepted for filtering ({} chars)",
+                current_text.chars().count()
             );
 
-            if confidence < effective_confidence_threshold {
+            if let Some(rejection) = crate::ocr_gate::classify(&current_text, min_significant_chars)
+            {
                 debug!(
-                    "[FILTER: low_confidence] ({:.2} < {:.2}, {} chars)",
-                    confidence,
-                    effective_confidence_threshold,
-                    current_text.chars().count()
-                );
-                tokio::time::sleep(Duration::from_millis(interval_ms as u64)).await;
-                continue;
-            }
-
-            let significant_chars = current_text
-                .chars()
-                .filter(|ch| ch.is_alphanumeric())
-                .count();
-            if significant_chars < 2 {
-                debug!("[FILTER: very_short] Noise/very short text detected, skipping");
-                tokio::time::sleep(Duration::from_millis(interval_ms as u64)).await;
-                continue;
-            }
-
-            if crate::llm::is_untranslatable_text(&current_text) {
-                debug!(
-                    "[FILTER: untranslatable] OCR text ({} chars, confidence: {:.2})",
+                    "[FILTER: {}] OCR text ({} chars, minimum {})",
+                    rejection.as_str(),
                     current_text.chars().count(),
-                    confidence
+                    min_significant_chars
                 );
+                // Text *is* in the region, so the overlay must stop claiming the
+                // region is empty. Staying silent leaves whichever notice is on
+                // screen contradicting what the viewer can see.
+                if last_notice != Some(rejection.as_str()) {
+                    last_notice = Some(rejection.as_str());
+                    let _ = app.emit(
+                        "translation-update",
+                        TranslationPayload::source_unreadable(
+                            session_id,
+                            token.capture_id,
+                            rejection,
+                        ),
+                    );
+                }
                 tokio::time::sleep(Duration::from_millis(interval_ms as u64)).await;
                 continue;
             }
@@ -1706,10 +1714,7 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
             let mut force_retry_duplicate = false;
             if is_exact_duplicate {
                 if last_backend_used != BackendId::Mock {
-                    debug!(
-                        "[FILTER: duplicate_exact] OCR text (confidence: {:.2})",
-                        confidence
-                    );
+                    debug!("[FILTER: duplicate_exact] OCR text");
                     translation_manager.record_ocr_line(&current_text);
                     tokio::time::sleep(Duration::from_millis(interval_ms as u64)).await;
                     continue;
@@ -1718,10 +1723,7 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
                 if now.duration_since(last_attempt_at)
                     < Duration::from_millis(MOCK_RETRY_COOLDOWN_MS)
                 {
-                    debug!(
-                        "[FILTER: duplicate_mock_cooldown] OCR text (confidence: {:.2})",
-                        confidence
-                    );
+                    debug!("[FILTER: duplicate_mock_cooldown] OCR text");
                     translation_manager.record_ocr_line(&current_text);
                     tokio::time::sleep(Duration::from_millis(interval_ms as u64)).await;
                     continue;
@@ -1734,16 +1736,14 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
                 && context_enabled
                 && translation_manager.is_duplicate(&current_text)
             {
-                debug!(
-                    "[FILTER: duplicate_context] OCR text (confidence: {:.2})",
-                    confidence
-                );
+                debug!("[FILTER: duplicate_context] OCR text");
                 translation_manager.record_ocr_line(&current_text);
                 tokio::time::sleep(Duration::from_millis(interval_ms as u64)).await;
                 continue;
             }
 
             last_text = current_text.clone();
+            last_notice = None;
             context_generation.fetch_add(1, Ordering::SeqCst);
             last_attempt_at = now;
             info!("📝 OCR detected ({} chars)", current_text.chars().count());
@@ -1970,24 +1970,11 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
             tokio::time::sleep(Duration::from_millis(interval_ms as u64)).await;
         }
 
-        let stopped_timestamp = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_millis() as u64;
         if pipeline_clock.is_session_current(session_id) {
             let stopped_token = pipeline_clock.next_capture(session_id);
             let _ = app.emit(
                 "translation-update",
-                TranslationPayload {
-                    session_id,
-                    capture_id: stopped_token.capture_id,
-                    original: String::new(),
-                    translated: String::new(),
-                    backend_used: BackendId::Mock.as_str().to_string(),
-                    warnings: Vec::new(),
-                    display_state: TranslationDisplayState::Stopped,
-                    timestamp: stopped_timestamp,
-                },
+                TranslationPayload::stopped(session_id, stopped_token.capture_id),
             );
         }
 
@@ -2069,19 +2056,7 @@ pub async fn stop_translation(state: State<'_, AppState>, app: AppHandle) -> Res
     }
     let _ = app.emit(
         "translation-update",
-        TranslationPayload {
-            session_id: stopped_session_id,
-            capture_id: 0,
-            original: String::new(),
-            translated: String::new(),
-            backend_used: BackendId::Mock.as_str().to_string(),
-            warnings: Vec::new(),
-            display_state: TranslationDisplayState::Stopped,
-            timestamp: SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .unwrap_or_default()
-                .as_millis() as u64,
-        },
+        TranslationPayload::stopped(stopped_session_id, 0),
     );
 
     info!("✅ Translation stopped!");
@@ -2091,61 +2066,6 @@ pub async fn stop_translation(state: State<'_, AppState>, app: AppHandle) -> Res
 // =============================================================================
 // OVERLAY COMMANDS
 // =============================================================================
-
-/// Set whether the overlay window ignores cursor events (click-through)
-///
-/// When `ignore` is true, the overlay is click-through (default during translation).
-/// When `ignore` is false, the overlay can receive mouse events (for settings interaction).
-///
-/// Called from JavaScript: `await invoke('set_overlay_click_through', { ignore: false });`
-#[tauri::command]
-pub fn set_overlay_click_through(app: AppHandle, ignore: bool) -> Result<(), String> {
-    info!("Setting overlay click-through: {}", ignore);
-
-    let window = app
-        .get_webview_window("overlay")
-        .ok_or("Overlay window not found")?;
-
-    window
-        .set_ignore_cursor_events(ignore)
-        .map_err(|e| format!("Failed to set cursor events: {}", e))?;
-
-    Ok(())
-}
-
-/// Update the overlay window region so it only contains the visible UI elements.
-///
-/// This is a workaround for WebView2 transparency regressions on Windows:
-/// - We make the overlay window non-rectangular (border ring + subtitle box)
-/// - The capture region area becomes a "hole" (not part of the window), so the
-///   underlying desktop/video remains visible even if the webview background is opaque.
-///
-/// Called from JavaScript (overlay window):
-/// `invoke('set_overlay_window_clip', { frameRegion, subtitleBounds, handleBounds, controlRadii, scaleFactor })`
-#[tauri::command]
-pub fn set_overlay_window_clip(
-    app: AppHandle,
-    frame_region: Option<CaptureRegion>,
-    subtitle_bounds: Option<CaptureRegion>,
-    handle_bounds: Option<Vec<CaptureRegion>>,
-    control_radii: Option<Vec<f64>>,
-    scale_factor: f64,
-) -> Result<(), String> {
-    let window = app
-        .get_webview_window("overlay")
-        .ok_or("Overlay window not found")?;
-
-    overlay::window_clip::apply_overlay_window_clip(
-        &window,
-        frame_region,
-        subtitle_bounds,
-        handle_bounds,
-        control_radii,
-        scale_factor,
-    )?;
-
-    Ok(())
-}
 
 // =============================================================================
 // FOUNDRY SETUP WIZARD COMMANDS

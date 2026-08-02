@@ -4,6 +4,7 @@ import type { AppSettings, EngineStatus } from "./contracts";
 import { applyLanguageSelection, ensureDistinctLanguagePair, languages } from "./languages";
 import { pickSampleTranslation } from "./sample-translations";
 import { classifyWizardOutput } from "./setup-progress";
+import "./meowcal-titlebar";
 
 const wizardLogoUrl = new URL("../assets/meowcal-icon.png", import.meta.url).href;
 
@@ -354,6 +355,7 @@ export class MeowcalSetup extends LitElement {
     const ready = this.sourceReady();
     return html`
       <div class="wizard-frame">
+        <meowcal-titlebar label="Local Translation Setup" no-maximize></meowcal-titlebar>
         <header class="wizard-brand">
           <img src=${wizardLogoUrl} alt="" /><span>Meowcal Sub</span
           ><span class="step-count">${this.step} / 4</span>

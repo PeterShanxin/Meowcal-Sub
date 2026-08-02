@@ -1,0 +1,275 @@
+/* =============================================================================
+   SETTINGS BUTTON - Gear icon in capture frame (top-right corner)
+   ============================================================================= */
+
+.settings-button {
+  position: absolute;
+  /* Centred on the top edge like the resize handles, and inset far enough to
+     clear the NE handle. The native clip ORs this rect back into the window
+     region, so overlapping the inner click-through hole is safe. */
+  top: -9px;
+  right: 22px;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+
+  background: rgba(80, 80, 80, 0.95);
+  border: 2px solid rgba(255, 255, 255, 0.9);
+  border-radius: 50%; /* Circular like resize handles */
+  cursor: pointer;
+
+  color: rgba(255, 255, 255, 0.9);
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  transition:
+    background 0.2s ease,
+    color 0.2s ease,
+    opacity 0.2s ease,
+    transform 0.2s ease;
+
+  opacity: 0; /* Hidden by default like resize handles */
+  transform: scale(0.5);
+  pointer-events: auto;
+  z-index: 100;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25);
+}
+
+/* Show button when hovering capture frame (like resize handles) */
+.capture-frame:hover .settings-button,
+.capture-frame.dragging .settings-button {
+  opacity: 1;
+  transform: scale(1);
+}
+
+/* Hide when frame is faded/entering/exiting */
+.capture-frame.faded .settings-button,
+.capture-frame.entering .settings-button,
+.capture-frame.exiting .settings-button {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.settings-button:hover {
+  background: rgba(255, 255, 255, 1);
+  transform: scale(1.2);
+}
+
+.settings-button:active {
+  background: rgba(255, 159, 67, 1);
+  transform: scale(0.95);
+}
+
+.settings-button svg {
+  display: block;
+  width: 12px;
+  height: 12px;
+}
+
+/* =============================================================================
+   SETTINGS MENU - Popup menu for settings
+   ============================================================================= */
+
+.settings-menu {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+
+  min-width: 280px;
+  padding: 16px;
+
+  /* No backdrop-filter: WebView2 renders it as flat grey on a transparent
+     window. See the same note on .subtitle-container. */
+  background: rgba(30, 30, 30, 0.97);
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+
+  box-shadow:
+    0 8px 32px rgba(0, 0, 0, 0.4),
+    0 0 0 1px rgba(255, 255, 255, 0.05);
+
+  z-index: 10000;
+
+  transition:
+    opacity 0.2s ease,
+    transform 0.2s ease;
+  pointer-events: auto;
+}
+
+.settings-menu.hidden {
+  opacity: 0;
+  transform: translate(-50%, -50%) scale(0.95);
+  pointer-events: none;
+}
+
+.settings-menu.visible {
+  opacity: 1;
+  transform: translate(-50%, -50%) scale(1);
+}
+
+.settings-menu-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+
+  font-size: 14px;
+  font-weight: 600;
+  color: #ffffff;
+  margin-bottom: 16px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* The overlay window is click-through outside its clipped surfaces, so the
+   popup needs its own close control - a click on the desktop never reaches it. */
+.settings-close {
+  flex: 0 0 auto;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 50%;
+  cursor: pointer;
+
+  color: rgba(255, 255, 255, 0.85);
+  font-size: 16px;
+  line-height: 1;
+
+  transition:
+    background 0.2s ease,
+    color 0.2s ease;
+}
+
+.settings-close:hover {
+  background: rgba(255, 255, 255, 0.18);
+  color: #ffffff;
+}
+
+.settings-close:focus-visible {
+  outline: 2px solid var(--accent, #ff9f43);
+  outline-offset: 2px;
+}
+
+.settings-item {
+  margin-bottom: 12px;
+}
+
+.settings-item:last-child {
+  margin-bottom: 0;
+}
+
+.settings-item label {
+  display: block;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.7);
+  margin-bottom: 8px;
+}
+
+.settings-slider-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.settings-slider {
+  flex: 1;
+  height: 4px;
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 2px;
+  appearance: none;
+  -webkit-appearance: none;
+  cursor: pointer;
+}
+
+.settings-slider::-webkit-slider-thumb {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 16px;
+  height: 16px;
+  background: #8ab4f8;
+  border-radius: 50%;
+  cursor: pointer;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+  transition: transform 0.1s ease;
+}
+
+.settings-slider::-webkit-slider-thumb:hover {
+  transform: scale(1.1);
+}
+
+.settings-slider::-webkit-slider-thumb:active {
+  transform: scale(0.95);
+}
+
+.settings-value {
+  min-width: 40px;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.9);
+  text-align: right;
+  font-family: "Consolas", monospace;
+}
+
+/* Toggle switch item - label and toggle side by side */
+.settings-toggle-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-top: 8px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.settings-toggle-item > label:first-child {
+  margin-bottom: 0;
+}
+
+/* Toggle switch */
+.settings-toggle {
+  position: relative;
+  display: inline-block;
+  width: 40px;
+  height: 22px;
+  cursor: pointer;
+}
+
+.settings-toggle input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.settings-toggle-slider {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 22px;
+  transition: background 0.2s ease;
+}
+
+.settings-toggle-slider::before {
+  position: absolute;
+  content: "";
+  height: 16px;
+  width: 16px;
+  left: 3px;
+  bottom: 3px;
+  background: white;
+  border-radius: 50%;
+  transition: transform 0.2s ease;
+}
+
+.settings-toggle input:checked + .settings-toggle-slider {
+  background: #8ab4f8;
+}
+
+.settings-toggle input:checked + .settings-toggle-slider::before {
+  transform: translateX(18px);
+}

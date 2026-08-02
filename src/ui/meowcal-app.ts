@@ -6,6 +6,7 @@ import type { AppScreen, HomePresentation, UiSnapshot } from "./contracts";
 import { deriveHomePresentation } from "./home-state";
 import { renderHome } from "./home-view";
 import { renderSettings } from "./settings-view";
+import "./meowcal-titlebar";
 
 @customElement("meowcal-app")
 export class MeowcalApp extends LitElement {
@@ -109,6 +110,7 @@ export class MeowcalApp extends LitElement {
     if (!this.snapshot) return nothing;
     return html`
       <div class="app-frame">
+        <meowcal-titlebar label="Meowcal Sub"></meowcal-titlebar>
         ${this.renderScreen()}
 
         <nav class="app-nav" aria-label="Main navigation">

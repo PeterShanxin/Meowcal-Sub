@@ -295,8 +295,21 @@
     // EXPORTS
     // =============================================================================
 
+    // The shell windows are undecorated, so the app draws its own title bar and
+    // has to provide the controls the system strip used to give it. Browser mode
+    // has no window to drive, so this stays undefined and the bar hides them.
+    const currentWindow = () => window.__TAURI__?.window?.getCurrentWindow?.() || null;
+    const windowControls = isTauri ? {
+        minimize: async () => { await currentWindow()?.minimize(); },
+        toggleMaximize: async () => { await currentWindow()?.toggleMaximize(); },
+        close: async () => { await currentWindow()?.close(); },
+        isMaximized: async () => (await currentWindow()?.isMaximized()) === true,
+    } : undefined;
+
     // Create the bridge object
     const TauriBridge = {
+        windowControls,
+
         // Core functions
         invoke,
         isTauri,

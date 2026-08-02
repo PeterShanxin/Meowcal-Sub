@@ -222,12 +222,6 @@
   display: none;
 }
 
-@keyframes meowcal-spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-
 @media (max-height: 650px) {
   .home-screen {
     padding-top: var(--space-4);

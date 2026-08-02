@@ -248,17 +248,13 @@ impl WindowsOcr {
         }
 
         // Create the result
-        let mut result = OcrResult::new(lines);
-
-        // Calculate confidence score using heuristic method
-        // Windows OCR doesn't provide native confidence, so we estimate it
-        result.confidence = Some(result.calculate_confidence());
+        let result = OcrResult::new(lines);
 
         debug!(
-            "OCR found {} lines ({} chars), confidence: {:.2}",
+            "OCR found {} lines ({} chars, {} significant)",
             result.lines.len(),
             result.text.chars().count(),
-            result.confidence.unwrap_or(0.0)
+            result.significant_chars()
         );
 
         Ok(result)
@@ -336,7 +332,7 @@ impl WindowsOcr {
         ];
 
         let mut best_result: Option<OcrResult> = None;
-        let mut best_confidence: f32 = 0.0;
+        let mut best_score: usize = 0;
 
         // Run OCR with each configuration (up to pass_count configs)
         for (i, config) in configs.iter().enumerate() {
@@ -359,16 +355,19 @@ impl WindowsOcr {
                 .await
             {
                 Ok(result) => {
-                    let confidence = result.confidence.unwrap_or(0.0);
+                    // The pass that resolved the most glyphs resolved the most
+                    // of the subtitle. Windows OCR reports no confidence, so
+                    // there is nothing better to rank passes by.
+                    let score = result.significant_chars();
                     debug!(
-                        "Multi-pass OCR: pass {} result confidence = {:.2}, text length = {}",
+                        "Multi-pass OCR: pass {} resolved {} significant chars, text length = {}",
                         pass_num,
-                        confidence,
+                        score,
                         result.text.len()
                     );
 
-                    if confidence > best_confidence {
-                        best_confidence = confidence;
+                    if score > best_score {
+                        best_score = score;
                         best_result = Some(result);
                     }
                 }
@@ -382,8 +381,8 @@ impl WindowsOcr {
         match best_result {
             Some(result) => {
                 info!(
-                    "Multi-pass OCR complete: best confidence = {:.2}",
-                    best_confidence
+                    "Multi-pass OCR complete: best pass resolved {} significant chars",
+                    best_score
                 );
                 Ok(result)
             }
