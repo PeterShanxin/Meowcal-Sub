@@ -8,7 +8,7 @@ ratchets. Machine-readable values live in
 
 Measured on 2026-08-02 after the native overlay clipping extraction milestone:
 
-- 94 production files under `src/` and `src-tauri/src/`;
+- 96 production files under `src/` and `src-tauri/src/`;
 - 400 lines maximum for a new `.rs`, `.js`, `.html`, or `.css` production file;
 - 17 explicit legacy files above that ceiling;
 - 10 existing ESLint warnings, with zero allowed errors;

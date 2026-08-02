@@ -9,6 +9,8 @@ const { clearSubtitleHint, setSubtitleHint, updateSubtitleHint } = window.Overla
 const { appendClipSurface } = window.OverlayWindowClip;
 const { resolveSubtitleSurface } = window.OverlaySubtitleSurface;
 const { setupSettingsMenu } = window.OverlaySettingsMenu;
+const { clipPayloadEquals } = window.OverlayClipPayload;
+const { pointInBounds, rectToPhysicalBounds, regionToPhysicalBounds } = window.OverlayHitBounds;
 
 // =============================================================================
 // GLOBAL STATE
@@ -43,6 +45,7 @@ const overlayState = {
 // Timers
 let clickThroughMonitor = null;
 let clickThroughBusy = false;
+let clickThroughBusyUntil = 0;
 let fadeTimer = null;
 
 // Fade duration for "start/stop translation" show/hide transitions.
@@ -144,59 +147,42 @@ function setHoveringState(isHovering) {
     }
 }
 
-function rectToPhysicalBounds(rect, scaleFactor) {
-    const offsetX = window.screenX || 0;
-    const offsetY = window.screenY || 0;
-
-    return {
-        left: (rect.left + offsetX) * scaleFactor,
-        top: (rect.top + offsetY) * scaleFactor,
-        right: (rect.right + offsetX) * scaleFactor,
-        bottom: (rect.bottom + offsetY) * scaleFactor,
-    };
+function getWindowOrigin() {
+    return { x: window.screenX || 0, y: window.screenY || 0 };
 }
 
 function getInteractiveBoundsPhysical(scaleFactor) {
     const bounds = [];
+    const origin = getWindowOrigin();
 
     if (overlayState.region) {
-        // Increase padding to cover the settings button (28px button at 8px from edge)
-        const handlePadding = 40;
-        bounds.push({
-            left: (overlayState.region.x - handlePadding) * scaleFactor,
-            top: (overlayState.region.y - handlePadding) * scaleFactor,
-            right: (overlayState.region.x + overlayState.region.width + handlePadding) * scaleFactor,
-            bottom: (overlayState.region.y + overlayState.region.height + handlePadding) * scaleFactor,
-        });
+        // Padding covers the resize handles and the settings gear outside the frame.
+        bounds.push(regionToPhysicalBounds(overlayState.region, 40, origin, scaleFactor));
     }
 
     const subtitleContainer = document.getElementById('subtitle-container');
     if (subtitleContainer && !subtitleContainer.classList.contains('hidden')) {
-        const rect = subtitleContainer.getBoundingClientRect();
-        bounds.push(rectToPhysicalBounds(rect, scaleFactor));
+        bounds.push(rectToPhysicalBounds(subtitleContainer.getBoundingClientRect(), origin, scaleFactor));
     }
 
     const settingsMenu = document.getElementById('settings-menu');
     if (settingsMenu && settingsMenu.classList.contains('visible')) {
-        const rect = settingsMenu.getBoundingClientRect();
-        bounds.push(rectToPhysicalBounds(rect, scaleFactor));
+        bounds.push(rectToPhysicalBounds(settingsMenu.getBoundingClientRect(), origin, scaleFactor));
     }
 
     return bounds;
 }
 
-function pointInBounds(point, bounds) {
-    return point.x >= bounds.left &&
-        point.x <= bounds.right &&
-        point.y >= bounds.top &&
-        point.y <= bounds.bottom;
-}
-
 async function updateClickThroughState() {
-    if (clickThroughBusy || !overlayState.isVisible) return;
+    // The busy flag must never outlive one tick: every step below is a main-thread
+    // IPC round trip, and a wedged flag would freeze the overlay in whatever
+    // click-through state it happened to be in, with no way back to interactive.
+    if (clickThroughBusy && Date.now() < clickThroughBusyUntil) return;
+    if (!overlayState.isVisible) return;
     if (!window.__TAURI__?.window?.cursorPosition) return;
 
     clickThroughBusy = true;
+    clickThroughBusyUntil = Date.now() + 2000;
     try {
         if (!overlayState.region) {
             await setOverlayClickThrough(true);
@@ -704,6 +690,10 @@ async function setupEventListeners(elements) {
             overlayState.isVisible = visible;
 
             if (visible) {
+                // The window is re-shown here, so the cached click-through and clip
+                // state can no longer be trusted to match what the OS window has.
+                overlayState.isClickThrough = null;
+                lastClipPayload = null;
                 await refreshScaleFactor();
                 // Ensure the capture frame is visible immediately (it may still be faded from a previous session)
                 showCaptureFrame();
@@ -905,6 +895,7 @@ function updateSubtitleText(textElement, newText, container) {
 // Restrict the overlay to visible UI so WebView2 opacity regressions cannot cover the screen.
 let clipUpdateLoopRunning = false;
 let clipUpdateLoopUntilMs = 0;
+let lastClipPayload = null;
 
 function scheduleWindowClipUpdate() {
     // Many overlay elements (capture frame + subtitle container) animate position/size
@@ -978,12 +969,21 @@ async function updateOverlayWindowClip() {
             appendClipSurface(bounds, radii, settingsMenu);
         }
 
-        const handleBounds = bounds.length > 0 ? bounds : null;
-        const controlRadii = radii.length > 0 ? radii : null;
+        const payload = {
+            frameRegion,
+            subtitleBounds,
+            handleBounds: bounds.length > 0 ? bounds : null,
+            controlRadii: radii.length > 0 ? radii : null,
+            scaleFactor,
+        };
 
-        await window.__TAURI__.core.invoke('set_overlay_window_clip', {
-            frameRegion, subtitleBounds, handleBounds, controlRadii, scaleFactor,
-        });
+        // The settle loop runs every animation frame while geometry animates, but
+        // the command is synchronous on the Tauri main thread. Resending identical
+        // geometry starves capture, OCR, and the click-through monitor.
+        if (clipPayloadEquals(payload, lastClipPayload)) return;
+
+        await window.__TAURI__.core.invoke('set_overlay_window_clip', payload);
+        lastClipPayload = payload;
     } catch (e) {
         // Ignore - this is a best-effort platform workaround.
     }
