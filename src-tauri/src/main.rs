@@ -267,8 +267,8 @@ fn main() {
             commands::prepare_foundry_local,
             commands::make_foundry_ready,
             // Overlay commands
-            commands::set_overlay_click_through,
-            commands::set_overlay_window_clip,
+            meowcal_sub::overlay::commands::set_overlay_click_through,
+            meowcal_sub::overlay::commands::set_overlay_window_clip,
             // Foundry setup wizard commands
             commands::open_foundry_wizard,
             commands::close_foundry_wizard,

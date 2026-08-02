@@ -14,6 +14,8 @@ use tracing::{debug, info};
 
 use crate::config::CaptureRegion;
 
+pub mod commands;
+pub mod window_alpha;
 pub mod window_clip;
 
 // =============================================================================
@@ -176,6 +178,12 @@ pub fn show_overlay(app: &AppHandle) -> Result<(), String> {
     #[cfg(windows)]
     if let Err(e) = configure_overlay_as_chromeless_popup(&window) {
         tracing::warn!("Failed to re-apply overlay popup style after show: {}", e);
+    }
+
+    // The webview cannot make itself translucent here, so the window does it.
+    // Applied after show: the style is only reliable once the frame exists.
+    if let Err(e) = window_alpha::apply(&window) {
+        tracing::warn!("Failed to apply overlay translucency: {}", e);
     }
 
     // Emit visibility event

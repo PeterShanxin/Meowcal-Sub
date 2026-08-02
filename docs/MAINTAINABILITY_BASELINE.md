@@ -6,9 +6,9 @@ ratchets. Machine-readable values live in
 
 ## Enforced baseline
 
-Measured on 2026-08-02 after the OCR thresholding rewrite milestone:
+Measured on 2026-08-02 after the overlay translucency and OCR thresholding milestone:
 
-- 99 production files under `src/` and `src-tauri/src/`;
+- 101 production files under `src/` and `src-tauri/src/`;
 - 400 lines maximum for a new `.rs`, `.js`, `.html`, or `.css` production file;
 - 17 explicit legacy files above that ceiling;
 - 10 existing ESLint warnings, with zero allowed errors;
@@ -35,7 +35,7 @@ machine-readable baseline. The largest and decomposition-owned hotspots are:
 
 | File                                 | Ceiling | Reduction owner      |
 | ------------------------------------ | ------: | -------------------- |
-| `src-tauri/src/commands.rs`          |   2,254 | #31                  |
+| `src-tauri/src/commands.rs`          |   2,199 | #31                  |
 | `src/scripts/main.js`                |   1,987 | #33                  |
 | `src-tauri/src/llm/foundry_local.rs` |   1,720 | #32                  |
 | `src-tauri/src/llm/manager.rs`       |   1,234 | #32                  |
