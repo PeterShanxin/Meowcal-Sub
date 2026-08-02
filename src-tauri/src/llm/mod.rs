@@ -197,6 +197,12 @@ pub enum TranslationDisplayState {
     Warming,
     TemporarilyUnavailable,
     SourceOnly,
+    /// OCR keeps reading the capture region but finds no text there.
+    ///
+    /// Distinct from `Stopped`: the pipeline is still running. Without this the
+    /// overlay cannot retire a translation whose source subtitle is gone, and a
+    /// silent gap looks identical to a broken engine.
+    NoSubtitleText,
     Stopped,
 }
 

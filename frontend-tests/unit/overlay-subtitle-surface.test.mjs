@@ -24,7 +24,7 @@ describe("overlay subtitle surface", () => {
     });
   });
 
-  it.each(["warming", "temporarilyUnavailable", "sourceOnly"])(
+  it.each(["warming", "temporarilyUnavailable", "sourceOnly", "noSubtitleText"])(
     "keeps the box visible so the %s state is readable",
     (displayState) => {
       expect(surfaceFor(displayState, "foundry_local", "")).toEqual({

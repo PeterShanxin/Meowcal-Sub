@@ -13,12 +13,22 @@ describe("translation display states", () => {
     ["warming", false, false],
     ["temporarilyUnavailable", false, false],
     ["sourceOnly", false, false],
+    ["noSubtitleText", false, false],
     ["stopped", false, true],
   ])("presents %s without mislabeling source text", (state, replaceText, clearText) => {
     expect(getTranslationPresentation(state)).toMatchObject({
       state,
       replaceText,
       clearText,
+    });
+  });
+
+  // The pipeline is still healthy here, so the box has to stay up with an
+  // explanation instead of leaving the previous translation on screen.
+  it("retires the previous line when the region has no text", () => {
+    expect(getTranslationPresentation("noSubtitleText")).toMatchObject({
+      hint: "No subtitle text in the selected area",
+      persist: true,
     });
   });
 

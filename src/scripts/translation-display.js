@@ -16,6 +16,7 @@
     "warming",
     "temporarilyUnavailable",
     "sourceOnly",
+    "noSubtitleText",
     "stopped",
   ]);
 
@@ -55,6 +56,17 @@
           replaceText: false,
           clearText: false,
           hint: "OCR captured · no translation shown",
+          severity: "warn",
+          persist: true,
+        };
+      case "noSubtitleText":
+        // The pipeline is healthy and the region simply has no text in it. The
+        // previous translation must go, or a stale line sits over the video.
+        return {
+          state: normalized,
+          replaceText: false,
+          clearText: false,
+          hint: "No subtitle text in the selected area",
           severity: "warn",
           persist: true,
         };

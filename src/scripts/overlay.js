@@ -1028,13 +1028,7 @@ async function loadOverlaySettings() {
                 diagnosticsToggle.checked = overlayState.showDiagnostics;
             }
 
-            console.log('🎨 Loaded overlay settings:', {
-                fontSize: overlayState.fontSize,
-                fontFamily: overlayState.fontFamily,
-                textColor: overlayState.textColor,
-                backgroundColor: overlayState.backgroundColor,
-                showDiagnostics: overlayState.showDiagnostics,
-            });
+            console.log('🎨 Loaded overlay settings:', settings.overlay);
         }
     } catch (e) {
         console.error('Failed to load settings:', e);
@@ -1075,6 +1069,11 @@ function updateDiagnosticsVisibility() {
         debugInfo.classList.add('hidden');
         debugInfo.classList.remove('visible');
     }
+
+    // The window region still contains the old panel rectangle until it is
+    // rebuilt, and a clipped area with nothing painted in it renders as a solid
+    // white block over the video.
+    scheduleWindowClipUpdate();
 }
 
 async function saveOverlaySettings() {

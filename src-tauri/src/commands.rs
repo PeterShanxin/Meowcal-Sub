@@ -1,14 +1,13 @@
 use crate::capture;
 use crate::config::{save_config, AppConfig, CaptureRegion};
-use crate::event_payloads::{CaptureStatusPayload, TranslationPayload};
+use crate::event_payloads::{CaptureStatusPayload, TranslationPayload, EMPTY_OCR_CLEAR_FRAMES};
 use crate::ipc::{
     IpcMessage, IpcServer, OverlaySettingsData, RegionData, SetRegionPayload, SettingsSyncPayload,
     SubtitleUpdatePayload,
 };
 use crate::llm::{
     BackendId, BackendInfo, FoundryLocalBackend, FoundryLocalPhase, TranslationDiagnostics,
-    TranslationDiagnosticsState, TranslationDisplayState, TranslationManager, TranslationOutcome,
-    TranslatorBackend,
+    TranslationDiagnosticsState, TranslationManager, TranslationOutcome, TranslatorBackend,
 };
 use crate::ocr::{PreprocessingConfig, WindowsOcr};
 use crate::overlay;
@@ -1484,6 +1483,8 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
             .checked_sub(Duration::from_millis(MOCK_RETRY_COOLDOWN_MS))
             .unwrap_or_else(Instant::now);
         let mut last_capture_region: Option<CaptureRegion> = None;
+        let mut empty_ocr_frames: u32 = 0;
+        let mut idle_notified = false;
 
         let use_persistent = match capture::init_capture_session() {
             Ok(_) => {
@@ -1657,9 +1658,29 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
 
             if ocr_result.is_empty() {
                 debug!("[FILTER: empty] No text detected, skipping");
+                empty_ocr_frames = empty_ocr_frames.saturating_add(1);
+
+                // A subtitle that leaves the region must leave the overlay too.
+                // Waiting a few frames keeps single-frame OCR misses from
+                // flickering the line away between subtitle changes.
+                if empty_ocr_frames >= EMPTY_OCR_CLEAR_FRAMES && !idle_notified {
+                    idle_notified = true;
+                    // The cleared line has to be translatable again: without this
+                    // the duplicate filter would suppress the identical subtitle
+                    // when it returns, leaving the overlay permanently blank.
+                    last_text.clear();
+                    let _ = app.emit(
+                        "translation-update",
+                        TranslationPayload::no_subtitle_text(session_id, token.capture_id),
+                    );
+                }
+
                 tokio::time::sleep(Duration::from_millis(interval_ms as u64)).await;
                 continue;
             }
+
+            empty_ocr_frames = 0;
+            idle_notified = false;
 
             let confidence = ocr_result.confidence.unwrap_or(0.0);
             let current_text = ocr_result.text.trim().to_string();
@@ -1970,24 +1991,11 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
             tokio::time::sleep(Duration::from_millis(interval_ms as u64)).await;
         }
 
-        let stopped_timestamp = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_millis() as u64;
         if pipeline_clock.is_session_current(session_id) {
             let stopped_token = pipeline_clock.next_capture(session_id);
             let _ = app.emit(
                 "translation-update",
-                TranslationPayload {
-                    session_id,
-                    capture_id: stopped_token.capture_id,
-                    original: String::new(),
-                    translated: String::new(),
-                    backend_used: BackendId::Mock.as_str().to_string(),
-                    warnings: Vec::new(),
-                    display_state: TranslationDisplayState::Stopped,
-                    timestamp: stopped_timestamp,
-                },
+                TranslationPayload::stopped(session_id, stopped_token.capture_id),
             );
         }
 
@@ -2069,19 +2077,7 @@ pub async fn stop_translation(state: State<'_, AppState>, app: AppHandle) -> Res
     }
     let _ = app.emit(
         "translation-update",
-        TranslationPayload {
-            session_id: stopped_session_id,
-            capture_id: 0,
-            original: String::new(),
-            translated: String::new(),
-            backend_used: BackendId::Mock.as_str().to_string(),
-            warnings: Vec::new(),
-            display_state: TranslationDisplayState::Stopped,
-            timestamp: SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .unwrap_or_default()
-                .as_millis() as u64,
-        },
+        TranslationPayload::stopped(stopped_session_id, 0),
     );
 
     info!("✅ Translation stopped!");
