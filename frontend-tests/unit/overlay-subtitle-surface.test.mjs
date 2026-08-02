@@ -24,15 +24,18 @@ describe("overlay subtitle surface", () => {
     });
   });
 
-  it.each(["warming", "temporarilyUnavailable", "sourceOnly", "noSubtitleText"])(
-    "keeps the box visible so the %s state is readable",
-    (displayState) => {
-      expect(surfaceFor(displayState, "foundry_local", "")).toEqual({
-        mode: "hint",
-        showContainer: true,
-      });
-    },
-  );
+  it.each([
+    "warming",
+    "temporarilyUnavailable",
+    "sourceOnly",
+    "noSubtitleText",
+    "sourceUnreadable",
+  ])("keeps the box visible so the %s state is readable", (displayState) => {
+    expect(surfaceFor(displayState, "foundry_local", "")).toEqual({
+      mode: "hint",
+      showContainer: true,
+    });
+  });
 
   it("hides the box when translation stops", () => {
     expect(surfaceFor("stopped", "foundry_local", "")).toEqual({

@@ -16,6 +16,9 @@ pub mod capture;
 /// OCR (Optical Character Recognition) - reads text from images
 pub mod ocr;
 
+/// Decides which recognised lines are reliable enough to translate
+pub mod ocr_gate;
+
 /// LLM (Large Language Model) - translates text using AI
 pub mod llm;
 

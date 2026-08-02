@@ -203,6 +203,12 @@ pub enum TranslationDisplayState {
     /// overlay cannot retire a translation whose source subtitle is gone, and a
     /// silent gap looks identical to a broken engine.
     NoSubtitleText,
+    /// OCR read something in the region but the pipeline refused to translate it.
+    ///
+    /// Distinct from `NoSubtitleText`: telling the viewer the region is empty
+    /// while text plainly sits in it sends them to move a region that was never
+    /// the problem. The machine-readable reason travels in `warnings`.
+    SourceUnreadable,
     Stopped,
 }
 

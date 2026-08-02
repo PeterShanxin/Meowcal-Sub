@@ -1484,7 +1484,9 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
             .unwrap_or_else(Instant::now);
         let mut last_capture_region: Option<CaptureRegion> = None;
         let mut empty_ocr_frames: u32 = 0;
-        let mut idle_notified = false;
+        // The loop runs several times a second. Re-emitting the same notice every
+        // pass would flood the overlay, so only a change of reason is reported.
+        let mut last_notice: Option<&'static str> = None;
 
         let use_persistent = match capture::init_capture_session() {
             Ok(_) => {
@@ -1663,8 +1665,8 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
                 // A subtitle that leaves the region must leave the overlay too.
                 // Waiting a few frames keeps single-frame OCR misses from
                 // flickering the line away between subtitle changes.
-                if empty_ocr_frames >= EMPTY_OCR_CLEAR_FRAMES && !idle_notified {
-                    idle_notified = true;
+                if empty_ocr_frames >= EMPTY_OCR_CLEAR_FRAMES && last_notice != Some("empty") {
+                    last_notice = Some("empty");
                     // The cleared line has to be translatable again: without this
                     // the duplicate filter would suppress the identical subtitle
                     // when it returns, leaving the overlay permanently blank.
@@ -1680,7 +1682,6 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
             }
 
             empty_ocr_frames = 0;
-            idle_notified = false;
 
             let confidence = ocr_result.confidence.unwrap_or(0.0);
             let current_text = ocr_result.text.trim().to_string();
@@ -1691,33 +1692,30 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
                 confidence
             );
 
-            if confidence < effective_confidence_threshold {
+            if let Some(rejection) =
+                crate::ocr_gate::classify(&current_text, confidence, effective_confidence_threshold)
+            {
                 debug!(
-                    "[FILTER: low_confidence] ({:.2} < {:.2}, {} chars)",
-                    confidence,
-                    effective_confidence_threshold,
-                    current_text.chars().count()
-                );
-                tokio::time::sleep(Duration::from_millis(interval_ms as u64)).await;
-                continue;
-            }
-
-            let significant_chars = current_text
-                .chars()
-                .filter(|ch| ch.is_alphanumeric())
-                .count();
-            if significant_chars < 2 {
-                debug!("[FILTER: very_short] Noise/very short text detected, skipping");
-                tokio::time::sleep(Duration::from_millis(interval_ms as u64)).await;
-                continue;
-            }
-
-            if crate::llm::is_untranslatable_text(&current_text) {
-                debug!(
-                    "[FILTER: untranslatable] OCR text ({} chars, confidence: {:.2})",
+                    "[FILTER: {}] OCR text ({} chars, confidence: {:.2}, threshold: {:.2})",
+                    rejection.as_str(),
                     current_text.chars().count(),
-                    confidence
+                    confidence,
+                    effective_confidence_threshold
                 );
+                // Text *is* in the region, so the overlay must stop claiming the
+                // region is empty. Staying silent leaves whichever notice is on
+                // screen contradicting what the viewer can see.
+                if last_notice != Some(rejection.as_str()) {
+                    last_notice = Some(rejection.as_str());
+                    let _ = app.emit(
+                        "translation-update",
+                        TranslationPayload::source_unreadable(
+                            session_id,
+                            token.capture_id,
+                            rejection,
+                        ),
+                    );
+                }
                 tokio::time::sleep(Duration::from_millis(interval_ms as u64)).await;
                 continue;
             }
@@ -1765,6 +1763,7 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
             }
 
             last_text = current_text.clone();
+            last_notice = None;
             context_generation.fetch_add(1, Ordering::SeqCst);
             last_attempt_at = now;
             info!("📝 OCR detected ({} chars)", current_text.chars().count());

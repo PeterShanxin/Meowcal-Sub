@@ -317,10 +317,10 @@ body {
     position: absolute;
     padding: 12px 24px;
 
-    /* No backdrop-filter here. WebView2 has no backdrop to sample on a
-       transparent window, so it composites a flat opaque grey over the video
-       instead of the translucent panel this alpha describes. */
-    background: rgba(0, 0, 0, 0.72);
+    /* Opaque on purpose: WebView2 transparency does not hold here (a clipped but
+       unpainted area renders white), so alpha on the outermost surface composites
+       to flat grey. Children may still use alpha - they blend against this plate. */
+    background: #0b0b0b;
     border-radius: 8px;
     border: 1px solid rgba(255, 255, 255, 0.1);
 

@@ -11,11 +11,6 @@
   },
   "app": {
     "withGlobalTauri": true,
-    "trayIcon": {
-      "iconPath": "icons/icon.png",
-      "iconAsTemplate": false,
-      "title": "Meowcal Sub"
-    },
     "windows": [
       {
         "title": "Meowcal Sub",

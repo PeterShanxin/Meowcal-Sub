@@ -1,4 +1,5 @@
 use crate::llm::TranslationDisplayState;
+use crate::ocr_gate::OcrRejection;
 use serde::Serialize;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -38,6 +39,21 @@ impl TranslationPayload {
         )
     }
 
+    /// OCR read the region but the line was not reliable enough to translate.
+    pub(crate) fn source_unreadable(
+        session_id: u64,
+        capture_id: u64,
+        rejection: OcrRejection,
+    ) -> Self {
+        let mut payload = Self::lifecycle(
+            session_id,
+            capture_id,
+            TranslationDisplayState::SourceUnreadable,
+        );
+        payload.warnings.push(rejection.as_str().to_string());
+        payload
+    }
+
     /// The pipeline has stopped; the overlay clears everything.
     pub(crate) fn stopped(session_id: u64, capture_id: u64) -> Self {
         Self::lifecycle(session_id, capture_id, TranslationDisplayState::Stopped)
@@ -49,7 +65,10 @@ impl TranslationPayload {
             capture_id,
             original: String::new(),
             translated: String::new(),
-            backend_used: crate::llm::BackendId::Mock.as_str().to_string(),
+            // No backend ran for a lifecycle notice. Naming one here made the
+            // overlay diagnostics report "mock (source only)" during a perfectly
+            // healthy Foundry session, which reads as a broken engine.
+            backend_used: String::new(),
             warnings: Vec::new(),
             display_state,
             timestamp: now_ms(),

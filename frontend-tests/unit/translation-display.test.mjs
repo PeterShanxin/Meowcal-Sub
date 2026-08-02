@@ -14,6 +14,7 @@ describe("translation display states", () => {
     ["temporarilyUnavailable", false, false],
     ["sourceOnly", false, false],
     ["noSubtitleText", false, false],
+    ["sourceUnreadable", false, false],
     ["stopped", false, true],
   ])("presents %s without mislabeling source text", (state, replaceText, clearText) => {
     expect(getTranslationPresentation(state)).toMatchObject({
@@ -30,6 +31,24 @@ describe("translation display states", () => {
       hint: "No subtitle text in the selected area",
       persist: true,
     });
+  });
+
+  // OCR read the region, so this state must never claim the area is empty -
+  // that sends the viewer to move a region that was never the problem.
+  it.each([
+    ["lowConfidence", "Subtitle text here is too unclear to read"],
+    ["tooShort", "Only stray marks found in the selected area"],
+    ["untranslatable", "Nothing translatable in the selected area"],
+  ])("explains %s without claiming the area is empty", (reason, hint) => {
+    expect(getTranslationPresentation("sourceUnreadable", "", [reason])).toMatchObject({
+      hint,
+      persist: true,
+    });
+  });
+
+  it("falls back to a generic reason when the backend sends an unknown one", () => {
+    const presentation = getTranslationPresentation("sourceUnreadable", "", ["somethingNew"]);
+    expect(presentation.hint).toBe("Subtitle text in this area could not be read");
   });
 
   it("labels passthrough payloads from older backends as source only", () => {

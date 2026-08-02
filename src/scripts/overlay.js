@@ -633,7 +633,7 @@ async function setupEventListeners(elements) {
                 window.PipelineUpdate.position(event.payload) ||
                 overlayState.lastPipelinePosition;
             const { translated, timestamp, backendUsed, warnings, displayState } = event.payload;
-            const presentation = getTranslationPresentation(displayState, backendUsed);
+            const presentation = getTranslationPresentation(displayState, backendUsed, warnings);
             console.log('🌐 Translation state:', presentation.state);
 
             const surface = resolveSubtitleSurface(presentation, translated);
@@ -674,12 +674,12 @@ async function setupEventListeners(elements) {
             });
             if (debugStatus) {
                 const time = new Date(timestamp).toLocaleTimeString();
-                const backend = backendUsed || 'unknown';
-                const warningCount = Array.isArray(warnings) ? warnings.length : 0;
-                const backendLabel = backend === 'mock' ? 'mock (source only)' : backend;
-                debugStatus.textContent = warningCount > 0
-                    ? `State: ${presentation.state} · ${backendLabel} @ ${time} | warnings: ${warningCount}`
-                    : `State: ${presentation.state} · ${backendLabel} @ ${time}`;
+                // Lifecycle notices run no backend; naming one anyway made a
+                // healthy Foundry session read as 'mock (source only)'.
+                const engine = backendUsed === 'mock' ? 'mock (source only)' : backendUsed;
+                const detail = Array.isArray(warnings) ? warnings.join(', ') : '';
+                debugStatus.textContent = [`State: ${presentation.state}`, engine, detail, time]
+                    .filter(Boolean).join(' · ');
             }
         });
 
