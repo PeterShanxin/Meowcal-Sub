@@ -98,9 +98,10 @@
       });
     }
 
-    button.style.pointerEvents = "auto";
-    menu.style.pointerEvents = "auto";
-
+    // Never write pointer-events inline. `.settings-menu` and `.settings-button`
+    // already opt in through CSS, and an inline value outranks the `.hidden` and
+    // `.faded` rules that switch it back off - which leaves an invisible popup
+    // sitting at screen centre swallowing every click that reaches the overlay.
     return { isOpen: () => open, close: () => applyOpen(false) };
   }
 

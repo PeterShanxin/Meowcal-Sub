@@ -118,6 +118,20 @@ describe("overlay settings menu", () => {
     expect(menu.classes.has("hidden")).toBe(true);
   });
 
+  // An inline pointer-events value outranks `.settings-menu.hidden` and
+  // `.capture-frame.faded .settings-button`, which leaves an invisible popup
+  // hit-testing over the video: stray drags moved the font slider and stray
+  // clicks flipped the diagnostics toggle.
+  it("never writes pointer-events inline", () => {
+    const { button, menu, closeButton } = buildMenu();
+
+    button.fire("click");
+    closeButton.fire("click");
+
+    expect(button.style.pointerEvents).toBeUndefined();
+    expect(menu.style.pointerEvents).toBeUndefined();
+  });
+
   it("keeps the menu open when a click lands inside it", () => {
     const button = fakeElement();
     const inner = {};
