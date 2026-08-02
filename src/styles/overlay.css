@@ -217,17 +217,18 @@ body {
     transform: scale(1.2);
 }
 
-/* Position each handle - positioned OUTSIDE the frame so they don't get
-   cropped by the inner click-through hole. With 14px diameter at -14px offset,
-   handles span from frame-14 to frame+0, fully outside the inner hole (frame+2). */
+/* Position each handle centred on the frame edge it resizes, so the eight dots
+   read as the boundary of the captured region instead of a larger ring around
+   it. Overlapping the inner click-through hole is safe: the native clip ORs each
+   handle rect back into the window region after the hole is punched. */
 .resize-handle[data-position="nw"] {
-    top: -14px;
-    left: -14px;
+    top: -7px;
+    left: -7px;
     cursor: nwse-resize;
 }
 
 .resize-handle[data-position="n"] {
-    top: -14px;
+    top: -7px;
     left: 50%;
     transform: translateX(-50%) scale(0.5);
     cursor: ns-resize;
@@ -243,14 +244,14 @@ body {
 }
 
 .resize-handle[data-position="ne"] {
-    top: -14px;
-    right: -14px;
+    top: -7px;
+    right: -7px;
     cursor: nesw-resize;
 }
 
 .resize-handle[data-position="w"] {
     top: 50%;
-    left: -14px;
+    left: -7px;
     transform: translateY(-50%) scale(0.5);
     cursor: ew-resize;
 }
@@ -266,7 +267,7 @@ body {
 
 .resize-handle[data-position="e"] {
     top: 50%;
-    right: -14px;
+    right: -7px;
     transform: translateY(-50%) scale(0.5);
     cursor: ew-resize;
 }
@@ -281,13 +282,13 @@ body {
 }
 
 .resize-handle[data-position="sw"] {
-    bottom: -14px;
-    left: -14px;
+    bottom: -7px;
+    left: -7px;
     cursor: nesw-resize;
 }
 
 .resize-handle[data-position="s"] {
-    bottom: -14px;
+    bottom: -7px;
     left: 50%;
     transform: translateX(-50%) scale(0.5);
     cursor: ns-resize;
@@ -303,8 +304,8 @@ body {
 }
 
 .resize-handle[data-position="se"] {
-    bottom: -14px;
-    right: -14px;
+    bottom: -7px;
+    right: -7px;
     cursor: nwse-resize;
 }
 
@@ -316,9 +317,10 @@ body {
     position: absolute;
     padding: 12px 24px;
 
-    background: rgba(0, 0, 0, 0.75);
-    backdrop-filter: blur(8px);
-    -webkit-backdrop-filter: blur(8px);
+    /* No backdrop-filter here. WebView2 has no backdrop to sample on a
+       transparent window, so it composites a flat opaque grey over the video
+       instead of the translucent panel this alpha describes. */
+    background: rgba(0, 0, 0, 0.72);
     border-radius: 8px;
     border: 1px solid rgba(255, 255, 255, 0.1);
 
@@ -357,9 +359,7 @@ body {
 
     border-radius: 999px;
     border: 1px solid rgba(255, 255, 255, 0.12);
-    background: rgba(0, 0, 0, 0.28);
-    backdrop-filter: blur(10px);
-    -webkit-backdrop-filter: blur(10px);
+    background: rgba(0, 0, 0, 0.42);
 
     color: rgba(255, 255, 255, 0.9);
     font-size: 12px;

@@ -4,11 +4,11 @@
 
 .settings-button {
   position: absolute;
-  /* Position well OUTSIDE the frame to avoid click-through hole.
-       The inner hole starts at frame_y + 2px, so we position the button
-       completely above the frame with enough margin. */
-  top: -22px;
-  right: 10px; /* Between frame edge and NE corner handle */
+  /* Centred on the top edge like the resize handles, and inset far enough to
+     clear the NE handle. The native clip ORs this rect back into the window
+     region, so overlapping the inner click-through hole is safe. */
+  top: -9px;
+  right: 22px;
   width: 18px;
   height: 18px;
   padding: 0;
@@ -81,9 +81,9 @@
   min-width: 280px;
   padding: 16px;
 
-  background: rgba(30, 30, 30, 0.95);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  /* No backdrop-filter: WebView2 renders it as flat grey on a transparent
+     window. See the same note on .subtitle-container. */
+  background: rgba(30, 30, 30, 0.97);
   border-radius: 12px;
   border: 1px solid rgba(255, 255, 255, 0.1);
 
