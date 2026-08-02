@@ -7,6 +7,8 @@ document.addEventListener('DOMContentLoaded', () => {
 const { getTranslationPresentation } = window.TranslationDisplay;
 const { clearSubtitleHint, setSubtitleHint, updateSubtitleHint } = window.OverlaySubtitleHint;
 const { appendClipSurface } = window.OverlayWindowClip;
+const { resolveSubtitleSurface } = window.OverlaySubtitleSurface;
+const { setupSettingsMenu } = window.OverlaySettingsMenu;
 
 // =============================================================================
 // GLOBAL STATE
@@ -245,6 +247,9 @@ function scheduleFadeOut() {
 
     // Fade out after 4 seconds of no interaction
     fadeTimer = setTimeout(() => {
+        // The settings popup is anchored to the gear inside the frame, so fading
+        // the frame while it is open would strand the popup with no way to close it.
+        if (overlayState.settingsOpen) return;
         if (!overlayState.isOverlayActive && !overlayState.isDragging && !overlayState.isResizing) {
             captureFrame.classList.add('faded');
             scheduleWindowClipUpdate();
@@ -302,7 +307,7 @@ async function initOverlay() {
     await refreshScaleFactor();
 
     // Load initial font size
-    await loadOverlaySettings(subtitleText);
+    await loadOverlaySettings();
 
     // Set up resize handles
     setupResizeHandles(captureFrame);
@@ -645,7 +650,8 @@ async function setupEventListeners(elements) {
             const presentation = getTranslationPresentation(displayState, backendUsed);
             console.log('🌐 Translation state:', presentation.state);
 
-            if (presentation.replaceText) {
+            const surface = resolveSubtitleSurface(presentation, translated);
+            if (surface.mode === 'text') {
                 updateSubtitleText(subtitleText, translated, subtitleContainer);
                 updateSubtitleHint(
                     subtitleHint,
@@ -653,13 +659,16 @@ async function setupEventListeners(elements) {
                     backendUsed,
                     warnings
                 );
-            } else if (presentation.clearText) {
+            } else if (surface.mode === 'clear') {
                 overlayState.currentText = '';
                 subtitleText.textContent = '';
-                subtitleContainer.classList.add('hidden');
-                subtitleContainer.classList.remove('visible');
+                setSubtitleContainerVisible(subtitleContainer, false);
                 clearSubtitleHint(subtitleHint, subtitleHintText);
             } else {
+                // Hint-only states must keep the box on screen; otherwise a warming,
+                // unavailable, or source-only pipeline looks identical to a dead one.
+                overlayState.currentText = '';
+                subtitleText.textContent = '';
                 setSubtitleHint(
                     subtitleHint,
                     subtitleHintText,
@@ -667,6 +676,7 @@ async function setupEventListeners(elements) {
                     presentation.severity,
                     presentation.persist
                 );
+                setSubtitleContainerVisible(subtitleContainer, surface.showContainer);
             }
 
             // Reposition using the real subtitle container height (hint can change size).
@@ -761,8 +771,8 @@ async function setupEventListeners(elements) {
                     captureFrame.classList.add('hidden');
                     captureFrame.classList.remove('visible', 'exiting', 'faded');
 
-                    subtitleContainer.classList.add('hidden');
-                    subtitleContainer.classList.remove('visible', 'exiting');
+                    subtitleContainer.classList.remove('exiting');
+                    setSubtitleContainerVisible(subtitleContainer, false);
                 }, OVERLAY_VISIBILITY_FADE_MS);
             }
         });
@@ -861,11 +871,19 @@ function updateSubtitlePosition(container, region) {
     container.style.transform = 'none';
 }
 
+// Single owner of the subtitle box visibility classes. The Win32 window region
+// only includes the box while it is `visible`, so class state and clip state
+// must always be updated together.
+function setSubtitleContainerVisible(container, visible) {
+    if (!container) return;
+    container.classList.toggle('visible', visible);
+    container.classList.toggle('hidden', !visible);
+    scheduleWindowClipUpdate();
+}
+
 function updateSubtitleText(textElement, newText, container) {
     if (!newText || newText.trim() === '') {
-        container.classList.add('hidden');
-        container.classList.remove('visible');
-        scheduleWindowClipUpdate();
+        setSubtitleContainerVisible(container, false);
         return;
     }
 
@@ -877,9 +895,7 @@ function updateSubtitleText(textElement, newText, container) {
     textElement.textContent = newText;
     textElement.classList.add('fade-in');
 
-    container.classList.remove('hidden');
-    container.classList.add('visible');
-    scheduleWindowClipUpdate();
+    setSubtitleContainerVisible(container, true);
 }
 
 // =============================================================================
@@ -989,7 +1005,7 @@ async function runWindowClipUpdateLoop() {
 // SETTINGS FUNCTIONS
 // =============================================================================
 
-async function loadOverlaySettings(subtitleText) {
+async function loadOverlaySettings() {
     try {
         const settings = await window.__TAURI__.core.invoke('get_settings');
         if (settings?.overlay) {
@@ -1074,80 +1090,37 @@ async function saveOverlaySettings() {
 }
 
 function setupSettingsButton(button, menu, subtitleText, subtitleContainer) {
-    if (!button || !menu) return;
-
-    const fontSizeSlider = document.getElementById('font-size-slider');
-    const fontSizeDisplay = document.getElementById('font-size-display');
-    const diagnosticsToggle = document.getElementById('diagnostics-toggle');
-
-    if (fontSizeSlider) fontSizeSlider.value = overlayState.fontSize;
-    if (fontSizeDisplay) fontSizeDisplay.textContent = `${overlayState.fontSize}px`;
-    if (diagnosticsToggle) diagnosticsToggle.checked = overlayState.showDiagnostics;
-
-    // Prevent mousedown from triggering capture frame drag
-    button.addEventListener('mousedown', (e) => {
-        console.log('⚙️ Settings button mousedown');
-        e.stopPropagation();
-        e.preventDefault();
-    });
-
-    // Toggle menu
-    button.addEventListener('click', (e) => {
-        console.log('⚙️ Settings button CLICKED!');
-        e.stopPropagation();
-        e.preventDefault();
-        overlayState.settingsOpen = !overlayState.settingsOpen;
-        menu.classList.toggle('visible', overlayState.settingsOpen);
-        menu.classList.toggle('hidden', !overlayState.settingsOpen);
-        console.log('⚙️ Settings menu visible:', overlayState.settingsOpen);
-
-        // Update window clip to include/exclude the settings menu
-        scheduleWindowClipUpdate();
-
-        if (!overlayState.settingsOpen) {
-            scheduleFadeOut();
-        }
-    });
-
-    // Close on outside click
-    document.addEventListener('click', (e) => {
-        if (overlayState.settingsOpen && !menu.contains(e.target) && e.target !== button) {
-            overlayState.settingsOpen = false;
-            menu.classList.remove('visible');
-            menu.classList.add('hidden');
+    setupSettingsMenu({
+        button,
+        menu,
+        closeButton: document.getElementById('settings-close'),
+        fontSizeSlider: document.getElementById('font-size-slider'),
+        fontSizeDisplay: document.getElementById('font-size-display'),
+        diagnosticsToggle: document.getElementById('diagnostics-toggle'),
+        initialFontSize: overlayState.fontSize,
+        initialDiagnostics: overlayState.showDiagnostics,
+        onOpenChange: (open) => {
+            overlayState.settingsOpen = open;
+            if (open) {
+                showCaptureFrame();
+            } else {
+                scheduleFadeOut();
+            }
             scheduleWindowClipUpdate();
-            scheduleFadeOut();
-        }
-    });
-
-    // Font size slider
-    if (fontSizeSlider) {
-        fontSizeSlider.addEventListener('input', (e) => {
-            const newSize = parseInt(e.target.value, 10);
+        },
+        onFontSize: (newSize) => {
             overlayState.fontSize = newSize;
-            if (fontSizeDisplay) fontSizeDisplay.textContent = `${newSize}px`;
             if (subtitleText) subtitleText.style.fontSize = `${newSize}px`;
             if (overlayState.region && subtitleContainer) {
                 updateSubtitlePosition(subtitleContainer, overlayState.region);
             }
-        });
-
-        fontSizeSlider.addEventListener('change', () => saveOverlaySettings());
-    }
-
-    // Diagnostics toggle
-    if (diagnosticsToggle) {
-        diagnosticsToggle.addEventListener('change', (e) => {
-            overlayState.showDiagnostics = e.target.checked;
+        },
+        onDiagnostics: (enabled) => {
+            overlayState.showDiagnostics = enabled;
             updateDiagnosticsVisibility();
-            saveOverlaySettings();
-        });
-    }
-
-    button.style.pointerEvents = 'auto';
-    menu.style.pointerEvents = 'auto';
-
-    console.log('⚙️ Settings button initialized');
+        },
+        onCommit: () => saveOverlaySettings(),
+    });
 }
 
 // =============================================================================

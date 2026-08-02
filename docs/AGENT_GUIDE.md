@@ -72,6 +72,18 @@ prerequisite is a repository defect, not a reason to skip verification.
 Browser mode does not prove Tauri-only capture, OCR, selector, overlay, tray,
 window, installer, or runtime-process behavior.
 
+## Development commands
+
+```powershell
+.\dev-browser.cmd                                # browser-only UI iteration
+.\dev-tauri.cmd                                  # current ARM64 Tauri dev flow
+.\scripts\build-package.ps1 -Architecture auto   # architecture-matched MSI/NSIS
+```
+
+`build-package.ps1` applies the verified ARM64 compiler safeguards. Browser mode
+does not prove Windows OCR, capture, selector, overlay, tray, installer, or
+DPI/window behavior.
+
 ## Manual gate
 
 After every visible behavior change, require fresh Windows evidence on the
@@ -101,3 +113,26 @@ other required manual gates remain outstanding.
 - `docs/adr/`: accepted or proposed cross-cutting decisions.
 - `docs/plans/`: dated plans and evidence, not standing policy.
 - `docs/archive/`: superseded historical context.
+
+`CLAUDE.md`, `AGENTS.md`, and `agent.md` are pointers to this guide. Keep them
+as pointers; put the actual contract here so every agent reads one source.
+
+## Maintaining this guide
+
+Treat this file as living working memory, not a frozen contract. Maintain it
+actively whenever an update would help the next agent:
+
+- When you learn a rule, invariant, or gotcha that would have saved you time,
+  add it here in the same change that taught it to you.
+- When live behavior contradicts a statement here, fix the statement or record
+  the contradiction explicitly. Never leave a known-false line standing.
+- When a command, path, gate, or ownership boundary changes, update it here
+  before handoff.
+- Prefer editing an existing line over appending a near-duplicate. Delete
+  guidance that no longer applies rather than accumulating exceptions.
+- Keep entries short, imperative, and verifiable. Move dated narrative and
+  one-off evidence to `docs/plans/`; keep only standing policy here.
+
+Guide edits are normative and reviewable: state what changed and why in the
+change description. Do not weaken a safety, privacy, or evidence rule here to
+make a task easier — raise the conflict instead.

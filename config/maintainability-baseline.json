@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "newProductionFileMaxLines": 400,
-  "eslintMaxWarnings": 11,
+  "eslintMaxWarnings": 10,
   "frontendCoverageMinimum": {
     "branches": 78,
     "functions": 92,
@@ -20,10 +20,10 @@
     "src-tauri/src/main.rs": 578,
     "src-tauri/src/ocr/windows_ocr.rs": 454,
     "src/scripts/main.js": 1987,
-    "src/scripts/overlay.js": 1159,
+    "src/scripts/overlay.js": 1132,
     "src/scripts/selector.js": 820,
     "src/styles/main.css": 697,
-    "src/styles/overlay.css": 745,
+    "src/styles/overlay.css": 508,
     "src/styles/selector.css": 414,
     "src/styles/settings.css": 506
   }
