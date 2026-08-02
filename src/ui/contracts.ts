@@ -104,6 +104,13 @@ export interface TauriBridgeApi {
     listen(eventName: string, callback: (event: { payload: unknown }) => void): Promise<() => void>;
     emit(eventName: string, payload: unknown): Promise<void>;
   };
+  /** Absent outside Tauri: browser mode has no window to control. */
+  windowControls?: {
+    minimize(): Promise<void>;
+    toggleMaximize(): Promise<void>;
+    close(): Promise<void>;
+    isMaximized(): Promise<boolean>;
+  };
 }
 
 declare global {

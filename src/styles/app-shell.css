@@ -26,7 +26,78 @@ meowcal-setup {
 }
 
 .app-frame {
-  grid-template-rows: minmax(0, 1fr) 60px;
+  grid-template-rows: 32px minmax(0, 1fr) 60px;
+}
+
+/* =============================================================================
+   TITLE BAR - replaces the system chrome on the undecorated shell windows
+   ============================================================================= */
+
+.titlebar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  height: 32px;
+  padding-left: var(--space-3);
+  border-bottom: 1px solid rgba(191, 211, 255, 0.09);
+  user-select: none;
+}
+
+.titlebar-identity {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  color: var(--text-3);
+  font-size: 12px;
+}
+
+.titlebar-identity img {
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+}
+
+.titlebar-identity span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.titlebar-controls {
+  display: flex;
+  height: 100%;
+}
+
+.titlebar-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text-2);
+  cursor: pointer;
+  transition:
+    background 0.15s ease,
+    color 0.15s ease;
+}
+
+.titlebar-button:hover {
+  background: rgba(191, 211, 255, 0.12);
+  color: var(--text-1);
+}
+
+.titlebar-button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.titlebar-close:hover {
+  background: var(--danger);
+  color: #ffffff;
 }
 
 .screen {
@@ -108,6 +179,15 @@ meowcal-setup {
 
 .toast.notice i {
   color: var(--success);
+}
+
+/* Shared by every shell page. The setup wizard animates its stage spinner with
+   this name but does not load home-next.css, so defining it there left the
+   "Working…" spinner frozen and made a slow install look like a hang. */
+@keyframes meowcal-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 @media (max-width: 700px) {
