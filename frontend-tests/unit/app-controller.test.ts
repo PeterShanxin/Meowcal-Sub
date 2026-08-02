@@ -5,13 +5,24 @@ import type { TauriBridgeApi, UiSnapshot } from "../../src/ui/contracts";
 function createController(
   invoke: TauriBridgeApi["invoke"],
   emit: TauriBridgeApi["event"]["emit"] = vi.fn().mockResolvedValue(undefined),
-): { controller: AppController; snapshots: UiSnapshot[] } {
+  browserMode = true,
+): {
+  controller: AppController;
+  snapshots: UiSnapshot[];
+  listeners: Map<string, (event: { payload: unknown }) => void>;
+  storage: { getItem: ReturnType<typeof vi.fn>; setItem: ReturnType<typeof vi.fn> };
+} {
   const snapshots: UiSnapshot[] = [];
+  const listeners = new Map<string, (event: { payload: unknown }) => void>();
+  const storage = { getItem: vi.fn(() => null), setItem: vi.fn() };
   const bridge: TauriBridgeApi = {
     invoke,
-    isBrowserMode: () => true,
+    isBrowserMode: () => browserMode,
     event: {
-      listen: vi.fn().mockResolvedValue(() => undefined),
+      listen: vi.fn((eventName, callback) => {
+        listeners.set(eventName, callback);
+        return Promise.resolve(() => listeners.delete(eventName));
+      }),
       emit,
     },
   };
@@ -22,8 +33,13 @@ function createController(
     setInterval: globalThis.setInterval.bind(globalThis) as unknown as Window["setInterval"],
     clearInterval: globalThis.clearInterval.bind(globalThis) as unknown as Window["clearInterval"],
   });
-  vi.stubGlobal("localStorage", { getItem: vi.fn(() => null), setItem: vi.fn() });
-  return { controller: new AppController((snapshot) => snapshots.push(snapshot)), snapshots };
+  vi.stubGlobal("localStorage", storage);
+  return {
+    controller: new AppController((snapshot) => snapshots.push(snapshot)),
+    snapshots,
+    listeners,
+    storage,
+  };
 }
 
 describe("AppController settings persistence", () => {
@@ -33,6 +49,7 @@ describe("AppController settings persistence", () => {
 
   afterEach(() => {
     vi.useRealTimers();
+    vi.restoreAllMocks();
     vi.unstubAllGlobals();
   });
 
@@ -82,5 +99,51 @@ describe("AppController settings persistence", () => {
       running: false,
     });
     expect(invoke).toHaveBeenCalledTimes(1);
+  });
+
+  it("opens onboarding on the first real Tauri launch", async () => {
+    const invoke = vi.fn().mockResolvedValue(undefined);
+    const { controller } = createController(invoke, undefined, false);
+
+    await controller.initialize();
+
+    expect(invoke).toHaveBeenCalledWith("open_foundry_wizard");
+  });
+
+  it("does not auto-open onboarding in browser mode", async () => {
+    const invoke = vi.fn().mockResolvedValue(undefined);
+    const { controller } = createController(invoke);
+
+    await controller.initialize();
+
+    expect(invoke).not.toHaveBeenCalledWith("open_foundry_wizard");
+  });
+
+  it("marks onboarding complete only after a successful wizard close", async () => {
+    const invoke = vi.fn().mockResolvedValue(undefined);
+    const { controller, listeners, storage } = createController(invoke, undefined, false);
+
+    await controller.initialize();
+    listeners.get("foundry-wizard-closed")?.({ payload: { modelDownloaded: false } });
+    expect(storage.setItem).not.toHaveBeenCalled();
+
+    listeners.get("foundry-wizard-closed")?.({ payload: { modelDownloaded: true } });
+    expect(storage.setItem).toHaveBeenCalledWith("meowcal.onboardingComplete", "true");
+  });
+
+  it("uses current settings and a curated source for settings test translation", async () => {
+    const invoke = vi.fn().mockResolvedValue({ translatedText: "sample" });
+    const { controller } = createController(invoke);
+    vi.spyOn(Math, "random").mockReturnValue(0);
+
+    await controller.setLanguage("source", "ja-JP");
+    await controller.setLanguage("target", "fr-FR");
+    await controller.testTranslation();
+
+    expect(invoke).toHaveBeenCalledWith("wizard_test_translation", {
+      sourceText: "時計塔の話は後だ、まずドアを閉めろ。",
+      sourceLanguage: "ja-JP",
+      targetLanguage: "fr-FR",
+    });
   });
 });

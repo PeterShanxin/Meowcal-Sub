@@ -6,6 +6,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
 const { getTranslationPresentation } = window.TranslationDisplay;
 const { clearSubtitleHint, setSubtitleHint, updateSubtitleHint } = window.OverlaySubtitleHint;
+const { appendClipSurface } = window.OverlayWindowClip;
 
 // =============================================================================
 // GLOBAL STATE
@@ -885,9 +886,7 @@ function updateSubtitleText(textElement, newText, container) {
 // WINDOW REGION CLIPPING (Windows transparency workaround)
 // =============================================================================
 
-// On some Windows/WebView2 versions, transparent webview backgrounds regress to opaque grey.
-// We work around this by telling Rust to set a non-rectangular window region so only the
-// visible UI (frame ring + subtitle box) is part of the overlay window.
+// Restrict the overlay to visible UI so WebView2 opacity regressions cannot cover the screen.
 let clipUpdateLoopRunning = false;
 let clipUpdateLoopUntilMs = 0;
 
@@ -909,6 +908,7 @@ async function updateOverlayWindowClip() {
     const captureFrame = document.getElementById('capture-frame');
     const subtitleContainer = document.getElementById('subtitle-container');
     const debugInfo = document.getElementById('debug-info');
+    const settingsButton = document.getElementById('settings-button');
     const settingsMenu = document.getElementById('settings-menu');
 
     const frameVisible = captureFrame &&
@@ -934,40 +934,40 @@ async function updateOverlayWindowClip() {
         // scale factor and let Rust convert everything to physical pixels.
         const scaleFactor = await getScaleFactor();
 
-        // The frame region is now expanded in Rust to include resize handles
-        // and settings button, so we don't need to add them as separate rectangles.
-        // We add other UI elements (diagnostics panel, settings menu) separately.
+        // Keep the frame ring tight. Controls positioned outside the frame must
+        // be passed as their own small rectangles or they get clipped.
         const bounds = [];
+        const radii = [];
+
+        if (captureFrame && frameVisible) {
+            captureFrame.querySelectorAll('.resize-handle')
+                .forEach((handle) => appendClipSurface(bounds, radii, handle));
+        }
+
+        if (settingsButton && frameVisible) {
+            appendClipSurface(bounds, radii, settingsButton);
+        }
 
         // Keep the bottom-right diagnostics panel visible when window clipping is enabled.
         if (debugInfo) {
             const style = getComputedStyle(debugInfo);
             const opacity = parseFloat(style.opacity || '0');
             if (style.display !== 'none' && opacity > 0.05) {
-                const rect = debugInfo.getBoundingClientRect();
-                bounds.push({
-                    x: Math.round(rect.left),
-                    y: Math.round(rect.top),
-                    width: Math.round(rect.width),
-                    height: Math.round(rect.height),
-                });
+                appendClipSurface(bounds, radii, debugInfo);
             }
         }
 
-        // Include the settings menu when it's visible (positioned at screen center)
+        // Include visible controls that are not children of the frame.
         if (settingsMenu && overlayState.settingsOpen) {
-            const rect = settingsMenu.getBoundingClientRect();
-            bounds.push({
-                x: Math.round(rect.left),
-                y: Math.round(rect.top),
-                width: Math.round(rect.width),
-                height: Math.round(rect.height),
-            });
+            appendClipSurface(bounds, radii, settingsMenu);
         }
 
         const handleBounds = bounds.length > 0 ? bounds : null;
+        const controlRadii = radii.length > 0 ? radii : null;
 
-        await window.__TAURI__.core.invoke('set_overlay_window_clip', { frameRegion, subtitleBounds, handleBounds, scaleFactor });
+        await window.__TAURI__.core.invoke('set_overlay_window_clip', {
+            frameRegion, subtitleBounds, handleBounds, controlRadii, scaleFactor,
+        });
     } catch (e) {
         // Ignore - this is a best-effort platform workaround.
     }

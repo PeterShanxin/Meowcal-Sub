@@ -1,8 +1,11 @@
 import { LitElement, html, nothing } from "lit";
 import { customElement, state } from "lit/decorators.js";
 import type { AppSettings, EngineStatus } from "./contracts";
-import { languages } from "./languages";
+import { applyLanguageSelection, ensureDistinctLanguagePair, languages } from "./languages";
+import { pickSampleTranslation } from "./sample-translations";
 import { classifyWizardOutput } from "./setup-progress";
+
+const wizardLogoUrl = new URL("../assets/meowcal-icon.png", import.meta.url).href;
 
 type Stage = "pending" | "active" | "complete" | "error";
 
@@ -61,7 +64,7 @@ export class MeowcalSetup extends LitElement {
         window.TauriBridge.invoke<AppSettings>("get_settings"),
         window.TauriBridge.invoke<string[]>("get_ocr_languages"),
       ]);
-      this.settings = settings;
+      this.settings = ensureDistinctLanguagePair(settings);
       this.ocrLanguages = new Set(languagesAvailable);
     } catch (error) {
       this.error = this.message(error);
@@ -129,10 +132,7 @@ export class MeowcalSetup extends LitElement {
 
   private setLanguage(kind: "source" | "target", value: string): void {
     if (!this.settings) return;
-    this.settings = {
-      ...this.settings,
-      [kind === "source" ? "sourceLanguage" : "targetLanguage"]: value,
-    };
+    this.settings = applyLanguageSelection(this.settings, kind, value);
   }
 
   private async beginEngineSetup(): Promise<void> {
@@ -168,10 +168,12 @@ export class MeowcalSetup extends LitElement {
       if (engine.phase !== "ready" || !engine.serviceRunning) throw new Error("ENGINE_NOT_READY");
       this.setStage(3, "complete");
       this.setStage(4, "active");
+      if (!this.settings) throw new Error("SETTINGS_UNAVAILABLE");
+      const { sourceLanguage, targetLanguage } = this.settings;
       const sample = await window.TauriBridge.invoke<SampleResult>("wizard_test_translation", {
-        sourceText: "先不提时钟塔",
-        sourceLanguage: "zh-CN",
-        targetLanguage: "en-US",
+        sourceText: pickSampleTranslation(sourceLanguage),
+        sourceLanguage,
+        targetLanguage,
       });
       if (!sample.translatedText) throw new Error("ENGINE_SAMPLE_TRANSLATION_FAILED");
       this.sample = sample;
@@ -353,7 +355,7 @@ export class MeowcalSetup extends LitElement {
     return html`
       <div class="wizard-frame">
         <header class="wizard-brand">
-          <img src="./assets/meowcal-icon.png" alt="" /><span>Meowcal Sub</span
+          <img src=${wizardLogoUrl} alt="" /><span>Meowcal Sub</span
           ><span class="step-count">${this.step} / 4</span>
         </header>
         ${this.step === 1 ? this.renderWelcome() : this.step === 2 ? this.renderLanguages() : this.step === 3 ? this.renderProgress() : this.renderFinish()}

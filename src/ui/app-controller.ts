@@ -6,8 +6,12 @@ import type {
   OcrConfig,
   UiSnapshot,
 } from "./contracts";
+import { pickSampleTranslation } from "./sample-translations";
+import { applyLanguageSelection, ensureDistinctLanguagePair } from "./languages";
 
 type Subscriber = (snapshot: UiSnapshot) => void;
+
+const ONBOARDING_COMPLETE_KEY = "meowcal.onboardingComplete";
 
 const defaultOcr: OcrConfig = {
   confidenceThreshold: 0.5,
@@ -55,7 +59,7 @@ const defaultSettings: AppSettings = {
 
 function mergeSettings(value: Partial<AppSettings> | null): AppSettings {
   if (!value) return structuredClone(defaultSettings);
-  return {
+  return ensureDistinctLanguagePair({
     ...structuredClone(defaultSettings),
     ...value,
     overlay: { ...defaultSettings.overlay, ...(value.overlay ?? {}) },
@@ -68,7 +72,7 @@ function mergeSettings(value: Partial<AppSettings> | null): AppSettings {
       },
       ocr: { ...defaultOcr, ...(value.translation?.ocr ?? {}) },
     },
-  };
+  });
 }
 
 function errorMessage(error: unknown): string {
@@ -108,12 +112,13 @@ export class AppController {
 
   async initialize(): Promise<void> {
     this.publish({ busy: "loading", error: null });
+    const browserMode = window.TauriBridge.isBrowserMode();
     const [settings, languages, engine, region, running] = await Promise.all([
       this.safeInvoke<Partial<AppSettings> | null>("get_settings", null),
       this.safeInvoke<string[]>("get_ocr_languages", []),
       this.safeInvoke<EngineStatus>("get_foundry_local_status", { phase: "unknown" }),
       this.safeInvoke<CaptureRegion | null>("get_capture_region", null),
-      window.TauriBridge.isBrowserMode()
+      browserMode
         ? Promise.resolve(false)
         : this.safeInvoke<boolean>("is_translation_running", false),
     ]);
@@ -127,6 +132,9 @@ export class AppController {
       busy: "idle",
     });
     await this.setupEvents();
+    if (!browserMode && localStorage.getItem(ONBOARDING_COMPLETE_KEY) !== "true") {
+      await this.openSetup();
+    }
   }
 
   private async safeInvoke<T>(command: string, fallback: T): Promise<T> {
@@ -147,7 +155,16 @@ export class AppController {
       const payload = event.payload as { isError?: boolean; message?: string };
       if (payload.isError) this.publish({ error: payload.message ?? "Screen capture failed" });
     });
-    this.unlisten.push(regionUnlisten, captureUnlisten);
+    const wizardUnlisten = await window.TauriBridge.event.listen(
+      "foundry-wizard-closed",
+      (event) => {
+        const payload = event.payload as { modelDownloaded?: boolean } | null;
+        if (payload?.modelDownloaded === true) {
+          localStorage.setItem(ONBOARDING_COMPLETE_KEY, "true");
+        }
+      },
+    );
+    this.unlisten.push(regionUnlisten, captureUnlisten, wizardUnlisten);
   }
 
   dispose(): void {
@@ -161,9 +178,7 @@ export class AppController {
   }
 
   async setLanguage(kind: "source" | "target", value: string): Promise<void> {
-    const settings = structuredClone(this.snapshot.settings);
-    if (kind === "source") settings.sourceLanguage = value;
-    else settings.targetLanguage = value;
+    const settings = applyLanguageSelection(structuredClone(this.snapshot.settings), kind, value);
     this.publish({ settings, notice: null });
     await this.persistSettingsInBackground();
   }
@@ -334,9 +349,9 @@ export class AppController {
         translatedText?: string;
         latencyMs?: number;
       }>("wizard_test_translation", {
-        sourceText: "先不提时钟塔",
-        sourceLanguage: "zh-CN",
-        targetLanguage: "en-US",
+        sourceText: pickSampleTranslation(this.snapshot.settings.sourceLanguage),
+        sourceLanguage: this.snapshot.settings.sourceLanguage,
+        targetLanguage: this.snapshot.settings.targetLanguage,
       });
       if (!result.translatedText) throw new Error("The sample translation did not return text.");
       const latency = result.latencyMs ? ` · ${result.latencyMs} ms` : "";

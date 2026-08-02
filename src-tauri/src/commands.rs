@@ -2121,181 +2121,28 @@ pub fn set_overlay_click_through(app: AppHandle, ignore: bool) -> Result<(), Str
 ///   underlying desktop/video remains visible even if the webview background is opaque.
 ///
 /// Called from JavaScript (overlay window):
-/// `invoke('set_overlay_window_clip', { frameRegion, subtitleBounds, handleBounds, scaleFactor })`
+/// `invoke('set_overlay_window_clip', { frameRegion, subtitleBounds, handleBounds, controlRadii, scaleFactor })`
 #[tauri::command]
 pub fn set_overlay_window_clip(
     app: AppHandle,
     frame_region: Option<CaptureRegion>,
     subtitle_bounds: Option<CaptureRegion>,
     handle_bounds: Option<Vec<CaptureRegion>>,
+    control_radii: Option<Vec<f64>>,
     scale_factor: f64,
 ) -> Result<(), String> {
     let window = app
         .get_webview_window("overlay")
         .ok_or("Overlay window not found")?;
 
-    #[cfg(windows)]
-    {
-        use raw_window_handle::HasWindowHandle;
-        use windows::Win32::Foundation::HWND;
-        use windows::Win32::Graphics::Gdi::{
-            CombineRgn, CreateRectRgn, CreateRoundRectRgn, SetWindowRgn, RGN_DIFF, RGN_OR,
-        };
-
-        // The frontend sends coordinates in CSS pixels (logical units).
-        // Win32 regions operate in device pixels, so we convert using the window scale factor.
-        //
-        // NOTE: This does not perfectly handle multi-monitor setups where different monitors have
-        // different DPI scales, but it fixes the common single-monitor case.
-        let scale_factor = if scale_factor > 0.0 {
-            scale_factor
-        } else {
-            1.0
-        };
-
-        let handle = window
-            .window_handle()
-            .map_err(|e| format!("Failed to get window handle: {}", e))?;
-
-        let raw_handle = handle.as_raw();
-        let hwnd = match raw_handle {
-            raw_window_handle::RawWindowHandle::Win32(win32) => HWND(win32.hwnd.get() as *mut _),
-            _ => return Err("Overlay window is not a Win32 window".to_string()),
-        };
-
-        // Build the region we want the overlay to occupy (in device pixels).
-        // The frontend provides CSS pixel coordinates + a DPI scale factor; we convert before creating regions.
-        let mut region_to_set = None;
-
-        unsafe {
-            // 1) Frame ring region (outer rect minus inner rect)
-            if let Some(region) = frame_region {
-                let region = region.scaled(scale_factor);
-                let border_px = (2.0 * scale_factor).round().max(1.0) as i32;
-                let radius_px = (8.0 * scale_factor).round().max(0.0) as i32;
-                // Padding to include resize handles (positioned at -7px) and settings button (-22px).
-                // The settings button is 18px tall at top: -22px, so it spans from y-22 to y-4.
-                // We use 26px padding to include it with some buffer.
-                let outer_padding = (26.0 * scale_factor).round() as i32;
-
-                // Expand outer boundary to include handles and settings button
-                let x1 = region.x - outer_padding;
-                let y1 = region.y - outer_padding;
-                let x2 = region.x + region.width + outer_padding;
-                let y2 = region.y + region.height + outer_padding;
-
-                // Outer rounded rectangle (expanded to include handles).
-                let outer = CreateRoundRectRgn(x1, y1, x2, y2, radius_px * 2, radius_px * 2);
-                if outer.is_invalid() {
-                    return Err("CreateRoundRectRgn (outer) failed".to_string());
-                }
-
-                // Inner rounded rectangle to subtract (creates a ring).
-                // The inner "hole" stays at the original region bounds (not expanded).
-                let inner_x1 = region.x + border_px;
-                let inner_y1 = region.y + border_px;
-                let inner_x2 = region.x + region.width - border_px;
-                let inner_y2 = region.y + region.height - border_px;
-
-                if inner_x2 > inner_x1 && inner_y2 > inner_y1 {
-                    let inner_radius = (radius_px - border_px).max(0);
-                    let inner = CreateRoundRectRgn(
-                        inner_x1,
-                        inner_y1,
-                        inner_x2,
-                        inner_y2,
-                        inner_radius * 2,
-                        inner_radius * 2,
-                    );
-                    if inner.is_invalid() {
-                        // Fallback to a rectangular inner region.
-                        let inner = CreateRectRgn(inner_x1, inner_y1, inner_x2, inner_y2);
-                        if inner.is_invalid() {
-                            return Err("CreateRectRgn (inner fallback) failed".to_string());
-                        }
-                        let _ = CombineRgn(Some(outer), Some(outer), Some(inner), RGN_DIFF);
-                        let _ = windows::Win32::Graphics::Gdi::DeleteObject(inner.into());
-                    } else {
-                        let _ = CombineRgn(Some(outer), Some(outer), Some(inner), RGN_DIFF);
-                        let _ = windows::Win32::Graphics::Gdi::DeleteObject(inner.into());
-                    }
-                }
-
-                region_to_set = Some(outer);
-            }
-
-            // 2) Subtitle bounds region (union)
-            if let Some(bounds) = subtitle_bounds {
-                let bounds = bounds.scaled(scale_factor);
-                let subtitle_radius_px = (8.0 * scale_factor).round().max(0.0) as i32;
-                let rgn = CreateRoundRectRgn(
-                    bounds.x,
-                    bounds.y,
-                    bounds.x + bounds.width,
-                    bounds.y + bounds.height,
-                    subtitle_radius_px * 2,
-                    subtitle_radius_px * 2,
-                );
-                if rgn.is_invalid() {
-                    return Err("CreateRoundRectRgn (subtitle) failed".to_string());
-                }
-
-                match region_to_set {
-                    Some(existing) => {
-                        let _ = CombineRgn(Some(existing), Some(existing), Some(rgn), RGN_OR);
-                        let _ = windows::Win32::Graphics::Gdi::DeleteObject(rgn.into());
-                    }
-                    None => {
-                        region_to_set = Some(rgn);
-                    }
-                }
-            }
-
-            // 3) Resize handle regions (union)
-            //
-            // The resize handles are positioned with negative offsets in CSS, so they can extend
-            // outside the capture region's bounding box. If we don't include them, they get clipped
-            // by the non-rectangular window region and resizing becomes impossible.
-            if let Some(handles) = handle_bounds {
-                for handle in handles {
-                    let handle = handle.scaled(scale_factor);
-
-                    let right = handle.x + handle.width;
-                    let bottom = handle.y + handle.height;
-                    if right <= handle.x || bottom <= handle.y {
-                        continue;
-                    }
-
-                    let rgn = CreateRectRgn(handle.x, handle.y, right, bottom);
-                    if rgn.is_invalid() {
-                        continue;
-                    }
-
-                    match region_to_set {
-                        Some(existing) => {
-                            let _ = CombineRgn(Some(existing), Some(existing), Some(rgn), RGN_OR);
-                            let _ = windows::Win32::Graphics::Gdi::DeleteObject(rgn.into());
-                        }
-                        None => {
-                            region_to_set = Some(rgn);
-                        }
-                    }
-                }
-            }
-
-            // If nothing is visible, clear the region (restore rectangular window).
-            // Passing None removes the region.
-            match region_to_set {
-                Some(rgn) => {
-                    SetWindowRgn(hwnd, Some(rgn), true);
-                    // DO NOT delete `rgn` after SetWindowRgn succeeds; the system owns it now.
-                }
-                None => {
-                    SetWindowRgn(hwnd, None, true);
-                }
-            }
-        }
-    }
+    overlay::window_clip::apply_overlay_window_clip(
+        &window,
+        frame_region,
+        subtitle_bounds,
+        handle_bounds,
+        control_radii,
+        scale_factor,
+    )?;
 
     Ok(())
 }

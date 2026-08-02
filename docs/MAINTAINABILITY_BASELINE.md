@@ -6,11 +6,11 @@ ratchets. Machine-readable values live in
 
 ## Enforced baseline
 
-Measured on 2026-08-01 after the compatibility-command extraction milestone:
+Measured on 2026-08-02 after the native overlay clipping extraction milestone:
 
-- 65 production files under `src/` and `src-tauri/src/`;
+- 91 production files under `src/` and `src-tauri/src/`;
 - 400 lines maximum for a new `.rs`, `.js`, `.html`, or `.css` production file;
-- 18 explicit legacy files above that ceiling;
+- 17 explicit legacy files above that ceiling;
 - 11 existing ESLint warnings, with zero allowed errors;
 - frontend coverage floors of 89% statements, 78% branches, 92% functions, and
   88% lines.
@@ -35,7 +35,7 @@ machine-readable baseline. The largest and decomposition-owned hotspots are:
 
 | File                                 | Ceiling | Reduction owner      |
 | ------------------------------------ | ------: | -------------------- |
-| `src-tauri/src/commands.rs`          |   2,432 | #31                  |
+| `src-tauri/src/commands.rs`          |   2,279 | #31                  |
 | `src/scripts/main.js`                |   1,987 | #33                  |
 | `src-tauri/src/llm/foundry_local.rs` |   1,720 | #32                  |
 | `src-tauri/src/llm/manager.rs`       |   1,234 | #32                  |

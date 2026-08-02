@@ -14,6 +14,8 @@ use tracing::{debug, info};
 
 use crate::config::CaptureRegion;
 
+pub mod window_clip;
+
 // =============================================================================
 // OVERLAY PAYLOADS (sent to frontend)
 // =============================================================================
