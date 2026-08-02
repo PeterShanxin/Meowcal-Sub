@@ -1,8 +1,14 @@
 // =============================================================================
 // PREPROCESSING.RS - Image Preprocessing for OCR
 // =============================================================================
-// This module provides image preprocessing functions to improve OCR quality.
-// Pipeline: BGRA Image → Grayscale → Contrast Enhancement → Binarize → Output
+// Pipeline: BGRA frame → grayscale → contrast stretch → adaptive binarize → BGRA
+//
+// The thresholding here has to survive a subtitle strip, which is an unusual
+// image: overwhelmingly background, with a few percent of bright glyph pixels
+// sitting on top of whatever the video happens to be showing. Any threshold
+// derived from the pixel *population* rather than from the two intensity
+// clusters promotes the brighter half of that background to the same value as
+// the glyphs, and OCR is handed blocks instead of letters.
 // =============================================================================
 
 use image::{GrayImage, ImageBuffer, Luma, Rgba};
@@ -13,10 +19,10 @@ use tracing::debug;
 pub struct PreprocessingConfig {
     /// Convert image to grayscale
     pub grayscale: bool,
-    /// Apply contrast enhancement (histogram equalization)
+    /// Stretch the intensity range to use the full 0-255 span
     pub contrast_enhancement: bool,
-    /// Apply binary threshold after contrast enhancement.
-    /// Converts image to pure black and white at the midpoint (128/255).
+    /// Split the image into glyphs and background at an automatically chosen
+    /// threshold, then normalise to dark text on a light page.
     pub binarize: bool,
 }
 
@@ -68,7 +74,6 @@ pub fn preprocess_image(
         return image_data.to_vec();
     }
 
-    // Create RGBA image from raw bytes
     let rgba_image =
         match ImageBuffer::<Rgba<u8>, Vec<u8>>::from_raw(width, height, image_data.to_vec()) {
             Some(img) => img,
@@ -78,128 +83,59 @@ pub fn preprocess_image(
             }
         };
 
-    // Step 1: Convert to grayscale if enabled
-    let gray_image: GrayImage = if config.grayscale {
-        debug!("Converting to grayscale...");
-        // Manual grayscale conversion using luminance formula: 0.299*R + 0.587*G + 0.114*B
-        // Input is BGRA format (from Windows capture), so channel indices are:
-        // B=0, G=1, R=2, A=3
-        let mut gray = GrayImage::new(width, height);
-        for (x, y, pixel) in rgba_image.enumerate_pixels() {
-            let b = pixel[0] as f32; // Blue
-            let g = pixel[1] as f32; // Green
-            let r = pixel[2] as f32; // Red
-            let gray_val = (0.299 * r + 0.587 * g + 0.114 * b) as u8;
-            gray.put_pixel(x, y, Luma([gray_val]));
-        }
-        gray
-    } else {
-        // Convert BGRA to grayscale using same formula
-        debug!("Converting to grayscale for OCR...");
-        let mut gray = GrayImage::new(width, height);
-        for (x, y, pixel) in rgba_image.enumerate_pixels() {
-            let b = pixel[0] as f32; // Blue
-            let g = pixel[1] as f32; // Green
-            let r = pixel[2] as f32; // Red
-            let gray_val = (0.299 * r + 0.587 * g + 0.114 * b) as u8;
-            gray.put_pixel(x, y, Luma([gray_val]));
-        }
-        gray
-    };
+    // Step 1: grayscale. Windows capture hands us BGRA, so the channel order is
+    // B=0, G=1, R=2, A=3. This runs whether or not the caller asked for it -
+    // every later step is defined on intensity alone.
+    let mut gray_image = GrayImage::new(width, height);
+    for (x, y, pixel) in rgba_image.enumerate_pixels() {
+        let b = pixel[0] as f32;
+        let g = pixel[1] as f32;
+        let r = pixel[2] as f32;
+        gray_image.put_pixel(x, y, Luma([(0.299 * r + 0.587 * g + 0.114 * b) as u8]));
+    }
 
-    // Step 2: Apply contrast enhancement if enabled
-    let after_eq: GrayImage = if config.contrast_enhancement {
-        debug!("Applying contrast enhancement...");
-        apply_histogram_equalization(&gray_image)
+    // Step 2: contrast. A linear stretch, not histogram equalisation: on a
+    // subtitle strip equalisation redistributes by pixel rank, which pulls the
+    // dominant background apart and pushes its brighter half up into the glyph
+    // range. A stretch is monotonic, so it never reorders intensities.
+    let stretched: GrayImage = if config.contrast_enhancement {
+        debug!("Applying contrast stretch...");
+        apply_contrast_stretch(&gray_image)
     } else {
         debug!("Skipping contrast enhancement");
         gray_image
     };
 
-    // Step 3: Apply binary threshold if enabled
-    // Pixels below 128 become 0 (black); 128 and above become 255 (white).
-    // Applied after EQ so the threshold is always at the normalized midpoint.
     let final_gray: GrayImage = if config.binarize {
-        debug!("Applying binary threshold (128)...");
-        apply_binarize(&after_eq)
+        debug!("Applying adaptive threshold...");
+        apply_adaptive_binarize(&stretched)
     } else {
         debug!("Skipping binarization");
-        after_eq
+        stretched
     };
 
     // Convert grayscale back to BGRA for OCR (Windows OCR expects BGRA)
     let mut output = Vec::with_capacity(expected_size);
     for pixel in final_gray.pixels() {
         let gray_value = pixel[0];
-        // BGRA format: Blue, Green, Red, Alpha
         output.push(gray_value); // B
         output.push(gray_value); // G
         output.push(gray_value); // R
-        output.push(255); // A (fully opaque)
+        output.push(255); // A
     }
 
     debug!("Preprocessing complete: {} bytes output", output.len());
     output
 }
 
-/// Apply histogram equalization to enhance image contrast.
-///
-/// This technique spreads out the intensity distribution, making dark
-/// text more distinguishable from light backgrounds.
-fn apply_histogram_equalization(image: &GrayImage) -> GrayImage {
-    let (width, height) = image.dimensions();
-    let total_pixels = width * height;
-
-    // Build histogram (256 buckets for 8-bit grayscale)
-    let mut histogram = [0u32; 256];
-    for pixel in image.pixels() {
-        let intensity = pixel[0] as usize;
-        histogram[intensity] += 1;
-    }
-
-    // Build cumulative distribution function (CDF)
-    let mut cdf = [0u32; 256];
-    cdf[0] = histogram[0];
-    for i in 1..256 {
-        cdf[i] = cdf[i - 1] + histogram[i];
-    }
-
-    // Find minimum CDF value (excluding zeros for proper normalization)
-    let cdf_min = cdf.iter().copied().find(|&v| v > 0).unwrap_or(0);
-
-    // Apply equalization: transform each pixel
-    let mut output = GrayImage::new(width, height);
-    for (y, row) in image.rows().enumerate() {
-        let y_coord = y as u32;
-        for (x, pixel) in row.enumerate() {
-            let x_coord = x as u32;
-            let input_value = pixel[0] as u32;
-            // Equalization formula: ((cdf - cdf_min) / (total_pixels - cdf_min)) * 255
-            let numerator = cdf[input_value as usize] - cdf_min;
-            let denominator = total_pixels - cdf_min;
-            let new_value = if denominator > 0 {
-                ((numerator as f64 / denominator as f64) * 255.0).round() as u8
-            } else {
-                input_value as u8
-            };
-            output.put_pixel(x_coord, y_coord, Luma([new_value]));
-        }
-    }
-
-    output
-}
-
 /// Apply linear contrast stretch to enhance image contrast.
 ///
-/// This is an alternative to histogram equalization that stretches
-/// the intensity range to use the full 0-255 range.
+/// Stretches the intensity range to use the full 0-255 range.
 pub fn apply_contrast_stretch(image: &GrayImage) -> GrayImage {
     let (width, height) = image.dimensions();
 
-    // Find min and max values
     let mut min_val: u8 = 255;
     let mut max_val: u8 = 0;
-
     for pixel in image.pixels() {
         let val = pixel[0];
         min_val = min_val.min(val);
@@ -211,139 +147,103 @@ pub fn apply_contrast_stretch(image: &GrayImage) -> GrayImage {
         return GrayImage::new(width, height);
     }
 
-    // Apply linear stretch
     let mut output = GrayImage::new(width, height);
     let range = (max_val - min_val) as f64;
-
-    for (y, row) in image.rows().enumerate() {
-        let y_coord = y as u32;
-        for (x, pixel) in row.enumerate() {
-            let x_coord = x as u32;
-            let val = pixel[0];
-            let stretched = ((val as f64 - min_val as f64) / range * 255.0).round() as u8;
-            output.put_pixel(x_coord, y_coord, Luma([stretched]));
-        }
+    for (x, y, pixel) in image.enumerate_pixels() {
+        let stretched = ((pixel[0] as f64 - min_val as f64) / range * 255.0).round() as u8;
+        output.put_pixel(x, y, Luma([stretched]));
     }
 
     output
 }
 
-/// Apply binary threshold to a grayscale image.
+/// Build the 256-bucket intensity histogram of a grayscale image.
+fn histogram_of(image: &GrayImage) -> [u32; 256] {
+    let mut histogram = [0u32; 256];
+    for pixel in image.pixels() {
+        histogram[pixel[0] as usize] += 1;
+    }
+    histogram
+}
+
+/// Otsu's method: the threshold that best separates the image into two
+/// intensity clusters.
 ///
-/// Pixels with intensity < 128 become 0 (black).
-/// Pixels with intensity >= 128 become 255 (white).
-/// Call this after histogram equalization for best results.
-fn apply_binarize(image: &GrayImage) -> GrayImage {
+/// This is chosen over any fixed cut because it is driven by where the two
+/// populations actually sit, not by how many pixels belong to each. A subtitle
+/// strip that is 95% background and 5% glyphs splits correctly; a fixed
+/// midpoint does not.
+///
+/// Returns the highest intensity that still belongs to the dark cluster.
+fn otsu_threshold(histogram: &[u32; 256]) -> u8 {
+    let total: u64 = histogram.iter().map(|&count| count as u64).sum();
+    if total == 0 {
+        return 127;
+    }
+
+    let weighted_total: u64 = histogram
+        .iter()
+        .enumerate()
+        .map(|(intensity, &count)| intensity as u64 * count as u64)
+        .sum();
+
+    let mut background_weight: u64 = 0;
+    let mut background_sum: u64 = 0;
+    let mut best_threshold: u8 = 127;
+    let mut best_variance = -1.0f64;
+
+    for (intensity, &count) in histogram.iter().enumerate() {
+        background_weight += count as u64;
+        if background_weight == 0 {
+            continue;
+        }
+        let foreground_weight = total - background_weight;
+        if foreground_weight == 0 {
+            break;
+        }
+
+        background_sum += intensity as u64 * count as u64;
+        let background_mean = background_sum as f64 / background_weight as f64;
+        let foreground_mean = (weighted_total - background_sum) as f64 / foreground_weight as f64;
+
+        let spread = background_mean - foreground_mean;
+        let variance = background_weight as f64 * foreground_weight as f64 * spread * spread;
+        if variance > best_variance {
+            best_variance = variance;
+            best_threshold = intensity as u8;
+        }
+    }
+
+    best_threshold
+}
+
+/// Split an image into glyphs and background, then normalise to dark text on a
+/// light page.
+///
+/// Subtitles are light-on-dark and printed pages are dark-on-light. Rather than
+/// guess which one arrived, this treats the *smaller* cluster as the glyphs -
+/// text never covers most of a capture region - and paints it black.
+fn apply_adaptive_binarize(image: &GrayImage) -> GrayImage {
+    let histogram = histogram_of(image);
+    let threshold = otsu_threshold(&histogram);
+
+    let dark_pixels: u64 = histogram[..=threshold as usize]
+        .iter()
+        .map(|&count| count as u64)
+        .sum();
+    let total: u64 = histogram.iter().map(|&count| count as u64).sum();
+    let glyphs_are_dark = dark_pixels * 2 <= total;
+
     let (width, height) = image.dimensions();
     let mut output = GrayImage::new(width, height);
     for (x, y, pixel) in image.enumerate_pixels() {
-        let new_val: u8 = if pixel[0] < 128 { 0 } else { 255 };
-        output.put_pixel(x, y, Luma([new_val]));
+        let is_dark = pixel[0] <= threshold;
+        let is_glyph = is_dark == glyphs_are_dark;
+        output.put_pixel(x, y, Luma([if is_glyph { 0 } else { 255 }]));
     }
     output
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_preprocessing_config_defaults() {
-        let config = PreprocessingConfig::default();
-        assert!(!config.is_enabled(), "Default config should be disabled");
-
-        let optimal = PreprocessingConfig::optimal();
-        assert!(optimal.is_enabled(), "Optimal config should be enabled");
-    }
-
-    #[test]
-    fn test_preprocess_disabled() {
-        // Create test image (10x10 white)
-        let width = 10u32;
-        let height = 10u32;
-        let image_data = vec![255u8; (width * height * 4) as usize];
-
-        let config = PreprocessingConfig::default();
-        let result = preprocess_image(&image_data, width, height, config);
-
-        assert_eq!(result, image_data, "Should return original when disabled");
-    }
-
-    #[test]
-    fn test_histogram_equalization() {
-        // Create a simple gradient image
-        let mut image = GrayImage::new(4, 4);
-        for y in 0..4 {
-            for x in 0..4 {
-                let val = ((x + y) * 255 / 6) as u8;
-                image.put_pixel(x, y, Luma([val]));
-            }
-        }
-
-        let result = apply_histogram_equalization(&image);
-        assert_eq!(result.dimensions(), (4, 4));
-    }
-
-    #[test]
-    fn test_contrast_stretch() {
-        // Create image with limited range
-        let mut image = GrayImage::new(10, 10);
-        for pixel in image.pixels_mut() {
-            pixel[0] = 50; // All pixels at value 50
-        }
-
-        let result = apply_contrast_stretch(&image);
-        // All pixels should become 0 after stretch (min=max=50)
-        for pixel in result.pixels() {
-            assert_eq!(
-                pixel[0], 0,
-                "Single-value image should become 0 after stretch"
-            );
-        }
-    }
-
-    #[test]
-    fn test_binarize_threshold() {
-        // Pixels below 128 → 0 (black), at/above 128 → 255 (white)
-        let mut image = GrayImage::new(4, 1);
-        image.put_pixel(0, 0, Luma([0]));
-        image.put_pixel(1, 0, Luma([127]));
-        image.put_pixel(2, 0, Luma([128]));
-        image.put_pixel(3, 0, Luma([255]));
-
-        let result = apply_binarize(&image);
-        assert_eq!(result.get_pixel(0, 0)[0], 0, "0 → black");
-        assert_eq!(result.get_pixel(1, 0)[0], 0, "127 → black");
-        assert_eq!(result.get_pixel(2, 0)[0], 255, "128 → white");
-        assert_eq!(result.get_pixel(3, 0)[0], 255, "255 → white");
-    }
-
-    #[test]
-    fn test_full_pipeline_binarized_output() {
-        // Run full grayscale → EQ → binarize pipeline; output must be only 0 or 255
-        let width = 10u32;
-        let height = 10u32;
-        let mut image_data = Vec::with_capacity((width * height * 4) as usize);
-        for i in 0..(width * height) {
-            let val = ((i * 255) / (width * height)) as u8;
-            image_data.extend_from_slice(&[val, val, val, 255u8]); // BGRA
-        }
-
-        let config = PreprocessingConfig {
-            grayscale: true,
-            contrast_enhancement: true,
-            binarize: true,
-        };
-
-        let result = preprocess_image(&image_data, width, height, config);
-
-        assert_eq!(result.len(), (width * height * 4) as usize, "output size");
-        for chunk in result.chunks(4) {
-            let b = chunk[0];
-            assert!(b == 0 || b == 255, "expected 0 or 255, got {}", b);
-            assert_eq!(chunk[0], chunk[1], "B == G");
-            assert_eq!(chunk[1], chunk[2], "G == R");
-            assert_eq!(chunk[3], 255, "alpha == 255");
-        }
-    }
-}
+#[path = "preprocessing_tests.rs"]
+mod tests;

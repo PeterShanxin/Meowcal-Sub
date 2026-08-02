@@ -166,9 +166,9 @@ pub struct TranslationConfig {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
 pub struct OcrConfig {
-    /// Minimum confidence threshold (0.0 to 1.0) for OCR text to be accepted.
-    /// Text with confidence below this threshold will be skipped.
-    /// Note: Windows OCR doesn't provide native confidence, so this uses heuristic scoring.
+    /// Retained only so existing settings files still deserialize. Nothing
+    /// reads it: Windows OCR publishes no confidence, and the heuristic that
+    /// stood in for one discarded correct subtitles. See `ValidationStrictness`.
     #[serde(default = "default_confidence_threshold")]
     pub confidence_threshold: f32,
 
@@ -257,13 +257,13 @@ pub enum ValidationStrictness {
 }
 
 impl ValidationStrictness {
-    /// Get the confidence threshold for this strictness level.
-    /// Returns the minimum confidence score required for OCR text to be accepted.
-    pub fn threshold(&self) -> f32 {
+    /// Minimum letters and digits a recognised line needs to be worth
+    /// translating. Replaced a confidence threshold that no engine could supply.
+    pub fn min_significant_chars(&self) -> usize {
         match self {
-            ValidationStrictness::Permissive => 0.2,
-            ValidationStrictness::Moderate => 0.4,
-            ValidationStrictness::Strict => 0.6,
+            ValidationStrictness::Permissive => 1,
+            ValidationStrictness::Moderate => 2,
+            ValidationStrictness::Strict => 4,
         }
     }
 }

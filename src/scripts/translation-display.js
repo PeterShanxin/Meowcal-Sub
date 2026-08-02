@@ -25,7 +25,6 @@
   // the wording lives here so the viewer is told what to change, not which
   // filter fired.
   const UNREADABLE_HINTS = {
-    lowConfidence: "Subtitle text here is too unclear to read",
     tooShort: "Only stray marks found in the selected area",
     untranslatable: "Nothing translatable in the selected area",
   };

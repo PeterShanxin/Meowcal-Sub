@@ -1343,7 +1343,6 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
         )
     };
 
-    let ocr_confidence_threshold = translation_config.ocr.confidence_threshold;
     let ocr_preprocessing_enabled = translation_config.ocr.preprocessing_enabled;
     let ocr_grayscale = translation_config.ocr.grayscale;
     let ocr_contrast_enhancement = translation_config.ocr.contrast_enhancement;
@@ -1352,16 +1351,10 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
     let ocr_multi_pass_count = translation_config.ocr.multi_pass_count;
     let ocr_validation_strictness = translation_config.ocr.validation_strictness;
 
-    let strictness_threshold = ocr_validation_strictness.threshold();
-    let effective_confidence_threshold = if ocr_confidence_threshold > 0.0 {
-        ocr_confidence_threshold.max(strictness_threshold)
-    } else {
-        strictness_threshold
-    };
+    let min_significant_chars = ocr_validation_strictness.min_significant_chars();
 
     debug!(
-        "OCR settings: confidence_threshold={:.2}, preprocessing={}, grayscale={}, contrast={}, binarize={}, multi_pass={}, pass_count={}, strictness={:?}, effective_threshold={:.2}",
-        ocr_confidence_threshold,
+        "OCR settings: preprocessing={}, grayscale={}, contrast={}, binarize={}, multi_pass={}, pass_count={}, strictness={:?}, min_significant_chars={}",
         ocr_preprocessing_enabled,
         ocr_grayscale,
         ocr_contrast_enhancement,
@@ -1369,7 +1362,7 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
         ocr_enable_multi_pass,
         ocr_multi_pass_count,
         ocr_validation_strictness,
-        effective_confidence_threshold
+        min_significant_chars
     );
 
     let context_enabled = translation_config.enable_context_aware;
@@ -1683,24 +1676,20 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
 
             empty_ocr_frames = 0;
 
-            let confidence = ocr_result.confidence.unwrap_or(0.0);
             let current_text = ocr_result.text.trim().to_string();
 
             debug!(
-                "OCR output accepted for filtering ({} chars, confidence: {:.2})",
-                current_text.chars().count(),
-                confidence
+                "OCR output accepted for filtering ({} chars)",
+                current_text.chars().count()
             );
 
-            if let Some(rejection) =
-                crate::ocr_gate::classify(&current_text, confidence, effective_confidence_threshold)
+            if let Some(rejection) = crate::ocr_gate::classify(&current_text, min_significant_chars)
             {
                 debug!(
-                    "[FILTER: {}] OCR text ({} chars, confidence: {:.2}, threshold: {:.2})",
+                    "[FILTER: {}] OCR text ({} chars, minimum {})",
                     rejection.as_str(),
                     current_text.chars().count(),
-                    confidence,
-                    effective_confidence_threshold
+                    min_significant_chars
                 );
                 // Text *is* in the region, so the overlay must stop claiming the
                 // region is empty. Staying silent leaves whichever notice is on
@@ -1725,10 +1714,7 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
             let mut force_retry_duplicate = false;
             if is_exact_duplicate {
                 if last_backend_used != BackendId::Mock {
-                    debug!(
-                        "[FILTER: duplicate_exact] OCR text (confidence: {:.2})",
-                        confidence
-                    );
+                    debug!("[FILTER: duplicate_exact] OCR text");
                     translation_manager.record_ocr_line(&current_text);
                     tokio::time::sleep(Duration::from_millis(interval_ms as u64)).await;
                     continue;
@@ -1737,10 +1723,7 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
                 if now.duration_since(last_attempt_at)
                     < Duration::from_millis(MOCK_RETRY_COOLDOWN_MS)
                 {
-                    debug!(
-                        "[FILTER: duplicate_mock_cooldown] OCR text (confidence: {:.2})",
-                        confidence
-                    );
+                    debug!("[FILTER: duplicate_mock_cooldown] OCR text");
                     translation_manager.record_ocr_line(&current_text);
                     tokio::time::sleep(Duration::from_millis(interval_ms as u64)).await;
                     continue;
@@ -1753,10 +1736,7 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
                 && context_enabled
                 && translation_manager.is_duplicate(&current_text)
             {
-                debug!(
-                    "[FILTER: duplicate_context] OCR text (confidence: {:.2})",
-                    confidence
-                );
+                debug!("[FILTER: duplicate_context] OCR text");
                 translation_manager.record_ocr_line(&current_text);
                 tokio::time::sleep(Duration::from_millis(interval_ms as u64)).await;
                 continue;
