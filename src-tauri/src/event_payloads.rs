@@ -27,6 +27,13 @@ pub(crate) struct TranslationPayload {
     pub warnings: Vec<String>,
     pub display_state: TranslationDisplayState,
     pub timestamp: u64,
+    /// Milliseconds the translation backend took for this line.
+    pub model_ms: u64,
+    /// Milliseconds from starting the capture to emitting this line.
+    ///
+    /// Surfaced so the overlay can show where the wait actually goes rather
+    /// than leaving latency to guesswork.
+    pub total_ms: u64,
 }
 
 impl TranslationPayload {
@@ -72,6 +79,8 @@ impl TranslationPayload {
             warnings: Vec::new(),
             display_state,
             timestamp: now_ms(),
+            model_ms: 0,
+            total_ms: 0,
         }
     }
 }

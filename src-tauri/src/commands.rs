@@ -1353,17 +1353,11 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
 
     let min_significant_chars = ocr_validation_strictness.min_significant_chars();
 
-    debug!(
-        "OCR settings: preprocessing={}, grayscale={}, contrast={}, binarize={}, multi_pass={}, pass_count={}, strictness={:?}, min_significant_chars={}",
-        ocr_preprocessing_enabled,
-        ocr_grayscale,
-        ocr_contrast_enhancement,
-        ocr_binarize,
-        ocr_enable_multi_pass,
-        ocr_multi_pass_count,
-        ocr_validation_strictness,
-        min_significant_chars
-    );
+    debug!(?translation_config.ocr, min_significant_chars, "OCR settings");
+
+    // Pace to a deadline: a frame that ran the translator must not also pay a
+    // full interval before the next capture.
+    let pacer = crate::pipeline_pacing::Pacer::new(interval_ms);
 
     let context_enabled = translation_config.enable_context_aware;
     let translation_config_for_summary = translation_config.clone();
@@ -1529,7 +1523,7 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
                     }
                     None => {
                         warn!("⚠️ No capture region set, skipping frame");
-                        tokio::time::sleep(Duration::from_millis(interval_ms as u64)).await;
+                        tokio::time::sleep(pacer.period()).await;
                         continue;
                     }
                 }
@@ -1561,7 +1555,7 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
                 match try_capture(&current_capture_region, &mut capture_state, &app) {
                     CaptureAttemptResult::Success(result) => result,
                     CaptureAttemptResult::RetryAfterDelay => {
-                        tokio::time::sleep(Duration::from_millis(interval_ms as u64)).await;
+                        tokio::time::sleep(pacer.remaining_for(frame_started)).await;
                         continue;
                     }
                 };
@@ -1594,7 +1588,7 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
                     Ok(result) => result,
                     Err(e) => {
                         warn!("⚠️ Multi-pass OCR failed: {}", e);
-                        tokio::time::sleep(Duration::from_millis(interval_ms as u64)).await;
+                        tokio::time::sleep(pacer.remaining_for(frame_started)).await;
                         continue;
                     }
                 }
@@ -1616,7 +1610,7 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
                     Ok(result) => result,
                     Err(e) => {
                         warn!("⚠️ OCR failed: {}", e);
-                        tokio::time::sleep(Duration::from_millis(interval_ms as u64)).await;
+                        tokio::time::sleep(pacer.remaining_for(frame_started)).await;
                         continue;
                     }
                 }
@@ -1632,7 +1626,7 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
                     Ok(result) => result,
                     Err(e) => {
                         warn!("⚠️ OCR failed: {}", e);
-                        tokio::time::sleep(Duration::from_millis(interval_ms as u64)).await;
+                        tokio::time::sleep(pacer.remaining_for(frame_started)).await;
                         continue;
                     }
                 }
@@ -1670,7 +1664,7 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
                     );
                 }
 
-                tokio::time::sleep(Duration::from_millis(interval_ms as u64)).await;
+                tokio::time::sleep(pacer.remaining_for(frame_started)).await;
                 continue;
             }
 
@@ -1705,7 +1699,7 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
                         ),
                     );
                 }
-                tokio::time::sleep(Duration::from_millis(interval_ms as u64)).await;
+                tokio::time::sleep(pacer.remaining_for(frame_started)).await;
                 continue;
             }
 
@@ -1716,7 +1710,7 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
                 if last_backend_used != BackendId::Mock {
                     debug!("[FILTER: duplicate_exact] OCR text");
                     translation_manager.record_ocr_line(&current_text);
-                    tokio::time::sleep(Duration::from_millis(interval_ms as u64)).await;
+                    tokio::time::sleep(pacer.remaining_for(frame_started)).await;
                     continue;
                 }
 
@@ -1725,7 +1719,7 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
                 {
                     debug!("[FILTER: duplicate_mock_cooldown] OCR text");
                     translation_manager.record_ocr_line(&current_text);
-                    tokio::time::sleep(Duration::from_millis(interval_ms as u64)).await;
+                    tokio::time::sleep(pacer.remaining_for(frame_started)).await;
                     continue;
                 }
 
@@ -1738,7 +1732,7 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
             {
                 debug!("[FILTER: duplicate_context] OCR text");
                 translation_manager.record_ocr_line(&current_text);
-                tokio::time::sleep(Duration::from_millis(interval_ms as u64)).await;
+                tokio::time::sleep(pacer.remaining_for(frame_started)).await;
                 continue;
             }
 
@@ -1933,6 +1927,8 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
                 warnings, // Move instead of clone - not used after this
                 display_state,
                 timestamp,
+                model_ms,
+                total_ms: frame_started.elapsed().as_millis() as u64,
             };
 
             if let Err(e) = app.emit("translation-update", payload) {
@@ -1967,7 +1963,7 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
                 "pipeline_frame_complete"
             );
 
-            tokio::time::sleep(Duration::from_millis(interval_ms as u64)).await;
+            tokio::time::sleep(pacer.remaining_for(frame_started)).await;
         }
 
         if pipeline_clock.is_session_current(session_id) {

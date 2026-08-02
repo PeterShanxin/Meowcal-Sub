@@ -13,7 +13,8 @@
   }
 
   // options: { button, menu, closeButton, fontSizeSlider, fontSizeDisplay,
-  //            diagnosticsToggle, initialFontSize, initialDiagnostics,
+  //            diagnosticsToggle, lightToggle, initialFontSize,
+  //            initialDiagnostics, initialLight, onLight,
   //            onOpenChange, onFontSize, onDiagnostics, onCommit }
   function setupSettingsMenu(options) {
     const {
@@ -23,11 +24,14 @@
       fontSizeSlider,
       fontSizeDisplay,
       diagnosticsToggle,
+      lightToggle,
       initialFontSize,
       initialDiagnostics,
+      initialLight,
       onOpenChange,
       onFontSize,
       onDiagnostics,
+      onLight = () => {},
       onCommit,
     } = options;
 
@@ -38,6 +42,7 @@
     if (fontSizeSlider) fontSizeSlider.value = String(initialFontSize);
     if (fontSizeDisplay) fontSizeDisplay.textContent = `${initialFontSize}px`;
     if (diagnosticsToggle) diagnosticsToggle.checked = initialDiagnostics === true;
+    if (lightToggle) lightToggle.checked = initialLight === true;
 
     const applyOpen = (next) => {
       if (open === next) return;
@@ -94,6 +99,13 @@
     if (diagnosticsToggle) {
       diagnosticsToggle.addEventListener("change", (event) => {
         onDiagnostics(event.target.checked === true);
+        onCommit();
+      });
+    }
+
+    if (lightToggle) {
+      lightToggle.addEventListener("change", (event) => {
+        onLight(event.target.checked === true);
         onCommit();
       });
     }

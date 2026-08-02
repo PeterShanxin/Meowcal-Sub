@@ -385,7 +385,7 @@ impl Default for AppConfig {
         Self {
             source_language: "en-US".to_string(),
             target_language: "zh-CN".to_string(), // Chinese as default target
-            capture_interval_ms: 500,             // Capture every 500ms
+            capture_interval_ms: 250,             // Capture every 250ms
             overlay: OverlayConfig::default(),
             translation: TranslationConfig::default(),
             last_capture_region: None,

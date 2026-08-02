@@ -5,7 +5,9 @@ fn test_default_config() {
     let config = AppConfig::default();
     assert_eq!(config.source_language, "en-US");
     assert_eq!(config.target_language, "zh-CN");
-    assert_eq!(config.capture_interval_ms, 500);
+    // 250ms halves how long a new subtitle waits to be noticed; the loop now
+    // paces to a deadline, so a slow frame does not stack an interval on top.
+    assert_eq!(config.capture_interval_ms, 250);
 }
 
 #[test]

@@ -24,6 +24,7 @@ pub mod llm;
 
 /// Overlay window management - shows floating subtitles
 pub mod overlay;
+pub mod pipeline_pacing;
 pub mod pipeline_session;
 pub mod startup_gate;
 pub mod subtitle_eval;
