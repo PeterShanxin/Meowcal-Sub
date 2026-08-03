@@ -98,7 +98,7 @@ pub fn classify(previous: &str, current: &str) -> LineChange {
 /// Reduce a read to the characters that carry meaning. Spacing and punctuation
 /// are the first things OCR gets wrong and the last things worth retranslating
 /// over.
-fn normalize(text: &str) -> Vec<char> {
+pub(crate) fn normalize(text: &str) -> Vec<char> {
     text.chars()
         .filter(|ch| ch.is_alphanumeric())
         .flat_map(|ch| ch.to_lowercase())
@@ -117,7 +117,7 @@ fn contains_subsequence(haystack: &[char], needle: &[char]) -> bool {
 }
 
 /// Share of characters shared by two reads, by edit distance.
-fn similarity(a: &[char], b: &[char]) -> f32 {
+pub(crate) fn similarity(a: &[char], b: &[char]) -> f32 {
     let longest = a.len().max(b.len());
     if longest == 0 {
         return 1.0;

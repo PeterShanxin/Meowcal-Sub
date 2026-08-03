@@ -3,10 +3,9 @@ use crate::config::{save_config, AppConfig, CaptureRegion};
 use crate::event_payloads::{CaptureStatusPayload, TranslationPayload, EMPTY_OCR_CLEAR_FRAMES};
 use crate::ipc::{
     IpcMessage, IpcServer, OverlaySettingsData, RegionData, SetRegionPayload, SettingsSyncPayload,
-    SubtitleUpdatePayload,
 };
 use crate::llm::{
-    BackendId, BackendInfo, FoundryLocalBackend, FoundryLocalPhase, TranslationDiagnostics,
+    BackendInfo, FoundryLocalBackend, FoundryLocalPhase, TranslationDiagnostics,
     TranslationDiagnosticsState, TranslationManager, TranslationOutcome, TranslatorBackend,
 };
 use crate::ocr::{PreprocessingConfig, WindowsOcr};
@@ -42,7 +41,7 @@ fn env_truthy(name: &str) -> bool {
 }
 
 /// Send a message to OverlayHost via IPC
-async fn send_overlay_message(app: &AppHandle, message: IpcMessage) {
+pub(crate) async fn send_overlay_message(app: &AppHandle, message: IpcMessage) {
     // Premium legacy is the default. The WinUI overlay is still experimental and can be
     // opaque/black on some systems, so keep it opt-in for now.
     if !env_truthy("MEOWCAL_USE_WINUI_OVERLAY") {
@@ -1464,8 +1463,17 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
             }
         };
 
+        let translator = crate::pipeline_translation::Translator::new(
+            app.clone(),
+            Arc::clone(&translation_manager),
+            Arc::clone(&pipeline_clock),
+            session_id,
+            source_language.clone(),
+            target_language.clone(),
+            Arc::clone(&context_generation),
+        );
+
         let mut last_text = String::new();
-        let mut last_backend_used = BackendId::Mock;
         let mut last_attempt_at = Instant::now()
             .checked_sub(Duration::from_millis(MOCK_RETRY_COOLDOWN_MS))
             .unwrap_or_else(Instant::now);
@@ -1536,7 +1544,7 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
                 debug!("Capture region changed, resetting subtitle context");
                 translation_manager.reset_context();
                 last_text.clear();
-                last_backend_used = BackendId::Mock;
+                translator.set_last_backend_was_mock(true);
                 last_attempt_at = Instant::now()
                     .checked_sub(Duration::from_millis(MOCK_RETRY_COOLDOWN_MS))
                     .unwrap_or_else(Instant::now);
@@ -1652,7 +1660,10 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
                 // A subtitle that leaves the region must leave the overlay too.
                 // Waiting a few frames keeps single-frame OCR misses from
                 // flickering the line away between subtitle changes.
-                if empty_ocr_frames >= EMPTY_OCR_CLEAR_FRAMES && last_notice != Some("empty") {
+                if empty_ocr_frames >= EMPTY_OCR_CLEAR_FRAMES
+                    && last_notice != Some("empty")
+                    && !translator.is_busy()
+                {
                     last_notice = Some("empty");
                     // The cleared line has to be translatable again: without this
                     // the duplicate filter would suppress the identical subtitle
@@ -1683,7 +1694,7 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
                 // Text *is* in the region, so the overlay must stop claiming the
                 // region is empty. Staying silent leaves whichever notice is on
                 // screen contradicting what the viewer can see.
-                if last_notice != Some(rejection.as_str()) {
+                if last_notice != Some(rejection.as_str()) && !translator.is_busy() {
                     last_notice = Some(rejection.as_str());
                     let _ = app.emit(
                         "translation-update",
@@ -1705,7 +1716,7 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
             let line_change = crate::ocr_stability::classify(&last_text, &current_text);
             let mut force_retry_duplicate = false;
             if line_change == crate::ocr_stability::LineChange::Repeat {
-                if last_backend_used != BackendId::Mock {
+                if !translator.last_backend_was_mock() {
                     debug!(source = %current_text, "[FILTER: duplicate_line] OCR text");
                     translation_manager.record_ocr_line(&current_text);
                     tokio::time::sleep(pacer.remaining_for(frame_started)).await;
@@ -1734,59 +1745,37 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
                 continue;
             }
 
-            last_text = current_text.clone();
-            last_notice = None;
-            context_generation.fetch_add(1, Ordering::SeqCst);
-            last_attempt_at = now;
-            info!("📝 OCR detected ({} chars)", current_text.chars().count());
-
+            // The model takes one line at a time - it serialises internally, so
+            // queueing frames into it would multiply latency rather than hide
+            // it. Claiming the slot is therefore the point of no return, and
+            // everything that records the line as handled happens only if the
+            // claim succeeded. Leaving `last_text` untouched otherwise is what
+            // makes declining safe: the next read of this same subtitle offers
+            // it again, and the freed slot picks it up one capture period later
+            // rather than a whole model call later.
             let context_prompt = translation_manager.get_context_prompt();
-
-            translation_manager.record_ocr_line(&current_text);
-
-            let model_started = Instant::now();
-            let translation = translation_manager.translate_with_context(
-                &current_text,
-                &source_language,
-                &target_language,
-                context_prompt.as_deref(),
+            let taken = translator.try_spawn(
+                crate::pipeline_translation::Frame {
+                    token,
+                    text: current_text.clone(),
+                    context_prompt,
+                    started: frame_started,
+                    capture_ms,
+                    ocr_ms,
+                },
+                stop_rx.clone(),
             );
-            let outcome = tokio::select! {
-                outcome = translation => outcome,
-                changed = stop_rx.changed() => {
-                    if changed.is_ok() && *stop_rx.borrow() {
-                        info!(
-                            session_id,
-                            capture_id = token.capture_id,
-                            "Cancelled in-flight translation"
-                        );
-                        break;
-                    }
-                    continue;
-                }
-            };
-            let model_ms = model_started.elapsed().as_millis() as u64;
-            let TranslationOutcome {
-                translated,
-                backend_used,
-                warnings,
-                display_state,
-            } = outcome;
-
-            // If stop was requested while the translation backend was running, don't emit results.
-            if *stop_rx.borrow() || !pipeline_clock.is_current(token) {
-                info!(
-                    session_id,
-                    capture_id = token.capture_id,
-                    "Discarding stale in-flight translation result"
-                );
-                if *stop_rx.borrow() {
-                    break;
-                }
+            if !taken {
+                debug!(source = %current_text, "[DEFER: translating] OCR text");
+                tokio::time::sleep(pacer.remaining_for(frame_started)).await;
                 continue;
             }
 
-            last_backend_used = backend_used;
+            last_text = current_text.clone();
+            last_notice = None;
+            last_attempt_at = now;
+            info!("📝 OCR detected ({} chars)", current_text.chars().count());
+            translation_manager.record_ocr_line(&current_text);
 
             // Check if context needs compression (async, don't block).
             //
@@ -1895,70 +1884,6 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
                     });
                 }
             }
-
-            if *stop_rx.borrow() {
-                info!("🛑 Stop signal received, skipping translation emission");
-                break;
-            }
-
-            // The pair, so a bad line can be blamed on OCR or on the model
-            // without reproducing the episode.
-            debug!(?line_change, source = %current_text, translated = %translated, "Translated");
-
-            // Step 4: Emit event to frontend
-            let overlay_started = Instant::now();
-            let timestamp = SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .unwrap_or_default()
-                .as_millis() as u64;
-
-            // Pre-compute shared values to avoid redundant allocations
-            let backend_str = backend_used.as_str().to_string();
-
-            let payload = TranslationPayload {
-                session_id,
-                capture_id: token.capture_id,
-                original: current_text.clone(),
-                translated: translated.clone(),
-                backend_used: backend_str.clone(),
-                warnings, // Move instead of clone - not used after this
-                display_state,
-                timestamp,
-                model_ms,
-                total_ms: frame_started.elapsed().as_millis() as u64,
-            };
-
-            if let Err(e) = app.emit("translation-update", payload) {
-                warn!("⚠️ Failed to emit event: {}", e);
-            }
-
-            // Send subtitle update to WinUI3 OverlayHost
-            // Move strings since they're no longer needed after this
-            if display_state == crate::llm::TranslationDisplayState::Translated {
-                let subtitle_payload = SubtitleUpdatePayload {
-                    text: translated,          // Move instead of clone
-                    source_text: current_text, // Move instead of clone
-                    timestamp: timestamp.to_string(),
-                    backend_used: Some(backend_str), // Move instead of new allocation
-                };
-
-                send_overlay_message(
-                    &app,
-                    IpcMessage::with_payload("Subtitle.Update", subtitle_payload),
-                )
-                .await;
-            }
-            let overlay_ms = overlay_started.elapsed().as_millis() as u64;
-            info!(
-                session_id,
-                capture_id = token.capture_id,
-                capture_ms,
-                ocr_ms,
-                model_ms,
-                overlay_ms,
-                total_ms = frame_started.elapsed().as_millis() as u64,
-                "pipeline_frame_complete"
-            );
 
             tokio::time::sleep(pacer.remaining_for(frame_started)).await;
         }

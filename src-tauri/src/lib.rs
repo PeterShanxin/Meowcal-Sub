@@ -29,6 +29,7 @@ pub mod llm;
 pub mod overlay;
 pub mod pipeline_pacing;
 pub mod pipeline_session;
+pub mod pipeline_translation;
 pub mod startup_gate;
 pub mod subtitle_eval;
 

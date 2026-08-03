@@ -10,11 +10,13 @@ pub struct PipelineToken {
 pub struct PipelineClock {
     session_id: AtomicU64,
     capture_id: AtomicU64,
+    translation_id: AtomicU64,
 }
 
 impl PipelineClock {
     pub fn begin_session(&self) -> u64 {
         self.capture_id.store(0, Ordering::SeqCst);
+        self.translation_id.store(0, Ordering::SeqCst);
         self.session_id.fetch_add(1, Ordering::SeqCst) + 1
     }
 
@@ -25,13 +27,35 @@ impl PipelineClock {
         }
     }
 
+    /// Claim the next translation slot.
+    ///
+    /// Kept apart from `capture_id` because the two answer different questions.
+    /// A capture is superseded the moment a newer frame is taken, which is what
+    /// `is_current` reports and what lets the loop drop a frame it no longer
+    /// needs to OCR. A translation is not: once the capture loop stopped
+    /// awaiting the model, frames keep being taken while a translation is in
+    /// flight, and measuring that translation against `capture_id` would
+    /// discard every result the moment it arrived.
+    pub fn begin_translation(&self) -> u64 {
+        self.translation_id.fetch_add(1, Ordering::SeqCst) + 1
+    }
+
+    /// Whether a translation's result is still the one the viewer should see.
+    pub fn is_translation_current(&self, translation_id: u64) -> bool {
+        self.translation_id.load(Ordering::SeqCst) == translation_id
+    }
+
     pub fn invalidate_capture(&self) {
         self.capture_id.fetch_add(1, Ordering::SeqCst);
+        // The region moved, so whatever is being translated came from somewhere
+        // the viewer is no longer pointing at.
+        self.translation_id.fetch_add(1, Ordering::SeqCst);
     }
 
     pub fn invalidate_session(&self) -> u64 {
         let invalidated_by = self.session_id.fetch_add(1, Ordering::SeqCst) + 1;
         self.capture_id.fetch_add(1, Ordering::SeqCst);
+        self.translation_id.fetch_add(1, Ordering::SeqCst);
         invalidated_by
     }
 
@@ -71,6 +95,57 @@ mod tests {
         clock.invalidate_capture();
 
         assert!(!clock.is_current(capture));
+    }
+
+    // The defect this separation exists for: with translation moved off the
+    // capture loop, frames keep arriving while the model works. Measured
+    // against `capture_id`, every result would land stale and nothing would
+    // ever reach the overlay.
+    #[test]
+    fn captures_taken_during_a_translation_do_not_supersede_it() {
+        let clock = PipelineClock::default();
+        let session = clock.begin_session();
+        let translation = clock.begin_translation();
+
+        for _ in 0..5 {
+            clock.next_capture(session);
+        }
+
+        assert!(clock.is_translation_current(translation));
+        assert!(clock.is_session_current(session));
+    }
+
+    #[test]
+    fn a_newer_translation_supersedes_one_still_in_flight() {
+        let clock = PipelineClock::default();
+        clock.begin_session();
+        let first = clock.begin_translation();
+        let second = clock.begin_translation();
+
+        assert!(!clock.is_translation_current(first));
+        assert!(clock.is_translation_current(second));
+    }
+
+    #[test]
+    fn moving_the_region_discards_a_translation_of_the_old_one() {
+        let clock = PipelineClock::default();
+        clock.begin_session();
+        let translation = clock.begin_translation();
+
+        clock.invalidate_capture();
+
+        assert!(!clock.is_translation_current(translation));
+    }
+
+    #[test]
+    fn a_new_session_discards_a_translation_from_the_previous_one() {
+        let clock = PipelineClock::default();
+        clock.begin_session();
+        let translation = clock.begin_translation();
+
+        clock.begin_session();
+
+        assert!(!clock.is_translation_current(translation));
     }
 
     #[test]
