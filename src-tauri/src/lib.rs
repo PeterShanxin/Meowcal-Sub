@@ -50,6 +50,7 @@ pub mod http_server;
 pub mod hy_mt_installer;
 pub mod hy_mt_runtime;
 pub mod legacy_translate_locally;
+pub mod process_lifetime;
 
 /// IPC (Inter-Process Communication) with WinUI3 OverlayHost
 pub mod ipc;
