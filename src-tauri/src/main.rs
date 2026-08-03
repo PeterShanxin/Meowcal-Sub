@@ -359,6 +359,7 @@ fn main() {
                         match Command::new(&overlay_host_path).spawn() {
                             Ok(child) => {
                                 info!("✅ OverlayHost spawned (PID: {})", child.id());
+                                meowcal_sub::process_lifetime::attach_to_app_lifetime(&child);
                                 app.manage(OverlayHostProcess(Arc::new(Mutex::new(Some(child)))));
                             }
                             Err(e) => {
@@ -471,14 +472,7 @@ fn main() {
                 tauri::WindowEvent::CloseRequested { api, .. } => {
                     meowcal_sub::window_lifecycle::handle_close_requested(window, api);
                 }
-                tauri::WindowEvent::Destroyed => {
-                    if let Some(overlay_process) = window.try_state::<OverlayHostProcess>() {
-                        if let Some(mut child) = lock_or_recover(&overlay_process.0).take() {
-                            let _ = child.kill();
-                            info!("🛑 Killed OverlayHost process");
-                        }
-                    }
-                }
+                tauri::WindowEvent::Destroyed => kill_overlay_host(window),
                 _ => {}
             }
         })
@@ -489,14 +483,20 @@ fn main() {
         if matches!(event, tauri::RunEvent::Exit) {
             meowcal_sub::window_lifecycle::persist_main_geometry_from_app(app_handle);
             meowcal_sub::hy_mt_runtime::shutdown_owned();
-            if let Some(overlay_process) = app_handle.try_state::<OverlayHostProcess>() {
-                if let Some(mut child) = lock_or_recover(&overlay_process.0).take() {
-                    let _ = child.kill();
-                    info!("🛑 Killed OverlayHost process");
-                }
-            }
+            kill_overlay_host(app_handle);
         }
     });
+}
+
+/// Stop the OverlayHost child. Reached from both clean exit paths; every other
+/// way the app can end is covered by `process_lifetime`'s job object.
+fn kill_overlay_host<M: tauri::Manager<tauri::Wry>>(manager: &M) {
+    if let Some(process) = manager.try_state::<OverlayHostProcess>() {
+        if let Some(mut child) = lock_or_recover(&process.0).take() {
+            let _ = child.kill();
+            info!("🛑 Killed OverlayHost process");
+        }
+    }
 }
 
 // =============================================================================

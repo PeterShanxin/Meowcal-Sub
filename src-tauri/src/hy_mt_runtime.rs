@@ -178,6 +178,11 @@ pub fn start(runtime: &ManagedLocalRuntimeConfig) -> Result<String, String> {
     let child = command
         .spawn()
         .map_err(|error| format!("Failed to start HY-MT runtime: {}", error))?;
+    // `shutdown_owned` below only runs when the app exits cleanly. This is what
+    // ends the engine when it does not - a crash, the installer replacing a
+    // running app, Task Manager. See `process_lifetime`.
+    #[cfg(target_os = "windows")]
+    crate::process_lifetime::attach_to_app_lifetime(&child);
     *owned = Some(OwnedRuntime {
         child,
         config: runtime.clone(),
@@ -273,6 +278,19 @@ pub fn start_configured(runtime: Option<ManagedLocalRuntimeConfig>) {
     let Some(runtime) = runtime else {
         return;
     };
+
+    // Engines stranded by app versions that shipped before the job object, or
+    // by anything the job object cannot cover. Runs before we start our own, so
+    // there is no chance of reaping it, and each one freed is a model's worth
+    // of memory the machine gets back.
+    #[cfg(target_os = "windows")]
+    {
+        let reaped = crate::process_lifetime::reap_orphans(Path::new(&runtime.executable_path));
+        if reaped > 0 {
+            warn!("Cleaned up {reaped} translation engine(s) left behind by an earlier run");
+        }
+    }
+
     tauri::async_runtime::spawn(async move {
         match ensure_ready(&runtime, Duration::from_secs(90)).await {
             Ok(_) => info!("Local Translation Engine is ready"),

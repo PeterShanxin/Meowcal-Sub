@@ -1,8 +1,8 @@
 use crate::config::FoundryLocalConfig;
-use crate::llm::subtitle_output::sanitize_subtitle_translation_output;
 use crate::llm::{
-    build_subtitle_translation_prompt, BackendId, FoundryLocalPhase, LlmError, PromptRouterOptions,
-    ReadyState, TranslatorBackend,
+    build_subtitle_translation_prompt, subtitle_output::sanitize_subtitle_translation_output,
+    transport_errors::describe_request_failure, BackendId, FoundryLocalPhase, LlmError,
+    PromptRouterOptions, ReadyState, TranslatorBackend,
 };
 use crate::sync_utils::{read_or_recover, write_or_recover};
 use async_trait::async_trait;
@@ -266,7 +266,7 @@ impl FoundryLocalBackend {
                     .get(&fallback_url)
                     .send()
                     .await
-                    .map_err(|e| LlmError::ApiError(format!("Request failed: {}", e)))?;
+                    .map_err(|e| LlmError::ApiError(describe_request_failure(&e)))?;
 
                 if resp.status().is_success() {
                     self.api_namespace.store(fallback, Ordering::SeqCst);
@@ -280,7 +280,7 @@ impl FoundryLocalBackend {
                 let status = resp.status();
                 Err(LlmError::ApiError(format!("API error {status}")))
             }
-            Err(e) => Err(LlmError::ApiError(format!("Request failed: {}", e))),
+            Err(e) => Err(LlmError::ApiError(describe_request_failure(&e))),
         }
     }
 
@@ -315,7 +315,7 @@ impl FoundryLocalBackend {
                     .json(body)
                     .send()
                     .await
-                    .map_err(|e| LlmError::ApiError(format!("Request failed: {}", e)))?;
+                    .map_err(|e| LlmError::ApiError(describe_request_failure(&e)))?;
 
                 if resp.status().is_success() {
                     self.api_namespace.store(fallback, Ordering::SeqCst);
@@ -333,7 +333,7 @@ impl FoundryLocalBackend {
             }
             Err(e) => {
                 warn!("Foundry Local request failed: {}", e);
-                Err(LlmError::ApiError(format!("Request failed: {}", e)))
+                Err(LlmError::ApiError(describe_request_failure(&e)))
             }
         }
     }

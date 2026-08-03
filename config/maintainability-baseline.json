@@ -10,7 +10,7 @@
   },
   "legacyFileMaxLines": {
     "src-tauri/src/capture/graphics_capture.rs": 522,
-    "src-tauri/src/commands.rs": 2192,
+    "src-tauri/src/commands.rs": 2112,
     "src-tauri/src/config.rs": 625,
     "src-tauri/src/http_server.rs": 727,
     "src-tauri/src/llm/context.rs": 732,
@@ -18,7 +18,7 @@
     "src-tauri/src/llm/manager.rs": 1234,
     "src-tauri/src/llm/prompt_router.rs": 471,
     "src-tauri/src/main.rs": 578,
-    "src-tauri/src/ocr/windows_ocr.rs": 453,
+    "src-tauri/src/ocr/windows_ocr.rs": 452,
     "src/scripts/main.js": 1987,
     "src/scripts/overlay.js": 1130,
     "src/scripts/selector.js": 820,

@@ -28,7 +28,21 @@ pub enum LineChange {
 
 /// Below this many significant characters a single differing character is a
 /// change of meaning rather than noise, so similarity is not consulted.
-const MIN_CHARS_FOR_SIMILARITY: usize = 6;
+///
+/// Measured against the longer of the two reads, not both. A re-read that drops
+/// a glyph is the common case - `击碎她的信仰` came back as `击的信仰` - and
+/// gating on the shorter read meant exactly those pairs skipped the similarity
+/// check and were translated twice.
+const MIN_CHARS_FOR_SIMILARITY: usize = 4;
+
+/// How much a read has to grow before the extra text is worth retranslating.
+///
+/// A subtitle that is still drawing gains a clause; OCR resolving one more
+/// stroke gains a character. Across a 45-minute session every read that grew by
+/// three characters or fewer was noise - `活下去` became `艹活下去 0 艹`,
+/// `斗转星移` became `0 斗转星移` - and each one replaced a good translation on
+/// screen with a different one. A genuine second row arrives with far more.
+const EXTENDED_MIN_NEW_CHARS: usize = 4;
 
 /// Share of characters that must agree before two reads are treated as the
 /// same line.
@@ -61,12 +75,18 @@ pub fn classify(previous: &str, current: &str) -> LineChange {
         return LineChange::Repeat;
     }
 
+    // Growth is only worth retranslating when it carries a clause. A stray
+    // glyph resolved at either edge of the strip grows the read too, and
+    // retranslating on it swaps a good line on screen for a different one.
     if contains_subsequence(&current, &previous) {
-        return LineChange::Extended;
+        return if current.len() - previous.len() >= EXTENDED_MIN_NEW_CHARS {
+            LineChange::Extended
+        } else {
+            LineChange::Repeat
+        };
     }
 
-    if previous.len() >= MIN_CHARS_FOR_SIMILARITY
-        && current.len() >= MIN_CHARS_FOR_SIMILARITY
+    if previous.len().max(current.len()) >= MIN_CHARS_FOR_SIMILARITY
         && similarity(&previous, &current) >= SAME_LINE_SIMILARITY
     {
         return LineChange::Repeat;
@@ -78,7 +98,7 @@ pub fn classify(previous: &str, current: &str) -> LineChange {
 /// Reduce a read to the characters that carry meaning. Spacing and punctuation
 /// are the first things OCR gets wrong and the last things worth retranslating
 /// over.
-fn normalize(text: &str) -> Vec<char> {
+pub(crate) fn normalize(text: &str) -> Vec<char> {
     text.chars()
         .filter(|ch| ch.is_alphanumeric())
         .flat_map(|ch| ch.to_lowercase())
@@ -97,7 +117,7 @@ fn contains_subsequence(haystack: &[char], needle: &[char]) -> bool {
 }
 
 /// Share of characters shared by two reads, by edit distance.
-fn similarity(a: &[char], b: &[char]) -> f32 {
+pub(crate) fn similarity(a: &[char], b: &[char]) -> f32 {
     let longest = a.len().max(b.len());
     if longest == 0 {
         return 1.0;
@@ -241,6 +261,55 @@ mod tests {
             assert_eq!(
                 classify(previous, current),
                 LineChange::New,
+                "{previous} -> {current}"
+            );
+        }
+    }
+
+    // A re-read that lost a glyph lands under the old six-character floor, so
+    // the similarity check never ran and the pair was translated twice. Taken
+    // from a 0.6.3 session where each of these put a second English rendering
+    // of one line on screen.
+    #[test]
+    fn a_re_read_that_shrank_below_the_floor_is_still_the_same_line() {
+        for (previous, current) in [
+            ("击碎她的信仰", "击的信仰"),
+            ("然后祈蝉量过", "然后祈蝉过"),
+            ("你真是不懂啊", "你不懂啊"),
+            ("这真是开心啊", "这真是心啊"),
+            ("杂种小姑娘高", "杂种小娘高"),
+            ("仅此而已啊", "匕而已啊"),
+            ("难遣是你吗", "难道是你吗"),
+            ("我之所选你", "我之所以选你"),
+            ("如此一来", "如仳来"),
+        ] {
+            assert_eq!(
+                classify(previous, current),
+                LineChange::Repeat,
+                "{previous} -> {current}"
+            );
+        }
+    }
+
+    // Windows resolves a letterbox edge or a half-drawn stroke into a stray
+    // glyph, which grows the read without adding anything to translate. Every
+    // one of these was classified Extended and replaced a good line on screen
+    // with a differently-worded one.
+    #[test]
+    fn a_read_that_grew_by_a_stray_glyph_is_not_worth_retranslating() {
+        for (previous, current) in [
+            ("活下去", "艹活下去 0 艹"),
+            ("斗转星移", "0 斗转星移"),
+            ("种资格啊", "我亠种资格啊"),
+            ("有不好的东西在靠近", "卜有不好的东西在靠近。"),
+            ("厉害好厉害", "好厉害好厉害"),
+            ("我要引擎全开了吉", "我要引擎全开了吉尔"),
+            ("但这个选择自己做的", "但这个选择自己做的判断"),
+            ("View: Category", "View: Category 0"),
+        ] {
+            assert_eq!(
+                classify(previous, current),
+                LineChange::Repeat,
                 "{previous} -> {current}"
             );
         }

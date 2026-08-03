@@ -21,9 +21,18 @@ use windows::Security::Cryptography::CryptographicBuffer;
 /// This wraps the Windows.Media.Ocr.OcrEngine to make it easier to use.
 pub struct WindowsOcr {
     engine: OcrEngine,
+    /// Display scale the frames arrive at. See `ocr::frame_budget`.
+    capture_scale: f64,
 }
 
 impl WindowsOcr {
+    /// Tell recognition what DPI its frames were captured at, so it can drop
+    /// the resolution it does not need. Defaults to 1.0, which changes nothing.
+    pub fn for_capture_scale(mut self, capture_scale: f64) -> Self {
+        self.capture_scale = capture_scale;
+        self
+    }
+
     /// Create a new OCR engine using the system's default language
     ///
     /// This will use whatever languages you have installed in Windows Settings.
@@ -50,7 +59,10 @@ impl WindowsOcr {
             }
         }
 
-        Ok(Self { engine })
+        Ok(Self {
+            engine,
+            capture_scale: 1.0,
+        })
     }
 
     /// Create an OCR engine with a specific language
@@ -93,7 +105,10 @@ impl WindowsOcr {
             .map_err(|e| OcrError::InitError(format!("Failed to create OCR engine: {}", e)))?;
 
         info!("OCR engine created successfully for '{}'", canonical_tag);
-        Ok(Self { engine })
+        Ok(Self {
+            engine,
+            capture_scale: 1.0,
+        })
     }
 
     /// Recognize text in an image with preprocessing enabled by default.
@@ -109,27 +124,6 @@ impl WindowsOcr {
     ///
     /// # Returns
     /// The recognized text
-    ///
-    /// # Example
-    /// ```rust,no_run
-    /// use meowcal_sub::capture::capture_region;
-    /// use meowcal_sub::config::CaptureRegion;
-    /// use meowcal_sub::ocr::WindowsOcr;
-    ///
-    /// fn main() -> Result<(), Box<dyn std::error::Error>> {
-    ///     let ocr = WindowsOcr::new()?;
-    ///     let region = CaptureRegion::new(0, 0, 800, 100);
-    ///     let capture = capture_region(&region)?;
-    ///
-    ///     let runtime = tokio::runtime::Runtime::new()?;
-    ///     let result = runtime.block_on(async {
-    ///         ocr.recognize(&capture.data, capture.width, capture.height).await
-    ///     })?;
-    ///
-    ///     println!("Found text: {}", result.text);
-    ///     Ok(())
-    /// }
-    /// ```
     pub async fn recognize(
         &self,
         image_data: &[u8],
@@ -151,7 +145,9 @@ impl WindowsOcr {
         width: u32,
         height: u32,
     ) -> Result<OcrResult, OcrError> {
-        self.recognize_raw(image_data, width, height).await
+        let (image_data, width, height) =
+            super::frame_budget::fit_frame(image_data, width, height, self.capture_scale);
+        self.recognize_raw(&image_data, width, height).await
     }
 
     /// Recognize text in an image with preprocessing configuration.
@@ -174,10 +170,13 @@ impl WindowsOcr {
         height: u32,
         preprocessing: PreprocessingConfig,
     ) -> Result<OcrResult, OcrError> {
-        // Apply preprocessing if enabled
-        let processed_data = preprocess_image(image_data, width, height, preprocessing);
+        // Before preprocessing, not after: the point is to stop the oversized
+        // buffer being allocated several more times. See `ocr::frame_budget`.
+        let (image_data, width, height) =
+            super::frame_budget::fit_frame(image_data, width, height, self.capture_scale);
 
-        // Use the processed data for OCR
+        let processed_data = preprocess_image(&image_data, width, height, preprocessing);
+
         self.recognize_raw(&processed_data, width, height).await
     }
 

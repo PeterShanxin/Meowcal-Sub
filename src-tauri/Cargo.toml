@@ -9,7 +9,7 @@
 # Basic info about our app
 name = "meowcal-sub"        # The app name (used in binary and imports)
 default-run = "meowcal-sub"
-version = "0.6.3"           # Version number (semantic versioning: major.minor.patch)
+version = "0.6.4"           # Version number (semantic versioning: major.minor.patch)
 edition = "2021"            # Rust edition (like ES6 vs ES2020 in JavaScript)
 description = "NPU-accelerated subtitle translation for Copilot+ PCs"
 authors = ["PeterShanxin"]
@@ -112,6 +112,14 @@ windows = { version = "0.61", features = [
     # File system APIs (disk space detection for wizard)
     "Win32_Storage_FileSystem",
     "Win32_System_SystemInformation",
+
+    # Child-process lifetime: a job object kills the translation engine with
+    # the app however the app dies, and the toolhelp snapshot identifies
+    # engines left behind by app versions that shipped before it.
+    "Win32_System_JobObjects",
+    "Win32_System_Threading",
+    "Win32_System_Diagnostics_ToolHelp",
+    "Win32_Security",           # SECURITY_ATTRIBUTES, required by CreateJobObjectW
 ] }
 windows-core = "0.61"      # Core Windows types
 windows-version = "0.1"

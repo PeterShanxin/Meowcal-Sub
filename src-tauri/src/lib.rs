@@ -29,6 +29,7 @@ pub mod llm;
 pub mod overlay;
 pub mod pipeline_pacing;
 pub mod pipeline_session;
+pub mod pipeline_translation;
 pub mod startup_gate;
 pub mod subtitle_eval;
 
@@ -49,6 +50,8 @@ pub mod http_server;
 pub mod hy_mt_installer;
 pub mod hy_mt_runtime;
 pub mod legacy_translate_locally;
+pub mod process_lifetime;
+pub mod process_ownership;
 
 /// IPC (Inter-Process Communication) with WinUI3 OverlayHost
 pub mod ipc;
