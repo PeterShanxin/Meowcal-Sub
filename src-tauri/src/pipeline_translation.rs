@@ -30,7 +30,7 @@ use std::sync::Arc;
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 use tauri::{AppHandle, Emitter};
 use tokio::sync::watch;
-use tracing::{debug, info, warn};
+use tracing::{debug, error, info, warn};
 
 /// One frame's worth of work, handed over once the loop has decided the text is
 /// worth translating.
@@ -45,6 +45,32 @@ pub struct Frame {
     pub ocr_ms: u64,
 }
 
+/// Releases the translation slot however the spawned task ends.
+///
+/// Clearing the flag with a store after the `await` looks equivalent and is
+/// not: an unwind skips it, and a panic in a detached task is swallowed by the
+/// runtime, so nothing would log and nothing would recover. The flag would stay
+/// set for the rest of the session - `try_spawn` refusing every frame, and,
+/// because `is_busy` also gates the loop's notices, the overlay frozen on the
+/// last translated line with only a debug line to show for it. Stop and start
+/// would be the only way back.
+///
+/// The panic is reachable: the translation manager locks its diagnostics with
+/// `unwrap`, and this codebase treats a poisoned mutex as expected enough to
+/// keep a `lock_or_recover` helper for it.
+struct InFlightGuard(Arc<AtomicBool>);
+
+impl Drop for InFlightGuard {
+    fn drop(&mut self) {
+        // A swallowed panic is invisible otherwise, and a translation slot that
+        // released itself for this reason is worth knowing about.
+        if std::thread::panicking() {
+            error!("Translation task panicked; releasing the translation slot");
+        }
+        self.0.store(false, Ordering::SeqCst);
+    }
+}
+
 /// The handles a translation task needs, cloned once per session rather than
 /// per frame.
 #[derive(Clone)]
@@ -56,8 +82,8 @@ pub struct Translator {
     pub source_language: String,
     pub target_language: String,
     /// Whether a translation is running. The loop reads it to decide whether to
-    /// start another; the task clears it on the way out, including on an early
-    /// return, so a discarded result cannot wedge the pipeline closed.
+    /// start another; `InFlightGuard` clears it however the task ends, so a
+    /// discarded result cannot wedge the pipeline closed.
     in_flight: Arc<AtomicBool>,
     /// What the last completed translation came from. The duplicate filter
     /// consults it, and it is written from the task, so it cannot stay a local.
@@ -133,9 +159,10 @@ impl Translator {
         }
 
         let worker = self.clone();
+        let guard = InFlightGuard(Arc::clone(&self.in_flight));
         tokio::spawn(async move {
+            let _guard = guard;
             worker.run(frame, stop_rx).await;
-            worker.in_flight.store(false, Ordering::SeqCst);
         });
         true
     }
@@ -238,5 +265,39 @@ impl Translator {
             total_ms = frame.started.elapsed().as_millis() as u64,
             "pipeline_frame_complete"
         );
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_slot_is_released_when_the_task_finishes() {
+        let flag = Arc::new(AtomicBool::new(true));
+        drop(InFlightGuard(Arc::clone(&flag)));
+        assert!(!flag.load(Ordering::SeqCst));
+    }
+
+    // The failure this guard exists for. A store placed after the await is
+    // skipped by an unwind, tokio swallows a detached task's panic, and the
+    // pipeline would then refuse every frame for the rest of the session with
+    // nothing above debug to say why.
+    #[test]
+    fn the_slot_is_released_when_the_task_panics() {
+        let flag = Arc::new(AtomicBool::new(true));
+        let guarded = Arc::clone(&flag);
+
+        let panicked = std::panic::catch_unwind(move || {
+            let _guard = InFlightGuard(guarded);
+            panic!("translation task fell over");
+        })
+        .is_err();
+
+        assert!(
+            panicked,
+            "the fixture must actually panic to prove anything"
+        );
+        assert!(!flag.load(Ordering::SeqCst));
     }
 }
