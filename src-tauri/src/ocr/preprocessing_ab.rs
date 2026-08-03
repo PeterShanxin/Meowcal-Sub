@@ -85,6 +85,9 @@ async fn preprocessing_variants_over_a_captured_frame() {
     // Rows where the variants disagree are the whole point: those are the
     // frames where preprocessing decided the result.
     let verbose = std::env::var_os("MEOWCAL_OCR_AB_VERBOSE").is_some();
+    let scale: Option<f64> = std::env::var("MEOWCAL_OCR_AB_SCALE")
+        .ok()
+        .and_then(|s| s.parse().ok());
     // With MEOWCAL_OCR_AB_TRUTH set to what the frames actually say, each
     // variant is scored against it instead of only against the others. That is
     // the character-level accuracy #53 asks for, and it needs a human to have
@@ -111,6 +114,28 @@ async fn preprocessing_variants_over_a_captured_frame() {
             .pixels()
             .flat_map(|p| [p[2], p[1], p[0], p[3]])
             .collect();
+
+        // MEOWCAL_OCR_AB_SCALE reduces every frame first, which is how the
+        // question "how small can a frame get before the read suffers" is
+        // answered against real content rather than guessed at.
+        let (bgra, width, height) = match scale {
+            Some(scale) if scale < 1.0 => {
+                let target_width = (((f64::from(width) * scale).round()) as u32).max(1);
+                let target_height = (((f64::from(height) * scale).round()) as u32).max(1);
+                let (target_width, target_height): (u32, u32) = (target_width, target_height);
+                match crate::ocr::frame_budget::scale_bgra(
+                    &bgra,
+                    width,
+                    height,
+                    target_width,
+                    target_height,
+                ) {
+                    Some(scaled) => (scaled, target_width, target_height),
+                    None => (bgra, width, height),
+                }
+            }
+            _ => (bgra, width, height),
+        };
 
         let mut reads: Vec<(&str, String)> = Vec::new();
         for (label, config) in VARIANTS {

@@ -1434,7 +1434,7 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
         let ocr = match WindowsOcr::with_language(&source_language) {
             Ok(o) => {
                 info!("OCR initialized with language: {}", source_language);
-                o
+                o.for_capture_scale(scale_factor)
             }
             Err(e) => {
                 warn!(
@@ -1454,7 +1454,7 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
                     },
                 );
                 match WindowsOcr::new() {
-                    Ok(o) => o,
+                    Ok(o) => o.for_capture_scale(scale_factor),
                     Err(e) => {
                         warn!("❌ Failed to initialize OCR: {}", e);
                         return;
@@ -1582,12 +1582,14 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
             }
 
             let ocr_started = Instant::now();
+            let frame_data = &capture_result.data;
+            let (frame_width, frame_height) = (capture_result.width, capture_result.height);
             let ocr_result = if ocr_enable_multi_pass {
                 match ocr
                     .recognize_multi_pass(
-                        &capture_result.data,
-                        capture_result.width,
-                        capture_result.height,
+                        frame_data,
+                        frame_width,
+                        frame_height,
                         ocr_multi_pass_count,
                     )
                     .await
@@ -1607,9 +1609,9 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
                 };
                 match ocr
                     .recognize_with_preprocessing(
-                        &capture_result.data,
-                        capture_result.width,
-                        capture_result.height,
+                        frame_data,
+                        frame_width,
+                        frame_height,
                         preprocessing_config,
                     )
                     .await
@@ -1623,11 +1625,7 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
                 }
             } else {
                 match ocr
-                    .recognize_without_preprocessing(
-                        &capture_result.data,
-                        capture_result.width,
-                        capture_result.height,
-                    )
+                    .recognize_without_preprocessing(frame_data, frame_width, frame_height)
                     .await
                 {
                     Ok(result) => result,

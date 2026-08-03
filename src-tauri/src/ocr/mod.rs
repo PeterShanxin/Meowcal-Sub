@@ -9,6 +9,7 @@
 // - Supports many languages
 // =============================================================================
 
+pub mod frame_budget;
 mod language;
 mod preprocessing;
 mod text_cleanup;
