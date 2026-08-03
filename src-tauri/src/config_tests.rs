@@ -10,6 +10,33 @@ fn test_default_config() {
     assert_eq!(config.capture_interval_ms, 250);
 }
 
+// The frontend shipped its own copy of this default and posted it back over the
+// stored settings, so every save reinstated 500ms and no UI could correct it.
+#[test]
+fn normalize_clears_the_stale_frontend_capture_interval() {
+    let mut config = AppConfig {
+        capture_interval_ms: 500,
+        ..AppConfig::default()
+    };
+
+    config.normalize();
+
+    assert_eq!(config.capture_interval_ms, 250);
+}
+
+// The migration targets one known bad value, not the whole setting.
+#[test]
+fn normalize_leaves_other_capture_intervals_alone() {
+    let mut config = AppConfig {
+        capture_interval_ms: 750,
+        ..AppConfig::default()
+    };
+
+    config.normalize();
+
+    assert_eq!(config.capture_interval_ms, 750);
+}
+
 #[test]
 fn test_capture_region_valid() {
     let region = CaptureRegion::new(0, 0, 100, 50);

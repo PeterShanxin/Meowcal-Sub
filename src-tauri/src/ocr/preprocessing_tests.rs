@@ -143,18 +143,144 @@ fn otsu_survives_a_blank_region() {
 }
 
 #[test]
-fn test_contrast_stretch() {
-    let mut image = GrayImage::new(10, 10);
-    for pixel in image.pixels_mut() {
-        pixel[0] = 50;
+fn a_flat_region_has_no_range_to_stretch() {
+    let image_data = vec![50u8; 10 * 10 * 4];
+    let config = PreprocessingConfig {
+        grayscale: true,
+        contrast_enhancement: true,
+        binarize: false,
+    };
+
+    let result = preprocess_image(&image_data, 10, 10, config);
+
+    for chunk in result.chunks(4) {
+        assert_eq!(chunk[0], 0, "single-value image should become 0");
+    }
+}
+
+/// The staged pipeline the fused one replaced: grayscale, then a contrast
+/// stretch over every pixel, then a histogram, then a threshold pass. Kept
+/// verbatim so the fast path can be held to producing identical bytes.
+fn staged_reference(
+    image_data: &[u8],
+    width: u32,
+    height: u32,
+    config: PreprocessingConfig,
+) -> Vec<u8> {
+    let expected_size = (width as usize) * (height as usize) * 4;
+    if !config.is_enabled() || image_data.len() != expected_size || image_data.is_empty() {
+        return image_data.to_vec();
     }
 
-    let result = apply_contrast_stretch(&image);
-    for pixel in result.pixels() {
-        assert_eq!(
-            pixel[0], 0,
-            "Single-value image should become 0 after stretch"
-        );
+    let mut gray: Vec<u8> = image_data
+        .chunks_exact(4)
+        .map(|pixel| {
+            let b = pixel[0] as f32;
+            let g = pixel[1] as f32;
+            let r = pixel[2] as f32;
+            (0.299 * r + 0.587 * g + 0.114 * b) as u8
+        })
+        .collect();
+
+    if config.contrast_enhancement {
+        let min_val = gray.iter().copied().min().unwrap();
+        let max_val = gray.iter().copied().max().unwrap();
+        gray = if max_val == min_val {
+            vec![0u8; gray.len()]
+        } else {
+            let range = (max_val - min_val) as f64;
+            gray.iter()
+                .map(|&value| (((value - min_val) as f64) / range * 255.0).round() as u8)
+                .collect()
+        };
+    }
+
+    if config.binarize {
+        let mut histogram = [0u32; 256];
+        for &value in &gray {
+            histogram[value as usize] += 1;
+        }
+        let threshold = otsu_threshold(&histogram);
+        let dark_pixels: u64 = histogram[..=threshold as usize]
+            .iter()
+            .map(|&count| count as u64)
+            .sum();
+        let total: u64 = histogram.iter().map(|&count| count as u64).sum();
+        let glyphs_are_dark = dark_pixels * 2 <= total;
+        gray = gray
+            .iter()
+            .map(|&value| {
+                let is_dark = value <= threshold;
+                if is_dark == glyphs_are_dark {
+                    0
+                } else {
+                    255
+                }
+            })
+            .collect();
+    }
+
+    let mut output = Vec::with_capacity(expected_size);
+    for value in gray {
+        output.extend_from_slice(&[value, value, value, 255]);
+    }
+    output
+}
+
+// The fused table exists purely for speed - 333ms of per-frame preprocessing
+// against the 19ms Windows OCR itself takes - so it earns its place only if it
+// changes nothing about what OCR is handed.
+#[test]
+fn fused_pipeline_matches_the_staged_reference() {
+    let configs = [
+        PreprocessingConfig::optimal(),
+        PreprocessingConfig {
+            grayscale: true,
+            contrast_enhancement: false,
+            binarize: true,
+        },
+        PreprocessingConfig {
+            grayscale: true,
+            contrast_enhancement: true,
+            binarize: false,
+        },
+        PreprocessingConfig {
+            grayscale: true,
+            contrast_enhancement: false,
+            binarize: false,
+        },
+    ];
+
+    // A subtitle strip, a flat region, a dark-on-bright strip, and noise: the
+    // shapes where the stretch bounds or the polarity decision can diverge.
+    let mut frames: Vec<(Vec<u8>, u32, u32)> = vec![
+        (subtitle_frame(60, 16, (10, 90), 240).0, 60, 16),
+        (subtitle_frame(60, 16, (170, 250), 15).0, 60, 16),
+        (vec![50u8; 8 * 8 * 4], 8, 8),
+    ];
+
+    let mut seed = 0x2545_F491_4F6C_DD1Du64;
+    let mut noise = Vec::with_capacity(40 * 12 * 4);
+    for _ in 0..(40 * 12) {
+        seed = seed
+            .wrapping_mul(6364136223846793005)
+            .wrapping_add(1442695040888963407);
+        let value = (seed >> 33) as u8;
+        noise.extend_from_slice(&[value, value.wrapping_add(7), value.wrapping_sub(19), 255]);
+    }
+    frames.push((noise, 40, 12));
+
+    for (data, width, height) in &frames {
+        for config in &configs {
+            assert_eq!(
+                preprocess_image(data, *width, *height, *config),
+                staged_reference(data, *width, *height, *config),
+                "fused output diverged for {}x{} with {:?}",
+                width,
+                height,
+                config
+            );
+        }
     }
 }
 

@@ -19,6 +19,9 @@ pub mod ocr;
 /// Decides which recognised lines are reliable enough to translate
 pub mod ocr_gate;
 
+/// Tells a re-read of the subtitle already on screen from fresh dialogue
+pub mod ocr_stability;
+
 /// LLM (Large Language Model) - translates text using AI
 pub mod llm;
 

@@ -166,9 +166,8 @@ pub struct TranslationConfig {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
 pub struct OcrConfig {
-    /// Retained only so existing settings files still deserialize. Nothing
-    /// reads it: Windows OCR publishes no confidence, and the heuristic that
-    /// stood in for one discarded correct subtitles. See `ValidationStrictness`.
+    /// Retained only so existing settings files still deserialize; nothing reads
+    /// it. Windows OCR publishes no confidence. See `ValidationStrictness`.
     #[serde(default = "default_confidence_threshold")]
     pub confidence_threshold: f32,
 
@@ -182,35 +181,28 @@ pub struct OcrConfig {
     #[serde(default = "default_grayscale")]
     pub grayscale: bool,
 
-    /// Apply contrast enhancement (histogram equalization) before OCR.
-    /// Helps with low-contrast images or uneven lighting.
+    /// Apply a linear contrast stretch before OCR. Not equalisation: on a
+    /// subtitle strip that promotes half the background into the glyph range.
     #[serde(default = "default_contrast_enhancement")]
     pub contrast_enhancement: bool,
 
-    /// Apply binary threshold after contrast enhancement.
-    /// Converts the image to pure black and white at the midpoint (128/255).
-    /// Recommended: true — reduces noise and improves OCR accuracy on subtitle text.
+    /// Split glyphs from background at an automatically chosen threshold, then
+    /// normalise to dark text on a light page. Recommended: true.
     #[serde(default = "default_binarize")]
     pub binarize: bool,
 
-    /// Enable multi-pass OCR for improved accuracy.
-    /// When enabled, runs OCR multiple times with different preprocessing settings
-    /// and selects the result with the highest confidence.
-    /// Note: This doubles/triples OCR processing time but can improve accuracy.
+    /// Run OCR several times with weaker preprocessing and keep the longest
+    /// read. None of those passes binarize, so this currently costs a multiple
+    /// of the OCR time for a worse read than the single adaptive pass.
     #[serde(default = "default_multi_pass_enabled")]
     pub enable_multi_pass: bool,
 
     /// Number of OCR passes to run when multi-pass is enabled.
-    /// Higher values may improve accuracy but take longer.
-    /// Recommended: 2-3 passes.
     #[serde(default = "default_multi_pass_count")]
     pub multi_pass_count: u32,
 
-    /// Validation strictness for heuristic-based text filtering.
-    /// Controls how aggressively to filter OCR artifacts and garbage text.
-    /// - Permissive: Only rejects obvious garbage (low confidence < 0.2)
-    /// - Moderate: Balances false positives/negatives (rejects confidence < 0.4)
-    /// - Strict: Aggressively filters potential garbage (rejects confidence < 0.6)
+    /// How many significant characters a line must carry to be worth
+    /// translating. See `ValidationStrictness::min_significant_chars`.
     #[serde(default)]
     pub validation_strictness: ValidationStrictness,
 }
@@ -342,6 +334,14 @@ impl TranslationConfig {
 impl AppConfig {
     pub fn normalize(&mut self) {
         self.translation.normalize();
+        // The frontend keeps its own copy of this default and posts it back over
+        // the stored settings, so 500ms kept returning after the backend moved
+        // to 250ms. No UI exposes the field, so a stored 500 is that bug's
+        // residue rather than a choice, and it cost up to half a second of
+        // detection delay on every line.
+        if self.capture_interval_ms == 500 {
+            self.capture_interval_ms = Self::default().capture_interval_ms;
+        }
     }
 }
 
