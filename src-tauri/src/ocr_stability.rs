@@ -31,9 +31,16 @@ pub enum LineChange {
 const MIN_CHARS_FOR_SIMILARITY: usize = 6;
 
 /// Share of characters that must agree before two reads are treated as the
-/// same line. Consecutive subtitles rarely resemble each other this closely;
-/// re-reads of one line rarely fall below it.
-const SAME_LINE_SIMILARITY: f32 = 0.85;
+/// same line.
+///
+/// Calibrated against a real zh-to-en episode rather than guessed. Across 63
+/// translated lines, consecutive reads of one subtitle scored 0.50 to 0.85,
+/// while genuinely different dialogue never exceeded 0.25 - Windows OCR is
+/// unstable enough on a subtitle strip that a re-read commonly differs by
+/// several characters, not by one. An earlier 0.85 sat inside the same-line
+/// band and let 26 of those 63 translations through as fresh dialogue, which is
+/// what put two and three renderings of one line on screen.
+const SAME_LINE_SIMILARITY: f32 = 0.45;
 
 /// Classify the current OCR text against the last line that was translated.
 pub fn classify(previous: &str, current: &str) -> LineChange {
@@ -187,6 +194,56 @@ mod tests {
     fn short_lines_are_compared_strictly() {
         assert_eq!(classify("好的", "好吗"), LineChange::New);
         assert_eq!(classify("不行", "不行"), LineChange::Repeat);
+    }
+
+    // Consecutive reads taken verbatim from a zh-to-en episode log. These are
+    // the pairs that reached the translator twice, so the threshold has to
+    // separate them from the genuinely new dialogue below.
+    #[test]
+    fn real_re_reads_from_an_episode_are_repeats() {
+        for (previous, current) in [
+            (
+                "那么彳尔有为此而杀死对方的觉悟吗",
+                "阝么你有为此而杀死对方的觉悟吗",
+            ),
+            ("我也很想很惠看看其它英难", "我也很相很看看其它英难"),
+            ("如果有难道友好相处", "如果有机难道不想友好相处巾"),
+            ("如果我能和七位都成为朋友", "如果我能和七位英难都成为朋友"),
+            ("那样京征服世界也不甫是梦啊", "那样就服世界也不再梦啊"),
+            (
+                "我能成为教授的弟子真是三生有幸",
+                "我能成为教授自真是三生有幸",
+            ),
+        ] {
+            assert_eq!(
+                classify(previous, current),
+                LineChange::Repeat,
+                "{previous} -> {current}"
+            );
+        }
+    }
+
+    #[test]
+    fn real_line_changes_from_an_episode_are_new() {
+        for (previous, current) in [
+            ("如果有机会唯道不想相处吗", "如果我自孬七亻雄都成为朋友"),
+            ("真的真的很感谢你", "我能成为教授的弟子真是三生有幸"),
+            (
+                "圣杯就是抱有这番觉悟的人们所追求的东西吧",
+                "这不就更想一探究竟吗",
+            ),
+            ("沦落到比死还惨的境界最后还一事无成", "甚至会被残忍杀害"),
+            (
+                "那么你有为此而杀死对方的悟吗一艹",
+                "有没有不杀对疠也能的办法",
+            ),
+        ] {
+            assert_eq!(
+                classify(previous, current),
+                LineChange::New,
+                "{previous} -> {current}"
+            );
+        }
     }
 
     #[test]
