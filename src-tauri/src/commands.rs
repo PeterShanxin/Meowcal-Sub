@@ -1470,7 +1470,6 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
             session_id,
             source_language.clone(),
             target_language.clone(),
-            Arc::clone(&context_generation),
         );
 
         let mut last_text = String::new();
@@ -1745,14 +1744,10 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
                 continue;
             }
 
-            // The model takes one line at a time - it serialises internally, so
-            // queueing frames into it would multiply latency rather than hide
-            // it. Claiming the slot is therefore the point of no return, and
-            // everything that records the line as handled happens only if the
-            // claim succeeded. Leaving `last_text` untouched otherwise is what
-            // makes declining safe: the next read of this same subtitle offers
-            // it again, and the freed slot picks it up one capture period later
-            // rather than a whole model call later.
+            // Claiming the single translation slot is the point of no return:
+            // everything below records the line as handled, so it runs only if
+            // the claim succeeded. See `Translator` for why it is one at a time
+            // and why declining is safe.
             let context_prompt = translation_manager.get_context_prompt();
             let taken = translator.try_spawn(
                 crate::pipeline_translation::Frame {
@@ -1774,6 +1769,8 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
             last_text = current_text.clone();
             last_notice = None;
             last_attempt_at = now;
+            // Bumped here, not in the task: see `Translator`.
+            context_generation.fetch_add(1, Ordering::SeqCst);
             info!("📝 OCR detected ({} chars)", current_text.chars().count());
             translation_manager.record_ocr_line(&current_text);
 

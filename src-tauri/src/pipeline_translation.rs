@@ -25,7 +25,7 @@ use crate::event_payloads::TranslationPayload;
 use crate::ipc::{IpcMessage, SubtitleUpdatePayload};
 use crate::llm::{BackendId, TranslationManager, TranslationOutcome};
 use crate::pipeline_session::{PipelineClock, PipelineToken};
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 use tauri::{AppHandle, Emitter};
@@ -62,7 +62,6 @@ pub struct Translator {
     /// What the last completed translation came from. The duplicate filter
     /// consults it, and it is written from the task, so it cannot stay a local.
     last_backend_was_mock: Arc<AtomicBool>,
-    pub context_generation: Arc<AtomicU64>,
 }
 
 impl Translator {
@@ -73,7 +72,6 @@ impl Translator {
         session_id: u64,
         source_language: String,
         target_language: String,
-        context_generation: Arc<AtomicU64>,
     ) -> Self {
         Self {
             app,
@@ -86,7 +84,6 @@ impl Translator {
             // Nothing has translated yet, and the mock-retry cooldown must not
             // fire before a real backend has been heard from.
             last_backend_was_mock: Arc::new(AtomicBool::new(true)),
-            context_generation,
         }
     }
 
@@ -117,7 +114,15 @@ impl Translator {
     ///
     /// Returns whether the frame was taken. A refused frame is not an error:
     /// the loop keeps the previous `last_text`, so the next read of the same
-    /// subtitle offers it again.
+    /// subtitle offers it again, and the freed slot picks it up one capture
+    /// period later rather than a whole model call later.
+    ///
+    /// The loop keeps two things on its own side of this handover. `last_text`
+    /// and the notice state are per-frame bookkeeping it alone can order. So is
+    /// the context generation counter: the summarization scheduler reads it as
+    /// the generation a run was scheduled at, and a bump that landed from in
+    /// here would arrive after that read and make every scheduled run look like
+    /// the text had changed underneath it and cancel itself.
     pub fn try_spawn(&self, frame: Frame, stop_rx: watch::Receiver<bool>) -> bool {
         if self
             .in_flight
@@ -137,7 +142,6 @@ impl Translator {
 
     async fn run(&self, frame: Frame, mut stop_rx: watch::Receiver<bool>) {
         let translation_id = self.clock.begin_translation();
-        self.context_generation.fetch_add(1, Ordering::SeqCst);
 
         let model_started = Instant::now();
         let translation = self.manager.translate_with_context(
