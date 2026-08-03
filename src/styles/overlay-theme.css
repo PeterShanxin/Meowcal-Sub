@@ -1,0 +1,34 @@
+/* =============================================================================
+   SUBTITLE PLATE THEME
+   =============================================================================
+   The plate commits to an opaque colour and lets the layered window supply the
+   translucency. It used to be painted from an rgba() overlay setting, and
+   because WebView2 transparency does not hold here that alpha composited
+   against the window's opaque white backing - which is why a plate configured
+   as 75% black arrived on screen looking washed-out white.
+   ============================================================================= */
+
+.subtitle-container {
+  background: #0b0b0b;
+}
+
+.subtitle-container.light {
+  background: #f2f2f2;
+  border-color: rgba(0, 0, 0, 0.16);
+}
+
+.subtitle-container.light #subtitle-text {
+  color: #101010;
+}
+
+.subtitle-container.light .subtitle-hint {
+  color: rgba(0, 0, 0, 0.72);
+  background: rgba(0, 0, 0, 0.08);
+  border-color: rgba(0, 0, 0, 0.16);
+}
+
+/* The diagnostics panel reports state, latency and the raw OCR line on
+   separate rows, so it has to keep the newlines it is given. */
+.debug-info #debug-status {
+  white-space: pre-line;
+}

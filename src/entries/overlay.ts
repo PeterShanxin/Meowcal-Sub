@@ -6,4 +6,5 @@ import "../scripts/overlay-subtitle-surface.js";
 import "../scripts/overlay-clip-payload.js";
 import "../scripts/overlay-hit-bounds.js";
 import "../scripts/overlay-settings-menu.js";
+import "../scripts/overlay-diagnostics.js";
 import "../scripts/overlay.js";

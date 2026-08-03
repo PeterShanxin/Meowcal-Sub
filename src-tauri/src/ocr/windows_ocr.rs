@@ -239,7 +239,10 @@ impl WindowsOcr {
         for i in 0..lines_collection.Size().unwrap_or(0) {
             if let Ok(line) = lines_collection.GetAt(i) {
                 if let Ok(text) = line.Text() {
-                    let text_str = text.to_string();
+                    // `OcrLine::Text` joins the recognised words with a space,
+                    // which for Chinese and Japanese puts one between every
+                    // glyph. See `text_cleanup`.
+                    let text_str = super::text_cleanup::clean_line(&text.to_string());
                     if !text_str.trim().is_empty() {
                         lines.push(text_str);
                     }
@@ -303,11 +306,8 @@ impl WindowsOcr {
     ) -> Result<OcrResult, OcrError> {
         info!("Running multi-pass OCR with {} passes", pass_count);
 
-        // Define different preprocessing configurations to try
-        // Pass 1: Standard preprocessing (grayscale + contrast)
-        // Pass 2: Grayscale only (no contrast enhancement)
-        // Pass 3: Contrast only (no grayscale)
-        // Pass 4: No preprocessing (raw image)
+        // Progressively weaker preprocessing. None of these binarize, so none
+        // gets the adaptive threshold the single pass relies on.
         let configs = [
             PreprocessingConfig {
                 grayscale: true,

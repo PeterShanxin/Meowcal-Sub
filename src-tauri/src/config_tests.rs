@@ -5,7 +5,36 @@ fn test_default_config() {
     let config = AppConfig::default();
     assert_eq!(config.source_language, "en-US");
     assert_eq!(config.target_language, "zh-CN");
-    assert_eq!(config.capture_interval_ms, 500);
+    // 250ms halves how long a new subtitle waits to be noticed; the loop now
+    // paces to a deadline, so a slow frame does not stack an interval on top.
+    assert_eq!(config.capture_interval_ms, 250);
+}
+
+// The frontend shipped its own copy of this default and posted it back over the
+// stored settings, so every save reinstated 500ms and no UI could correct it.
+#[test]
+fn normalize_clears_the_stale_frontend_capture_interval() {
+    let mut config = AppConfig {
+        capture_interval_ms: 500,
+        ..AppConfig::default()
+    };
+
+    config.normalize();
+
+    assert_eq!(config.capture_interval_ms, 250);
+}
+
+// The migration targets one known bad value, not the whole setting.
+#[test]
+fn normalize_leaves_other_capture_intervals_alone() {
+    let mut config = AppConfig {
+        capture_interval_ms: 750,
+        ..AppConfig::default()
+    };
+
+    config.normalize();
+
+    assert_eq!(config.capture_interval_ms, 750);
 }
 
 #[test]

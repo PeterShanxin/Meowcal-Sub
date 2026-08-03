@@ -112,21 +112,44 @@ pub fn handle_page_load(webview: &Webview, payload: &PageLoadPayload<'_>) {
     }
 }
 
+/// Windows parks a minimised window far outside any desktop rather than
+/// hiding it, so its reported position is the giveaway.
+const OFFSCREEN_LIMIT: i32 = -30_000;
+
+/// Whether a captured size and position could have come from a window the user
+/// was actually looking at.
+///
+/// Minimising fires the same `Resized` and `Moved` events as dragging, and the
+/// geometry that arrives with them describes the minimised window: a tiny box
+/// at roughly (-32000, -32000). Persisting it restored the app as a 320x300
+/// cube in the corner of the primary monitor on the next launch, because that
+/// is what the restore clamps such a geometry to.
+fn is_onscreen_geometry(width: u32, height: u32, x: i32, y: i32) -> bool {
+    width >= MIN_WINDOW_WIDTH
+        && height >= MIN_WINDOW_HEIGHT
+        && x > OFFSCREEN_LIMIT
+        && y > OFFSCREEN_LIMIT
+}
+
 fn capture_preferences(window: &Window, preferences: &mut WindowPreferences) {
     let is_maximized = window.is_maximized().unwrap_or(preferences.is_maximized);
     preferences.is_maximized = is_maximized;
     preferences.scale_factor = window.scale_factor().ok().or(preferences.scale_factor);
-    if is_maximized {
+    if is_maximized || window.is_minimized().unwrap_or(false) {
         return;
     }
-    if let Ok(size) = window.inner_size() {
-        preferences.width = Some(size.width);
-        preferences.height = Some(size.height);
+    let (Ok(size), Ok(position)) = (window.inner_size(), window.outer_position()) else {
+        return;
+    };
+    // Checked together: a minimised window has to keep the geometry it had
+    // while visible, not half of it.
+    if !is_onscreen_geometry(size.width, size.height, position.x, position.y) {
+        return;
     }
-    if let Ok(position) = window.outer_position() {
-        preferences.x = Some(position.x);
-        preferences.y = Some(position.y);
-    }
+    preferences.width = Some(size.width);
+    preferences.height = Some(size.height);
+    preferences.x = Some(position.x);
+    preferences.y = Some(position.y);
 }
 
 /// Restore saved geometry before first visibility to avoid a center-then-jump.
@@ -276,7 +299,10 @@ fn intersection_area(left: Geometry, right: Geometry) -> i64 {
 
 #[cfg(test)]
 mod tests {
-    use super::{close_behavior, fit_geometry, CloseBehavior, Geometry};
+    use super::{
+        close_behavior, fit_geometry, is_onscreen_geometry, CloseBehavior, Geometry,
+        MIN_WINDOW_HEIGHT, MIN_WINDOW_WIDTH,
+    };
 
     #[test]
     fn main_window_hides_to_tray_instead_of_destroying() {
@@ -291,6 +317,31 @@ mod tests {
     #[test]
     fn transient_windows_can_close_normally() {
         assert_eq!(close_behavior("selector"), CloseBehavior::AllowClose);
+    }
+
+    // Minimising to tray fired a resize and a move carrying the minimised
+    // window's geometry. Remembering it reopened the app as a small cube in the
+    // corner of the screen, which is what the restore clamps that geometry to.
+    #[test]
+    fn a_minimised_windows_geometry_is_not_worth_remembering() {
+        assert!(!is_onscreen_geometry(160, 28, -32000, -32000));
+        assert!(!is_onscreen_geometry(0, 0, 0, 0));
+        assert!(!is_onscreen_geometry(800, 600, -32000, -32000));
+        assert!(!is_onscreen_geometry(120, 90, 400, 300));
+    }
+
+    // A window on a monitor arranged left of or above the primary one has
+    // negative coordinates and is perfectly visible.
+    #[test]
+    fn a_window_on_a_monitor_left_of_primary_is_still_remembered() {
+        assert!(is_onscreen_geometry(800, 600, -1920, 0));
+        assert!(is_onscreen_geometry(800, 600, -1920, -1080));
+        assert!(is_onscreen_geometry(
+            MIN_WINDOW_WIDTH,
+            MIN_WINDOW_HEIGHT,
+            0,
+            0
+        ));
     }
 
     #[test]

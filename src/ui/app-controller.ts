@@ -27,7 +27,11 @@ const defaultOcr: OcrConfig = {
 const defaultSettings: AppSettings = {
   sourceLanguage: "zh-CN",
   targetLanguage: "en-US",
-  captureIntervalMs: 500,
+  // Must track `default_config()` in src-tauri/src/config.rs. The frontend
+  // saves this whole object back over the stored settings, so a stale value
+  // here silently overrides the backend default - which is how a 500ms capture
+  // interval kept coming back after the backend moved to 250ms.
+  captureIntervalMs: 250,
   overlay: {
     fontSize: 32,
     fontFamily: "Segoe UI",

@@ -11,6 +11,7 @@
 
 mod language;
 mod preprocessing;
+mod text_cleanup;
 mod windows_ocr;
 
 pub use language::normalize_language_tag;

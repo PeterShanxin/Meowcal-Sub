@@ -11,6 +11,7 @@ const { resolveSubtitleSurface } = window.OverlaySubtitleSurface;
 const { setupSettingsMenu } = window.OverlaySettingsMenu;
 const { clipPayloadEquals } = window.OverlayClipPayload;
 const { pointInBounds, rectToPhysicalBounds, regionToPhysicalBounds } = window.OverlayHitBounds;
+const { buildDiagnosticsText } = window.OverlayDiagnostics;
 
 // =============================================================================
 // GLOBAL STATE
@@ -26,7 +27,7 @@ const overlayState = {
     fontSize: 24,
     fontFamily: 'Segoe UI',
     textColor: '#FFFFFF',
-    backgroundColor: 'rgba(0, 0, 0, 0.75)',
+    lightBackground: false,
     showDiagnostics: false, // Whether to show the diagnostics panel
     lastPipelinePosition: null,
     settingsOpen: false,
@@ -632,7 +633,7 @@ async function setupEventListeners(elements) {
             overlayState.lastPipelinePosition =
                 window.PipelineUpdate.position(event.payload) ||
                 overlayState.lastPipelinePosition;
-            const { translated, timestamp, backendUsed, warnings, displayState } = event.payload;
+            const { original, translated, timestamp, backendUsed, warnings, displayState } = event.payload;
             const presentation = getTranslationPresentation(displayState, backendUsed, warnings);
             console.log('🌐 Translation state:', presentation.state);
 
@@ -673,13 +674,11 @@ async function setupEventListeners(elements) {
                 }
             });
             if (debugStatus) {
-                const time = new Date(timestamp).toLocaleTimeString();
-                // Lifecycle notices run no backend; naming one anyway made a
-                // healthy Foundry session read as 'mock (source only)'.
-                const engine = backendUsed === 'mock' ? 'mock (source only)' : backendUsed;
-                const detail = Array.isArray(warnings) ? warnings.join(', ') : '';
-                debugStatus.textContent = [`State: ${presentation.state}`, engine, detail, time]
-                    .filter(Boolean).join(' · ');
+                debugStatus.textContent = buildDiagnosticsText({
+                    state: presentation.state, backendUsed, warnings,
+                    modelMs: event.payload.modelMs, totalMs: event.payload.totalMs,
+                    source: original, now: new Date(timestamp).toLocaleTimeString(),
+                });
             }
         });
 
@@ -789,8 +788,8 @@ async function setupEventListeners(elements) {
                 overlayState.textColor = payload.textColor;
             }
 
-            if (typeof payload.backgroundColor === 'string') {
-                overlayState.backgroundColor = payload.backgroundColor;
+            if (typeof payload.lightBackground === 'boolean') {
+                overlayState.lightBackground = payload.lightBackground;
             }
 
             // Apply all styles to subtitle elements
@@ -1013,7 +1012,7 @@ async function loadOverlaySettings() {
             overlayState.fontSize = settings.overlay.fontSize || 24;
             overlayState.fontFamily = settings.overlay.fontFamily || 'Segoe UI';
             overlayState.textColor = settings.overlay.textColor || '#FFFFFF';
-            overlayState.backgroundColor = settings.overlay.backgroundColor || 'rgba(0, 0, 0, 0.75)';
+            overlayState.lightBackground = settings.overlay.lightBackground === true;
             overlayState.showDiagnostics = settings.overlay.showDiagnostics === true;
 
             // Apply all styles to subtitle elements
@@ -1023,10 +1022,10 @@ async function loadOverlaySettings() {
             updateDiagnosticsVisibility();
 
             // Sync the toggle checkbox if it exists
-            const diagnosticsToggle = document.getElementById('diagnostics-toggle');
-            if (diagnosticsToggle) {
-                diagnosticsToggle.checked = overlayState.showDiagnostics;
-            }
+            const diag = document.getElementById('diagnostics-toggle');
+            if (diag) diag.checked = overlayState.showDiagnostics;
+            const light = document.getElementById('light-background-toggle');
+            if (light) light.checked = overlayState.lightBackground;
 
             console.log('🎨 Loaded overlay settings:', settings.overlay);
         }
@@ -1042,20 +1041,18 @@ function applyOverlayStyles() {
     if (subtitleText) {
         subtitleText.style.fontSize = `${overlayState.fontSize}px`;
         subtitleText.style.fontFamily = overlayState.fontFamily;
-        subtitleText.style.color = overlayState.textColor;
+        subtitleText.style.color = overlayState.lightBackground ? '' : overlayState.textColor;
     }
 
     if (subtitleContainer) {
-        // Use 'background' to override the CSS shorthand property
-        subtitleContainer.style.background = overlayState.backgroundColor;
+        // Never write an inline background here. The plate colour is opaque in
+        // CSS on purpose - the layered window supplies the translucency - and an
+        // rgba() written inline composited against WebView2's opaque white
+        // backing, which is what made the plate look washed-out white.
+        subtitleContainer.classList.toggle('light', overlayState.lightBackground === true);
     }
 
-    console.log('🎨 Applied overlay styles:', {
-        fontSize: overlayState.fontSize,
-        fontFamily: overlayState.fontFamily,
-        textColor: overlayState.textColor,
-        backgroundColor: overlayState.backgroundColor,
-    });
+    console.log('🎨 Applied overlay styles:', overlayState.fontSize, overlayState.fontFamily);
 }
 
 function updateDiagnosticsVisibility() {
@@ -1079,8 +1076,7 @@ function updateDiagnosticsVisibility() {
 async function saveOverlaySettings() {
     try {
         const settings = await window.__TAURI__.core.invoke('get_settings');
-        settings.overlay.fontSize = overlayState.fontSize;
-        settings.overlay.showDiagnostics = overlayState.showDiagnostics;
+        Object.assign(settings.overlay, { fontSize: overlayState.fontSize, showDiagnostics: overlayState.showDiagnostics, lightBackground: overlayState.lightBackground });
         await window.__TAURI__.core.invoke('save_settings', { settings });
         console.log('💾 Saved overlay settings:', { fontSize: overlayState.fontSize, showDiagnostics: overlayState.showDiagnostics });
     } catch (e) {
@@ -1096,6 +1092,9 @@ function setupSettingsButton(button, menu, subtitleText, subtitleContainer) {
         fontSizeSlider: document.getElementById('font-size-slider'),
         fontSizeDisplay: document.getElementById('font-size-display'),
         diagnosticsToggle: document.getElementById('diagnostics-toggle'),
+        lightToggle: document.getElementById('light-background-toggle'),
+        initialLight: overlayState.lightBackground,
+        onLight: (on) => { overlayState.lightBackground = on; applyOverlayStyles(); },
         initialFontSize: overlayState.fontSize,
         initialDiagnostics: overlayState.showDiagnostics,
         onOpenChange: (open) => {

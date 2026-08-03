@@ -1353,17 +1353,11 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
 
     let min_significant_chars = ocr_validation_strictness.min_significant_chars();
 
-    debug!(
-        "OCR settings: preprocessing={}, grayscale={}, contrast={}, binarize={}, multi_pass={}, pass_count={}, strictness={:?}, min_significant_chars={}",
-        ocr_preprocessing_enabled,
-        ocr_grayscale,
-        ocr_contrast_enhancement,
-        ocr_binarize,
-        ocr_enable_multi_pass,
-        ocr_multi_pass_count,
-        ocr_validation_strictness,
-        min_significant_chars
-    );
+    debug!(?translation_config.ocr, min_significant_chars, "OCR settings");
+
+    // Pace to a deadline: a frame that ran the translator must not also pay a
+    // full interval before the next capture.
+    let pacer = crate::pipeline_pacing::Pacer::new(interval_ms);
 
     let context_enabled = translation_config.enable_context_aware;
     let translation_config_for_summary = translation_config.clone();
@@ -1529,7 +1523,7 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
                     }
                     None => {
                         warn!("⚠️ No capture region set, skipping frame");
-                        tokio::time::sleep(Duration::from_millis(interval_ms as u64)).await;
+                        tokio::time::sleep(pacer.period()).await;
                         continue;
                     }
                 }
@@ -1561,7 +1555,7 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
                 match try_capture(&current_capture_region, &mut capture_state, &app) {
                     CaptureAttemptResult::Success(result) => result,
                     CaptureAttemptResult::RetryAfterDelay => {
-                        tokio::time::sleep(Duration::from_millis(interval_ms as u64)).await;
+                        tokio::time::sleep(pacer.remaining_for(frame_started)).await;
                         continue;
                     }
                 };
@@ -1575,7 +1569,7 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
                 info!(
                     session_id,
                     capture_id = token.capture_id,
-                    "Discarding stale capture before OCR"
+                    "Stale capture, before OCR"
                 );
                 continue;
             }
@@ -1594,7 +1588,7 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
                     Ok(result) => result,
                     Err(e) => {
                         warn!("⚠️ Multi-pass OCR failed: {}", e);
-                        tokio::time::sleep(Duration::from_millis(interval_ms as u64)).await;
+                        tokio::time::sleep(pacer.remaining_for(frame_started)).await;
                         continue;
                     }
                 }
@@ -1616,7 +1610,7 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
                     Ok(result) => result,
                     Err(e) => {
                         warn!("⚠️ OCR failed: {}", e);
-                        tokio::time::sleep(Duration::from_millis(interval_ms as u64)).await;
+                        tokio::time::sleep(pacer.remaining_for(frame_started)).await;
                         continue;
                     }
                 }
@@ -1632,7 +1626,7 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
                     Ok(result) => result,
                     Err(e) => {
                         warn!("⚠️ OCR failed: {}", e);
-                        tokio::time::sleep(Duration::from_millis(interval_ms as u64)).await;
+                        tokio::time::sleep(pacer.remaining_for(frame_started)).await;
                         continue;
                     }
                 }
@@ -1643,7 +1637,7 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
                 info!(
                     session_id,
                     capture_id = token.capture_id,
-                    "Discarding stale capture after OCR"
+                    "Stale capture, after OCR"
                 );
                 if *stop_rx.borrow() {
                     break;
@@ -1670,18 +1664,13 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
                     );
                 }
 
-                tokio::time::sleep(Duration::from_millis(interval_ms as u64)).await;
+                tokio::time::sleep(pacer.remaining_for(frame_started)).await;
                 continue;
             }
 
             empty_ocr_frames = 0;
 
             let current_text = ocr_result.text.trim().to_string();
-
-            debug!(
-                "OCR output accepted for filtering ({} chars)",
-                current_text.chars().count()
-            );
 
             if let Some(rejection) = crate::ocr_gate::classify(&current_text, min_significant_chars)
             {
@@ -1705,18 +1694,21 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
                         ),
                     );
                 }
-                tokio::time::sleep(Duration::from_millis(interval_ms as u64)).await;
+                tokio::time::sleep(pacer.remaining_for(frame_started)).await;
                 continue;
             }
 
             let now = Instant::now();
-            let is_exact_duplicate = current_text == last_text;
+            // Exact equality alone treated OCR noise - a dropped glyph, a comma
+            // read as a period - as fresh dialogue, so one subtitle on screen
+            // earned two or three translations in a row.
+            let line_change = crate::ocr_stability::classify(&last_text, &current_text);
             let mut force_retry_duplicate = false;
-            if is_exact_duplicate {
+            if line_change == crate::ocr_stability::LineChange::Repeat {
                 if last_backend_used != BackendId::Mock {
-                    debug!("[FILTER: duplicate_exact] OCR text");
+                    debug!(source = %current_text, "[FILTER: duplicate_line] OCR text");
                     translation_manager.record_ocr_line(&current_text);
-                    tokio::time::sleep(Duration::from_millis(interval_ms as u64)).await;
+                    tokio::time::sleep(pacer.remaining_for(frame_started)).await;
                     continue;
                 }
 
@@ -1725,7 +1717,7 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
                 {
                     debug!("[FILTER: duplicate_mock_cooldown] OCR text");
                     translation_manager.record_ocr_line(&current_text);
-                    tokio::time::sleep(Duration::from_millis(interval_ms as u64)).await;
+                    tokio::time::sleep(pacer.remaining_for(frame_started)).await;
                     continue;
                 }
 
@@ -1738,7 +1730,7 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
             {
                 debug!("[FILTER: duplicate_context] OCR text");
                 translation_manager.record_ocr_line(&current_text);
-                tokio::time::sleep(Duration::from_millis(interval_ms as u64)).await;
+                tokio::time::sleep(pacer.remaining_for(frame_started)).await;
                 continue;
             }
 
@@ -1909,10 +1901,9 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
                 break;
             }
 
-            info!(
-                "🌐 Translation produced ({} chars)",
-                translated.chars().count()
-            );
+            // The pair, so a bad line can be blamed on OCR or on the model
+            // without reproducing the episode.
+            debug!(?line_change, source = %current_text, translated = %translated, "Translated");
 
             // Step 4: Emit event to frontend
             let overlay_started = Instant::now();
@@ -1933,6 +1924,8 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
                 warnings, // Move instead of clone - not used after this
                 display_state,
                 timestamp,
+                model_ms,
+                total_ms: frame_started.elapsed().as_millis() as u64,
             };
 
             if let Err(e) = app.emit("translation-update", payload) {
@@ -1967,7 +1960,7 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
                 "pipeline_frame_complete"
             );
 
-            tokio::time::sleep(Duration::from_millis(interval_ms as u64)).await;
+            tokio::time::sleep(pacer.remaining_for(frame_started)).await;
         }
 
         if pipeline_clock.is_session_current(session_id) {
