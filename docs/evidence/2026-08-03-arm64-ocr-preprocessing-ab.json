@@ -1,0 +1,65 @@
+{
+  "schemaVersion": 1,
+  "generatedAtUtc": "2026-08-03T13:10:00Z",
+  "testedCommit": "a7e2928",
+  "architecture": "aarch64",
+  "windowsBuild": "26200",
+  "scenario": "ocr-preprocessing-variant-ab",
+  "issue": 53,
+  "sourceLanguage": "zh-CN",
+  "question": "Does hard binarization split Chinese glyphs into their radicals?",
+  "method": {
+    "harness": "src-tauri/src/ocr/preprocessing_ab.rs",
+    "capture": "GDI CopyFromScreen over the configured region, 2920x176 physical, 200ms apart during live playback",
+    "engine": "Windows.Media.Ocr, zh-CN",
+    "score": "mean per-frame character similarity (Levenshtein over alphanumerics) against a hand-transcribed ground truth"
+  },
+  "paused": {
+    "frames": 135,
+    "note": "one static frame sampled repeatedly; all four variants read it identically and correctly (19/19 chars). Windows OCR is deterministic on identical pixels, and preprocessing is harmless on a clean, high-contrast frame.",
+    "variantsDisagreeing": 0
+  },
+  "live": {
+    "frames": 319,
+    "framesCarryingText": 151,
+    "framesWhereVariantsDisagreed": 115,
+    "note": "76% of text-bearing frames read differently depending on preprocessing, so the choice is not neutral during playback."
+  },
+  "truthHandling": "Ground truth was hand-transcribed to score the runs and is deliberately not recorded here; see this directory's README. Runs are identified by shape and background only.",
+  "accuracyByRun": [
+    {
+      "run": "A",
+      "truthChars": 17,
+      "background": "blue, low contrast against white text",
+      "frames": 19,
+      "shippedDefaultBinarize": 0.658,
+      "noBinarize": 0.707,
+      "grayscaleOnly": 0.707,
+      "noPreprocessing": 0.681
+    },
+    {
+      "run": "B",
+      "truthChars": 5,
+      "background": "dark blue, high contrast",
+      "frames": 9,
+      "shippedDefaultBinarize": 0.741,
+      "noBinarize": 0.741,
+      "grayscaleOnly": 0.741,
+      "noPreprocessing": 0.722
+    },
+    {
+      "run": "C",
+      "truthChars": 3,
+      "background": "red, mid contrast",
+      "frames": 10,
+      "shippedDefaultBinarize": 0.507,
+      "noBinarize": 0.340,
+      "grayscaleOnly": 0.340,
+      "noPreprocessing": 0.357
+    }
+  ],
+  "finding": "Hypothesis 1 of issue #53 is not supported. Binarization is content-dependent, not uniformly harmful: it loses 4.9 points on run A and gains 15.0 on run C. Radical splitting appears under every variant including no preprocessing at all - a single ideograph was returned as its two components with the frame handed to Windows OCR exactly as captured - so the segmentation happens inside the recognizer rather than in our preprocessing.",
+  "decision": "Shipped preprocessing default left unchanged; the evidence does not support a change in either direction. Issue #53 should proceed to step 2 (capture resolution) or step 3 (Microsoft.Windows.Vision.TextRecognizer).",
+  "sideObservation": "Character accuracy on hard frames is 66-74%, so roughly one character in three is wrong before the text reaches the translator. That, not the duplicate filter, is the ceiling on subtitle quality.",
+  "manualStatus": "measured; single episode, three subtitle runs, one machine"
+}

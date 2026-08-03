@@ -55,6 +55,23 @@ check: the app selected `zh-CN` while Windows reported the equivalent installed
 tag `zh-Hans-CN`, with no false "not installed" warning. Recognition and overlay
 rendering remain separate gates.
 
+`2026-08-03-arm64-ocr-preprocessing-ab.json` answers the first question in
+issue #53: whether hard binarization is what splits Chinese glyphs into their
+radicals. It is not. Across three subtitle runs captured during live playback,
+binarization lost 4.9 points of character accuracy on a low-contrast blue
+background and gained 15.0 on a red one, and radical splitting appeared under
+every variant including no preprocessing at all. The shipped default was left
+unchanged. Reproduce it with:
+
+```powershell
+$env:MEOWCAL_OCR_AB_FRAME = "<directory of captured frames>"
+$env:MEOWCAL_OCR_AB_TRUTH = "<what those frames say>"
+cargo test --lib preprocessing_variants -- --ignored --nocapture
+```
+
+Ground truth is supplied at run time and not stored. The report keeps accuracy
+figures, frame counts, and run shape only.
+
 The `Windows Packages` workflow also produced the native x64 MSI and NSIS
 artifact bundle on `2883966` (run `30699524713`, artifact
 `meowcal-sub-x64-packages`). This proves x64 package generation only; it does
