@@ -73,26 +73,42 @@ fn starts_scriptio_continua(token: &str) -> bool {
     token.chars().next().is_some_and(is_scriptio_continua)
 }
 
-/// Drop a stray character stranded at either end of a line.
+/// Drop stray characters stranded at either end of a line.
 ///
-/// Both conditions have to hold: the character stands alone, and its neighbour
-/// is CJK. That is what separates the bare "0" Windows resolved beside Chinese
-/// dialogue from the 7 in "Chapter 7", and it leaves a line that is genuinely
-/// just "0" alone, since at that point nothing says it was noise.
+/// Both conditions have to hold: the characters stand alone, and the dialogue
+/// they are stranded against is CJK. That is what separates the bare "0"
+/// Windows resolved beside Chinese dialogue from the 7 in "Chapter 7", and it
+/// leaves a line that is genuinely just "0" alone, since at that point nothing
+/// says it was noise.
+///
+/// A run is judged as a whole rather than one token at a time. Windows resolves
+/// a letterbox edge into two marks as readily as one, and checking each against
+/// its immediate neighbour meant the outer mark of "噁 0 0" was measured against
+/// the inner one, found not to be CJK, and kept.
 pub fn trim_edge_noise(text: &str) -> String {
-    let mut tokens: Vec<&str> = text.split_whitespace().collect();
+    let tokens: Vec<&str> = text.split_whitespace().collect();
 
-    while tokens.len() > 1 && is_stray_mark(tokens[0]) && starts_scriptio_continua(tokens[1]) {
-        tokens.remove(0);
-    }
-    while tokens.len() > 1
-        && is_stray_mark(tokens[tokens.len() - 1])
-        && starts_scriptio_continua(tokens[tokens.len() - 2])
-    {
-        tokens.pop();
+    let leading = tokens.iter().take_while(|t| is_stray_mark(t)).count();
+    let trailing = tokens.iter().rev().take_while(|t| is_stray_mark(t)).count();
+
+    // Nothing but marks: there is no dialogue to judge them against.
+    if leading + trailing >= tokens.len() {
+        return tokens.join(" ");
     }
 
-    tokens.join(" ")
+    let start = if starts_scriptio_continua(tokens[leading]) {
+        leading
+    } else {
+        0
+    };
+    let end = tokens.len() - trailing;
+    let end = if starts_scriptio_continua(tokens[end - 1]) {
+        end
+    } else {
+        tokens.len()
+    };
+
+    tokens[start..end.max(start)].join(" ")
 }
 
 /// Everything above, in the order the pipeline needs it: strip the stray
@@ -155,6 +171,16 @@ mod tests {
     fn a_line_that_is_only_a_digit_survives() {
         assert_eq!(clean_line("0"), "0");
         assert_eq!(clean_line("?"), "?");
+        assert_eq!(clean_line("0 0"), "0 0");
+    }
+
+    // Windows resolves an edge into two marks as readily as one. Judging each
+    // against its immediate neighbour left the outer one in place.
+    #[test]
+    fn a_run_of_stray_marks_at_either_end_is_dropped() {
+        assert_eq!(clean_line("0 0 装 作 疯 了"), "装作疯了");
+        assert_eq!(clean_line("走 噁 0 0"), "走噁");
+        assert_eq!(clean_line("0 “ 你 来 了 吗 ？ 0 0"), "你来了吗？");
     }
 
     // A lone digit is only noise when it turned up beside CJK dialogue. Latin

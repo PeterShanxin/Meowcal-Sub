@@ -14,6 +14,11 @@ mod preprocessing;
 mod text_cleanup;
 mod windows_ocr;
 
+/// Operator-run comparison of preprocessing variants against a real captured
+/// frame. See the module header; it asserts nothing and is `#[ignore]`d.
+#[cfg(test)]
+mod preprocessing_ab;
+
 pub use language::normalize_language_tag;
 pub use preprocessing::*;
 pub use windows_ocr::*;
@@ -47,8 +52,16 @@ pub struct OcrResult {
 
 impl OcrResult {
     /// Create a new OCR result
+    ///
+    /// The edge trim runs again over the joined text. `clean_line` already ran
+    /// per line, but when Windows returns a stray character as its own line it
+    /// arrives as a single-token line with no CJK neighbour to be judged
+    /// against, and is correctly left alone - a line that really is just "0"
+    /// should survive. Joining then reinstates it beside the dialogue, which is
+    /// how `虽然想完全复刻再展开的 0` reached the translator and put a bare 0
+    /// inside translated dialogue.
     pub fn new(lines: Vec<String>) -> Self {
-        let text = lines.join(" ");
+        let text = text_cleanup::trim_edge_noise(&lines.join(" "));
         Self { text, lines }
     }
 

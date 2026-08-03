@@ -18,6 +18,10 @@ use tokio::time::{timeout, Duration};
 use tracing::{debug, info, warn};
 
 const DEFAULT_BACKEND_TIMEOUT_MS: u64 = 2500;
+/// Per-attempt ceiling with no context attached. Above the observed p99 of ~5s
+/// on a warm local model, so ordinary slow lines still land; far below the
+/// total budget, so a stall is abandoned in time to retry it.
+const UNCONTEXTED_ATTEMPT_TIMEOUT_MS: u64 = 6500;
 const MAX_TRANSLATION_INPUT_CHARS: usize = 2000;
 const FOUNDRY_TRANSIENT_MAX_RETRIES: usize = 2;
 const FOUNDRY_TRANSIENT_RETRY_DELAY_MS: u64 = 600;
@@ -642,30 +646,6 @@ impl TranslationManager {
         timeout_ms.clamp(1, 120_000)
     }
 
-    fn should_retry_foundry_error(err: &LlmError) -> bool {
-        match err {
-            LlmError::ApiError(message) => {
-                let lower = message.to_ascii_lowercase();
-                // Treat missing/permissioned ep_cache_context as non-retriable: it's unlikely to
-                // resolve within a subtitle frame budget and retries just add latency.
-                if lower.contains("ep_cache_context")
-                    && (lower.contains("does not exist") || lower.contains("not accessible"))
-                {
-                    return false;
-                }
-
-                lower.contains("model is loading")
-                    || lower.contains("connection refused")
-                    || lower.contains("connection reset")
-                    || lower.contains("temporarily unavailable")
-                    || lower.contains("qnn_backend_manager")
-                    || lower.contains("onnxruntime::qnn")
-                    || lower.contains("failed to load from epcontext model")
-            }
-            _ => false,
-        }
-    }
-
     fn backend_supports_context(id: BackendId) -> bool {
         matches!(id, BackendId::FoundryLocal)
     }
@@ -829,12 +809,17 @@ impl TranslationManager {
                 };
             }
 
-            // Soft timeout only when context is included
-            let attempt_timeout = if context_used {
-                remaining_total.min(Duration::from_millis(DEFAULT_BACKEND_TIMEOUT_MS))
+            // Every attempt is bounded. With context the cap is tight, since a
+            // slow answer has somewhere to go: drop a tier and ask again.
+            // Without context there was no cap at all, so an attempt ran to the
+            // full 30s total - and because the capture loop awaits translation
+            // inline, one 27.6s stall left the pipeline blind for its duration.
+            let attempt_cap = if context_used {
+                DEFAULT_BACKEND_TIMEOUT_MS
             } else {
-                remaining_total
+                UNCONTEXTED_ATTEMPT_TIMEOUT_MS
             };
+            let attempt_timeout = remaining_total.min(Duration::from_millis(attempt_cap));
 
             let result = timeout(
                 attempt_timeout,
@@ -890,7 +875,7 @@ impl TranslationManager {
                 }
                 Ok(Err(err)) => {
                     let should_retry =
-                        attempt < max_attempts && Self::should_retry_foundry_error(&err);
+                        attempt < max_attempts && crate::llm::transport_errors::is_transient(&err);
                     lock_or_recover(&self.diagnostics).record_error(
                         id,
                         err.code(),
@@ -931,8 +916,23 @@ impl TranslationManager {
                         ready_state = ?ready_state,
                         latency_ms,
                         error_code = "timeout",
+                        attempt,
+                        max_attempts,
                         "Translation backend timed out"
                     );
+
+                    // With context, a timeout is answered by degrading a tier.
+                    // Without context that door is shut, and abandoning the line
+                    // is what put raw Chinese and an unavailable notice on
+                    // screen. A stall clears on retry - the 27.6s one was
+                    // followed by a 476ms answer - so ask again if budget allows.
+                    if !context_used && attempt < max_attempts {
+                        let remaining = total_timeout.saturating_sub(started.elapsed());
+                        if remaining > Duration::from_millis(FOUNDRY_TRANSIENT_RETRY_DELAY_MS) {
+                            continue;
+                        }
+                    }
+
                     warnings.push(format!("{}: timeout", id.as_str()));
                     return TierAttemptResult::Timeout {
                         total_exhausted: false,

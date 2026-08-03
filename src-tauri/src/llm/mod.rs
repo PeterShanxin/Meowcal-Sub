@@ -15,6 +15,7 @@ pub(crate) mod output_validation;
 mod prompt_router;
 mod subtitle_output;
 mod text_utils;
+mod transport_errors;
 
 pub use context::*;
 pub use foundry_local::*;
