@@ -27,6 +27,7 @@
   const UNREADABLE_HINTS = {
     tooShort: "Only stray marks found in the selected area",
     untranslatable: "Nothing translatable in the selected area",
+    tooLong: "Too much text in the selected area — narrow it to the subtitle line",
   };
 
   function unreadableHint(reason) {

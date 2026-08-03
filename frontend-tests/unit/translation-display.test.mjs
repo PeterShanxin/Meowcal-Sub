@@ -38,6 +38,7 @@ describe("translation display states", () => {
   it.each([
     ["tooShort", "Only stray marks found in the selected area"],
     ["untranslatable", "Nothing translatable in the selected area"],
+    ["tooLong", "Too much text in the selected area — narrow it to the subtitle line"],
   ])("explains %s without claiming the area is empty", (reason, hint) => {
     expect(getTranslationPresentation("sourceUnreadable", "", [reason])).toMatchObject({
       hint,

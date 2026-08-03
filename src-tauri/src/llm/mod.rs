@@ -14,7 +14,7 @@ mod mock;
 pub(crate) mod output_validation;
 mod prompt_router;
 mod subtitle_output;
-mod text_utils;
+pub(crate) mod text_utils;
 mod transport_errors;
 
 pub use context::*;

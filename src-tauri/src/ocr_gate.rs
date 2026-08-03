@@ -20,6 +20,10 @@ pub enum OcrRejection {
     /// Real characters, but nothing a translator can act on (digits, symbols,
     /// timestamps).
     Untranslatable,
+    /// More text than a subtitle cue can hold, so the region is catching page
+    /// furniture - a menu, a stat readout, a wall of body text - rather than a
+    /// line of dialogue.
+    TooLong,
 }
 
 impl OcrRejection {
@@ -28,9 +32,26 @@ impl OcrRejection {
         match self {
             OcrRejection::TooShort => "tooShort",
             OcrRejection::Untranslatable => "untranslatable",
+            OcrRejection::TooLong => "tooLong",
         }
     }
 }
+
+// The longest line still worth translating.
+//
+// This is a subtitle app: a cue is one or two short lines, and anything much
+// longer is the capture region taking in the page around the subtitle. Sending
+// it on is worse than dropping it - it spends a full model call, holds the one
+// translation slot for seconds while real dialogue goes by, and puts a
+// paragraph of unrelated text over the video.
+//
+// Two limits, because the same sentence needs roughly twice the characters in
+// an alphabetic script as in an ideographic one. A single cap would either wave
+// a page of Chinese through or cut an ordinary English cue in half. Broadcast
+// practice puts a full two-line cue near 40 characters of CJK and near 84 of
+// Latin, so both limits sit above anything a real cue produces.
+const MAX_CJK_CHARS: usize = 50;
+const MAX_ALPHABETIC_CHARS: usize = 100;
 
 /// Decide whether a recognised line should be translated.
 ///
@@ -49,11 +70,37 @@ pub fn classify(text: &str, min_significant_chars: usize) -> Option<OcrRejection
         return Some(OcrRejection::TooShort);
     }
 
+    if text.chars().count() > length_limit(text) {
+        return Some(OcrRejection::TooLong);
+    }
+
     if crate::llm::is_untranslatable_text(text) {
         return Some(OcrRejection::Untranslatable);
     }
 
     None
+}
+
+/// Pick the length limit that matches the script the line is written in.
+///
+/// Decided per line rather than from the configured source language: the
+/// language setting says what the viewer expects, and the limit has to hold for
+/// whatever OCR actually returned.
+fn length_limit(text: &str) -> usize {
+    let cjk = text
+        .chars()
+        .filter(|ch| crate::llm::text_utils::is_cjk_char(*ch))
+        .count();
+    let alphabetic = text
+        .chars()
+        .filter(|ch| ch.is_alphabetic() && !crate::llm::text_utils::is_cjk_char(*ch))
+        .count();
+
+    if cjk > alphabetic {
+        MAX_CJK_CHARS
+    } else {
+        MAX_ALPHABETIC_CHARS
+    }
 }
 
 #[cfg(test)]
@@ -110,5 +157,51 @@ mod tests {
         // downgrades the overlay to its generic fallback hint.
         assert_eq!(OcrRejection::TooShort.as_str(), "tooShort");
         assert_eq!(OcrRejection::Untranslatable.as_str(), "untranslatable");
+        assert_eq!(OcrRejection::TooLong.as_str(), "tooLong");
+    }
+
+    #[test]
+    fn accepts_a_full_two_line_chinese_cue() {
+        let cue = "如果想完全复刻再展开的话就会变得非常困难所以先做一个简单的版本";
+        assert!(cue.chars().count() <= MAX_CJK_CHARS);
+        assert_eq!(classify(cue, MODERATE), None);
+    }
+
+    #[test]
+    fn rejects_a_page_of_chinese_text() {
+        let page = "好".repeat(MAX_CJK_CHARS + 1);
+        assert_eq!(classify(&page, MODERATE), Some(OcrRejection::TooLong));
+        // And the character before it still passes, so the limit is where the
+        // constant says it is rather than somewhere near it.
+        assert_eq!(classify(&"好".repeat(MAX_CJK_CHARS), MODERATE), None);
+    }
+
+    // The reason there are two limits. Judged against the CJK cap this ordinary
+    // two-line cue would be thrown away for being ordinary.
+    #[test]
+    fn accepts_a_long_two_line_english_cue() {
+        let cue =
+            "I never expected to see you here again after everything that happened last winter";
+        assert!(cue.chars().count() > MAX_CJK_CHARS);
+        assert!(cue.chars().count() <= MAX_ALPHABETIC_CHARS);
+        assert_eq!(classify(cue, MODERATE), None);
+    }
+
+    // The failure this gate exists for: a capture region covering most of the
+    // screen hands back every line on the page joined into one sentence, and
+    // the translator spends a full model call rendering it as nonsense.
+    #[test]
+    fn rejects_the_page_furniture_a_tall_region_catches() {
+        let page = "Name Status CPU Memory Disk Network Processes 91.0 MB 82.3 MB 45.1 MB \
+                    System 12.4 MB Background processes 34 running";
+        assert!(page.chars().count() > MAX_ALPHABETIC_CHARS);
+        assert_eq!(classify(page, MODERATE), Some(OcrRejection::TooLong));
+    }
+
+    #[test]
+    fn a_chinese_line_carrying_a_latin_name_is_still_judged_as_chinese() {
+        let mixed = format!("{}Saber", "好".repeat(MAX_CJK_CHARS));
+        assert!(mixed.chars().count() <= MAX_ALPHABETIC_CHARS);
+        assert_eq!(classify(&mixed, MODERATE), Some(OcrRejection::TooLong));
     }
 }
