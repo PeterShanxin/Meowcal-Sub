@@ -9,8 +9,10 @@
 // - Supports many languages
 // =============================================================================
 
+mod band_log;
 pub mod frame_budget;
 mod language;
+mod line_geometry;
 mod preprocessing;
 mod text_cleanup;
 mod windows_ocr;
@@ -42,6 +44,28 @@ pub enum OcrError {
     InvalidImage(String),
 }
 
+/// Where a recognised line sat in the frame, in captured pixels.
+///
+/// Windows OCR reports a rectangle per word; this is their union across one
+/// line. The pipeline has always thrown this away and kept only the string,
+/// which is why a capture region taller than one subtitle can only be handled
+/// by refusing it. Position is what tells two stacked subtitle positions apart
+/// from each other and from the page furniture between them.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct LineBox {
+    pub x: f32,
+    pub y: f32,
+    pub width: f32,
+    pub height: f32,
+}
+
+impl LineBox {
+    /// Vertical centre, which is what bands are grouped on.
+    pub fn middle_y(&self) -> f32 {
+        self.y + self.height / 2.0
+    }
+}
+
 /// The result of OCR recognition
 #[derive(Debug, Clone)]
 pub struct OcrResult {
@@ -49,6 +73,11 @@ pub struct OcrResult {
     pub text: String,
     /// Individual lines of recognized text
     pub lines: Vec<String>,
+    /// Where each line sat, parallel to `lines`.
+    ///
+    /// Empty when the source could not report geometry, so a consumer must
+    /// treat it as optional rather than index it against `lines` blindly.
+    pub boxes: Vec<LineBox>,
 }
 
 impl OcrResult {
@@ -62,8 +91,13 @@ impl OcrResult {
     /// how `虽然想完全复刻再展开的 0` reached the translator and put a bare 0
     /// inside translated dialogue.
     pub fn new(lines: Vec<String>) -> Self {
+        Self::with_boxes(lines, Vec::new())
+    }
+
+    /// Create a result that also knows where each line sat.
+    pub fn with_boxes(lines: Vec<String>, boxes: Vec<LineBox>) -> Self {
         let text = text_cleanup::trim_edge_noise(&lines.join(" "));
-        Self { text, lines }
+        Self { text, lines, boxes }
     }
 
     /// Create an empty result (no text found)
@@ -71,6 +105,7 @@ impl OcrResult {
         Self {
             text: String::new(),
             lines: Vec::new(),
+            boxes: Vec::new(),
         }
     }
 
