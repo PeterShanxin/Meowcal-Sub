@@ -31,9 +31,17 @@ use tracing::info;
 
 /// Bring the app to a state an installer can overwrite.
 ///
-/// Called from the front end immediately before `downloadAndInstall`. Failing
-/// to stop a session is reported, because an update applied over a live capture
-/// is the case worth not proceeding with.
+/// Called from the front end immediately before `downloadAndInstall`.
+///
+/// Stopping a session is best effort, and deliberately so: `stop_translation`
+/// signals the pipeline loop and returns without waiting for it, and every step
+/// inside it that can fail is already tolerated rather than reported. The loop
+/// holds nothing inside the install directory, so what it is still doing when
+/// the installer starts does not decide whether the upgrade succeeds. Do not
+/// read the `Result` here as a promise that capture has stopped.
+///
+/// The two child processes are different: they hold files open, so this waits
+/// for them.
 #[tauri::command]
 pub async fn prepare_for_update(state: State<'_, AppState>, app: AppHandle) -> Result<(), String> {
     info!("Preparing for an in-place update…");
@@ -46,8 +54,16 @@ pub async fn prepare_for_update(state: State<'_, AppState>, app: AppHandle) -> R
     }
 
     crate::window_lifecycle::persist_main_geometry_from_app(&app);
-    crate::overlay_host_process::stop(&app);
-    crate::hy_mt_runtime::shutdown_owned();
+
+    // `kill` then `wait` on a child that is slow to die would otherwise park a
+    // tokio worker while the front end is awaiting this command.
+    let handle = app.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        crate::overlay_host_process::stop(&handle);
+        crate::hy_mt_runtime::shutdown_owned();
+    })
+    .await
+    .map_err(|error| format!("Could not stop this app's child processes: {error}"))?;
 
     info!("Ready for the installer to replace this installation");
     Ok(())

@@ -50,10 +50,14 @@ settings. Never infer merge permission from permission to open a PR.
 
 ## Release and update contract
 
-- The Tauri CLI is pinned in `package.json` and must stay level with the `tauri`
-  crate. A CLI behind the crate cannot patch `__TAURI_BUNDLE_TYPE` into the
-  binary, and the updater needs that byte. Never invoke the CLI through
-  `npx --yes @tauri-apps/cli@2`; use the pinned one.
+- The Tauri CLI is pinned in `package.json`. It is versioned independently of
+  the `tauri` crate - the two numbers are different series and are not expected
+  to match - but it must be recent enough to patch `__TAURI_BUNDLE_TYPE` into
+  the binary. Never invoke it through `npx --yes @tauri-apps/cli@2`, which
+  resolves to whatever is cached on the build machine; use the pinned one.
+  That marker only chooses between `windows-x86_64-nsis` and `windows-x86_64`
+  manifest keys: the Windows updater decides how to install from the bytes it
+  downloaded, so a missing marker does not stop an update.
 - Packaging signs the installers with `TAURI_SIGNING_PRIVATE_KEY` and
   `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` from repository secrets. The matching
   public key lives in `tauri.conf.json`. Rotating one without the other makes

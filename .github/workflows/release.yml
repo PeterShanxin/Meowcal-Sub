@@ -203,6 +203,10 @@ jobs:
             throw "Missing release notes: $notesPath"
           }
 
+          # The `.sig` files stay behind on purpose. The updater reads the
+          # signature text out of latest.json and never fetches a separate file,
+          # and publishing them would put two sources of the same truth in front
+          # of users.
           $assets = @(Get-ChildItem release-assets -Recurse -File |
             Where-Object {
               $_.Extension -eq ".msi" -or
