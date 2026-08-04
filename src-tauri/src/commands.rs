@@ -798,19 +798,12 @@ pub async fn save_settings(
     let last_scale_factor = *lock_or_recover(&state.capture_scale_factor);
     updated.last_capture_scale_factor = Some(last_scale_factor);
 
-    // Capture window preferences if possible
+    // Through the same path the window events use, rather than reading the
+    // window here: that copy lacked the minimised and offscreen guards, so
+    // saving any setting while minimised stored the minimised geometry.
     if let Some(window) = app.get_webview_window("main") {
-        if let Ok(size) = window.inner_size() {
-            updated.window_preferences.width = Some(size.width);
-            updated.window_preferences.height = Some(size.height);
-        }
-        if let Ok(position) = window.outer_position() {
-            updated.window_preferences.x = Some(position.x);
-            updated.window_preferences.y = Some(position.y);
-        }
-        if let Ok(is_maximized) = window.is_maximized() {
-            updated.window_preferences.is_maximized = is_maximized;
-        }
+        crate::window_lifecycle::remember_main_geometry(&window.as_ref().window());
+        updated.window_preferences = lock_or_recover(&state.config).window_preferences.clone();
     }
 
     // Update the in-memory config

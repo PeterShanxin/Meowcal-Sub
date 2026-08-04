@@ -55,9 +55,7 @@ export interface AppSettings {
   overlay: OverlayConfig;
   translation: TranslationConfig;
   lastCaptureRegion?: CaptureRegion | null;
-  autoStart: boolean;
   minimizeToTray: boolean;
-  startWithWindows: boolean;
   [key: string]: unknown;
 }
 

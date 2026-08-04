@@ -11,10 +11,11 @@
 // =============================================================================
 
 use crate::sync_utils::lock_or_recover;
-use std::process::Child;
+use std::path::PathBuf;
+use std::process::{Child, Command};
 use std::sync::{Arc, Mutex};
 use tauri::Manager;
-use tracing::info;
+use tracing::{info, warn};
 
 /// Managed state for tracking the OverlayHost child process.
 pub struct OverlayHostProcess(Arc<Mutex<Option<Child>>>);
@@ -24,6 +25,72 @@ impl OverlayHostProcess {
     /// host is opt-in behind an environment variable.
     pub fn new(child: Option<Child>) -> Self {
         Self(Arc::new(Mutex::new(child)))
+    }
+}
+
+/// Where the host executable can be, most specific first.
+///
+/// The installed layout puts it beside the app in the resource directory; the
+/// rest are the shapes a development run takes, which differ by whether the
+/// process was started from the repository root or from `src-tauri`.
+fn candidates<M: Manager<tauri::Wry>>(manager: &M) -> Vec<PathBuf> {
+    let mut candidates = Vec::new();
+
+    if let Ok(resource_dir) = manager.path().resource_dir() {
+        candidates.push(resource_dir.join("OverlayHost.exe"));
+    }
+
+    if let Ok(current_dir) = std::env::current_dir() {
+        if current_dir
+            .file_name()
+            .and_then(|name| name.to_str())
+            .is_some_and(|name| name.eq_ignore_ascii_case("src-tauri"))
+        {
+            candidates.push(current_dir.join("resources").join("OverlayHost.exe"));
+        }
+        candidates.push(
+            current_dir
+                .join("src-tauri")
+                .join("resources")
+                .join("OverlayHost.exe"),
+        );
+    }
+
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(parent) = exe.parent() {
+            candidates.push(parent.join("OverlayHost.exe"));
+        }
+    }
+
+    candidates
+}
+
+/// Start the host and hand it to the app to own.
+///
+/// Always leaves an `OverlayHostProcess` managed, even when nothing started, so
+/// that the stop path has something to find and does not have to distinguish
+/// "no host" from "state never registered".
+pub fn spawn_and_manage<M: Manager<tauri::Wry>>(manager: &M) {
+    let candidates = candidates(manager);
+    let Some(path) = candidates.iter().find(|candidate| candidate.exists()) else {
+        warn!("⚠️ OverlayHost.exe not found. Tried: {:?}", candidates);
+        manager.manage(OverlayHostProcess::new(None));
+        return;
+    };
+
+    info!("🚀 Spawning OverlayHost from: {:?}", path);
+    match Command::new(path).spawn() {
+        Ok(child) => {
+            info!("✅ OverlayHost spawned (PID: {})", child.id());
+            // Tied to this process, so a crash cannot leave it holding its own
+            // image file open inside the install directory.
+            crate::process_lifetime::attach_to_app_lifetime(&child);
+            manager.manage(OverlayHostProcess::new(Some(child)));
+        }
+        Err(error) => {
+            warn!("⚠️ Failed to spawn OverlayHost: {}", error);
+            manager.manage(OverlayHostProcess::new(None));
+        }
     }
 }
 

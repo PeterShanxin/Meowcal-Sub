@@ -57,9 +57,7 @@ const defaultSettings: AppSettings = {
     foundryLocal: { model: null, timeoutMs: 30000 },
     ocr: defaultOcr,
   },
-  autoStart: false,
   minimizeToTray: true,
-  startWithWindows: false,
 };
 
 function mergeSettings(value: Partial<AppSettings> | null): AppSettings {
@@ -341,10 +339,7 @@ export class AppController {
     }, 250);
   }
 
-  async updatePreference(
-    kind: "minimizeToTray" | "startWithWindows",
-    enabled: boolean,
-  ): Promise<void> {
+  async updatePreference(kind: "minimizeToTray", enabled: boolean): Promise<void> {
     const settings = structuredClone(this.snapshot.settings);
     settings[kind] = enabled;
     this.publish({ settings });

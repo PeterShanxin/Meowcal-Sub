@@ -154,3 +154,35 @@ impl OcrResult {
         self.text.trim().is_empty()
     }
 }
+
+#[cfg(test)]
+mod result_tests {
+    use super::OcrResult;
+
+    /// Windows returns the stray character stranded at a capture region's edge
+    /// as its own line as readily as it returns it inside one. On its own line
+    /// it has no CJK neighbour, so the per-line trim correctly leaves it alone
+    /// - and joining then reinstated it beside the dialogue, which is how a
+    /// bare 0 reached the translator. Reported as issue #54.
+    #[test]
+    fn a_stray_character_on_its_own_line_does_not_survive_the_join() {
+        let result = OcrResult::new(vec![
+            "虽 然 想 完 全 复 刻 再 展 开 的".replace(' ', ""),
+            "0".to_string(),
+        ]);
+
+        assert_eq!(result.text, "虽然想完全复刻再展开的");
+        assert_eq!(
+            result.lines.len(),
+            2,
+            "the recognised lines stay as they were"
+        );
+    }
+
+    /// Nothing distinguishes a result that is only the stray character from a
+    /// subtitle that really is a lone digit, so it is kept.
+    #[test]
+    fn a_result_that_is_nothing_but_a_stray_character_survives() {
+        assert_eq!(OcrResult::new(vec!["0".to_string()]).text, "0");
+    }
+}

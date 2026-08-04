@@ -55,14 +55,8 @@ pub struct AppConfig {
     #[serde(default)]
     pub window_preferences: WindowPreferences,
 
-    /// Whether to start translation automatically when app opens
-    pub auto_start: bool,
-
     /// Whether to minimize to system tray instead of closing
     pub minimize_to_tray: bool,
-
-    /// Whether to start with Windows
-    pub start_with_windows: bool,
 }
 
 /// Configuration for the subtitle overlay appearance
@@ -391,9 +385,7 @@ impl Default for AppConfig {
             last_capture_region: None,
             last_capture_scale_factor: None,
             window_preferences: WindowPreferences::default(),
-            auto_start: false,
             minimize_to_tray: true,
-            start_with_windows: false,
         }
     }
 }
