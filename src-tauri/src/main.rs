@@ -29,11 +29,8 @@ use tracing_subscriber::{EnvFilter, FmtSubscriber};
 use meowcal_sub::commands::{self, AppState};
 use meowcal_sub::config::load_config;
 use meowcal_sub::ipc::{IpcMessage, IpcServer};
-use meowcal_sub::overlay_host_process::OverlayHostProcess;
 use meowcal_sub::sync_utils::lock_or_recover;
 use meowcal_sub::{http_server, legacy_translate_locally};
-use std::path::PathBuf;
-use std::process::Command;
 use std::sync::Arc;
 
 const LOG_RETENTION_DAYS: u64 = 7;
@@ -292,6 +289,7 @@ fn main() {
 
             // Load persisted config
             let loaded_config = load_config(app.handle());
+
             {
                 let state = app.state::<AppState>();
                 *lock_or_recover(&state.config) = loaded_config.clone();
@@ -326,62 +324,7 @@ fn main() {
             let should_spawn_overlay_host = use_winui_selector || use_winui_overlay;
 
             if should_spawn_overlay_host {
-                let mut overlay_candidates: Vec<PathBuf> = Vec::new();
-
-                if let Ok(resource_dir) = app.path().resource_dir() {
-                    overlay_candidates.push(resource_dir.join("OverlayHost.exe"));
-                }
-
-                if let Ok(current_dir) = std::env::current_dir() {
-                    if current_dir
-                        .file_name()
-                        .and_then(|name| name.to_str())
-                        .is_some_and(|name| name.eq_ignore_ascii_case("src-tauri"))
-                    {
-                        overlay_candidates.push(current_dir.join("resources").join("OverlayHost.exe"));
-                    }
-                    overlay_candidates.push(
-                        current_dir
-                            .join("src-tauri")
-                            .join("resources")
-                            .join("OverlayHost.exe"),
-                    );
-                }
-
-                if let Ok(exe) = std::env::current_exe() {
-                    if let Some(parent) = exe.parent() {
-                        overlay_candidates.push(parent.join("OverlayHost.exe"));
-                    }
-                }
-
-                let overlay_host_path = overlay_candidates
-                    .iter()
-                    .find(|candidate| candidate.exists())
-                    .cloned();
-
-                match overlay_host_path {
-                    Some(overlay_host_path) => {
-                        info!("🚀 Spawning OverlayHost from: {:?}", overlay_host_path);
-                        match Command::new(&overlay_host_path).spawn() {
-                            Ok(child) => {
-                                info!("✅ OverlayHost spawned (PID: {})", child.id());
-                                meowcal_sub::process_lifetime::attach_to_app_lifetime(&child);
-                                app.manage(OverlayHostProcess::new(Some(child)));
-                            }
-                            Err(e) => {
-                                warn!("⚠️ Failed to spawn OverlayHost: {}", e);
-                                app.manage(OverlayHostProcess::new(None));
-                            }
-                        }
-                    }
-                    None => {
-                        warn!(
-                            "⚠️ OverlayHost.exe not found. Tried: {:?}",
-                            overlay_candidates
-                        );
-                        app.manage(OverlayHostProcess::new(None));
-                    }
-                }
+                meowcal_sub::overlay_host_process::spawn_and_manage(app);
 
                 // --- Start IPC server ---
                 let app_handle = app.handle().clone();
@@ -402,7 +345,9 @@ fn main() {
                 info!(
                     "Skipping OverlayHost + IPC server (premium legacy). Set MEOWCAL_USE_WINUI_SELECTOR=1 or MEOWCAL_USE_WINUI_OVERLAY=1 to enable."
                 );
-                app.manage(OverlayHostProcess::new(None));
+                app.manage(meowcal_sub::overlay_host_process::OverlayHostProcess::new(
+                    None,
+                ));
             }
 
             // Create menu items for the tray
