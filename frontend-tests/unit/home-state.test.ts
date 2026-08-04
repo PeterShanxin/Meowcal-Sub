@@ -62,6 +62,8 @@ function snapshot(patch: Partial<UiSnapshot> = {}): UiSnapshot {
     error: null,
     notice: null,
     developerMode: false,
+    update: { kind: "idle" },
+    appVersion: "0.6.6",
     ...patch,
   };
 }

@@ -48,6 +48,22 @@ The support script uses the same embedded manifest, sizes, SHA-256 hashes,
 architecture selection, preflight requirements, and rollback layout as the
 app. It is not an alternative model-selection interface.
 
+## Staying up to date
+
+**Settings → Updates → Check for updates** asks GitHub whether a newer release
+exists. Nothing is checked or downloaded until that button is pressed, and
+installing is a second, separate confirmation.
+
+Installing downloads the architecture-matched installer, verifies it against a
+signature the app was built with, closes Meowcal Sub, upgrades in place, and
+reopens it. Settings, onboarding state, and the downloaded engine and model are
+untouched.
+
+The installers are not code-signed, so applying an update can raise a Windows
+SmartScreen prompt in the same way the first install does. The signature the
+updater verifies proves the download is the one this project published; it is
+not the same thing as an Authenticode certificate.
+
 ## Development prerequisites
 
 - Windows 11;

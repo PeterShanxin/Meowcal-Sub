@@ -8,6 +8,7 @@ import type {
 } from "./contracts";
 import { pickSampleTranslation } from "./sample-translations";
 import { applyLanguageSelection, ensureDistinctLanguagePair } from "./languages";
+import { UpdateController } from "./update-controller";
 
 type Subscriber = (snapshot: UiSnapshot) => void;
 
@@ -99,7 +100,10 @@ export class AppController {
     error: null,
     notice: null,
     developerMode: localStorage.getItem("meowcal.developerMode") === "true",
+    update: { kind: "idle" },
+    appVersion: null,
   };
+  private updates = new UpdateController((patch) => this.publish(patch));
 
   constructor(subscriber: Subscriber) {
     this.subscriber = subscriber;
@@ -134,6 +138,7 @@ export class AppController {
       region: region ?? merged.lastCaptureRegion ?? null,
       running,
       busy: "idle",
+      ...(await this.updates.initialState()),
     });
     await this.setupEvents();
     if (!browserMode && localStorage.getItem(ONBOARDING_COMPLETE_KEY) !== "true") {
@@ -363,6 +368,14 @@ export class AppController {
     } catch (error) {
       this.publish({ busy: "idle", error: errorMessage(error) });
     }
+  }
+
+  async checkForUpdates(): Promise<void> {
+    await this.updates.check();
+  }
+
+  async installUpdate(): Promise<void> {
+    await this.updates.install();
   }
 
   setDeveloperMode(enabled: boolean): void {

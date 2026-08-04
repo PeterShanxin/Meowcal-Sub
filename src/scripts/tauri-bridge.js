@@ -306,9 +306,35 @@
         isMaximized: async () => (await currentWindow()?.isMaximized()) === true,
     } : undefined;
 
+    // In-app update. The plugins publish themselves on `window.__TAURI__`
+    // because the app builds with `withGlobalTauri`, so there is nothing to
+    // import - but a build without the plugins registered would leave these
+    // undefined, and the Settings screen has to degrade rather than throw.
+    //
+    // `check()` resolves to null when the endpoint answered and this install is
+    // already current. Older plugin builds returned an object with
+    // `available: false` instead, so both are treated as "nothing to do".
+    const updater = () => window.__TAURI__?.updater;
+    const updates = isTauri && updater() ? {
+        currentVersion: () => window.__TAURI__.app.getVersion(),
+        check: async () => {
+            const update = await updater().check();
+            if (!update || update.available === false) {
+                return null;
+            }
+            return {
+                version: update.version,
+                notes: update.body || null,
+                install: (onProgress) => update.downloadAndInstall(onProgress),
+            };
+        },
+        restart: () => window.__TAURI__.process.relaunch(),
+    } : undefined;
+
     // Create the bridge object
     const TauriBridge = {
         windowControls,
+        updates,
 
         // Core functions
         invoke,

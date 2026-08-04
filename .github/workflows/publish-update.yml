@@ -1,0 +1,146 @@
+name: Publish Update
+
+# Copies a release's assets from this private repository to the public mirror
+# and marks the mirror release as latest.
+#
+# This repository is private, so its release assets are not downloadable without
+# a token; the in-app updater has no token and reads
+# `https://github.com/PeterShanxin/Meowcal-Sub-releases/releases/latest/download/latest.json`
+# instead. Running this workflow is therefore the moment an update becomes live
+# for every installed copy - it is deliberately separate from packaging, and
+# deliberately manual, so it happens only after the release's manual gate.
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Semantic version without the v prefix, for example 0.6.6
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+env:
+  MIRROR_REPO: PeterShanxin/Meowcal-Sub-releases
+
+jobs:
+  publish:
+    name: Publish to the public mirror
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve the release to mirror
+        id: release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_VERSION: ${{ inputs.version }}
+        run: |
+          if ($env:RELEASE_VERSION -notmatch '^\d+\.\d+\.\d+$') {
+            throw "Version must use major.minor.patch without a v prefix."
+          }
+          $tag = "v$env:RELEASE_VERSION"
+
+          $release = gh release view $tag --repo $env:GITHUB_REPOSITORY --json isDraft,assets |
+            ConvertFrom-Json
+          if ($LASTEXITCODE -ne 0) {
+            throw "Release $tag does not exist in $env:GITHUB_REPOSITORY."
+          }
+          if ($release.isDraft) {
+            # A draft has not passed the manual gate, and mirroring it would put
+            # an unapproved build in front of every installed copy.
+            throw "Release $tag is still a draft. Publish it here before mirroring it."
+          }
+
+          $names = @($release.assets | ForEach-Object { $_.name })
+          if ($names -notcontains "latest.json") {
+            throw "Release $tag has no latest.json; the updater would have nothing to read."
+          }
+
+          "tag=$tag" >> $env:GITHUB_OUTPUT
+
+      - name: Download the release assets
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          New-Item -ItemType Directory -Path mirror-assets | Out-Null
+          gh release download ${{ steps.release.outputs.tag }} `
+            --repo $env:GITHUB_REPOSITORY `
+            --dir mirror-assets
+          if ($LASTEXITCODE -ne 0) {
+            throw "Failed to download assets for ${{ steps.release.outputs.tag }}."
+          }
+
+      - name: Verify the manifest points at this mirror and this tag
+        shell: pwsh
+        run: |
+          # A manifest built against the wrong repository or tag produces a
+          # release that looks complete and 404s for every user who asks for it.
+          $manifest = Get-Content mirror-assets/latest.json -Raw | ConvertFrom-Json
+          $expectedPrefix =
+            "https://github.com/$env:MIRROR_REPO/releases/download/${{ steps.release.outputs.tag }}/"
+
+          if ($manifest.version -ne "${{ inputs.version }}") {
+            throw "latest.json declares $($manifest.version), not ${{ inputs.version }}."
+          }
+          foreach ($platform in @("windows-x86_64", "windows-aarch64")) {
+            $entry = $manifest.platforms.$platform
+            if (-not $entry) {
+              throw "latest.json has no $platform entry."
+            }
+            if (-not $entry.url.StartsWith($expectedPrefix)) {
+              throw "$platform points at $($entry.url), outside $expectedPrefix."
+            }
+            $asset = Split-Path -Leaf $entry.url
+            if (-not (Test-Path -LiteralPath "mirror-assets/$asset")) {
+              throw "$platform names $asset, which is not among the release assets."
+            }
+          }
+
+      - name: Create the public mirror release
+        shell: pwsh
+        env:
+          # A fine-grained token with Contents: read and write on the mirror
+          # repository only. `github.token` is scoped to this repository and
+          # cannot write to another one.
+          GH_TOKEN: ${{ secrets.RELEASE_MIRROR_TOKEN }}
+          RELEASE_VERSION: ${{ inputs.version }}
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:GH_TOKEN)) {
+            throw "RELEASE_MIRROR_TOKEN is not set; the mirror cannot be written to."
+          }
+          $tag = "${{ steps.release.outputs.tag }}"
+
+          gh release view $tag --repo $env:MIRROR_REPO *> $null
+          if ($LASTEXITCODE -eq 0) {
+            throw "Release $tag already exists in $env:MIRROR_REPO; refusing to overwrite it."
+          }
+
+          $notesPath = "docs/releases/$tag.md"
+          if (-not (Test-Path -LiteralPath $notesPath -PathType Leaf)) {
+            throw "Missing release notes: $notesPath"
+          }
+
+          $assets = @(Get-ChildItem mirror-assets -File | ForEach-Object FullName)
+          gh release create $tag @assets `
+            --repo $env:MIRROR_REPO `
+            --title "Meowcal Sub $tag" `
+            --notes-file $notesPath `
+            --latest
+          if ($LASTEXITCODE -ne 0) {
+            throw "Failed to publish $tag to $env:MIRROR_REPO."
+          }
+
+      - name: Confirm the updater endpoint resolves
+        shell: pwsh
+        run: |
+          # The check every installed copy makes, made once here, unauthenticated.
+          $endpoint = "https://github.com/$env:MIRROR_REPO/releases/latest/download/latest.json"
+          $manifest = Invoke-RestMethod -Uri $endpoint -MaximumRedirection 5
+          if ($manifest.version -ne "${{ inputs.version }}") {
+            throw "The endpoint serves $($manifest.version), not ${{ inputs.version }}."
+          }
+          Write-Host "Updater endpoint serves $($manifest.version)."

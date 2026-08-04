@@ -80,6 +80,8 @@ export class MeowcalApp extends LitElement {
         onRepair: () => void this.controller.openSetup(),
         onTest: () => void this.controller.testTranslation(),
         onDeveloper: (enabled) => this.controller.setDeveloperMode(enabled),
+        onCheckUpdates: () => void this.controller.checkForUpdates(),
+        onInstallUpdate: () => void this.controller.installUpdate(),
       });
     }
 

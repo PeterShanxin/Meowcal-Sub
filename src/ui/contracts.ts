@@ -1,3 +1,5 @@
+import type { DownloadEvent, UpdateStatus } from "./update-state";
+
 export type AppScreen = "home" | "appearance" | "settings";
 export type BusyState = "idle" | "loading" | "warming" | "starting" | "stopping" | "saving";
 export type Tone = "neutral" | "accent" | "success" | "warning" | "danger";
@@ -79,6 +81,9 @@ export interface UiSnapshot {
   error: string | null;
   notice: string | null;
   developerMode: boolean;
+  update: UpdateStatus;
+  /** `null` until the app reports its own version, and always so in browser mode. */
+  appVersion: string | null;
 }
 
 export type PrimaryAction =
@@ -97,6 +102,25 @@ export interface HomePresentation {
   supportTone: Tone;
 }
 
+/** A newer release the updater has already verified the signature of. */
+export interface PendingUpdate {
+  version: string;
+  notes: string | null;
+  /**
+   * Download and hand off to the installer. On Windows this never returns
+   * normally: the installer requires the app to exit, so the process ends
+   * inside this call.
+   */
+  install(onProgress: (event: DownloadEvent) => void): Promise<void>;
+}
+
+export interface UpdatesApi {
+  currentVersion(): Promise<string>;
+  /** `null` means the endpoint answered and nothing newer exists. */
+  check(): Promise<PendingUpdate | null>;
+  restart(): Promise<void>;
+}
+
 export interface TauriBridgeApi {
   invoke<T = unknown>(command: string, args?: Record<string, unknown>): Promise<T>;
   isBrowserMode(): boolean;
@@ -111,6 +135,8 @@ export interface TauriBridgeApi {
     close(): Promise<void>;
     isMaximized(): Promise<boolean>;
   };
+  /** Absent outside Tauri: browser mode has no installation to replace. */
+  updates?: UpdatesApi;
 }
 
 declare global {
