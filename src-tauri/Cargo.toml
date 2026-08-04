@@ -9,7 +9,7 @@
 # Basic info about our app
 name = "meowcal-sub"        # The app name (used in binary and imports)
 default-run = "meowcal-sub"
-version = "0.6.5"           # Version number (semantic versioning: major.minor.patch)
+version = "0.6.6"           # Version number (semantic versioning: major.minor.patch)
 edition = "2021"            # Rust edition (like ES6 vs ES2020 in JavaScript)
 description = "NPU-accelerated subtitle translation for Copilot+ PCs"
 authors = ["PeterShanxin"]
@@ -38,6 +38,18 @@ tauri = { version = "2", features = [
 tauri-plugin-opener = "2"  # Opens URLs/files with system defaults
 tauri-plugin-dialog = "2"  # Native file/folder picker dialogs
 raw-window-handle = "0.6"  # Cross-platform window handle access (for NonRudeHWND)
+
+# In-app update check and apply, plus the restart that follows one.
+#
+# `default-features = false` drops the plugin's rustls/ring stack: this crate
+# graph is deliberately native-TLS only, because ring needs a C toolchain that
+# Windows ARM64 builds do not reliably have. `zip` stays because the updater
+# decides how to unpack from the artifact it downloaded, not from our config.
+tauri-plugin-updater = { version = "2", default-features = false, features = [
+    "native-tls",
+    "zip",
+] }
+tauri-plugin-process = "2"  # Restart into the freshly installed version
 
 # --- Serialization ---
 # Converts Rust structs to/from JSON (for sending data between Rust and JavaScript)

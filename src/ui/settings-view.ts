@@ -1,5 +1,6 @@
 import { html, type TemplateResult } from "lit";
 import type { UiSnapshot } from "./contracts";
+import { deriveUpdatePresentation } from "./update-state";
 
 interface SettingsActions {
   onRecognition(value: "fast" | "balanced" | "accurate"): void;
@@ -7,6 +8,8 @@ interface SettingsActions {
   onRepair(): void;
   onTest(): void;
   onDeveloper(enabled: boolean): void;
+  onCheckUpdates(): void;
+  onInstallUpdate(): void;
 }
 
 function recognition(snapshot: UiSnapshot): "fast" | "balanced" | "accurate" {
@@ -14,6 +17,36 @@ function recognition(snapshot: UiSnapshot): "fast" | "balanced" | "accurate" {
   if (config.enableMultiPass || config.validationStrictness === "strict") return "accurate";
   if (!config.preprocessingEnabled || config.validationStrictness === "permissive") return "fast";
   return "balanced";
+}
+
+function renderUpdates(snapshot: UiSnapshot, actions: SettingsActions): TemplateResult {
+  const update = deriveUpdatePresentation(snapshot.update, snapshot.appVersion);
+  const run = update.action === "install" ? actions.onInstallUpdate : actions.onCheckUpdates;
+  return html`
+    <section class="settings-section" aria-labelledby="updates-heading">
+      <div class="section-heading">
+        <i class="ph ph-arrow-circle-up" aria-hidden="true"></i>
+        <div>
+          <h2 id="updates-heading">Updates</h2>
+          <p>Meowcal Sub only checks when you ask it to.</p>
+        </div>
+      </div>
+      <div class="setting-row">
+        <span><strong>${update.headline}</strong><small>${update.detail}</small></span>
+        <button
+          class="secondary-button"
+          type="button"
+          @click=${() => {
+            if (update.action !== "none") run();
+          }}
+          ?disabled=${update.actionDisabled}
+        >
+          <i class="ph ph-arrow-circle-up" aria-hidden="true"></i> ${update.actionLabel}
+        </button>
+      </div>
+      ${update.notes ? html`<pre class="update-notes">${update.notes}</pre>` : ""}
+    </section>
+  `;
 }
 
 export function renderSettings(snapshot: UiSnapshot, actions: SettingsActions): TemplateResult {
@@ -108,6 +141,8 @@ export function renderSettings(snapshot: UiSnapshot, actions: SettingsActions): 
           </button>
         </div>
       </section>
+
+      ${renderUpdates(snapshot, actions)}
 
       <details class="advanced-panel" ?open=${snapshot.developerMode}>
         <summary>Advanced</summary>
