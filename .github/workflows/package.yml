@@ -26,6 +26,19 @@ jobs:
     name: ${{ inputs.architecture || 'x64' }} MSI and NSIS bundles
     runs-on: ${{ inputs.architecture == 'arm64' && 'windows-11-arm' || 'windows-latest' }}
     steps:
+      - name: Require the update signing key
+        shell: pwsh
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+        run: |
+          # Checked before the twenty-minute build rather than after it. An
+          # empty value here means a caller invoked this reusable workflow
+          # without `secrets: inherit`, which reads as a signing failure at the
+          # very end of packaging and says nothing about the cause.
+          if ([string]::IsNullOrWhiteSpace($env:TAURI_SIGNING_PRIVATE_KEY)) {
+            throw "TAURI_SIGNING_PRIVATE_KEY is empty. A reusable workflow inherits no secrets unless its caller passes 'secrets: inherit'."
+          }
+
       - name: Resolve package contract
         id: package
         shell: pwsh

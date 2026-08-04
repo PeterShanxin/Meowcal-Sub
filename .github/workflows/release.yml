@@ -96,6 +96,9 @@ jobs:
     uses: ./.github/workflows/package.yml
     with:
       architecture: x64
+    # Without this the called workflow sees empty signing secrets and builds
+    # unsignable installers. A reusable workflow inherits nothing by default.
+    secrets: inherit
     permissions:
       contents: read
 
