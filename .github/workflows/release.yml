@@ -120,8 +120,17 @@ jobs:
     env:
       GH_TOKEN: ${{ github.token }}
       RELEASE_VERSION: ${{ needs.validate.outputs.version }}
+      # This repository is private, so its release assets are not downloadable
+      # without a token and cannot serve the updater. The manifest therefore
+      # points at the public mirror, which `publish-update.yml` fills.
+      UPDATE_MIRROR_REPO: PeterShanxin/Meowcal-Sub-releases
     steps:
       - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
 
       - name: Download package artifacts
         uses: actions/download-artifact@v5
@@ -132,20 +141,29 @@ jobs:
       - name: Verify assets and write checksums
         shell: pwsh
         run: |
-          $installers = @(Get-ChildItem release-assets -Recurse -File |
-            Where-Object { $_.Extension -eq ".msi" -or $_.Name -like "*-setup.exe" })
-          if ($installers.Count -ne 4) {
-            throw "Expected four installers (MSI and NSIS for x64 and ARM64), found $($installers.Count)."
-          }
-
-          $architectures = @("x64", "arm64")
-          foreach ($architecture in $architectures) {
-            $matches = @($installers | Where-Object { $_.Name -like "*$architecture*" })
-            if ($matches.Count -ne 2) {
-              throw "Expected two $architecture installers, found $($matches.Count)."
+          # Named per architecture rather than counted, so a run that produced
+          # four x64 files cannot pass as one that produced both architectures.
+          # The signature is checked here too: without it the updater manifest
+          # cannot be built, and that failure belongs before the release exists.
+          $files = @(Get-ChildItem release-assets -Recurse -File)
+          $required = @(
+            @{ Kind = "MSI"; Pattern = "*.msi" },
+            @{ Kind = "NSIS setup"; Pattern = "*-setup.exe" },
+            @{ Kind = "updater signature"; Pattern = "*-setup.exe.sig" }
+          )
+          foreach ($architecture in @("x64", "arm64")) {
+            foreach ($expected in $required) {
+              $found = @($files | Where-Object {
+                $_.Name -like "*$architecture*" -and $_.Name -like $expected.Pattern
+              })
+              if ($found.Count -ne 1) {
+                throw "Expected exactly one $architecture $($expected.Kind), found $($found.Count)."
+              }
             }
           }
 
+          $installers = @($files |
+            Where-Object { $_.Extension -eq ".msi" -or $_.Name -like "*-setup.exe" })
           $checksumLines = $installers |
             Sort-Object Name |
             ForEach-Object {
@@ -153,6 +171,23 @@ jobs:
               "$hash  $($_.Name)"
             }
           Set-Content -LiteralPath release-assets/SHA256SUMS.txt -Value $checksumLines -Encoding utf8NoBOM
+
+      - name: Build the updater manifest
+        shell: pwsh
+        run: |
+          # The URLs name the mirror's copy of this tag's assets, which exist
+          # only once `publish-update.yml` has run. Publishing there is what
+          # turns the update on for every installed copy.
+          node scripts/build-updater-manifest.mjs `
+            --directory release-assets `
+            --version $env:RELEASE_VERSION `
+            --tag "v$env:RELEASE_VERSION" `
+            --repo $env:UPDATE_MIRROR_REPO `
+            --notes-file "docs/releases/v$env:RELEASE_VERSION.md" `
+            --output release-assets/latest.json
+          if ($LASTEXITCODE -ne 0) {
+            throw "Failed to build latest.json for v$env:RELEASE_VERSION."
+          }
 
       - name: Create draft GitHub release
         shell: pwsh
@@ -172,7 +207,8 @@ jobs:
             Where-Object {
               $_.Extension -eq ".msi" -or
               $_.Name -like "*-setup.exe" -or
-              $_.Name -eq "SHA256SUMS.txt"
+              $_.Name -eq "SHA256SUMS.txt" -or
+              $_.Name -eq "latest.json"
             } |
             ForEach-Object FullName)
 
