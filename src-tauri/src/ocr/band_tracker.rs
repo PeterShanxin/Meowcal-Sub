@@ -56,8 +56,11 @@ pub struct BandGroup {
 pub struct DroppedBand {
     pub centre_y: f32,
     pub lines: usize,
-    /// Wording from `Verdict::reason`, for the log line that reports the drop.
-    pub reason: &'static str,
+    /// Why it was held back. Every drop is reported to the caller - nothing is
+    /// discarded silently - but `Verdict::is_worth_reporting` says which are
+    /// worth a log line, since a glimpse is held every few seconds all session
+    /// and logging each would bury the drops that explain a missing subtitle.
+    pub verdict: Verdict,
 }
 
 /// One frame's lines, sorted into what to translate and what to leave.
@@ -128,10 +131,10 @@ impl BandTracker {
                     centre_y: tracked.centre_y(),
                     lines,
                 }),
-                Some(reason) => banding.dropped.push(DroppedBand {
+                Some(_) => banding.dropped.push(DroppedBand {
                     centre_y: tracked.centre_y(),
                     lines: lines.len(),
-                    reason,
+                    verdict,
                 }),
             }
         }
@@ -267,11 +270,11 @@ mod tests {
     #[test]
     fn lines_on_the_same_row_share_a_band() {
         let mut tracker = BandTracker::new(REGION, INTERVAL);
-        let banding = observe(
-            &mut tracker,
-            vec![area(100.0, 1000.0, 200.0), area(320.0, 1006.0, 180.0)],
-            0,
-        );
+        let rows = vec![area(100.0, 1000.0, 200.0), area(320.0, 1006.0, 180.0)];
+        let mut banding = Banding::default();
+        for frame in 0..4u64 {
+            banding = observe(&mut tracker, rows.clone(), frame * INTERVAL);
+        }
         assert_eq!(banding.included.len(), 1);
         assert_eq!(banding.included[0].lines, vec![0, 1]);
     }
@@ -279,22 +282,42 @@ mod tests {
     #[test]
     fn rows_far_apart_are_separate_bands() {
         let mut tracker = BandTracker::new(REGION, INTERVAL);
-        let banding = observe(
-            &mut tracker,
-            vec![area(100.0, 110.0, 200.0), area(100.0, 1000.0, 200.0)],
-            0,
-        );
+        let rows = vec![area(100.0, 110.0, 200.0), area(100.0, 1000.0, 200.0)];
+        let mut banding = Banding::default();
+        for frame in 0..4u64 {
+            banding = observe(&mut tracker, rows.clone(), frame * INTERVAL);
+        }
         assert_eq!(banding.included.len(), 2);
         // Sorted top to bottom so a caller can place translations in order.
         assert!(banding.included[0].centre_y < banding.included[1].centre_y);
     }
 
+    // Default-open, but only once a band has been seen enough to be a band at
+    // all. One sighting is a stray recognition off the video; by the third the
+    // benefit of the doubt applies, long before there is enough history to
+    // judge what kind of band it is.
     #[test]
-    fn a_new_band_is_translated_before_anything_is_known_about_it() {
+    fn a_band_is_translated_once_seen_a_few_times_not_on_first_sight() {
+        let mut tracker = BandTracker::new(REGION, INTERVAL);
+        let first = observe_one(&mut tracker, 100.0, 1000.0, 200.0, 0);
+        assert_eq!(first.included, vec![]);
+        assert_eq!(first.dropped[0].verdict, Verdict::Glimpsed);
+
+        observe_one(&mut tracker, 100.0, 1000.0, 200.0, INTERVAL);
+        let third = observe_one(&mut tracker, 100.0, 1000.0, 200.0, 2 * INTERVAL);
+        assert_eq!(third.dropped, vec![], "three sightings is a band");
+        assert_eq!(third.included.len(), 1);
+    }
+
+    // A glimpse is still reported to the caller - nothing is discarded
+    // silently - it is only marked as not worth a log line of its own.
+    #[test]
+    fn a_glimpse_is_reported_but_not_worth_logging() {
         let mut tracker = BandTracker::new(REGION, INTERVAL);
         let banding = observe_one(&mut tracker, 100.0, 1000.0, 200.0, 0);
-        assert_eq!(banding.dropped, vec![]);
-        assert_eq!(banding.included.len(), 1);
+        assert_eq!(banding.dropped.len(), 1);
+        assert_eq!(banding.dropped[0].lines, 1);
+        assert!(!banding.dropped[0].verdict.is_worth_reporting());
     }
 
     #[test]
@@ -315,7 +338,7 @@ mod tests {
         let banding = observe_one(&mut tracker, 600.0, 574.0, 320.0, 120 * INTERVAL);
         assert_eq!(banding.included, vec![]);
         assert_eq!(banding.dropped.len(), 1);
-        assert_eq!(banding.dropped[0].reason, "unchanging");
+        assert_eq!(banding.dropped[0].verdict, Verdict::Static);
     }
 
     #[test]
@@ -334,7 +357,7 @@ mod tests {
         }
         let banding = observe_one(&mut tracker, 400.0, 700.0, 260.0, 120 * INTERVAL);
         assert_eq!(banding.included, vec![]);
-        assert_eq!(banding.dropped[0].reason, "position unstable");
+        assert_eq!(banding.dropped[0].verdict, Verdict::Scattered);
     }
 
     // The measured session's central finding: a band changes character when

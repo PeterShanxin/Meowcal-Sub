@@ -42,6 +42,25 @@ const MAX_CENTRE_SCATTER: f32 = 0.15;
 /// how it behaves while it is up, not on how often it is up.
 const MIN_CUE_RATE_PER_MINUTE: f32 = 10.0;
 
+/// Most distinct readings per minute on screen that still counts as a subtitle.
+///
+/// A second recorded session ran into end credits: ten evenly spaced bands
+/// spanning the whole frame, holding position well enough to pass the scatter
+/// test - unlike the first session's scene text, which the camera swept around -
+/// and so translated in full. Text that turns over four times faster than
+/// dialogue is not dialogue. Measured subtitles reached 44 and the slowest thing
+/// that was not a subtitle 67, in either session; this sits between them.
+const MAX_CUE_RATE_PER_MINUTE: f32 = 55.0;
+
+/// Observations a band needs before it is worth translating at all.
+///
+/// Two sightings in a ninety-second window is not "not judged yet", it is a
+/// glimpse - and measurement shows that is what stray recognitions off the
+/// video look like, since they never recur often enough to be judged and so
+/// would be translated forever under a default-open rule. A real cue lasts
+/// about five frames, so a band that matters clears this within its first cue.
+const MIN_OBSERVATIONS_TO_TRUST: usize = 3;
+
 /// Observations a band needs before it can be judged at all.
 ///
 /// Small on purpose. The busy bottom band reaches this in about three seconds
@@ -57,6 +76,11 @@ pub enum Verdict {
     /// session, and the top band is exactly the one that takes longest to
     /// gather evidence.
     Warming,
+    /// Seen once or twice and then gone - a stray recognition off the video
+    /// rather than a band that exists. Excluded, because unlike `Warming` this
+    /// is not an absence of evidence but evidence of absence: a real cue lasts
+    /// several frames, and these never recur.
+    Glimpsed,
     /// Holds its position and changes at a subtitle's pace.
     Subtitle,
     /// Holds its position but hardly ever changes - a watermark, a paused
@@ -65,6 +89,9 @@ pub enum Verdict {
     /// Changes constantly and will not hold still horizontally - text that
     /// belongs to the video rather than to the subtitle track.
     Scattered,
+    /// Holds its position but turns over far faster than dialogue - credits
+    /// rolling past, a list scrolling, a timer counting.
+    Churning,
 }
 
 impl Verdict {
@@ -73,6 +100,14 @@ impl Verdict {
     /// Exclusion requires evidence; everything else is included.
     pub fn is_included(self) -> bool {
         matches!(self, Verdict::Warming | Verdict::Subtitle)
+    }
+
+    /// Whether this verdict rests on enough history to be worth reporting.
+    ///
+    /// A glimpse is held back every few seconds all session long, so logging
+    /// each one would bury the drops that actually explain a missing subtitle.
+    pub fn is_worth_reporting(self) -> bool {
+        !matches!(self, Verdict::Glimpsed)
     }
 
     /// Why a band was excluded, for the log line that reports the drop.
@@ -84,6 +119,8 @@ impl Verdict {
         match self {
             Verdict::Static => Some("unchanging"),
             Verdict::Scattered => Some("position unstable"),
+            Verdict::Churning => Some("changing too fast for dialogue"),
+            Verdict::Glimpsed => Some("seen too briefly to be a band"),
             Verdict::Warming | Verdict::Subtitle => None,
         }
     }
@@ -123,14 +160,21 @@ impl BandStats {
 /// and scales oversized ones, so an absolute pixel threshold would mean
 /// different things on different displays.
 pub fn classify(stats: &BandStats, region_width: f32) -> Verdict {
+    if stats.observations < MIN_OBSERVATIONS_TO_TRUST {
+        return Verdict::Glimpsed;
+    }
     if stats.observations < MIN_OBSERVATIONS {
         return Verdict::Warming;
     }
     if stats.centre_scatter > MAX_CENTRE_SCATTER * region_width {
         return Verdict::Scattered;
     }
-    if stats.cue_rate_per_minute() < MIN_CUE_RATE_PER_MINUTE {
+    let rate = stats.cue_rate_per_minute();
+    if rate < MIN_CUE_RATE_PER_MINUTE {
         return Verdict::Static;
+    }
+    if rate > MAX_CUE_RATE_PER_MINUTE {
+        return Verdict::Churning;
     }
     Verdict::Subtitle
 }
@@ -224,6 +268,32 @@ mod tests {
         assert!(verdict.is_included(), "warming bands must still be read");
     }
 
+    // The second session ran into end credits: ten evenly spaced bands that
+    // held position well enough to pass the scatter test and would otherwise
+    // have been translated in full.
+    #[test]
+    fn end_credits_are_not_subtitles() {
+        // 540 frames at 134ms is the block the second session actually held,
+        // and 140-224 cues a minute is the rate it actually turned over at.
+        for cues in [126, 202] {
+            assert_eq!(
+                classify(&stats(540, 200.0, cues, 72_000), 1857.0),
+                Verdict::Churning,
+                "{cues} cues"
+            );
+        }
+    }
+
+    // The gap the ceiling sits in, from both recorded sessions: nothing that
+    // was a subtitle exceeded 44 a minute, and nothing that was not fell below
+    // 67. Both sides are checked so a later tweak cannot quietly close it.
+    #[test]
+    fn the_rate_ceiling_sits_between_what_was_measured() {
+        let per_minute = |rate: usize| stats(600, 100.0, rate, 60_000);
+        assert_eq!(classify(&per_minute(44), 1832.0), Verdict::Subtitle);
+        assert_eq!(classify(&per_minute(67), 1832.0), Verdict::Churning);
+    }
+
     #[test]
     fn only_the_excluded_verdicts_carry_a_reason() {
         assert!(Verdict::Subtitle.is_included());
@@ -231,15 +301,20 @@ mod tests {
         assert!(!Verdict::Scattered.is_included());
         assert_eq!(Verdict::Subtitle.reason(), None);
         assert_eq!(Verdict::Warming.reason(), None);
+        assert!(!Verdict::Churning.is_included());
+        assert!(!Verdict::Glimpsed.is_included());
+        assert!(!Verdict::Glimpsed.is_worth_reporting());
+        assert!(Verdict::Static.is_worth_reporting());
         assert!(Verdict::Static.reason().is_some());
         assert!(Verdict::Scattered.reason().is_some());
+        assert!(Verdict::Churning.reason().is_some());
     }
 
     // The scatter threshold is a fraction of the region, so a narrower capture
     // must judge the same wander more harshly.
     #[test]
     fn the_scatter_threshold_follows_the_region_width() {
-        let wander = stats(100, 200.0, 100, 60_000);
+        let wander = stats(100, 200.0, 40, 60_000);
         assert_eq!(classify(&wander, 1832.0), Verdict::Subtitle);
         assert_eq!(classify(&wander, 800.0), Verdict::Scattered);
     }

@@ -25,6 +25,11 @@ mod windows_ocr;
 #[cfg(test)]
 mod preprocessing_ab;
 
+/// Operator-run replay of a recorded session through the real band tracker.
+/// See the module header; it asserts nothing and is `#[ignore]`d.
+#[cfg(test)]
+mod band_replay;
+
 pub use language::normalize_language_tag;
 pub use preprocessing::*;
 pub use windows_ocr::*;
