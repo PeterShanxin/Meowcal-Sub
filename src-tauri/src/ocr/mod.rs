@@ -15,6 +15,7 @@ mod band_log;
 mod band_tracker;
 mod band_verdict;
 mod band_window;
+mod banding;
 pub mod frame_budget;
 mod language;
 mod line_geometry;
@@ -35,8 +36,8 @@ mod band_replay;
 
 pub use band_filter::BandFilter;
 pub use language::normalize_language_tag;
-pub use recognition_mode::RecognitionMode;
 pub use preprocessing::*;
+pub use recognition_mode::RecognitionMode;
 pub use windows_ocr::*;
 
 use thiserror::Error;

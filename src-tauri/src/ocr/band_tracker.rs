@@ -9,8 +9,13 @@
 // How a frame's rectangles become one band's position is in `band_geometry`.
 // =============================================================================
 
-use super::band_verdict::{classify, Verdict};
+use super::band_verdict::classify;
+// Only `verdicts` and the tests name the verdict type; the pipeline acts on
+// what `observe` hands back.
+#[cfg(test)]
+use super::band_verdict::Verdict;
 use super::band_window::{TrackedBand, WINDOW_MS};
+use super::banding::{BandGroup, Banding, DroppedBand};
 use super::LineBox;
 
 /// How long a band survives without being seen before it is forgotten.
@@ -18,34 +23,6 @@ use super::LineBox;
 /// Matches the window: once every observation has expired there is nothing left
 /// to judge it on, so keeping the band would only preserve a stale verdict.
 const RETIRE_MS: u64 = WINDOW_MS;
-
-/// Lines that share a band, with where to put their translation.
-#[derive(Debug, Clone, PartialEq)]
-pub struct BandGroup {
-    /// Vertical centre of the band in captured pixels.
-    pub centre_y: f32,
-    /// Indices into the `lines` slice that was observed, in the order given.
-    pub lines: Vec<usize>,
-}
-
-/// A band whose lines were held back, and why.
-#[derive(Debug, Clone, PartialEq)]
-pub struct DroppedBand {
-    pub centre_y: f32,
-    pub lines: usize,
-    /// Why it was held back. Every drop is reported to the caller - nothing is
-    /// discarded silently - but `Verdict::is_worth_reporting` says which are
-    /// worth a log line, since a glimpse is held every few seconds all session
-    /// and logging each would bury the drops that explain a missing subtitle.
-    pub verdict: Verdict,
-}
-
-/// One frame's lines, sorted into what to translate and what to leave.
-#[derive(Debug, Clone, Default, PartialEq)]
-pub struct Banding {
-    pub included: Vec<BandGroup>,
-    pub dropped: Vec<DroppedBand>,
-}
 
 /// Remembers what each horizontal band has been doing.
 ///
@@ -106,16 +83,17 @@ impl BandTracker {
             let raw = classify(&tracked.stats(interval), width);
             let verdict = tracked.settle(raw);
             let tracked = &self.bands[band];
-            match verdict.reason() {
-                None => banding.included.push(BandGroup {
+            if verdict.is_included() {
+                banding.included.push(BandGroup {
                     centre_y: tracked.centre_y(),
                     lines,
-                }),
-                Some(_) => banding.dropped.push(DroppedBand {
+                });
+            } else {
+                banding.dropped.push(DroppedBand {
                     centre_y: tracked.centre_y(),
                     lines: lines.len(),
                     verdict,
-                }),
+                });
             }
         }
 
@@ -125,7 +103,9 @@ impl BandTracker {
                 lines: ungrouped,
             });
         }
-        banding.included.sort_by(|a, b| a.centre_y.total_cmp(&b.centre_y));
+        banding
+            .included
+            .sort_by(|a, b| a.centre_y.total_cmp(&b.centre_y));
         banding
     }
 
@@ -136,7 +116,12 @@ impl BandTracker {
         self.region_width
     }
 
-    /// What this tracker currently believes about each band, for diagnostics.
+    /// What this tracker currently believes about each band.
+    ///
+    /// Only the tests and `band_replay` ask - the pipeline acts on the verdict
+    /// it is handed per frame rather than interrogating the tracker - so this
+    /// is not compiled into the app.
+    #[cfg(test)]
     pub fn verdicts(&self) -> Vec<(f32, Verdict)> {
         self.bands
             .iter()
@@ -332,7 +317,13 @@ mod tests {
         // Now the same band goes static for longer than the window.
         let frozen_from = 200 * INTERVAL;
         for frame in 0..500u64 {
-            observe_one(&mut tracker, 610.0, 1000.0, 300.0, frozen_from + frame * INTERVAL);
+            observe_one(
+                &mut tracker,
+                610.0,
+                1000.0,
+                300.0,
+                frozen_from + frame * INTERVAL,
+            );
         }
         assert_eq!(tracker.verdicts()[0].1, Verdict::Static);
     }
@@ -342,7 +333,13 @@ mod tests {
         let mut tracker = BandTracker::new(REGION, INTERVAL);
         play(&mut tracker, 1000.0, 40, 8, 0);
         assert_eq!(tracker.verdicts().len(), 1);
-        observe_one(&mut tracker, 100.0, 110.0, 200.0, 40 * INTERVAL + RETIRE_MS + 1);
+        observe_one(
+            &mut tracker,
+            100.0,
+            110.0,
+            200.0,
+            40 * INTERVAL + RETIRE_MS + 1,
+        );
         let remaining = tracker.verdicts();
         assert_eq!(remaining.len(), 1, "the stale band should be gone");
         assert!(remaining[0].0 < 200.0, "only the new band should remain");

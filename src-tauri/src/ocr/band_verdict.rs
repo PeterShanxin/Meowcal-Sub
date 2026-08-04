@@ -189,8 +189,7 @@ pub fn classify(stats: &BandStats, region_width: f32) -> Verdict {
 pub fn is_same_cue(width: f32, chars: usize, previous_width: f32, previous_chars: usize) -> bool {
     let width_slack = (0.08 * previous_width).max(8.0);
     let chars_slack = ((0.15 * previous_chars as f32) as usize).max(2);
-    (width - previous_width).abs() <= width_slack
-        && chars.abs_diff(previous_chars) <= chars_slack
+    (width - previous_width).abs() <= width_slack && chars.abs_diff(previous_chars) <= chars_slack
 }
 
 #[cfg(test)]
@@ -199,7 +198,12 @@ mod tests {
 
     const REGION: f32 = 1832.0;
 
-    fn stats(observations: usize, centre_scatter: f32, cues: usize, on_screen_ms: u64) -> BandStats {
+    fn stats(
+        observations: usize,
+        centre_scatter: f32,
+        cues: usize,
+        on_screen_ms: u64,
+    ) -> BandStats {
         BandStats {
             observations,
             centre_scatter,

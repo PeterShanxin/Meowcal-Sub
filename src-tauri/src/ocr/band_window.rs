@@ -238,7 +238,13 @@ mod tests {
         let mut band = TrackedBand::new(1000.0);
         for frame in 0..6u64 {
             let right = 900.0 + frame as f32 * 200.0;
-            band.record(1000.0, 600.0, right, 20 + frame as usize * 12, frame * INTERVAL);
+            band.record(
+                1000.0,
+                600.0,
+                right,
+                20 + frame as usize * 12,
+                frame * INTERVAL,
+            );
         }
         assert_eq!(band.stats(INTERVAL).cues, 6);
     }

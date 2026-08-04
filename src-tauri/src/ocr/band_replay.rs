@@ -172,8 +172,7 @@ fn replay_a_recorded_session() {
     );
 
     println!("\n     y   translated-by-decile   held-by-decile");
-    let rows: std::collections::BTreeSet<i64> =
-        kept.keys().chain(held.keys()).copied().collect();
+    let rows: std::collections::BTreeSet<i64> = kept.keys().chain(held.keys()).copied().collect();
     for y in rows {
         let show = |counts: Option<&[usize; 10]>| match counts {
             None => "..........".to_string(),
@@ -188,9 +187,8 @@ fn replay_a_recorded_session() {
                 })
                 .collect(),
         };
-        let total = |counts: Option<&[usize; 10]>| {
-            counts.map_or(0, |counts| counts.iter().sum::<usize>())
-        };
+        let total =
+            |counts: Option<&[usize; 10]>| counts.map_or(0, |counts| counts.iter().sum::<usize>());
         let (translated, withheld) = (total(kept.get(&y)), total(held.get(&y)));
         // A band that is sometimes translated and sometimes not, in the same
         // stretch, is a verdict flickering on a threshold - which shows up as a
