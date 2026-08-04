@@ -108,6 +108,7 @@ jobs:
     uses: ./.github/workflows/package.yml
     with:
       architecture: arm64
+    secrets: inherit
     permissions:
       contents: read
 
