@@ -10,6 +10,9 @@
 // =============================================================================
 
 mod band_log;
+mod band_tracker;
+mod band_verdict;
+mod band_window;
 pub mod frame_budget;
 mod language;
 mod line_geometry;
