@@ -78,7 +78,7 @@ fn bounds(line: &OcrLine) -> Option<LineBox> {
         seen = true;
     }
 
-    seen.then(|| LineBox {
+    seen.then_some(LineBox {
         x: left,
         y: top,
         width: right - left,
