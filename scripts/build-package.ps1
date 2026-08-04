@@ -45,7 +45,10 @@ try {
         throw "OverlayHost build failed for $Architecture."
     }
 
-    npx --yes @tauri-apps/cli@2 build --target $targetTriple --bundles $bundleArgs
+    # The pinned CLI from package.json, never whatever npx would fetch. A CLI
+    # older than the `tauri` crate cannot patch `__TAURI_BUNDLE_TYPE` into the
+    # binary, and the updater needs that byte to know how it was installed.
+    npx --no -- tauri build --target $targetTriple --bundles $bundleArgs
     if ($LASTEXITCODE -ne 0) {
         throw "Tauri package build failed for $Architecture."
     }
