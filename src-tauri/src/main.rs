@@ -29,11 +29,12 @@ use tracing_subscriber::{EnvFilter, FmtSubscriber};
 use meowcal_sub::commands::{self, AppState};
 use meowcal_sub::config::load_config;
 use meowcal_sub::ipc::{IpcMessage, IpcServer};
+use meowcal_sub::overlay_host_process::OverlayHostProcess;
 use meowcal_sub::sync_utils::lock_or_recover;
 use meowcal_sub::{http_server, legacy_translate_locally};
 use std::path::PathBuf;
-use std::process::{Child, Command};
-use std::sync::{Arc, Mutex};
+use std::process::Command;
+use std::sync::Arc;
 
 const LOG_RETENTION_DAYS: u64 = 7;
 const DEFAULT_LOG_FILTER: &str = "meowcal_sub=debug,translation_io=info,tauri=info,axum=info,tower_http=info,hyper=warn,hyper_util=warn,reqwest=warn";
@@ -41,9 +42,8 @@ const DEFAULT_LOG_FILTER: &str = "meowcal_sub=debug,translation_io=info,tauri=in
 // =============================================================================
 // OVERLAY HOST PROCESS MANAGEMENT
 // =============================================================================
-
-/// Managed state for tracking the OverlayHost child process
-struct OverlayHostProcess(Arc<Mutex<Option<Child>>>);
+// Ownership of the child itself lives in `overlay_host_process`, because the
+// update handoff has to stop it too.
 
 /// Get the appropriate runtime identifier for the current architecture.
 /// Used to locate OverlayHost.exe in the correct architecture-specific folder.
@@ -275,9 +275,15 @@ fn main() {
             commands::wizard_install_engine,
             commands::wizard_start_service,
             commands::wizard_test_translation,
+            // In-app update
+            meowcal_sub::update_handoff::prepare_for_update,
         ])
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
+        // The update check and its apply step. `process` is what restarts the
+        // app into the version the installer just wrote.
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_process::init())
         .manage(AppState::default())
         .on_page_load(meowcal_sub::window_lifecycle::handle_page_load)
         // Set up the system tray icon
@@ -360,11 +366,11 @@ fn main() {
                             Ok(child) => {
                                 info!("✅ OverlayHost spawned (PID: {})", child.id());
                                 meowcal_sub::process_lifetime::attach_to_app_lifetime(&child);
-                                app.manage(OverlayHostProcess(Arc::new(Mutex::new(Some(child)))));
+                                app.manage(OverlayHostProcess::new(Some(child)));
                             }
                             Err(e) => {
                                 warn!("⚠️ Failed to spawn OverlayHost: {}", e);
-                                app.manage(OverlayHostProcess(Arc::new(Mutex::new(None))));
+                                app.manage(OverlayHostProcess::new(None));
                             }
                         }
                     }
@@ -373,7 +379,7 @@ fn main() {
                             "⚠️ OverlayHost.exe not found. Tried: {:?}",
                             overlay_candidates
                         );
-                        app.manage(OverlayHostProcess(Arc::new(Mutex::new(None))));
+                        app.manage(OverlayHostProcess::new(None));
                     }
                 }
 
@@ -396,7 +402,7 @@ fn main() {
                 info!(
                     "Skipping OverlayHost + IPC server (premium legacy). Set MEOWCAL_USE_WINUI_SELECTOR=1 or MEOWCAL_USE_WINUI_OVERLAY=1 to enable."
                 );
-                app.manage(OverlayHostProcess(Arc::new(Mutex::new(None))));
+                app.manage(OverlayHostProcess::new(None));
             }
 
             // Create menu items for the tray
@@ -472,7 +478,9 @@ fn main() {
                 tauri::WindowEvent::CloseRequested { api, .. } => {
                     meowcal_sub::window_lifecycle::handle_close_requested(window, api);
                 }
-                tauri::WindowEvent::Destroyed => kill_overlay_host(window),
+                tauri::WindowEvent::Destroyed => {
+                    meowcal_sub::overlay_host_process::stop(window)
+                }
                 _ => {}
             }
         })
@@ -483,20 +491,9 @@ fn main() {
         if matches!(event, tauri::RunEvent::Exit) {
             meowcal_sub::window_lifecycle::persist_main_geometry_from_app(app_handle);
             meowcal_sub::hy_mt_runtime::shutdown_owned();
-            kill_overlay_host(app_handle);
+            meowcal_sub::overlay_host_process::stop(app_handle);
         }
     });
-}
-
-/// Stop the OverlayHost child. Reached from both clean exit paths; every other
-/// way the app can end is covered by `process_lifetime`'s job object.
-fn kill_overlay_host<M: tauri::Manager<tauri::Wry>>(manager: &M) {
-    if let Some(process) = manager.try_state::<OverlayHostProcess>() {
-        if let Some(mut child) = lock_or_recover(&process.0).take() {
-            let _ = child.kill();
-            info!("🛑 Killed OverlayHost process");
-        }
-    }
 }
 
 // =============================================================================

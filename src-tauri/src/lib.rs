@@ -27,6 +27,9 @@ pub mod llm;
 
 /// Overlay window management - shows floating subtitles
 pub mod overlay;
+
+/// Ownership of the WinUI OverlayHost child process
+pub mod overlay_host_process;
 pub mod pipeline_pacing;
 pub mod pipeline_session;
 pub mod pipeline_translation;
@@ -58,6 +61,9 @@ pub mod ipc;
 
 /// Synchronization utilities - safe mutex/RwLock handling with poison recovery
 pub mod sync_utils;
+
+/// Quiescing the app so an update installer can replace its files
+pub mod update_handoff;
 pub mod window_lifecycle;
 pub mod wizard_contracts;
 
