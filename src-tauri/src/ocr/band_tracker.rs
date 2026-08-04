@@ -5,20 +5,8 @@
 // assembles that history: which lines belong to the same horizontal band, what
 // each frame contributed, and when to forget it again.
 //
-// Two things here are load-bearing and were both settled by measurement rather
-// than argument.
-//
-// The window is bounded by *age*, not just by count. Over the measured session
-// two bands were live video text for sixteen minutes and then became a frozen
-// screen when playback stopped. A band is not one thing forever, so evidence
-// has to expire or a band is judged on what it used to be.
-//
-// Horizontal position is summarised as the *smallest* scatter among the left
-// edge, the centre and the right edge. Centred subtitles hold their centre;
-// left-aligned ones hold their left edge while the centre wanders with line
-// length. Taking the minimum covers all three alignments, and measurement
-// confirmed it costs nothing: text belonging to the video scattered by 388-574
-// pixels on every edge at once, because the camera moves all of them together.
+// What a band remembers, and why its evidence expires, is in `band_window`.
+// How a frame's rectangles become one band's position is in `band_geometry`.
 // =============================================================================
 
 use super::band_verdict::{classify, Verdict};
@@ -30,17 +18,6 @@ use super::LineBox;
 /// Matches the window: once every observation has expired there is nothing left
 /// to judge it on, so keeping the band would only preserve a stale verdict.
 const RETIRE_MS: u64 = WINDOW_MS;
-
-/// How close two vertical centres must be to count as the same band, as a
-/// multiple of the typical line height in the frame.
-///
-/// Relative to line height rather than absolute so it holds at any resolution.
-const BAND_TOLERANCE: f32 = 0.75;
-
-/// Fallback line height when a frame reports no usable geometry, so grouping
-/// still has a tolerance to work with rather than putting every line in its own
-/// band.
-const ASSUMED_LINE_HEIGHT: f32 = 32.0;
 
 /// Lines that share a band, with where to put their translation.
 #[derive(Debug, Clone, PartialEq)]
@@ -100,7 +77,7 @@ impl BandTracker {
     pub fn observe(&mut self, texts: &[String], boxes: &[LineBox], at_ms: u64) -> Banding {
         self.retire(at_ms);
 
-        let tolerance = self.tolerance(boxes);
+        let tolerance = super::band_geometry::tolerance(boxes);
         let mut per_band: Vec<(usize, Vec<usize>)> = Vec::new();
         let mut ungrouped: Vec<usize> = Vec::new();
 
@@ -124,8 +101,11 @@ impl BandTracker {
                 .map(|text| text.chars().count())
                 .sum();
             self.record(band, chars, boxes, &lines, at_ms);
+            let (interval, width) = (self.frame_interval_ms, self.region_width);
+            let tracked = &mut self.bands[band];
+            let raw = classify(&tracked.stats(interval), width);
+            let verdict = tracked.settle(raw);
             let tracked = &self.bands[band];
-            let verdict = classify(&tracked.stats(self.frame_interval_ms), self.region_width);
             match verdict.reason() {
                 None => banding.included.push(BandGroup {
                     centre_y: tracked.centre_y(),
@@ -149,6 +129,13 @@ impl BandTracker {
         banding
     }
 
+    /// The frame width these bands were measured against. A change means the
+    /// region was reselected and the remembered heights no longer refer to
+    /// anything.
+    pub fn region_width(&self) -> f32 {
+        self.region_width
+    }
+
     /// What this tracker currently believes about each band, for diagnostics.
     pub fn verdicts(&self) -> Vec<(f32, Verdict)> {
         self.bands
@@ -160,19 +147,6 @@ impl BandTracker {
                 )
             })
             .collect()
-    }
-
-    fn tolerance(&self, boxes: &[LineBox]) -> f32 {
-        let mut heights: Vec<f32> = boxes
-            .iter()
-            .map(|area| area.height)
-            .filter(|height| *height > 0.0)
-            .collect();
-        if heights.is_empty() {
-            return BAND_TOLERANCE * ASSUMED_LINE_HEIGHT;
-        }
-        heights.sort_by(f32::total_cmp);
-        BAND_TOLERANCE * heights[heights.len() / 2]
     }
 
     fn band_for(&mut self, centre_y: f32, tolerance: f32) -> usize {
@@ -201,20 +175,7 @@ impl BandTracker {
         lines: &[usize],
         at_ms: u64,
     ) {
-        let left = lines
-            .iter()
-            .map(|index| boxes[*index].x)
-            .fold(f32::MAX, f32::min);
-        let right = lines
-            .iter()
-            .map(|index| boxes[*index].x + boxes[*index].width)
-            .fold(f32::MIN, f32::max);
-        let centre_y = lines
-            .iter()
-            .map(|index| boxes[*index].middle_y())
-            .sum::<f32>()
-            / lines.len() as f32;
-
+        let (left, right, centre_y) = super::band_geometry::union(boxes, lines);
         self.bands[band].record(centre_y, left, right, chars, at_ms);
     }
 

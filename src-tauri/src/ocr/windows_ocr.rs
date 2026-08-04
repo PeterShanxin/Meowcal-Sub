@@ -233,7 +233,7 @@ impl WindowsOcr {
         let (lines, boxes) = super::line_geometry::lines_with_boxes(&ocr_result);
 
         // Create the result
-        let result = OcrResult::with_boxes(lines, boxes);
+        let result = OcrResult::with_boxes(lines, boxes, width as f32);
 
         debug!(
             "OCR found {} lines ({} chars, {} significant)",

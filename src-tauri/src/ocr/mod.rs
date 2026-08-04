@@ -9,6 +9,8 @@
 // - Supports many languages
 // =============================================================================
 
+mod band_filter;
+mod band_geometry;
 mod band_log;
 mod band_tracker;
 mod band_verdict;
@@ -17,6 +19,7 @@ pub mod frame_budget;
 mod language;
 mod line_geometry;
 mod preprocessing;
+mod recognition_mode;
 mod text_cleanup;
 mod windows_ocr;
 
@@ -30,7 +33,9 @@ mod preprocessing_ab;
 #[cfg(test)]
 mod band_replay;
 
+pub use band_filter::BandFilter;
 pub use language::normalize_language_tag;
+pub use recognition_mode::RecognitionMode;
 pub use preprocessing::*;
 pub use windows_ocr::*;
 
@@ -86,6 +91,14 @@ pub struct OcrResult {
     /// Empty when the source could not report geometry, so a consumer must
     /// treat it as optional rather than index it against `lines` blindly.
     pub boxes: Vec<LineBox>,
+    /// Width of the frame the boxes are measured in, in the same pixels.
+    ///
+    /// Not the capture region's width: the pipeline normalises a high-DPI
+    /// capture and scales an oversized one before recognition, so this is
+    /// whatever survived that. Band selection expresses its position threshold
+    /// as a fraction of it, which is the only way one threshold can hold across
+    /// displays. Zero when unknown.
+    pub frame_width: f32,
 }
 
 impl OcrResult {
@@ -99,13 +112,18 @@ impl OcrResult {
     /// how `虽然想完全复刻再展开的 0` reached the translator and put a bare 0
     /// inside translated dialogue.
     pub fn new(lines: Vec<String>) -> Self {
-        Self::with_boxes(lines, Vec::new())
+        Self::with_boxes(lines, Vec::new(), 0.0)
     }
 
     /// Create a result that also knows where each line sat.
-    pub fn with_boxes(lines: Vec<String>, boxes: Vec<LineBox>) -> Self {
+    pub fn with_boxes(lines: Vec<String>, boxes: Vec<LineBox>, frame_width: f32) -> Self {
         let text = text_cleanup::trim_edge_noise(&lines.join(" "));
-        Self { text, lines, boxes }
+        Self {
+            text,
+            lines,
+            boxes,
+            frame_width,
+        }
     }
 
     /// Create an empty result (no text found)
@@ -114,6 +132,7 @@ impl OcrResult {
             text: String::new(),
             lines: Vec::new(),
             boxes: Vec::new(),
+            frame_width: 0.0,
         }
     }
 

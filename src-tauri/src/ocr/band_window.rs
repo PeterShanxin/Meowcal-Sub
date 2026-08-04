@@ -18,11 +18,22 @@
 // all three edges at once, because the camera moves them together.
 // =============================================================================
 
-use super::band_verdict::{is_same_cue, BandStats};
+use super::band_verdict::{is_same_cue, BandStats, Verdict};
 use std::collections::VecDeque;
 
 /// How long a band's evidence stays relevant.
 pub(super) const WINDOW_MS: u64 = 90_000;
+
+/// Frames a band already known to carry subtitles must read as something else
+/// before it is actually demoted.
+///
+/// Without this the verdict crosses a threshold and back inside its own window,
+/// and measurement put that at one frame in six on the bottom band and one in
+/// three on the top - which is a subtitle that intermittently fails to appear,
+/// worst on the shortest lines. Only demotion is delayed. Promotion is
+/// immediate, because making a subtitle wait to be recognised is the very
+/// failure this is meant to prevent.
+const HOLD_THROUGH_FRAMES: usize = 8;
 
 #[derive(Debug, Clone, Copy)]
 struct Observation {
@@ -48,6 +59,8 @@ pub(super) struct TrackedBand {
     centre_y: f32,
     last_seen_ms: u64,
     window: VecDeque<Observation>,
+    settled: Option<Verdict>,
+    disagreeing: usize,
 }
 
 impl TrackedBand {
@@ -56,7 +69,35 @@ impl TrackedBand {
             centre_y,
             last_seen_ms: 0,
             window: VecDeque::new(),
+            settled: None,
+            disagreeing: 0,
         }
+    }
+
+    /// Apply the freshly computed verdict, delaying only the demotion of a band
+    /// already established as carrying subtitles.
+    ///
+    /// Everything else takes effect at once: a band that has never been a
+    /// subtitle has nothing to protect, and holding a promotion back would cost
+    /// exactly the cues this exists to keep.
+    pub(super) fn settle(&mut self, raw: Verdict) -> Verdict {
+        let settled = match self.settled {
+            Some(Verdict::Subtitle) if raw != Verdict::Subtitle => {
+                self.disagreeing += 1;
+                if self.disagreeing >= HOLD_THROUGH_FRAMES {
+                    self.disagreeing = 0;
+                    raw
+                } else {
+                    Verdict::Subtitle
+                }
+            }
+            _ => {
+                self.disagreeing = 0;
+                raw
+            }
+        };
+        self.settled = Some(settled);
+        settled
     }
 
     pub(super) fn centre_y(&self) -> f32 {
@@ -200,6 +241,62 @@ mod tests {
             band.record(1000.0, 600.0, right, 20 + frame as usize * 12, frame * INTERVAL);
         }
         assert_eq!(band.stats(INTERVAL).cues, 6);
+    }
+
+    // A subtitle band that reads as something else for a frame or two must keep
+    // being translated. That flicker is what makes a short line fail to appear.
+    #[test]
+    fn an_established_subtitle_band_survives_a_brief_disagreement() {
+        let mut band = TrackedBand::new(1000.0);
+        assert_eq!(band.settle(Verdict::Subtitle), Verdict::Subtitle);
+        for frame in 0..HOLD_THROUGH_FRAMES - 1 {
+            assert_eq!(
+                band.settle(Verdict::Churning),
+                Verdict::Subtitle,
+                "frame {frame} should still be translated"
+            );
+        }
+    }
+
+    #[test]
+    fn a_sustained_disagreement_does_demote_it() {
+        let mut band = TrackedBand::new(1000.0);
+        band.settle(Verdict::Subtitle);
+        for _ in 0..HOLD_THROUGH_FRAMES {
+            band.settle(Verdict::Churning);
+        }
+        assert_eq!(band.settle(Verdict::Churning), Verdict::Churning);
+    }
+
+    // The protection is for a band that has earned it, not for anything that
+    // happens to be included at the time.
+    #[test]
+    fn a_band_that_was_never_a_subtitle_is_demoted_at_once() {
+        let mut band = TrackedBand::new(1000.0);
+        band.settle(Verdict::Warming);
+        assert_eq!(band.settle(Verdict::Scattered), Verdict::Scattered);
+    }
+
+    // Recognition is immediate in the other direction, or a subtitle waits
+    // eight frames to appear - the very failure this exists to prevent.
+    #[test]
+    fn becoming_a_subtitle_takes_effect_immediately() {
+        let mut band = TrackedBand::new(1000.0);
+        band.settle(Verdict::Glimpsed);
+        assert_eq!(band.settle(Verdict::Subtitle), Verdict::Subtitle);
+    }
+
+    // A disagreement that does not persist must not accumulate towards a later
+    // demotion, or enough scattered single frames eventually add up to one.
+    #[test]
+    fn a_recovered_band_starts_its_grace_period_over() {
+        let mut band = TrackedBand::new(1000.0);
+        band.settle(Verdict::Subtitle);
+        for _ in 0..HOLD_THROUGH_FRAMES - 1 {
+            band.settle(Verdict::Churning);
+        }
+        band.settle(Verdict::Subtitle);
+        assert_eq!(band.settle(Verdict::Churning), Verdict::Subtitle);
     }
 
     #[test]

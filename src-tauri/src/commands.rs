@@ -8,7 +8,7 @@ use crate::llm::{
     BackendInfo, FoundryLocalBackend, FoundryLocalPhase, TranslationDiagnostics,
     TranslationDiagnosticsState, TranslationManager, TranslationOutcome, TranslatorBackend,
 };
-use crate::ocr::{PreprocessingConfig, WindowsOcr};
+use crate::ocr::WindowsOcr;
 use crate::overlay;
 use crate::pipeline_session::PipelineClock;
 use crate::startup_gate::StartupGate;
@@ -1342,12 +1342,14 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
         )
     };
 
-    let ocr_preprocessing_enabled = translation_config.ocr.preprocessing_enabled;
-    let ocr_grayscale = translation_config.ocr.grayscale;
-    let ocr_contrast_enhancement = translation_config.ocr.contrast_enhancement;
-    let ocr_binarize = translation_config.ocr.binarize;
-    let ocr_enable_multi_pass = translation_config.ocr.enable_multi_pass;
-    let ocr_multi_pass_count = translation_config.ocr.multi_pass_count;
+    let recognition_mode = crate::ocr::RecognitionMode {
+        multi_pass: translation_config.ocr.enable_multi_pass,
+        multi_pass_count: translation_config.ocr.multi_pass_count,
+        preprocessing: translation_config.ocr.preprocessing_enabled,
+        grayscale: translation_config.ocr.grayscale,
+        contrast_enhancement: translation_config.ocr.contrast_enhancement,
+        binarize: translation_config.ocr.binarize,
+    };
     let ocr_validation_strictness = translation_config.ocr.validation_strictness;
 
     let min_significant_chars = ocr_validation_strictness.min_significant_chars();
@@ -1496,6 +1498,9 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
             }
         };
         let mut capture_state = CaptureSessionState::new(use_persistent);
+        // A region taller than one subtitle also holds scene text, credits and
+        // static overlays. See `ocr::BandFilter`.
+        let mut band_filter = crate::ocr::BandFilter::new(interval_ms.into());
 
         loop {
             if *stop_rx.borrow() {
@@ -1584,56 +1589,15 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
             let ocr_started = Instant::now();
             let frame_data = &capture_result.data;
             let (frame_width, frame_height) = (capture_result.width, capture_result.height);
-            let ocr_result = if ocr_enable_multi_pass {
-                match ocr
-                    .recognize_multi_pass(
-                        frame_data,
-                        frame_width,
-                        frame_height,
-                        ocr_multi_pass_count,
-                    )
-                    .await
-                {
-                    Ok(result) => result,
-                    Err(e) => {
-                        warn!("⚠️ Multi-pass OCR failed: {}", e);
-                        tokio::time::sleep(pacer.remaining_for(frame_started)).await;
-                        continue;
-                    }
-                }
-            } else if ocr_preprocessing_enabled {
-                let preprocessing_config = PreprocessingConfig {
-                    grayscale: ocr_grayscale,
-                    contrast_enhancement: ocr_contrast_enhancement,
-                    binarize: ocr_binarize,
-                };
-                match ocr
-                    .recognize_with_preprocessing(
-                        frame_data,
-                        frame_width,
-                        frame_height,
-                        preprocessing_config,
-                    )
-                    .await
-                {
-                    Ok(result) => result,
-                    Err(e) => {
-                        warn!("⚠️ OCR failed: {}", e);
-                        tokio::time::sleep(pacer.remaining_for(frame_started)).await;
-                        continue;
-                    }
-                }
-            } else {
-                match ocr
-                    .recognize_without_preprocessing(frame_data, frame_width, frame_height)
-                    .await
-                {
-                    Ok(result) => result,
-                    Err(e) => {
-                        warn!("⚠️ OCR failed: {}", e);
-                        tokio::time::sleep(pacer.remaining_for(frame_started)).await;
-                        continue;
-                    }
+            let ocr_result = match recognition_mode
+                .recognize(&ocr, frame_data, frame_width, frame_height)
+                .await
+            {
+                Ok(result) => result,
+                Err((error, what)) => {
+                    warn!("⚠️ {}: {}", what, error);
+                    tokio::time::sleep(pacer.remaining_for(frame_started)).await;
+                    continue;
                 }
             };
             let ocr_ms = ocr_started.elapsed().as_millis() as u64;
@@ -1649,6 +1613,8 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
                 }
                 continue;
             }
+
+            let ocr_result = band_filter.apply(ocr_result);
 
             if ocr_result.is_empty() {
                 debug!("[FILTER: empty] No text detected, skipping");

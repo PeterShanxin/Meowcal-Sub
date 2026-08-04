@@ -10,7 +10,7 @@
   },
   "legacyFileMaxLines": {
     "src-tauri/src/capture/graphics_capture.rs": 522,
-    "src-tauri/src/commands.rs": 2112,
+    "src-tauri/src/commands.rs": 2078,
     "src-tauri/src/config.rs": 625,
     "src-tauri/src/http_server.rs": 727,
     "src-tauri/src/llm/context.rs": 732,

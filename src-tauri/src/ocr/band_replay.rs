@@ -96,23 +96,68 @@ fn replay_a_recorded_session() {
     let mut held: std::collections::BTreeMap<i64, [usize; 10]> = Default::default();
     let mut lines_translated = 0usize;
     let mut lines_held = 0usize;
+    // A cue is a stretch of consecutive frames in which a band held text. One
+    // where not a single frame was translated is a subtitle that never
+    // appeared, which is what "a quick line got nothing" looks like from here.
+    // Frame percentages cannot show it: a cue can lose most of its frames and
+    // still be displayed from the rest.
+    #[derive(Default)]
+    struct Runs {
+        total: usize,
+        lost: usize,
+        frames: usize,
+        lost_frames: usize,
+        run_translated: bool,
+        run_frames: usize,
+        last_index: usize,
+    }
+    impl Runs {
+        fn close(&mut self) {
+            if self.run_frames > 0 && !self.run_translated {
+                self.lost += 1;
+                self.lost_frames += self.run_frames;
+            }
+        }
+    }
+    let mut runs: std::collections::BTreeMap<i64, Runs> = Default::default();
 
     for (index, frame) in frames.iter().enumerate() {
         let slot = decile(index, frames.len());
         let banding = tracker.observe(&frame.texts, &frame.boxes, frame.at_ms);
+        let mut note = |y: i64, translated: bool| {
+            let entry = runs.entry(y).or_default();
+            if entry.last_index != index {
+                // A gap since this band was last live ends the stretch.
+                entry.close();
+                entry.total += 1;
+                entry.run_translated = false;
+                entry.run_frames = 0;
+            }
+            entry.run_translated |= translated;
+            entry.run_frames += 1;
+            entry.frames += 1;
+            entry.last_index = index + 1;
+        };
+
         for group in &banding.included {
             if group.centre_y.is_nan() {
                 continue;
             }
-            kept.entry((group.centre_y / 20.0).round() as i64 * 20)
-                .or_default()[slot] += 1;
+            let y = (group.centre_y / 20.0).round() as i64 * 20;
+            kept.entry(y).or_default()[slot] += 1;
             lines_translated += group.lines.len();
+            note(y, true);
         }
         for band in &banding.dropped {
-            held.entry((band.centre_y / 20.0).round() as i64 * 20)
-                .or_default()[slot] += 1;
+            let y = (band.centre_y / 20.0).round() as i64 * 20;
+            held.entry(y).or_default()[slot] += 1;
             lines_held += band.lines;
+            note(y, false);
         }
+    }
+    // Close the final stretch of every band.
+    for entry in runs.values_mut() {
+        entry.close();
     }
 
     println!("\n{path}");
@@ -162,6 +207,24 @@ fn replay_a_recorded_session() {
             "{y:6}   {}            {}   {translated:6} {withheld:6}{flicker}",
             show(kept.get(&y)),
             show(held.get(&y))
+        );
+    }
+
+    println!("\nstretches never translated at all - text on screen that showed nothing.");
+    println!("Weighted by frames, because losing a two-frame blip is not losing a subtitle.");
+    println!("\n     y   stretches lost   screen time lost");
+    for (y, entry) in &runs {
+        if entry.total < 5 {
+            continue;
+        }
+        println!(
+            "{y:6}   {:5} of {:5}  {:3.0}%   {:6} of {:6}  {:3.0}%",
+            entry.lost,
+            entry.total,
+            entry.lost as f64 / entry.total as f64 * 100.0,
+            entry.lost_frames,
+            entry.frames,
+            entry.lost_frames as f64 / entry.frames.max(1) as f64 * 100.0
         );
     }
 
