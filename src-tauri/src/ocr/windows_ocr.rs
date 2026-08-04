@@ -229,28 +229,11 @@ impl WindowsOcr {
             .get() // Block until complete (IAsyncOperation -> Result)
             .map_err(|e| OcrError::RecognitionError(format!("OCR failed: {}", e)))?;
 
-        // Extract the text from each line
-        let lines_collection = ocr_result
-            .Lines()
-            .map_err(|e| OcrError::RecognitionError(format!("Failed to get lines: {}", e)))?;
-
-        let mut lines = Vec::new();
-        for i in 0..lines_collection.Size().unwrap_or(0) {
-            if let Ok(line) = lines_collection.GetAt(i) {
-                if let Ok(text) = line.Text() {
-                    // `OcrLine::Text` joins the recognised words with a space,
-                    // which for Chinese and Japanese puts one between every
-                    // glyph. See `text_cleanup`.
-                    let text_str = super::text_cleanup::clean_line(&text.to_string());
-                    if !text_str.trim().is_empty() {
-                        lines.push(text_str);
-                    }
-                }
-            }
-        }
+        // Text and where each line sat. See `line_geometry`.
+        let (lines, boxes) = super::line_geometry::lines_with_boxes(&ocr_result);
 
         // Create the result
-        let result = OcrResult::new(lines);
+        let result = OcrResult::with_boxes(lines, boxes, width as f32);
 
         debug!(
             "OCR found {} lines ({} chars, {} significant)",
