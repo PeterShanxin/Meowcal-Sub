@@ -58,6 +58,7 @@ Source OCR is never represented as successful translation.
 | Engine runtime          | `llm/foundry_local.rs`, command helpers           | Curated engine service owns manifest, install, process, health, repair, rollback       |
 | Compatibility downloads | `legacy_translate_locally.rs`                    | Kept outside normal-mode adapters; legacy/developer compatibility only                  |
 | Native overlay IPC      | `ipc/`, `overlay/`, `commands.rs`                 | `ipc/protocol.rs` owns payload schema; adapters do not redefine it                     |
+| In-app update           | `update_handoff.rs`, `ui/update-controller.ts`    | Handoff owns what must stop before the installer runs; the manifest is generated, never hand-written |
 | Main/setup UI           | Lit components and TypeScript controllers         | One reactive snapshot drives Home/setup/settings presentation; bridge adapters stay thin |
 | Overlay/selector UI     | `overlay.js`, `selector.js`                       | Separate geometry/state owners with thin bridge and DOM adapters                       |
 
