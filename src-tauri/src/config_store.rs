@@ -52,6 +52,14 @@ pub fn load_config(app: &tauri::AppHandle) -> AppConfig {
     };
 
     let (config, recovery) = load_durable(&path);
+    // Every save this session is gated on this. A config reconstructed from a
+    // backup is usable but is not evidence of the user's settings, so it must
+    // never refresh the backup or overwrite a config that becomes readable
+    // again - see `config_save::Provenance`.
+    crate::config_save::remember_provenance(match recovery {
+        Recovery::None | Recovery::FirstRun => crate::config_save::Provenance::Authoritative,
+        _ => crate::config_save::Provenance::Fallback,
+    });
     // Each message states only what actually happened. Claiming the corrupt file
     // "is kept as config.corrupt.json" when the rename failed sends whoever
     // triages the problem after a file that is not there - and does it in the
@@ -82,33 +90,6 @@ pub fn load_config(app: &tauri::AppHandle) -> AppConfig {
         }
     }
     config
-}
-
-/// Save config to disk atomically, never dropping a registration still on disk.
-pub fn save_config(app: &tauri::AppHandle, config: &AppConfig) -> Result<(), String> {
-    let path = get_config_path(app)?;
-    let mut config = config.clone();
-    preserve_runtime_from_disk(&path, &mut config);
-    write_atomic(&path, &config)?;
-    // Keep the fallback current. Refreshing only at startup meant a tray app left
-    // running for days backed up its state once, so a corruption on Wednesday
-    // restored Monday - silently rolling back every setting and engine change
-    // made in between, and then overwriting them. A backup that just came from a
-    // successful write is well-formed by construction, so this cannot poison it.
-    refresh_backup(&path);
-    Ok(())
-}
-
-/// Save, and say so when it fails.
-///
-/// The background save sites - the capture region, the window geometry - had no
-/// caller able to act on an error and so discarded it. That is the user-visible
-/// half of #64 through a different door: a region set once and silently gone at
-/// the next launch. Nothing here can recover, but it must not be silent.
-pub fn save_or_warn(app: &tauri::AppHandle, config: &AppConfig, what: &str) {
-    if let Err(error) = save_config(app, config) {
-        tracing::warn!("Could not save {what}: {error}");
-    }
 }
 
 /// What was found where the config should be.
@@ -154,7 +135,7 @@ pub fn quarantine_path(config_path: &Path) -> PathBuf {
     sibling(config_path, "config.corrupt.json")
 }
 
-fn sibling(config_path: &Path, name: &str) -> PathBuf {
+pub(crate) fn sibling(config_path: &Path, name: &str) -> PathBuf {
     config_path
         .parent()
         .map(|parent| parent.join(name))
@@ -189,11 +170,42 @@ pub fn read_from(path: &Path) -> LoadOutcome {
 
     match serde_json::from_str::<AppConfig>(&content) {
         Ok(mut config) => {
+            // Container-level `serde(default)` lets a config survive a key it
+            // does not know, which is the point - but it also means `{}` and any
+            // unrelated JSON object deserialize happily into factory defaults,
+            // reported as a clean load. That would refresh the backup from
+            // nothing and log not a word. A config we wrote always carries at
+            // least one key we model.
+            if !mentions_a_modelled_setting(&content) {
+                return LoadOutcome::Corrupt(
+                    "contains no recognisable settings, so it is not a config this app wrote"
+                        .to_string(),
+                );
+            }
             config.normalize();
             LoadOutcome::Loaded(Box::new(config))
         }
         Err(error) => LoadOutcome::Corrupt(format!("is not valid config JSON: {error}")),
     }
+}
+
+/// Whether a parsed config actually claims to be one.
+fn mentions_a_modelled_setting(content: &str) -> bool {
+    const MODELLED: [&str; 8] = [
+        "sourceLanguage",
+        "targetLanguage",
+        "captureIntervalMs",
+        "overlay",
+        "translation",
+        "lastCaptureRegion",
+        "windowPreferences",
+        "minimizeToTray",
+    ];
+    serde_json::from_str::<serde_json::Value>(content)
+        .ok()
+        .as_ref()
+        .and_then(serde_json::Value::as_object)
+        .is_some_and(|object| MODELLED.iter().any(|key| object.contains_key(*key)))
 }
 
 fn read_with_retry(path: &Path) -> std::io::Result<String> {
@@ -244,7 +256,7 @@ pub fn load_durable(path: &Path) -> (AppConfig, Recovery) {
     let Some(reason) = outcome.failure_reason().map(str::to_string) else {
         return match outcome {
             LoadOutcome::Loaded(config) => {
-                refresh_backup(path);
+                crate::config_save::refresh_backup(path);
                 (*config, Recovery::None)
             }
             _ => (AppConfig::default(), Recovery::FirstRun),
@@ -271,7 +283,7 @@ pub fn load_durable(path: &Path) -> (AppConfig, Recovery) {
         // launch would then find no config at all, take the `Missing` path, and
         // start from defaults. That would turn a survivable corruption into the
         // very loss this module exists to prevent, one session later.
-        if let Err(error) = write_atomic(path, &config) {
+        if let Err(error) = crate::config_save::write_atomic(path, &config) {
             tracing::error!("Recovered config could not be written back: {error}");
         }
         if !quarantined {
@@ -290,108 +302,6 @@ pub fn load_durable(path: &Path) -> (AppConfig, Recovery) {
             quarantined,
         },
     )
-}
-
-/// Keep the last-known-good copy in step with a config that just parsed.
-///
-/// Staged and renamed rather than copied straight over. A plain `fs::copy` can
-/// be interrupted halfway, leaving a truncated backup - and the backup would
-/// then fail in exactly the interruption class it exists to survive, so the next
-/// corrupt config would fall through to defaults with no fallback at all.
-///
-/// A failure to refresh is logged rather than propagated: the config itself
-/// loaded fine, so the app should still start. But it must not pass silently,
-/// because it means the recovery net is not there.
-fn refresh_backup(path: &Path) {
-    let backup = backup_path(path);
-    let staged = sibling(path, "config.bak.tmp.json");
-    let result = fs::copy(path, &staged).and_then(|_| fs::rename(&staged, &backup));
-    if let Err(error) = result {
-        let _ = fs::remove_file(&staged);
-        tracing::warn!("Could not refresh the config backup: {error}");
-    }
-}
-
-/// Write the config so that it is either wholly the old one or wholly the new.
-///
-/// `fs::write` truncates before it writes, so an interruption leaves a file that
-/// exists, parses as nothing, and reads as "no settings". Writing a temporary
-/// beside the target and renaming over it is atomic on NTFS, so a reader always
-/// sees one complete version or the other.
-pub fn write_atomic(path: &Path, config: &AppConfig) -> Result<(), String> {
-    let mut config = config.clone();
-    config.normalize();
-    let json = serde_json::to_string_pretty(&config).map_err(|error| error.to_string())?;
-
-    // Same directory as the target: `fs::rename` is only atomic within a volume,
-    // and a temp dir can easily be on another one.
-    let temp = staging_path(path);
-    if let Err(error) = write_and_sync(&temp, json.as_bytes()) {
-        let _ = fs::remove_file(&temp);
-        return Err(format!("Failed to stage config: {error}"));
-    }
-    fs::rename(&temp, path).map_err(|error| {
-        // The staged file is useless once the rename failed, and leaving it
-        // behind makes the next write look like it interrupted itself.
-        let _ = fs::remove_file(&temp);
-        format!("Failed to replace config: {error}")
-    })
-}
-
-/// Write a file and get it onto the disk before anyone renames it into place.
-///
-/// `fs::write` returns once the bytes are in the OS cache. The rename can then
-/// reach the NTFS metadata journal while the data extents have not been flushed,
-/// so a power loss leaves a full-length `config.json` full of zeros. That is
-/// exactly the "exists but reads as nothing" shape this module treats as
-/// corruption - so without the flush, the promise of "wholly old or wholly new"
-/// is not one this code actually keeps.
-fn write_and_sync(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
-    use std::io::Write;
-
-    let mut file = std::fs::File::create(path)?;
-    file.write_all(bytes)?;
-    file.sync_all()
-}
-
-/// A staging name no concurrent save will also be using.
-///
-/// Saves are not serialised: autosave from the UI and the window-geometry
-/// persistence both reach `save_config`, so two can overlap. Sharing one
-/// `config.tmp.json` let the second writer overwrite the first's staged JSON
-/// before its rename ran - so a save could report success having written the
-/// other one's state - or steal the file outright and make the rename fail.
-/// A per-save name removes the interference entirely.
-fn staging_path(path: &Path) -> PathBuf {
-    static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
-    let ticket = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-    sibling(
-        path,
-        &format!("config.tmp.{}.{ticket}.json", std::process::id()),
-    )
-}
-
-/// Refuse to write away an engine registration that is still on disk.
-///
-/// `FoundryLocalConfig::preserve_managed_runtime_from` already guards settings
-/// saves, but it preserves from the in-memory config - which, after a bad load,
-/// is the default with no runtime at all. So the guard was blind in exactly the
-/// case it existed for, and the first save after a bad load made the loss
-/// permanent.
-///
-/// Consulting the file closes that. The engine is app-owned: the UI has no way
-/// to legitimately clear these fields, so a runtime present on disk and absent
-/// in memory is always the bug, never the intent.
-pub fn preserve_runtime_from_disk(path: &Path, config: &mut AppConfig) {
-    if config.translation.foundry_local.managed_runtime.is_some() {
-        return;
-    }
-    if let LoadOutcome::Loaded(on_disk) = read_from(path) {
-        config
-            .translation
-            .foundry_local
-            .preserve_managed_runtime_from(&on_disk.translation.foundry_local);
-    }
 }
 
 #[cfg(test)]

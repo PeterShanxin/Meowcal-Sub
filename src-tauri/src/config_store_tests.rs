@@ -1,4 +1,5 @@
 use super::*;
+use crate::config_save::write_atomic;
 use crate::engine_config::ManagedLocalRuntimeConfig;
 #[cfg(target_os = "windows")]
 use std::os::windows::fs::OpenOptionsExt;
@@ -165,54 +166,6 @@ fn a_locked_config_is_left_on_disk() {
     );
 }
 
-// A tray app can run for days. Backing up only at startup meant a corruption on
-// Wednesday restored Monday, rolling back everything in between.
-#[test]
-fn saving_keeps_the_backup_current() {
-    let dir = temp_dir("backup-current");
-    let path = dir.join("config.json");
-    write_atomic(&path, &AppConfig::default()).unwrap();
-    load_durable(&path); // backup is now the default config
-
-    let mut later = registered();
-    later.target_language = "ja-JP".to_string();
-    write_atomic(&path, &later).unwrap();
-    refresh_backup(&path);
-
-    let LoadOutcome::Loaded(backup) = read_from(&backup_path(&path)) else {
-        panic!("the backup should load");
-    };
-    assert_eq!(backup.target_language, "ja-JP");
-}
-
-// The backup is the recovery net; refreshing it with a plain copy could leave it
-// truncated by the same interruption it exists to survive.
-#[test]
-fn refreshing_the_backup_leaves_no_staging_file() {
-    let dir = temp_dir("backup-staging");
-    let path = dir.join("config.json");
-    write_atomic(&path, &registered()).unwrap();
-
-    load_durable(&path);
-
-    assert!(backup_path(&path).is_file());
-    assert!(!sibling(&path, "config.bak.tmp.json").exists());
-}
-
-// Autosave and window-geometry persistence both reach `save_config`, so two
-// saves can overlap. A shared staging name let one overwrite the other's staged
-// JSON before its rename ran.
-#[test]
-fn concurrent_saves_do_not_share_a_staging_file() {
-    let dir = temp_dir("staging-unique");
-    let path = dir.join("config.json");
-
-    let first = staging_path(&path);
-    let second = staging_path(&path);
-
-    assert_ne!(first, second);
-}
-
 // Losing the config is bad; losing the evidence of what was lost is worse.
 #[test]
 fn an_unusable_config_is_quarantined_rather_than_overwritten() {
@@ -279,46 +232,6 @@ fn a_written_config_reads_back_identically() {
 
 // No `config.tmp.json` should survive a successful write; a leftover would
 // look like an interrupted save to anyone diagnosing the next problem.
-#[test]
-fn writing_leaves_no_staging_file_behind() {
-    let dir = temp_dir("staging");
-    let path = dir.join("config.json");
-    write_atomic(&path, &registered()).unwrap();
-
-    assert!(!sibling(&path, "config.tmp.json").exists());
-}
-
 // Issue #64's permanent-wipe step: a save whose in-memory config was
 // defaulted must not clear a registration that is still on disk.
-#[test]
-fn a_save_cannot_clear_a_runtime_that_is_still_on_disk() {
-    let dir = temp_dir("preserve");
-    let path = dir.join("config.json");
-    write_atomic(&path, &registered()).unwrap();
-
-    let mut defaulted = AppConfig::default();
-    preserve_runtime_from_disk(&path, &mut defaulted);
-
-    assert!(defaulted
-        .translation
-        .foundry_local
-        .managed_runtime
-        .is_some());
-    assert_eq!(
-        defaulted.translation.foundry_local.model.as_deref(),
-        Some("HY-MT1.5-1.8B-Q4_K_M")
-    );
-}
-
 // The guard must not invent a registration where none was ever recorded.
-#[test]
-fn preserving_adds_nothing_when_disk_has_no_runtime() {
-    let dir = temp_dir("preserve-empty");
-    let path = dir.join("config.json");
-    write_atomic(&path, &AppConfig::default()).unwrap();
-
-    let mut incoming = AppConfig::default();
-    preserve_runtime_from_disk(&path, &mut incoming);
-
-    assert!(incoming.translation.foundry_local.managed_runtime.is_none());
-}

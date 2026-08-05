@@ -114,23 +114,24 @@ pub fn restore_registration(
 ///
 /// `None` means "no idea" - the installer then picks the platform default.
 pub fn install_cache_root(config: &FoundryLocalConfig) -> Option<String> {
-    config
+    // Each candidate is filtered on its own. Filtering the resolved `Option`
+    // instead meant a runtime record pointing at a detached drive produced
+    // `Some`, skipped `or_else` entirely, and was then filtered to `None` - so
+    // the independently recorded root, which may well be on an attached drive,
+    // was never tried and setup re-downloaded 1.1 GB (#69 review).
+    let from_runtime = config
         .managed_cache_root()
         .map(|path| path.to_string_lossy().to_string())
-        .or_else(|| {
-            config
-                .engine_cache_root
-                .as_deref()
-                .map(str::trim)
-                .filter(|root| !root.is_empty())
-                .map(str::to_string)
-        })
-        // A recorded root on a drive that is no longer attached would otherwise
-        // be handed to the installer verbatim, and setup would fail at
-        // `create_dir_all` with a raw OS error rather than falling back to the
-        // default. Only the volume is checked: a missing directory is normal for
-        // a first install, but a missing drive never becomes writable.
-        .filter(|root| volume_exists(Path::new(root)))
+        .filter(|root| volume_exists(Path::new(root)));
+    from_runtime.or_else(|| {
+        config
+            .engine_cache_root
+            .as_deref()
+            .map(str::trim)
+            .filter(|root| !root.is_empty())
+            .map(str::to_string)
+            .filter(|root| volume_exists(Path::new(root)))
+    })
 }
 
 /// Whether the volume a path sits on is present.
@@ -194,7 +195,7 @@ pub fn load_with_engine(app: &tauri::AppHandle) -> crate::config::AppConfig {
             // Every install predating `engine_cache_root` has a runtime record
             // and no recorded root, so recovery would have nowhere to look the
             // day that record goes. Recorded now, while it can still be derived.
-            if let Err(error) = crate::config_store::save_config(app, &config) {
+            if let Err(error) = crate::config_save::save_config(app, &config) {
                 // Losing this quietly means the next config problem sends setup
                 // to the default cache directory and re-downloads 1.1 GB - the
                 // #65 outcome the backfill exists to prevent, with no trace of
@@ -234,7 +235,7 @@ pub fn load_with_engine(app: &tauri::AppHandle) -> crate::config::AppConfig {
          re-adopted it instead of asking for setup",
         root.display()
     );
-    if let Err(error) = crate::config_store::save_config(app, &config) {
+    if let Err(error) = crate::config_save::save_config(app, &config) {
         // The in-memory recovery still stands for this session.
         tracing::error!("Could not persist the recovered engine registration: {error}");
     }

@@ -81,7 +81,7 @@ pub fn persist_main_geometry(window: &Window) {
         return;
     };
     let config = lock_or_recover(&state.config).clone();
-    crate::config_store::save_or_warn(window.app_handle(), &config, "window geometry");
+    crate::config_save::save_or_warn(window.app_handle(), &config, "window geometry");
 }
 
 pub fn persist_main_geometry_from_app(app: &AppHandle) {

@@ -39,8 +39,11 @@ pub mod subtitle_eval;
 /// App configuration - settings like language preferences
 pub mod config;
 
-/// Reading and writing config.json without losing it
+/// Reading config.json without losing it
 pub mod config_store;
+
+/// Writing config.json without overwriting something better
+pub mod config_save;
 pub mod engine_artifact_io;
 pub mod engine_config;
 pub mod engine_install_transaction;

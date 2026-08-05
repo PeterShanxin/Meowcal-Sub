@@ -140,7 +140,7 @@ fn handle_ipc_message(app: &tauri::AppHandle, message: IpcMessage) {
                     {
                         let mut config = lock_or_recover(&state.config);
                         config.last_capture_region = Some(new_region);
-                        meowcal_sub::config_store::save_or_warn(app, &config, "the capture region");
+                        meowcal_sub::config_save::save_or_warn(app, &config, "the capture region");
                     }
                 }
             }

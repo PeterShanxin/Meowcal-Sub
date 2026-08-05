@@ -17,8 +17,8 @@ use serde::{Deserialize, Serialize};
 /// This is what gets saved/loaded from settings, and what the UI reads/writes.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 // `default` matches every other config struct here: without it one absent key -
-// what an older config looks like the moment a field is added - failed the whole
-// parse, and a failed parse is what #64 turns into a wipe (#69 review).
+// what an older config looks like once a field is added - failed the whole parse,
+// and a failed parse is what #64 turns into a wipe (#69 review).
 #[serde(rename_all = "camelCase", default)] // camelCase in JSON (JavaScript convention)
 pub struct AppConfig {
     /// The language to translate FROM (source language)
@@ -54,8 +54,8 @@ pub struct AppConfig {
     /// Whether to minimize to system tray instead of closing
     pub minimize_to_tray: bool,
 
-    /// Settings on disk this struct does not model, carried through untouched
-    /// rather than dropped on save. See `config_store` for why (#64).
+    /// Settings on disk this struct does not model, carried through rather than
+    /// dropped on save (#64).
     #[serde(flatten, default)]
     pub unmodelled: serde_json::Map<String, serde_json::Value>,
 }
@@ -83,8 +83,12 @@ pub struct OverlayConfig {
     pub max_width: u32,
 
     /// Whether to show the diagnostics overlay (debug info panel)
-    #[serde(default)]
     pub show_diagnostics: bool,
+
+    /// As `AppConfig::unmodelled`. `lightBackground` is written and read back by
+    /// the overlay but modelled nowhere, so the toggle never survived a restart.
+    #[serde(flatten, default)]
+    pub unmodelled: serde_json::Map<String, serde_json::Value>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -112,7 +116,6 @@ pub struct TranslationConfig {
     pub enable_context_aware: bool,
 
     /// Context level for Foundry Local prompts.
-    #[serde(default)]
     pub context_level: ContextLevel,
 
     /// How many recent translations to include in the prompt (MemoryAndRecent only).
@@ -149,11 +152,9 @@ pub struct TranslationConfig {
     pub context_reset_gap_ms: u32,
 
     /// Foundry Local backend configuration
-    #[serde(default)]
     pub foundry_local: FoundryLocalConfig,
 
     /// OCR-specific settings
-    #[serde(default)]
     pub ocr: OcrConfig,
 }
 
@@ -198,7 +199,6 @@ pub struct OcrConfig {
 
     /// How many significant characters a line must carry to be worth
     /// translating. See `ValidationStrictness::min_significant_chars`.
-    #[serde(default)]
     pub validation_strictness: ValidationStrictness,
 }
 
@@ -410,6 +410,7 @@ impl Default for OverlayConfig {
             offset_y: 10,                      // 10px below capture region
             max_width: 0,                      // Match capture region width
             show_diagnostics: false,           // Off by default
+            unmodelled: serde_json::Map::new(),
         }
     }
 }
@@ -582,16 +583,12 @@ impl Default for FoundryLocalConfig {
     }
 }
 
-// =============================================================================
-// PERSISTENCE
-// =============================================================================
-// Reading and writing config.json lives in `config_store`, where the failures
-// worth guarding against - an unreadable config mistaken for an absent one, a
-// half-written file, a save that drops an engine registration still on disk -
-// can be tested without a running Tauri app. Re-exported here so callers keep
-// using `config::load_config` and `config::save_config`.
+// PERSISTENCE - reading lives in `config_store`, writing in `config_save`, both
+// on paths so the failures worth guarding against are testable without a running
+// Tauri app. Re-exported so callers keep using `config::load_config`/`save_config`.
 
-pub use crate::config_store::{get_config_path, load_config, save_config};
+pub use crate::config_save::save_config;
+pub use crate::config_store::{get_config_path, load_config};
 
 #[cfg(test)]
 #[path = "config_tests.rs"]
