@@ -1,5 +1,7 @@
 use super::*;
 use crate::engine_config::ManagedLocalRuntimeConfig;
+#[cfg(target_os = "windows")]
+use std::os::windows::fs::OpenOptionsExt;
 
 fn temp_dir(name: &str) -> PathBuf {
     let dir = std::env::temp_dir().join(format!("meowcal-config-store-{name}"));
@@ -37,17 +39,35 @@ fn an_unparseable_config_is_not_treated_as_absent() {
     let path = dir.join("config.json");
     fs::write(&path, "{ this is not json").unwrap();
 
-    assert!(matches!(read_from(&path), LoadOutcome::Unreadable(_)));
+    assert!(matches!(read_from(&path), LoadOutcome::Corrupt(_)));
 }
 
 // The exact shape an interrupted `fs::write` leaves behind.
 #[test]
-fn a_truncated_config_is_unreadable_rather_than_empty_settings() {
+fn a_truncated_config_is_corrupt_rather_than_empty_settings() {
     let dir = temp_dir("truncated");
     let path = dir.join("config.json");
     fs::write(&path, "").unwrap();
 
-    assert!(matches!(read_from(&path), LoadOutcome::Unreadable(_)));
+    assert!(matches!(read_from(&path), LoadOutcome::Corrupt(_)));
+}
+
+// A key added to `AppConfig` after a config was written must cost that key, not
+// the whole file - a failed parse is what #64 turns into a wipe.
+#[test]
+fn a_config_missing_a_field_still_loads() {
+    let dir = temp_dir("missing-field");
+    let path = dir.join("config.json");
+    let mut partial = serde_json::to_value(registered()).unwrap();
+    partial.as_object_mut().unwrap().remove("minimizeToTray");
+    partial.as_object_mut().unwrap().remove("overlay");
+    fs::write(&path, serde_json::to_string_pretty(&partial).unwrap()).unwrap();
+
+    let LoadOutcome::Loaded(config) = read_from(&path) else {
+        panic!("a config missing optional keys should still load");
+    };
+    // The engine registration is the thing that must survive.
+    assert!(config.translation.foundry_local.managed_runtime.is_some());
 }
 
 #[test]
@@ -100,6 +120,71 @@ fn a_recovered_config_is_written_back_immediately() {
     assert!(on_disk.translation.foundry_local.managed_runtime.is_some());
 }
 
+// A config that is merely locked may be perfectly good. Treating that as
+// corruption would quarantine it and overwrite it with a stale backup, throwing
+// away the real settings to work around a lock that lasts a moment.
+#[test]
+fn a_locked_config_is_not_corrupt() {
+    let dir = temp_dir("locked");
+    let path = dir.join("config.json");
+    write_atomic(&path, &registered()).unwrap();
+
+    // An exclusive handle is what a scanner or backup agent holds.
+    let _lock = std::fs::OpenOptions::new()
+        .read(true)
+        .share_mode(0)
+        .open(&path)
+        .expect("exclusive handle");
+
+    assert!(matches!(read_from(&path), LoadOutcome::Unreadable(_)));
+}
+
+// ...and the file must survive that verdict untouched, so a later launch can
+// still recover the real thing.
+#[test]
+fn a_locked_config_is_left_on_disk() {
+    let dir = temp_dir("locked-intact");
+    let path = dir.join("config.json");
+    write_atomic(&path, &registered()).unwrap();
+    load_durable(&path); // establishes the backup
+
+    let recovery = {
+        let _lock = std::fs::OpenOptions::new()
+            .read(true)
+            .share_mode(0)
+            .open(&path)
+            .expect("exclusive handle");
+        load_durable(&path).1
+    };
+
+    assert!(matches!(recovery, Recovery::UsingBackupUntilReadable(_)));
+    assert!(path.is_file(), "the locked config must not be moved");
+    assert!(
+        !quarantine_path(&path).exists(),
+        "a locked config is not corrupt and must not be quarantined"
+    );
+}
+
+// A tray app can run for days. Backing up only at startup meant a corruption on
+// Wednesday restored Monday, rolling back everything in between.
+#[test]
+fn saving_keeps_the_backup_current() {
+    let dir = temp_dir("backup-current");
+    let path = dir.join("config.json");
+    write_atomic(&path, &AppConfig::default()).unwrap();
+    load_durable(&path); // backup is now the default config
+
+    let mut later = registered();
+    later.target_language = "ja-JP".to_string();
+    write_atomic(&path, &later).unwrap();
+    refresh_backup(&path);
+
+    let LoadOutcome::Loaded(backup) = read_from(&backup_path(&path)) else {
+        panic!("the backup should load");
+    };
+    assert_eq!(backup.target_language, "ja-JP");
+}
+
 // The backup is the recovery net; refreshing it with a plain copy could leave it
 // truncated by the same interruption it exists to survive.
 #[test]
@@ -137,7 +222,13 @@ fn an_unusable_config_is_quarantined_rather_than_overwritten() {
 
     let (_, recovery) = load_durable(&path);
 
-    assert!(matches!(recovery, Recovery::Defaulted(_)));
+    assert!(matches!(
+        recovery,
+        Recovery::Defaulted {
+            quarantined: true,
+            ..
+        }
+    ));
     assert!(quarantine_path(&path).is_file());
     assert!(!path.exists());
 }

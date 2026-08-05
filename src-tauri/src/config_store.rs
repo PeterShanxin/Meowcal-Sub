@@ -52,17 +52,34 @@ pub fn load_config(app: &tauri::AppHandle) -> AppConfig {
     };
 
     let (config, recovery) = load_durable(&path);
+    // Each message states only what actually happened. Claiming the corrupt file
+    // "is kept as config.corrupt.json" when the rename failed sends whoever
+    // triages the problem after a file that is not there - and does it in the
+    // one case where the original data still exists and could be rescued.
     match recovery {
         Recovery::None => {}
         Recovery::FirstRun => tracing::info!("No config found; starting with defaults"),
         Recovery::RestoredFromBackup(reason) => tracing::warn!(
-            "config.json {reason}; restored the last known-good copy. \
-             The unusable file is kept as config.corrupt.json"
+            "config.json {reason}; restored the last known-good copy and set the \
+             unusable file aside as config.corrupt.json"
         ),
-        Recovery::Defaulted(reason) => tracing::error!(
-            "config.json {reason} and no backup was usable; starting with defaults. \
-             The unusable file is kept as config.corrupt.json"
+        Recovery::UsingBackupUntilReadable(reason) => tracing::warn!(
+            "config.json {reason}; using the last known-good copy for this session \
+             and leaving the file untouched in case it becomes readable again"
         ),
+        Recovery::Defaulted {
+            reason,
+            quarantined,
+        } => {
+            let kept = if quarantined {
+                "The unusable file is kept as config.corrupt.json"
+            } else {
+                "The unusable file could not be set aside and is still config.json"
+            };
+            tracing::error!(
+                "config.json {reason} and no backup was usable; starting with defaults. {kept}"
+            );
+        }
     }
     config
 }
@@ -72,7 +89,26 @@ pub fn save_config(app: &tauri::AppHandle, config: &AppConfig) -> Result<(), Str
     let path = get_config_path(app)?;
     let mut config = config.clone();
     preserve_runtime_from_disk(&path, &mut config);
-    write_atomic(&path, &config)
+    write_atomic(&path, &config)?;
+    // Keep the fallback current. Refreshing only at startup meant a tray app left
+    // running for days backed up its state once, so a corruption on Wednesday
+    // restored Monday - silently rolling back every setting and engine change
+    // made in between, and then overwriting them. A backup that just came from a
+    // successful write is well-formed by construction, so this cannot poison it.
+    refresh_backup(&path);
+    Ok(())
+}
+
+/// Save, and say so when it fails.
+///
+/// The background save sites - the capture region, the window geometry - had no
+/// caller able to act on an error and so discarded it. That is the user-visible
+/// half of #64 through a different door: a region set once and silently gone at
+/// the next launch. Nothing here can recover, but it must not be silent.
+pub fn save_or_warn(app: &tauri::AppHandle, config: &AppConfig, what: &str) {
+    if let Err(error) = save_config(app, config) {
+        tracing::warn!("Could not save {what}: {error}");
+    }
 }
 
 /// What was found where the config should be.
@@ -86,8 +122,26 @@ pub enum LoadOutcome {
     Loaded(Box<AppConfig>),
     /// No file. A first run - defaults are correct here.
     Missing,
-    /// A file exists and could not be used. Defaults would be data loss.
+    /// A file exists and its contents are wrong. Defaults would be data loss.
+    Corrupt(String),
+    /// A file exists and could not be read at all - locked, denied, bad sector.
+    ///
+    /// Kept apart from `Corrupt` because the treatment differs. Corrupt contents
+    /// justify quarantining the file and writing a recovery over it; an
+    /// unreadable *file* does not, since the bytes may be perfectly good and
+    /// merely held open by a backup agent or a scanner. Overwriting there would
+    /// destroy a valid config to work around a lock that lasted 200ms.
     Unreadable(String),
+}
+
+impl LoadOutcome {
+    /// Why the config could not be used, whatever the reason.
+    fn failure_reason(&self) -> Option<&str> {
+        match self {
+            Self::Corrupt(reason) | Self::Unreadable(reason) => Some(reason),
+            _ => None,
+        }
+    }
 }
 
 /// Where the last good copy is kept, beside the config itself.
@@ -107,22 +161,30 @@ fn sibling(config_path: &Path, name: &str) -> PathBuf {
         .unwrap_or_else(|| PathBuf::from(name))
 }
 
-/// Read one config file, keeping the three outcomes apart.
+/// How many times a read is retried before a lock is called a failure.
+///
+/// Windows hands out sharing violations freely - a backup agent, OneDrive, or a
+/// scanner touching the file at the wrong instant is enough. Treating the first
+/// one as "unreadable" would demote a perfectly good config to a stale backup
+/// over a lock that lasts a moment.
+const READ_ATTEMPTS: usize = 3;
+const READ_RETRY_DELAY: std::time::Duration = std::time::Duration::from_millis(120);
+
+/// Read one config file, keeping the outcomes apart.
 pub fn read_from(path: &Path) -> LoadOutcome {
-    let content = match fs::read_to_string(path) {
+    let content = match read_with_retry(path) {
         Ok(content) => content,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return LoadOutcome::Missing,
-        // Anything else - a lock, a permission problem, a bad sector - means a
-        // config probably exists and we simply cannot see it. Defaulting here
-        // would discard it on the next save.
+        // The file is there and we cannot see it. Its bytes may be fine, so this
+        // is reported as unreadable rather than corrupt and must not be
+        // overwritten - see `LoadOutcome::Unreadable`.
         Err(error) => return LoadOutcome::Unreadable(format!("could not be read: {error}")),
     };
 
     // An empty file is the signature of an interrupted `fs::write`: truncated,
-    // never refilled. Reported as unreadable rather than parsed, so recovery
-    // runs instead of a silent reset.
+    // never refilled. Corrupt contents, not an unreadable file.
     if content.trim().is_empty() {
-        return LoadOutcome::Unreadable("is empty".to_string());
+        return LoadOutcome::Corrupt("is empty".to_string());
     }
 
     match serde_json::from_str::<AppConfig>(&content) {
@@ -130,8 +192,27 @@ pub fn read_from(path: &Path) -> LoadOutcome {
             config.normalize();
             LoadOutcome::Loaded(Box::new(config))
         }
-        Err(error) => LoadOutcome::Unreadable(format!("is not valid config JSON: {error}")),
+        Err(error) => LoadOutcome::Corrupt(format!("is not valid config JSON: {error}")),
     }
+}
+
+fn read_with_retry(path: &Path) -> std::io::Result<String> {
+    let mut last = None;
+    for attempt in 0..READ_ATTEMPTS {
+        match fs::read_to_string(path) {
+            Ok(content) => return Ok(content),
+            // A missing file will not appear by waiting, and this is the common
+            // first-run path - returning immediately keeps startup quick.
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Err(error),
+            Err(error) => {
+                if attempt + 1 < READ_ATTEMPTS {
+                    std::thread::sleep(READ_RETRY_DELAY);
+                }
+                last = Some(error);
+            }
+        }
+    }
+    Err(last.expect("at least one attempt ran"))
 }
 
 /// What a load did, so the caller can say so rather than starting up mute.
@@ -141,11 +222,15 @@ pub enum Recovery {
     None,
     /// No config existed. Defaults, legitimately.
     FirstRun,
-    /// The config was unusable and the backup was used instead.
+    /// The config was corrupt and the backup was used instead. The corrupt file
+    /// is kept at `quarantine_path`, and the recovery has been written back.
     RestoredFromBackup(String),
-    /// The config was unusable and there was no backup. Defaults, regrettably.
-    /// The unusable file is kept at `quarantine_path` rather than overwritten.
-    Defaulted(String),
+    /// The config could not be read at all, so the backup is being used for this
+    /// session only. Nothing on disk was moved or overwritten - the file may be
+    /// perfectly good and merely locked.
+    UsingBackupUntilReadable(String),
+    /// Nothing usable was found anywhere. Defaults, regrettably.
+    Defaulted { reason: String, quarantined: bool },
 }
 
 /// Load a config, preferring the backup over defaults when the main file is
@@ -155,19 +240,31 @@ pub enum Recovery {
 /// that quietly resets everything is the failure this module exists for - the
 /// caller is expected to log it, loudly.
 pub fn load_durable(path: &Path) -> (AppConfig, Recovery) {
-    let reason = match read_from(path) {
-        LoadOutcome::Loaded(config) => {
-            refresh_backup(path);
-            return (*config, Recovery::None);
-        }
-        LoadOutcome::Missing => return (AppConfig::default(), Recovery::FirstRun),
-        LoadOutcome::Unreadable(reason) => reason,
+    let outcome = read_from(path);
+    let Some(reason) = outcome.failure_reason().map(str::to_string) else {
+        return match outcome {
+            LoadOutcome::Loaded(config) => {
+                refresh_backup(path);
+                (*config, Recovery::None)
+            }
+            _ => (AppConfig::default(), Recovery::FirstRun),
+        };
     };
 
+    // A file we could not read is not a file we may destroy. Its bytes may be
+    // intact behind a scanner's lock, so the backup stands in for this session
+    // and the disk is left exactly as found - a later launch can still recover
+    // the real thing. Corrupt contents get the opposite treatment: quarantined,
+    // and the recovery written back.
+    let readable = !matches!(outcome, LoadOutcome::Unreadable(_));
+
     if let LoadOutcome::Loaded(config) = read_from(&backup_path(path)) {
-        // Keep the unusable original: it is the only evidence of what was lost,
+        if !readable {
+            return (*config, Recovery::UsingBackupUntilReadable(reason));
+        }
+        // Keep the corrupt original: it is the only evidence of what was lost,
         // and the next successful save would otherwise write over it.
-        let _ = fs::rename(path, quarantine_path(path));
+        let quarantined = fs::rename(path, quarantine_path(path)).is_ok();
         // Put the recovery back on disk now rather than trusting some later save
         // to do it. Nothing guarantees one runs - a crash, Task Manager, or the
         // update handoff all end the process without saving - and the next
@@ -177,11 +274,22 @@ pub fn load_durable(path: &Path) -> (AppConfig, Recovery) {
         if let Err(error) = write_atomic(path, &config) {
             tracing::error!("Recovered config could not be written back: {error}");
         }
+        if !quarantined {
+            tracing::warn!("The corrupt config could not be set aside for inspection");
+        }
         return (*config, Recovery::RestoredFromBackup(reason));
     }
 
-    let _ = fs::rename(path, quarantine_path(path));
-    (AppConfig::default(), Recovery::Defaulted(reason))
+    // Nothing to fall back on. Still refuse to touch a file we merely could not
+    // read - overwriting it would destroy the only copy of the real settings.
+    let quarantined = readable && fs::rename(path, quarantine_path(path)).is_ok();
+    (
+        AppConfig::default(),
+        Recovery::Defaulted {
+            reason,
+            quarantined,
+        },
+    )
 }
 
 /// Keep the last-known-good copy in step with a config that just parsed.
@@ -218,13 +326,32 @@ pub fn write_atomic(path: &Path, config: &AppConfig) -> Result<(), String> {
     // Same directory as the target: `fs::rename` is only atomic within a volume,
     // and a temp dir can easily be on another one.
     let temp = staging_path(path);
-    fs::write(&temp, json).map_err(|error| format!("Failed to stage config: {error}"))?;
+    if let Err(error) = write_and_sync(&temp, json.as_bytes()) {
+        let _ = fs::remove_file(&temp);
+        return Err(format!("Failed to stage config: {error}"));
+    }
     fs::rename(&temp, path).map_err(|error| {
         // The staged file is useless once the rename failed, and leaving it
         // behind makes the next write look like it interrupted itself.
         let _ = fs::remove_file(&temp);
         format!("Failed to replace config: {error}")
     })
+}
+
+/// Write a file and get it onto the disk before anyone renames it into place.
+///
+/// `fs::write` returns once the bytes are in the OS cache. The rename can then
+/// reach the NTFS metadata journal while the data extents have not been flushed,
+/// so a power loss leaves a full-length `config.json` full of zeros. That is
+/// exactly the "exists but reads as nothing" shape this module treats as
+/// corruption - so without the flush, the promise of "wholly old or wholly new"
+/// is not one this code actually keeps.
+fn write_and_sync(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
+    use std::io::Write;
+
+    let mut file = std::fs::File::create(path)?;
+    file.write_all(bytes)?;
+    file.sync_all()
 }
 
 /// A staging name no concurrent save will also be using.

@@ -8,16 +8,16 @@
 // again - into a different tree from the one the viewer had chosen.
 //
 // The files are self-describing: a cache root plus the shipped manifest gives
-// the exact executable and model paths, and their sizes say whether the install
-// is intact. So a lost registration is recoverable without downloading anything,
-// provided we still know where to look - which is what `engine_cache_root` on
-// `FoundryLocalConfig` is for, and why it is stored separately from the record
-// it has to outlive.
+// the exact executable and model paths, their sizes, and their hashes. So a lost
+// registration is recoverable without downloading anything, provided we still
+// know where to look - which is what `engine_cache_root` on `FoundryLocalConfig`
+// is for, and why it is stored separately from the record it has to outlive.
 //
 // Recovery is deliberately conservative: it adopts an install only when both
-// artifacts are present at their manifest sizes. Adopting a half-written tree
-// would trade a re-download for an engine that fails at translation time, which
-// is the worse failure - it looks like a bug rather than a setup step.
+// artifacts verify against the manifest by size and SHA-256, the same standard
+// the installer applies. Adoption is not a report - it writes the paths into
+// `managed_runtime` and startup then launches the executable - so a size match
+// is not a strong enough claim to run something on.
 // =============================================================================
 
 use crate::config::FoundryLocalConfig;
@@ -125,6 +125,27 @@ pub fn install_cache_root(config: &FoundryLocalConfig) -> Option<String> {
                 .filter(|root| !root.is_empty())
                 .map(str::to_string)
         })
+        // A recorded root on a drive that is no longer attached would otherwise
+        // be handed to the installer verbatim, and setup would fail at
+        // `create_dir_all` with a raw OS error rather than falling back to the
+        // default. Only the volume is checked: a missing directory is normal for
+        // a first install, but a missing drive never becomes writable.
+        .filter(|root| volume_exists(Path::new(root)))
+}
+
+/// Whether the volume a path sits on is present.
+fn volume_exists(root: &Path) -> bool {
+    match root.components().next() {
+        // `D:\...` - the prefix is the drive, and it either exists or does not.
+        // Built as a string rather than with `join`, which would treat a leading
+        // separator as a fresh absolute path and check the current drive instead.
+        Some(std::path::Component::Prefix(prefix)) => {
+            PathBuf::from(format!("{}\\", prefix.as_os_str().to_string_lossy())).is_dir()
+        }
+        // Relative or otherwise unusual: leave the judgement to the installer,
+        // which rejects non-absolute roots with a clear message of its own.
+        _ => true,
+    }
 }
 
 /// The cache root that contains an install, ready to record.
@@ -173,13 +194,32 @@ pub fn load_with_engine(app: &tauri::AppHandle) -> crate::config::AppConfig {
             // Every install predating `engine_cache_root` has a runtime record
             // and no recorded root, so recovery would have nowhere to look the
             // day that record goes. Recorded now, while it can still be derived.
-            let _ = crate::config_store::save_config(app, &config);
+            if let Err(error) = crate::config_store::save_config(app, &config) {
+                // Losing this quietly means the next config problem sends setup
+                // to the default cache directory and re-downloads 1.1 GB - the
+                // #65 outcome the backfill exists to prevent, with no trace of
+                // why it did not work.
+                tracing::error!("Could not record where the engine is installed: {error}");
+            }
         }
         return config;
     }
-    let (Ok(manifest), Ok(default_root)) = (EngineManifest::shipped(), app.path().app_cache_dir())
-    else {
-        return config;
+    // Reported separately: both are infrastructure failures, not "no engine", and
+    // silence here sends the viewer to first-run setup for an engine that is
+    // sitting on disk with nothing in the log to explain it.
+    let manifest = match EngineManifest::shipped() {
+        Ok(manifest) => manifest,
+        Err(error) => {
+            tracing::error!("Cannot check for an installed engine - manifest unreadable: {error}");
+            return config;
+        }
+    };
+    let default_root = match app.path().app_cache_dir() {
+        Ok(root) => root,
+        Err(error) => {
+            tracing::error!("Cannot check for an installed engine - no cache directory: {error}");
+            return config;
+        }
     };
     let Some(root) = restore_registration(
         &mut config.translation.foundry_local,
@@ -202,143 +242,5 @@ pub fn load_with_engine(app: &tauri::AppHandle) -> crate::config::AppConfig {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn default_root() -> PathBuf {
-        PathBuf::from(r"C:\Users\someone\AppData\Local\meowcal\cache")
-    }
-
-    #[test]
-    fn a_recorded_root_is_tried_before_the_default() {
-        let roots = candidate_roots(Some(r"D:\foundry-cache"), &default_root());
-
-        assert_eq!(roots[0], PathBuf::from(r"D:\foundry-cache"));
-        assert_eq!(roots[1], default_root());
-    }
-
-    #[test]
-    fn the_default_root_is_the_only_candidate_without_a_record() {
-        assert_eq!(candidate_roots(None, &default_root()), vec![default_root()]);
-    }
-
-    // Installs predating `engine_cache_root` write an empty string rather than
-    // omitting the field; that must not become a candidate path of "".
-    #[test]
-    fn a_blank_recorded_root_is_ignored() {
-        assert_eq!(
-            candidate_roots(Some("   "), &default_root()),
-            vec![default_root()]
-        );
-    }
-
-    #[test]
-    fn the_default_root_is_not_listed_twice() {
-        let recorded = default_root().to_string_lossy().to_string();
-        assert_eq!(
-            candidate_roots(Some(&recorded), &default_root()),
-            vec![default_root()]
-        );
-    }
-
-    // An engine the app is already using must not be replaced by whatever a
-    // directory scan happens to find.
-    #[test]
-    fn a_registered_runtime_is_left_alone() {
-        let manifest = EngineManifest::shipped().expect("shipped manifest");
-        let mut config = FoundryLocalConfig {
-            managed_runtime: Some(crate::engine_config::ManagedLocalRuntimeConfig {
-                kind: "hy-mt".to_string(),
-                executable_path: r"D:\engine\llama-server.exe".to_string(),
-                model_path: r"D:\engine\HY-MT.gguf".to_string(),
-                port: 11_436,
-            }),
-            ..FoundryLocalConfig::default()
-        };
-
-        assert!(restore_registration(&mut config, &manifest, &default_root()).is_none());
-    }
-
-    // Configs written before `engine_cache_root` existed carry a runtime record
-    // and no recorded root. Without backfilling, the very installs this was
-    // built to rescue would still have nowhere to look.
-    #[test]
-    fn an_existing_install_gets_its_root_recorded() {
-        let mut config = FoundryLocalConfig {
-            managed_runtime: Some(crate::engine_config::ManagedLocalRuntimeConfig {
-                kind: "hy-mt".to_string(),
-                executable_path: r"D:\foundry-cache\meowcal-sub\runtime\engine\llama-server.exe"
-                    .to_string(),
-                model_path: r"D:\foundry-cache\meowcal-sub\models\hy-mt\model.gguf".to_string(),
-                port: 11_436,
-            }),
-            ..FoundryLocalConfig::default()
-        };
-
-        assert!(backfill_cache_root(&mut config));
-        assert_eq!(
-            config.engine_cache_root.as_deref(),
-            Some(r"D:\foundry-cache")
-        );
-    }
-
-    // Backfilling twice must not churn the config or trigger a pointless save.
-    #[test]
-    fn a_recorded_root_is_not_backfilled_again() {
-        let mut config = FoundryLocalConfig {
-            engine_cache_root: Some(r"D:\foundry-cache".to_string()),
-            ..FoundryLocalConfig::default()
-        };
-
-        assert!(!backfill_cache_root(&mut config));
-    }
-
-    // Adoption launches the executable, so a file that is merely the right size
-    // must not be trusted. The installer hashes before registering; so does this.
-    #[test]
-    fn a_same_sized_but_wrong_install_is_not_adopted() {
-        let manifest = EngineManifest::shipped().expect("shipped manifest");
-        let runtime = manifest
-            .runtime_for_current_arch()
-            .expect("runtime for this arch");
-        let cache_root = std::env::temp_dir().join("meowcal-recovery-tampered");
-        let _ = std::fs::remove_dir_all(&cache_root);
-        let paths = HyMtInstallPaths::from_cache_root(&cache_root, &manifest, runtime);
-
-        // Right sizes, wrong bytes - what a corrupted or swapped artifact looks
-        // like to a size check.
-        for (file, size) in [
-            (&paths.executable, runtime.executable.size_bytes),
-            (&paths.model, manifest.model.artifact.size_bytes),
-        ] {
-            std::fs::create_dir_all(file.parent().unwrap()).unwrap();
-            std::fs::write(file, vec![0u8; size as usize]).unwrap();
-        }
-        assert!(
-            paths.is_complete(&manifest, runtime),
-            "the fixture must pass the size check to prove the hash is what rejects it"
-        );
-
-        let mut config = FoundryLocalConfig {
-            engine_cache_root: Some(cache_root.to_string_lossy().to_string()),
-            ..FoundryLocalConfig::default()
-        };
-        let adopted = restore_registration(&mut config, &manifest, &default_root());
-
-        let _ = std::fs::remove_dir_all(&cache_root);
-        assert!(adopted.is_none());
-        assert!(config.managed_runtime.is_none());
-    }
-
-    // Issue #65's core case, inverted: with nothing installed anywhere, recovery
-    // must decline rather than register paths that do not exist.
-    #[test]
-    fn nothing_is_adopted_when_no_candidate_holds_an_install() {
-        let manifest = EngineManifest::shipped().expect("shipped manifest");
-        let empty = std::env::temp_dir().join("meowcal-recovery-empty");
-        let mut config = FoundryLocalConfig::default();
-
-        assert!(restore_registration(&mut config, &manifest, &empty).is_none());
-        assert!(config.managed_runtime.is_none());
-    }
-}
+#[path = "engine_recovery_tests.rs"]
+mod tests;

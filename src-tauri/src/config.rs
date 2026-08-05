@@ -16,7 +16,10 @@ use serde::{Deserialize, Serialize};
 ///
 /// This is what gets saved/loaded from settings, and what the UI reads/writes.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")] // Use camelCase in JSON (JavaScript convention)
+// `default` matches every other config struct here: without it one absent key -
+// what an older config looks like the moment a field is added - failed the whole
+// parse, and a failed parse is what #64 turns into a wipe (#69 review).
+#[serde(rename_all = "camelCase", default)] // camelCase in JSON (JavaScript convention)
 pub struct AppConfig {
     /// The language to translate FROM (source language)
     /// Examples: "en-US", "ja-JP", "zh-CN"
@@ -35,21 +38,17 @@ pub struct AppConfig {
     pub overlay: OverlayConfig,
 
     /// Translation backend settings
-    #[serde(default)]
     pub translation: TranslationConfig,
 
     /// Last selected capture region
-    #[serde(default)]
     pub last_capture_region: Option<CaptureRegion>,
 
     /// Last known DPI scale factor for the capture region (logical -> physical pixels).
     ///
     /// This is persisted so restored regions behave correctly on high-DPI displays.
-    #[serde(default)]
     pub last_capture_scale_factor: Option<f64>,
 
     /// Window size/position preferences
-    #[serde(default)]
     pub window_preferences: WindowPreferences,
 
     /// Whether to minimize to system tray instead of closing
@@ -63,7 +62,7 @@ pub struct AppConfig {
 
 /// Configuration for the subtitle overlay appearance
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", default)]
 pub struct OverlayConfig {
     /// Font size for the translated text (in pixels)
     pub font_size: u32,

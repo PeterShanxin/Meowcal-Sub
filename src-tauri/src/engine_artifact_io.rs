@@ -188,8 +188,16 @@ pub async fn download_file<R: Runtime>(
 /// one place a viewer cannot work around a failure themselves, so the reason has
 /// to survive.
 pub async fn extract_zip(archive: &Path, destination: &Path) -> Result<(), String> {
+    // `powershell -Command` exits 0 for a non-terminating cmdlet error, which is
+    // what most `Expand-Archive` failures are - a locked destination writes to
+    // stderr, extracts nothing, and reports success. The install then failed one
+    // step later as "executable missing after extraction", throwing away the
+    // stderr that says why. Promoting errors to terminating and exiting non-zero
+    // is what makes the captured output below actually reachable.
     let script = "param([string]$archive,[string]$destination) \
-                  Expand-Archive -LiteralPath $archive -DestinationPath $destination -Force";
+                  $ErrorActionPreference = 'Stop'; \
+                  try { Expand-Archive -LiteralPath $archive -DestinationPath $destination -Force } \
+                  catch { Write-Error $_; exit 1 }";
     // Captured rather than inherited: `.status()` let PowerShell's diagnosis go
     // to a console nobody was reading.
     let output = crate::windowless_command::tokio_command("powershell")
