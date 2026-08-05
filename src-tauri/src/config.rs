@@ -7,9 +7,6 @@
 
 pub use crate::engine_config::ManagedLocalRuntimeConfig;
 use serde::{Deserialize, Serialize};
-use std::fs;
-use std::path::PathBuf;
-use tauri::Manager;
 
 // =============================================================================
 // APP CONFIG
@@ -19,7 +16,10 @@ use tauri::Manager;
 ///
 /// This is what gets saved/loaded from settings, and what the UI reads/writes.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")] // Use camelCase in JSON (JavaScript convention)
+// `default` matches every other config struct here: without it one absent key -
+// what an older config looks like once a field is added - failed the whole parse,
+// and a failed parse is what #64 turns into a wipe (#69 review).
+#[serde(rename_all = "camelCase", default)] // camelCase in JSON (JavaScript convention)
 pub struct AppConfig {
     /// The language to translate FROM (source language)
     /// Examples: "en-US", "ja-JP", "zh-CN"
@@ -38,30 +38,31 @@ pub struct AppConfig {
     pub overlay: OverlayConfig,
 
     /// Translation backend settings
-    #[serde(default)]
     pub translation: TranslationConfig,
 
     /// Last selected capture region
-    #[serde(default)]
     pub last_capture_region: Option<CaptureRegion>,
 
     /// Last known DPI scale factor for the capture region (logical -> physical pixels).
     ///
     /// This is persisted so restored regions behave correctly on high-DPI displays.
-    #[serde(default)]
     pub last_capture_scale_factor: Option<f64>,
 
     /// Window size/position preferences
-    #[serde(default)]
     pub window_preferences: WindowPreferences,
 
     /// Whether to minimize to system tray instead of closing
     pub minimize_to_tray: bool,
+
+    /// Settings on disk this struct does not model, carried through rather than
+    /// dropped on save (#64).
+    #[serde(flatten, default)]
+    pub unmodelled: serde_json::Map<String, serde_json::Value>,
 }
 
 /// Configuration for the subtitle overlay appearance
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", default)]
 pub struct OverlayConfig {
     /// Font size for the translated text (in pixels)
     pub font_size: u32,
@@ -82,8 +83,12 @@ pub struct OverlayConfig {
     pub max_width: u32,
 
     /// Whether to show the diagnostics overlay (debug info panel)
-    #[serde(default)]
     pub show_diagnostics: bool,
+
+    /// As `AppConfig::unmodelled`. `lightBackground` is written and read back by
+    /// the overlay but modelled nowhere, so the toggle never survived a restart.
+    #[serde(flatten, default)]
+    pub unmodelled: serde_json::Map<String, serde_json::Value>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -111,7 +116,6 @@ pub struct TranslationConfig {
     pub enable_context_aware: bool,
 
     /// Context level for Foundry Local prompts.
-    #[serde(default)]
     pub context_level: ContextLevel,
 
     /// How many recent translations to include in the prompt (MemoryAndRecent only).
@@ -148,11 +152,9 @@ pub struct TranslationConfig {
     pub context_reset_gap_ms: u32,
 
     /// Foundry Local backend configuration
-    #[serde(default)]
     pub foundry_local: FoundryLocalConfig,
 
     /// OCR-specific settings
-    #[serde(default)]
     pub ocr: OcrConfig,
 }
 
@@ -197,7 +199,6 @@ pub struct OcrConfig {
 
     /// How many significant characters a line must carry to be worth
     /// translating. See `ValidationStrictness::min_significant_chars`.
-    #[serde(default)]
     pub validation_strictness: ValidationStrictness,
 }
 
@@ -354,6 +355,14 @@ pub struct FoundryLocalConfig {
 
     /// App-owned HY-MT runtime metadata.
     pub managed_runtime: Option<ManagedLocalRuntimeConfig>,
+
+    /// Where the engine was installed, kept independently of `managed_runtime`.
+    ///
+    /// The install location used to be derivable only from `managed_runtime`,
+    /// so losing that record also lost the 1.1 GB sitting on disk: setup fell
+    /// back to the default cache directory and began downloading again (#65).
+    /// Held separately precisely so it survives the registration.
+    pub engine_cache_root: Option<String>,
 }
 
 /// A rectangular region on the screen
@@ -386,6 +395,7 @@ impl Default for AppConfig {
             last_capture_scale_factor: None,
             window_preferences: WindowPreferences::default(),
             minimize_to_tray: true,
+            unmodelled: serde_json::Map::new(),
         }
     }
 }
@@ -400,6 +410,7 @@ impl Default for OverlayConfig {
             offset_y: 10,                      // 10px below capture region
             max_width: 0,                      // Match capture region width
             show_diagnostics: false,           // Off by default
+            unmodelled: serde_json::Map::new(),
         }
     }
 }
@@ -567,50 +578,17 @@ impl Default for FoundryLocalConfig {
             timeout_ms: 30_000,
             endpoint_url: None,
             managed_runtime: None,
+            engine_cache_root: None,
         }
     }
 }
 
-// =============================================================================
-// PERSISTENCE
-// =============================================================================
+// PERSISTENCE - reading lives in `config_store`, writing in `config_save`, both
+// on paths so the failures worth guarding against are testable without a running
+// Tauri app. Re-exported so callers keep using `config::load_config`/`save_config`.
 
-/// Get the config.json path in the app data directory.
-pub fn get_config_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
-    let app_dir = app
-        .path()
-        .app_data_dir()
-        .map_err(|e| format!("Failed to resolve app data dir: {}", e))?;
-    fs::create_dir_all(&app_dir).map_err(|e| format!("Failed to create app data dir: {}", e))?;
-    Ok(app_dir.join("config.json"))
-}
-
-/// Load config from disk (fall back to defaults on error).
-pub fn load_config(app: &tauri::AppHandle) -> AppConfig {
-    let path = match get_config_path(app) {
-        Ok(path) => path,
-        Err(_) => return AppConfig::default(),
-    };
-
-    if let Ok(content) = fs::read_to_string(&path) {
-        if let Ok(mut config) = serde_json::from_str::<AppConfig>(&content) {
-            config.normalize();
-            return config;
-        }
-    }
-
-    AppConfig::default()
-}
-
-/// Save config to disk.
-pub fn save_config(app: &tauri::AppHandle, config: &AppConfig) -> Result<(), String> {
-    let path = get_config_path(app)?;
-    let mut config = config.clone();
-    config.normalize();
-    let json = serde_json::to_string_pretty(&config).map_err(|e| e.to_string())?;
-    fs::write(path, json).map_err(|e| e.to_string())?;
-    Ok(())
-}
+pub use crate::config_save::save_config;
+pub use crate::config_store::{get_config_path, load_config};
 
 #[cfg(test)]
 #[path = "config_tests.rs"]

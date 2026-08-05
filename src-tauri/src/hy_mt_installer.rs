@@ -29,7 +29,14 @@ pub async fn install<R: Runtime>(
         Err(error) => {
             crate::hy_mt_runtime::shutdown_owned();
             if let Some(previous) = recover_active(&paths.root).await {
-                emit_progress(app, "Install failed; restored the last known-good engine.");
+                // Someone who ran setup *to repair* a broken engine gets an `Ok`
+                // here, so without this the reason the repair failed exists
+                // nowhere - not in the wizard, not in the log.
+                tracing::error!("Engine install failed, restored the previous one: {error}");
+                emit_progress(
+                    app,
+                    format!("Install failed ({error}); restored the last known-good engine."),
+                );
                 Ok(previous)
             } else {
                 Err(error)
@@ -179,6 +186,7 @@ async fn verify_sample(paths: &HyMtInstallPaths, manifest: &EngineManifest) -> R
             endpoint_url: Some(endpoint),
             managed_runtime: Some(runtime),
             timeout_ms: 90_000,
+            ..FoundryLocalConfig::default()
         };
         FoundryLocalBackend::new(config)
             .translate("先不提时钟塔", "zh-CN", "en-US")

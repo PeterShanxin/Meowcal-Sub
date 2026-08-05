@@ -1,5 +1,5 @@
 use crate::commands::AppState;
-use crate::config::{save_config, WindowPreferences};
+use crate::config::WindowPreferences;
 use crate::sync_utils::lock_or_recover;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
@@ -81,7 +81,7 @@ pub fn persist_main_geometry(window: &Window) {
         return;
     };
     let config = lock_or_recover(&state.config).clone();
-    let _ = save_config(window.app_handle(), &config);
+    crate::config_save::save_or_warn(window.app_handle(), &config, "window geometry");
 }
 
 pub fn persist_main_geometry_from_app(app: &AppHandle) {

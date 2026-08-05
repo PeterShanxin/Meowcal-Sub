@@ -8,11 +8,17 @@ use crate::sync_utils::{read_or_recover, write_or_recover};
 use async_trait::async_trait;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
-use std::process::{Command, Stdio};
+use std::process::Stdio;
 use std::sync::atomic::{AtomicBool, AtomicU64, AtomicU8, Ordering};
 use std::sync::{OnceLock, RwLock};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tracing::{debug, info, warn};
+
+/// Every `foundry` spawn goes through here: these run on a timer while the
+/// viewer is watching, and four of the five once drew a console window (#67).
+fn foundry_command() -> std::process::Command {
+    crate::windowless_command::std_command("foundry")
+}
 
 const START_ATTEMPT_COOLDOWN_MS: u64 = 6_000;
 static LAST_START_ATTEMPT_MS: AtomicU64 = AtomicU64::new(0);
@@ -370,7 +376,7 @@ impl FoundryLocalBackend {
 
     /// Internal: actually spawn the CLI process to get service URL
     fn fetch_service_url_from_cli() -> Option<String> {
-        let output = Command::new("foundry")
+        let output = foundry_command()
             .args(["service", "status"])
             .output()
             .ok()?;
@@ -463,7 +469,7 @@ impl FoundryLocalBackend {
 
     /// Internal: actually spawn the CLI process to get cached models
     fn fetch_cached_models_from_cli() -> Vec<String> {
-        let output = Command::new("foundry").args(["cache", "list"]).output();
+        let output = foundry_command().args(["cache", "list"]).output();
 
         let Ok(output) = output else {
             debug!("Failed to run 'foundry cache list'");
@@ -524,7 +530,7 @@ impl FoundryLocalBackend {
     /// Get model context window size from `foundry model info <model>` output
     /// Returns None if detection fails (caller should use default budget)
     pub fn get_model_context_window(model: &str) -> Option<usize> {
-        let output = Command::new("foundry")
+        let output = foundry_command()
             .args(["model", "info", model])
             .output()
             .ok()?;
@@ -746,19 +752,12 @@ impl FoundryLocalBackend {
         LAST_START_ATTEMPT_MS.store(now_ms, Ordering::SeqCst);
 
         debug!("Attempting to start Foundry Local service");
-        let mut command = Command::new("foundry");
+        let mut command = foundry_command();
         command
             .args(["service", "start"])
             .stdin(Stdio::null())
             .stdout(Stdio::null())
             .stderr(Stdio::null());
-
-        #[cfg(target_os = "windows")]
-        {
-            use std::os::windows::process::CommandExt;
-            const CREATE_NO_WINDOW: u32 = 0x08000000;
-            command.creation_flags(CREATE_NO_WINDOW);
-        }
 
         match command.spawn() {
             Ok(_child) => {
@@ -1029,7 +1028,7 @@ impl FoundryLocalBackend {
 
     /// Check if the Foundry CLI is available on this system
     pub fn is_cli_available() -> bool {
-        Command::new("foundry")
+        foundry_command()
             .arg("--version")
             .stdout(Stdio::null())
             .stderr(Stdio::null())

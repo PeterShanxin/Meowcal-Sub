@@ -27,6 +27,26 @@ pub async fn file_matches(
     Ok(digest.eq_ignore_ascii_case(expected_hash))
 }
 
+/// `file_matches` without a runtime to await on.
+///
+/// Startup recovery (`engine_recovery`) has to decide whether an install is
+/// trustworthy before Tauri's `setup` returns, and it decides whether to launch
+/// an executable - so a size check alone is not enough. Hashing the model costs
+/// seconds, which is why this is not on the normal startup path: it runs only
+/// when a registration has been lost and an install is about to be re-adopted.
+pub fn file_matches_blocking(path: &Path, expected_size: u64, expected_hash: &str) -> bool {
+    if path
+        .metadata()
+        .map(|metadata| metadata.len() != expected_size)
+        .unwrap_or(true)
+    {
+        return false;
+    }
+    sha256_file(path)
+        .map(|digest| digest.eq_ignore_ascii_case(expected_hash))
+        .unwrap_or(false)
+}
+
 pub async fn verify_download(
     path: &Path,
     artifact: &DownloadArtifact,
@@ -159,10 +179,28 @@ pub async fn download_file<R: Runtime>(
         .map_err(|error| format!("ENGINE_DOWNLOAD_FINALIZE: {label}: {error}"))
 }
 
+/// Unpack a downloaded archive.
+///
+/// Issue #66: this used to report `ENGINE_EXTRACT_FAILED: Some(1)` and nothing
+/// else. `Expand-Archive` distinguishes a locked destination from a full disk
+/// from a truncated archive, and every one of them arrived as the same exit
+/// code, naming neither the archive nor where it was being written. Setup is the
+/// one place a viewer cannot work around a failure themselves, so the reason has
+/// to survive.
 pub async fn extract_zip(archive: &Path, destination: &Path) -> Result<(), String> {
+    // `powershell -Command` exits 0 for a non-terminating cmdlet error, which is
+    // what most `Expand-Archive` failures are - a locked destination writes to
+    // stderr, extracts nothing, and reports success. The install then failed one
+    // step later as "executable missing after extraction", throwing away the
+    // stderr that says why. Promoting errors to terminating and exiting non-zero
+    // is what makes the captured output below actually reachable.
     let script = "param([string]$archive,[string]$destination) \
-                  Expand-Archive -LiteralPath $archive -DestinationPath $destination -Force";
-    let status = tokio::process::Command::new("powershell")
+                  $ErrorActionPreference = 'Stop'; \
+                  try { Expand-Archive -LiteralPath $archive -DestinationPath $destination -Force } \
+                  catch { Write-Error $_; exit 1 }";
+    // Captured rather than inherited: `.status()` let PowerShell's diagnosis go
+    // to a console nobody was reading.
+    let output = crate::windowless_command::tokio_command("powershell")
         .args([
             "-NoProfile",
             "-NonInteractive",
@@ -171,14 +209,38 @@ pub async fn extract_zip(archive: &Path, destination: &Path) -> Result<(), Strin
             archive.to_string_lossy().as_ref(),
             destination.to_string_lossy().as_ref(),
         ])
-        .status()
+        .output()
         .await
         .map_err(|error| format!("ENGINE_EXTRACT_START: {error}"))?;
-    if status.success() {
-        Ok(())
-    } else {
-        Err(format!("ENGINE_EXTRACT_FAILED: {:?}", status.code()))
+    if output.status.success() {
+        return Ok(());
     }
+    Err(format!(
+        "ENGINE_EXTRACT_FAILED: {:?} extracting {} into {}: {}",
+        output.status.code(),
+        archive.display(),
+        destination.display(),
+        extraction_reason(&output.stderr)
+    ))
+}
+
+/// The useful part of a PowerShell failure.
+///
+/// `Expand-Archive` prefixes each error with a banner and then wraps the detail
+/// across several lines; the last non-empty lines carry the cause. Capped so a
+/// stack trace cannot bury the message in a wizard dialog.
+fn extraction_reason(stderr: &[u8]) -> String {
+    const MAX_LINES: usize = 4;
+    let text = String::from_utf8_lossy(stderr);
+    let lines: Vec<&str> = text
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+        .collect();
+    if lines.is_empty() {
+        return "no error output".to_string();
+    }
+    lines[lines.len().saturating_sub(MAX_LINES)..].join("; ")
 }
 
 fn emit_progress<R: Runtime>(app: &AppHandle<R>, line: impl Into<String>) {
@@ -211,6 +273,37 @@ mod tests {
     use super::*;
     use crate::engine_manifest::EngineManifest;
     use std::time::{SystemTime, UNIX_EPOCH};
+
+    // Issue #66: the reason has to reach the wizard, not a console nobody sees.
+    #[test]
+    fn an_extraction_failure_keeps_the_reason() {
+        let stderr = b"Expand-Archive : The process cannot access the file \
+                       'llama.dll' because it is being used by another process.\n\
+                       At line:1 char:1\n";
+        let reason = extraction_reason(stderr);
+
+        assert!(reason.contains("being used by another process"));
+    }
+
+    // A silent failure must still say that it was silent, rather than trailing
+    // off into an empty string that reads like a truncated message.
+    #[test]
+    fn an_extraction_failure_without_output_says_so() {
+        assert_eq!(extraction_reason(b""), "no error output");
+    }
+
+    // PowerShell can emit a long trace; the wizard shows this text, so the tail
+    // that carries the cause is kept and the rest dropped.
+    #[test]
+    fn a_long_trace_is_trimmed_to_its_last_lines() {
+        let stderr = (1..=20)
+            .map(|n| format!("line {n}"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        let reason = extraction_reason(stderr.as_bytes());
+
+        assert_eq!(reason, "line 17; line 18; line 19; line 20");
+    }
 
     #[tokio::test]
     async fn same_sized_corrupt_artifact_is_not_treated_as_installed() {
