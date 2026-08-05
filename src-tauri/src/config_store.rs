@@ -68,10 +68,17 @@ pub fn load_config(app: &tauri::AppHandle) -> AppConfig {
     match recovery {
         Recovery::None => {}
         Recovery::FirstRun => tracing::info!("No config found; starting with defaults"),
-        Recovery::RestoredFromBackup(reason) => tracing::warn!(
-            "config.json {reason}; restored the last known-good copy and set the \
-             unusable file aside as config.corrupt.json"
-        ),
+        Recovery::RestoredFromBackup {
+            reason,
+            quarantined,
+        } => {
+            let kept = if quarantined {
+                " and set the unusable file aside as config.corrupt.json"
+            } else {
+                ""
+            };
+            tracing::warn!("config.json {reason}; restored the last known-good copy{kept}");
+        }
         Recovery::UsingBackupUntilReadable(reason) => tracing::warn!(
             "config.json {reason}; using the last known-good copy for this session \
              and leaving the file untouched in case it becomes readable again"
@@ -243,9 +250,11 @@ pub enum Recovery {
     None,
     /// No config existed. Defaults, legitimately.
     FirstRun,
-    /// The config was corrupt and the backup was used instead. The corrupt file
-    /// is kept at `quarantine_path`, and the recovery has been written back.
-    RestoredFromBackup(String),
+    /// The backup was used instead, and written back. `quarantined` says whether
+    /// there was an unusable file to set aside at all - a config that was simply
+    /// missing leaves nothing to keep, and saying otherwise sends whoever
+    /// triages the problem after a file that does not exist.
+    RestoredFromBackup { reason: String, quarantined: bool },
     /// The config could not be read at all, so the backup is being used for this
     /// session only. Nothing on disk was moved or overwritten - the file may be
     /// perfectly good and merely locked.
@@ -282,7 +291,10 @@ pub fn load_durable(path: &Path) -> (AppConfig, Recovery) {
                     }
                     (
                         *config,
-                        Recovery::RestoredFromBackup("was missing".to_string()),
+                        Recovery::RestoredFromBackup {
+                            reason: "was missing".to_string(),
+                            quarantined: false,
+                        },
                     )
                 }
                 _ => (AppConfig::default(), Recovery::FirstRun),
@@ -313,7 +325,13 @@ pub fn load_durable(path: &Path) -> (AppConfig, Recovery) {
         if !quarantined {
             tracing::warn!("The corrupt config could not be set aside for inspection");
         }
-        return (*config, Recovery::RestoredFromBackup(reason));
+        return (
+            *config,
+            Recovery::RestoredFromBackup {
+                reason,
+                quarantined,
+            },
+        );
     }
 
     // Nothing to fall back on - but a backup that is merely locked is not

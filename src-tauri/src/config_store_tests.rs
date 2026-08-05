@@ -95,7 +95,7 @@ fn a_corrupt_config_falls_back_to_the_backup() {
 
     let (config, recovery) = load_durable(&path);
 
-    assert!(matches!(recovery, Recovery::RestoredFromBackup(_)));
+    assert!(matches!(recovery, Recovery::RestoredFromBackup { .. }));
     assert!(config.translation.foundry_local.managed_runtime.is_some());
 }
 
@@ -249,7 +249,7 @@ fn a_missing_config_is_restored_from_the_backup() {
 
     let (config, recovery) = load_durable(&path);
 
-    assert!(matches!(recovery, Recovery::RestoredFromBackup(_)));
+    assert!(matches!(recovery, Recovery::RestoredFromBackup { .. }));
     assert!(config.translation.foundry_local.managed_runtime.is_some());
     assert!(path.is_file(), "the recovery should be back on disk");
 }
