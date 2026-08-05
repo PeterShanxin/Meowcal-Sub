@@ -179,6 +179,7 @@ async fn verify_sample(paths: &HyMtInstallPaths, manifest: &EngineManifest) -> R
             endpoint_url: Some(endpoint),
             managed_runtime: Some(runtime),
             timeout_ms: 90_000,
+            ..FoundryLocalConfig::default()
         };
         FoundryLocalBackend::new(config)
             .translate("先不提时钟塔", "zh-CN", "en-US")

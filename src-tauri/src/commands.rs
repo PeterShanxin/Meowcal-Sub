@@ -234,7 +234,7 @@ pub async fn install_ocr_language(language_tag: String) -> Result<(), String> {
         );
 
         // Outer PowerShell spawns an elevated inner shell via Start-Process -Verb RunAs
-        let mut cmd = std::process::Command::new("powershell");
+        let mut cmd = crate::windowless_command::std_command("powershell");
         cmd.args([
             "-NoProfile",
             "-Command",
@@ -244,13 +244,6 @@ pub async fn install_ocr_language(language_tag: String) -> Result<(), String> {
                 inner_script.replace('\'', "''")
             ),
         ]);
-
-        #[cfg(windows)]
-        {
-            use std::os::windows::process::CommandExt;
-            const CREATE_NO_WINDOW: u32 = 0x08000000;
-            cmd.creation_flags(CREATE_NO_WINDOW);
-        }
 
         match cmd.status() {
             Ok(status) if status.success() => {
@@ -1989,13 +1982,11 @@ pub async fn wizard_install_engine(
 ) -> Result<(), String> {
     let manifest =
         crate::engine_manifest::EngineManifest::shipped().map_err(|error| error.to_string())?;
+    // Falls back to the independently recorded root, so a lost registration no
+    // longer sends setup to a different directory and a re-download (#65).
     let cache_dir = {
         let config = lock_or_recover(&state.config);
-        config
-            .translation
-            .foundry_local
-            .managed_cache_root()
-            .map(|path| path.to_string_lossy().to_string())
+        crate::engine_recovery::install_cache_root(&config.translation.foundry_local)
     };
 
     match hy_mt_installer::install(&app, cache_dir).await {
@@ -2009,6 +2000,10 @@ pub async fn wizard_install_engine(
                 config.translation.foundry_local.endpoint_url =
                     Some(hy_mt_runtime::endpoint_url(&runtime));
                 config.translation.foundry_local.managed_runtime = Some(runtime);
+                // Kept independently of the runtime record so a future config
+                // problem cannot hide this install from setup (#65).
+                config.translation.foundry_local.engine_cache_root =
+                    crate::engine_recovery::cache_root_of(&paths);
                 config.clone()
             };
             save_config(&app, &updated)?;

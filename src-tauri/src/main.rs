@@ -27,7 +27,6 @@ use tracing_subscriber::{EnvFilter, FmtSubscriber};
 
 // Import our custom modules
 use meowcal_sub::commands::{self, AppState};
-use meowcal_sub::config::load_config;
 use meowcal_sub::ipc::{IpcMessage, IpcServer};
 use meowcal_sub::sync_utils::lock_or_recover;
 use meowcal_sub::{http_server, legacy_translate_locally};
@@ -287,8 +286,8 @@ fn main() {
         .setup(move |app| {
             info!("Setting up system tray...");
 
-            // Load persisted config
-            let loaded_config = load_config(app.handle());
+            // Persisted settings, re-adopting an installed-but-unregistered engine (#65)
+            let loaded_config = meowcal_sub::engine_recovery::load_with_engine(app.handle());
 
             {
                 let state = app.state::<AppState>();

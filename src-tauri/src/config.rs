@@ -7,9 +7,6 @@
 
 pub use crate::engine_config::ManagedLocalRuntimeConfig;
 use serde::{Deserialize, Serialize};
-use std::fs;
-use std::path::PathBuf;
-use tauri::Manager;
 
 // =============================================================================
 // APP CONFIG
@@ -57,6 +54,11 @@ pub struct AppConfig {
 
     /// Whether to minimize to system tray instead of closing
     pub minimize_to_tray: bool,
+
+    /// Settings on disk this struct does not model, carried through untouched
+    /// rather than dropped on save. See `config_store` for why (#64).
+    #[serde(flatten, default)]
+    pub unmodelled: serde_json::Map<String, serde_json::Value>,
 }
 
 /// Configuration for the subtitle overlay appearance
@@ -354,6 +356,14 @@ pub struct FoundryLocalConfig {
 
     /// App-owned HY-MT runtime metadata.
     pub managed_runtime: Option<ManagedLocalRuntimeConfig>,
+
+    /// Where the engine was installed, kept independently of `managed_runtime`.
+    ///
+    /// The install location used to be derivable only from `managed_runtime`,
+    /// so losing that record also lost the 1.1 GB sitting on disk: setup fell
+    /// back to the default cache directory and began downloading again (#65).
+    /// Held separately precisely so it survives the registration.
+    pub engine_cache_root: Option<String>,
 }
 
 /// A rectangular region on the screen
@@ -386,6 +396,7 @@ impl Default for AppConfig {
             last_capture_scale_factor: None,
             window_preferences: WindowPreferences::default(),
             minimize_to_tray: true,
+            unmodelled: serde_json::Map::new(),
         }
     }
 }
@@ -567,6 +578,7 @@ impl Default for FoundryLocalConfig {
             timeout_ms: 30_000,
             endpoint_url: None,
             managed_runtime: None,
+            engine_cache_root: None,
         }
     }
 }
@@ -574,43 +586,13 @@ impl Default for FoundryLocalConfig {
 // =============================================================================
 // PERSISTENCE
 // =============================================================================
+// Reading and writing config.json lives in `config_store`, where the failures
+// worth guarding against - an unreadable config mistaken for an absent one, a
+// half-written file, a save that drops an engine registration still on disk -
+// can be tested without a running Tauri app. Re-exported here so callers keep
+// using `config::load_config` and `config::save_config`.
 
-/// Get the config.json path in the app data directory.
-pub fn get_config_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
-    let app_dir = app
-        .path()
-        .app_data_dir()
-        .map_err(|e| format!("Failed to resolve app data dir: {}", e))?;
-    fs::create_dir_all(&app_dir).map_err(|e| format!("Failed to create app data dir: {}", e))?;
-    Ok(app_dir.join("config.json"))
-}
-
-/// Load config from disk (fall back to defaults on error).
-pub fn load_config(app: &tauri::AppHandle) -> AppConfig {
-    let path = match get_config_path(app) {
-        Ok(path) => path,
-        Err(_) => return AppConfig::default(),
-    };
-
-    if let Ok(content) = fs::read_to_string(&path) {
-        if let Ok(mut config) = serde_json::from_str::<AppConfig>(&content) {
-            config.normalize();
-            return config;
-        }
-    }
-
-    AppConfig::default()
-}
-
-/// Save config to disk.
-pub fn save_config(app: &tauri::AppHandle, config: &AppConfig) -> Result<(), String> {
-    let path = get_config_path(app)?;
-    let mut config = config.clone();
-    config.normalize();
-    let json = serde_json::to_string_pretty(&config).map_err(|e| e.to_string())?;
-    fs::write(path, json).map_err(|e| e.to_string())?;
-    Ok(())
-}
+pub use crate::config_store::{get_config_path, load_config, save_config};
 
 #[cfg(test)]
 #[path = "config_tests.rs"]

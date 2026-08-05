@@ -35,6 +35,12 @@ impl FoundryLocalConfig {
             self.endpoint_url = current.endpoint_url.clone();
             self.managed_runtime = current.managed_runtime.clone();
         }
+        // Carried across independently of the runtime record: knowing where the
+        // engine lives is what lets a lost registration be recovered rather than
+        // re-downloaded (#65), so it must outlive the record itself.
+        if self.engine_cache_root.is_none() {
+            self.engine_cache_root = current.engine_cache_root.clone();
+        }
     }
 
     pub fn managed_cache_root(&self) -> Option<PathBuf> {

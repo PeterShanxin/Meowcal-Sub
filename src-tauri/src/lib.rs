@@ -38,11 +38,17 @@ pub mod subtitle_eval;
 
 /// App configuration - settings like language preferences
 pub mod config;
+
+/// Reading and writing config.json without losing it
+pub mod config_store;
 pub mod engine_artifact_io;
 pub mod engine_config;
 pub mod engine_install_transaction;
 pub mod engine_manifest;
 pub mod engine_preflight;
+
+/// Finding an engine that is installed but no longer registered
+pub mod engine_recovery;
 
 /// Tauri commands - functions that JavaScript can call
 pub mod commands;
@@ -64,7 +70,10 @@ pub mod sync_utils;
 
 /// Quiescing the app so an update installer can replace its files
 pub mod update_handoff;
+
 pub mod window_lifecycle;
+/// Subprocesses that do not flash a console window over playback
+pub mod windowless_command;
 pub mod wizard_contracts;
 
 // =============================================================================
