@@ -235,3 +235,66 @@ fn a_written_config_reads_back_identically() {
 // Issue #64's permanent-wipe step: a save whose in-memory config was
 // defaulted must not clear a registration that is still on disk.
 // The guard must not invent a registration where none was ever recorded.
+
+// The aftermath of a quarantine whose write-back never landed - a crash or the
+// update handoff in exactly the window the write-back exists to close. Treating
+// it as a first run would discard the recovery one launch later.
+#[test]
+fn a_missing_config_is_restored_from_the_backup() {
+    let dir = temp_dir("missing-with-backup");
+    let path = dir.join("config.json");
+    write_atomic(&path, &registered()).unwrap();
+    load_durable(&path); // establishes the backup
+    fs::remove_file(&path).unwrap();
+
+    let (config, recovery) = load_durable(&path);
+
+    assert!(matches!(recovery, Recovery::RestoredFromBackup(_)));
+    assert!(config.translation.foundry_local.managed_runtime.is_some());
+    assert!(path.is_file(), "the recovery should be back on disk");
+}
+
+// Non-UTF-8 bytes are damage, not a lock. Classified as unreadable the file
+// would never be quarantined, so the app would relaunch from a stale backup
+// forever instead of recovering once.
+#[test]
+fn a_config_of_invalid_text_is_corrupt() {
+    let dir = temp_dir("invalid-utf8");
+    let path = dir.join("config.json");
+    fs::write(&path, [0xff, 0xfe, 0x00, 0x9c, 0x01]).unwrap();
+
+    assert!(matches!(read_from(&path), LoadOutcome::Corrupt(_)));
+}
+
+// A backup that is only locked is not "no backup" - it is an answer we do not
+// have yet. Quarantining against it discards the corrupt file's evidence while
+// the backup may still hold the real settings.
+#[test]
+fn a_corrupt_config_is_not_quarantined_against_a_locked_backup() {
+    let dir = temp_dir("undecided-backup");
+    let path = dir.join("config.json");
+    write_atomic(&path, &registered()).unwrap();
+    load_durable(&path); // establishes the backup
+    fs::write(&path, "{ truncated").unwrap();
+
+    let recovery = {
+        let _lock = std::fs::OpenOptions::new()
+            .read(true)
+            .share_mode(0)
+            .open(backup_path(&path))
+            .expect("exclusive handle on the backup");
+        load_durable(&path).1
+    };
+
+    assert!(matches!(
+        recovery,
+        Recovery::Defaulted {
+            quarantined: false,
+            ..
+        }
+    ));
+    assert!(
+        path.is_file(),
+        "the corrupt config must be left for a later launch"
+    );
+}

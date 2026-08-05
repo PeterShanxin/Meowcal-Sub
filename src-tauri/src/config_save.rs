@@ -151,7 +151,11 @@ fn preserve_runtime(on_disk: &AppConfig, config: &mut AppConfig) {
 /// recovery net is not there.
 pub fn refresh_backup(path: &Path) {
     let backup = backup_path(path);
-    let staged = sibling(path, "config.bak.tmp.json");
+    // Per-refresh name for the same reason the config write has one: two saves
+    // can overlap, and a shared `config.bak.tmp.json` let one truncate or steal
+    // the other's staged backup, leaving the backup stale or missing while both
+    // saves reported success.
+    let staged = staging_path_named(path, "bak");
     let result = fs::copy(path, &staged).and_then(|_| fs::rename(&staged, &backup));
     if let Err(error) = result {
         let _ = fs::remove_file(&staged);
@@ -209,11 +213,15 @@ fn write_and_sync(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
 /// before its rename ran - so a save could report success having written the
 /// other one's state - or steal the file outright and make the rename fail.
 fn staging_path(path: &Path) -> PathBuf {
+    staging_path_named(path, "tmp")
+}
+
+fn staging_path_named(path: &Path, kind: &str) -> PathBuf {
     static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
     let ticket = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     sibling(
         path,
-        &format!("config.tmp.{}.{ticket}.json", std::process::id()),
+        &format!("config.{kind}.{}.{ticket}.json", std::process::id()),
     )
 }
 

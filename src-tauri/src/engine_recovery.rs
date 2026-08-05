@@ -167,7 +167,16 @@ pub fn cache_root_of(paths: &HyMtInstallPaths) -> Option<String> {
 /// ones carry a runtime record and no recorded root, so the first config
 /// problem would still leave recovery searching the default directory.
 pub fn backfill_cache_root(config: &mut FoundryLocalConfig) -> bool {
-    if config.engine_cache_root.is_some() {
+    // Blank counts as missing. A recorded-but-empty root is what an older build
+    // leaves behind, and returning early on it left custom-root installs with
+    // nothing to recover from - `candidate_roots` ignores a blank value, so
+    // recovery would search only the default cache (#69 review).
+    let recorded = config
+        .engine_cache_root
+        .as_deref()
+        .map(str::trim)
+        .filter(|root| !root.is_empty());
+    if recorded.is_some() {
         return false;
     }
     let Some(root) = config.managed_cache_root() else {

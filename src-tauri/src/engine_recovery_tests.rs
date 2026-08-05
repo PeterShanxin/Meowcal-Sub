@@ -165,3 +165,25 @@ fn nothing_is_adopted_when_no_candidate_holds_an_install() {
     assert!(restore_registration(&mut config, &manifest, &empty).is_none());
     assert!(config.managed_runtime.is_none());
 }
+
+// An older build can leave `engineCacheRoot` present but empty. Returning early
+// on that left custom-root installs with nothing for recovery to search.
+#[test]
+fn a_blank_recorded_root_is_backfilled_like_a_missing_one() {
+    let mut config = FoundryLocalConfig {
+        engine_cache_root: Some("   ".to_string()),
+        managed_runtime: Some(crate::engine_config::ManagedLocalRuntimeConfig {
+            kind: "hy-mt".to_string(),
+            executable_path: r"D:\foundry-cache\meowcal-sub\runtime\e\llama-server.exe".to_string(),
+            model_path: r"D:\foundry-cache\meowcal-sub\models\m\model.gguf".to_string(),
+            port: 11_436,
+        }),
+        ..FoundryLocalConfig::default()
+    };
+
+    assert!(backfill_cache_root(&mut config));
+    assert_eq!(
+        config.engine_cache_root.as_deref(),
+        Some(r"D:\foundry-cache")
+    );
+}

@@ -1,5 +1,5 @@
 // =============================================================================
-// CONFIG_STORE.RS - reading and writing config.json without losing it
+// CONFIG_STORE.RS - reading config.json without losing it
 // =============================================================================
 // Issue #64: a config the app could not parse became `AppConfig::default()`
 // silently, and the next save wrote those defaults back. One unreadable read
@@ -18,9 +18,10 @@
 // - The guard meant to protect app-owned engine paths reads the *in-memory*
 //   config, so once that had been defaulted the guard saw nothing to preserve.
 //
-// This module works on paths rather than an `AppHandle` so the failures above
-// are testable without a running Tauri app - none of them could be reached from
-// a test before.
+// Writing lives in `config_save`, which owns the separate question of whether
+// this session is entitled to replace what is on disk. Both work on paths rather
+// than an `AppHandle` so the failures above are testable without a running Tauri
+// app - none of them could be reached from a test before.
 // =============================================================================
 
 use crate::config::AppConfig;
@@ -159,6 +160,14 @@ pub fn read_from(path: &Path) -> LoadOutcome {
         // The file is there and we cannot see it. Its bytes may be fine, so this
         // is reported as unreadable rather than corrupt and must not be
         // overwritten - see `LoadOutcome::Unreadable`.
+        //
+        // `InvalidData` is the exception: the file was read fine and its *bytes*
+        // are not text, which is damage rather than a lock. Left as `Unreadable`
+        // it would never be quarantined, so the app would relaunch from a stale
+        // backup forever instead of recovering once.
+        Err(error) if error.kind() == std::io::ErrorKind::InvalidData => {
+            return LoadOutcome::Corrupt(format!("is not valid text: {error}"))
+        }
         Err(error) => return LoadOutcome::Unreadable(format!("could not be read: {error}")),
     };
 
@@ -253,13 +262,31 @@ pub enum Recovery {
 /// caller is expected to log it, loudly.
 pub fn load_durable(path: &Path) -> (AppConfig, Recovery) {
     let outcome = read_from(path);
+    let backup = read_from(&backup_path(path));
+
     let Some(reason) = outcome.failure_reason().map(str::to_string) else {
         return match outcome {
             LoadOutcome::Loaded(config) => {
                 crate::config_save::refresh_backup(path);
                 (*config, Recovery::None)
             }
-            _ => (AppConfig::default(), Recovery::FirstRun),
+            // No config, but a backup. This is the aftermath of a quarantine
+            // whose write-back never landed - the update handoff or a crash in
+            // exactly the window the write-back exists to close. Treating it as
+            // a first run would discard the recovery one launch later, which is
+            // the loss this module is for.
+            _ => match backup {
+                LoadOutcome::Loaded(config) => {
+                    if let Err(error) = crate::config_save::write_atomic(path, &config) {
+                        tracing::error!("Backup could not be restored: {error}");
+                    }
+                    (
+                        *config,
+                        Recovery::RestoredFromBackup("was missing".to_string()),
+                    )
+                }
+                _ => (AppConfig::default(), Recovery::FirstRun),
+            },
         };
     };
 
@@ -270,7 +297,7 @@ pub fn load_durable(path: &Path) -> (AppConfig, Recovery) {
     // and the recovery written back.
     let readable = !matches!(outcome, LoadOutcome::Unreadable(_));
 
-    if let LoadOutcome::Loaded(config) = read_from(&backup_path(path)) {
+    if let LoadOutcome::Loaded(config) = backup {
         if !readable {
             return (*config, Recovery::UsingBackupUntilReadable(reason));
         }
@@ -279,10 +306,7 @@ pub fn load_durable(path: &Path) -> (AppConfig, Recovery) {
         let quarantined = fs::rename(path, quarantine_path(path)).is_ok();
         // Put the recovery back on disk now rather than trusting some later save
         // to do it. Nothing guarantees one runs - a crash, Task Manager, or the
-        // update handoff all end the process without saving - and the next
-        // launch would then find no config at all, take the `Missing` path, and
-        // start from defaults. That would turn a survivable corruption into the
-        // very loss this module exists to prevent, one session later.
+        // update handoff all end the process without saving.
         if let Err(error) = crate::config_save::write_atomic(path, &config) {
             tracing::error!("Recovered config could not be written back: {error}");
         }
@@ -292,9 +316,13 @@ pub fn load_durable(path: &Path) -> (AppConfig, Recovery) {
         return (*config, Recovery::RestoredFromBackup(reason));
     }
 
-    // Nothing to fall back on. Still refuse to touch a file we merely could not
-    // read - overwriting it would destroy the only copy of the real settings.
-    let quarantined = readable && fs::rename(path, quarantine_path(path)).is_ok();
+    // Nothing to fall back on - but a backup that is merely locked is not
+    // "nothing", it is an answer we do not have yet. Quarantining the config
+    // against it would throw away the corrupt file's evidence and let a later
+    // save replace a backup that may hold the real settings.
+    let backup_undecided = matches!(backup, LoadOutcome::Unreadable(_));
+    let quarantined =
+        readable && !backup_undecided && fs::rename(path, quarantine_path(path)).is_ok();
     (
         AppConfig::default(),
         Recovery::Defaulted {
