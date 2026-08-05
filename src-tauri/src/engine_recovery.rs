@@ -42,16 +42,44 @@ pub fn candidate_roots(recorded: Option<&str>, default_root: &Path) -> Vec<PathB
     roots
 }
 
-/// The first candidate root holding a complete install.
+/// The first candidate root holding an install that verifies against the manifest.
 ///
-/// `is_complete` checks both artifacts against their manifest sizes, the same
-/// test `managed_hy_mt_status` uses to decide the engine is usable - so anything
-/// adopted here will report ready rather than half-installed.
+/// Both artifacts are checked by size *and* SHA-256, the same standard the
+/// installer applies before it registers anything. Size alone is what
+/// `is_complete` uses, and it is enough for reporting status - but adoption
+/// writes these paths into `managed_runtime` and startup then launches the
+/// executable, so a same-sized corrupt or tampered file under the recorded root
+/// would be trusted and run rather than repaired. Hashing costs seconds on the
+/// 1.1 GB model; it is paid once, only when a registration has been lost.
 pub fn find_installed(roots: &[PathBuf], manifest: &EngineManifest) -> Option<HyMtInstallPaths> {
+    use crate::engine_artifact_io::file_matches_blocking;
+
     let runtime = manifest.runtime_for_current_arch().ok()?;
     roots.iter().find_map(|root| {
         let paths = HyMtInstallPaths::from_cache_root(root, manifest, runtime);
-        paths.is_complete(manifest, runtime).then_some(paths)
+        // Sizes first: they reject a wrong or absent tree instantly, so the
+        // expensive hash only runs on a candidate that could plausibly be right.
+        if !paths.is_complete(manifest, runtime) {
+            return None;
+        }
+        let verified = file_matches_blocking(
+            &paths.executable,
+            runtime.executable.size_bytes,
+            &runtime.executable.sha256,
+        ) && file_matches_blocking(
+            &paths.model,
+            manifest.model.artifact.size_bytes,
+            &manifest.model.artifact.sha256,
+        );
+        if !verified {
+            tracing::warn!(
+                "An install at {} is the right size but does not match the manifest; \
+                 leaving it for setup to repair rather than adopting it",
+                paths.root.display()
+            );
+            return None;
+        }
+        Some(paths)
     })
 }
 
@@ -263,6 +291,43 @@ mod tests {
         };
 
         assert!(!backfill_cache_root(&mut config));
+    }
+
+    // Adoption launches the executable, so a file that is merely the right size
+    // must not be trusted. The installer hashes before registering; so does this.
+    #[test]
+    fn a_same_sized_but_wrong_install_is_not_adopted() {
+        let manifest = EngineManifest::shipped().expect("shipped manifest");
+        let runtime = manifest
+            .runtime_for_current_arch()
+            .expect("runtime for this arch");
+        let cache_root = std::env::temp_dir().join("meowcal-recovery-tampered");
+        let _ = std::fs::remove_dir_all(&cache_root);
+        let paths = HyMtInstallPaths::from_cache_root(&cache_root, &manifest, runtime);
+
+        // Right sizes, wrong bytes - what a corrupted or swapped artifact looks
+        // like to a size check.
+        for (file, size) in [
+            (&paths.executable, runtime.executable.size_bytes),
+            (&paths.model, manifest.model.artifact.size_bytes),
+        ] {
+            std::fs::create_dir_all(file.parent().unwrap()).unwrap();
+            std::fs::write(file, vec![0u8; size as usize]).unwrap();
+        }
+        assert!(
+            paths.is_complete(&manifest, runtime),
+            "the fixture must pass the size check to prove the hash is what rejects it"
+        );
+
+        let mut config = FoundryLocalConfig {
+            engine_cache_root: Some(cache_root.to_string_lossy().to_string()),
+            ..FoundryLocalConfig::default()
+        };
+        let adopted = restore_registration(&mut config, &manifest, &default_root());
+
+        let _ = std::fs::remove_dir_all(&cache_root);
+        assert!(adopted.is_none());
+        assert!(config.managed_runtime.is_none());
     }
 
     // Issue #65's core case, inverted: with nothing installed anywhere, recovery

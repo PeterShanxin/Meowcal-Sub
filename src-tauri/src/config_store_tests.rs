@@ -78,6 +78,56 @@ fn a_corrupt_config_falls_back_to_the_backup() {
     assert!(config.translation.foundry_local.managed_runtime.is_some());
 }
 
+// A recovery held only in memory is lost the moment the process ends without
+// saving - a crash, Task Manager, the update handoff. The next launch would then
+// find no config, take the `Missing` path, and start from defaults: the very
+// loss this module prevents, one session later.
+#[test]
+fn a_recovered_config_is_written_back_immediately() {
+    let dir = temp_dir("write-back");
+    let path = dir.join("config.json");
+    write_atomic(&path, &registered()).unwrap();
+    load_durable(&path); // establishes the backup
+    fs::write(&path, "{ truncated").unwrap();
+
+    load_durable(&path);
+
+    // Read the file rather than the return value: the point is that the disk
+    // now holds the recovery, with no further save required.
+    let LoadOutcome::Loaded(on_disk) = read_from(&path) else {
+        panic!("the recovered config should be back on disk");
+    };
+    assert!(on_disk.translation.foundry_local.managed_runtime.is_some());
+}
+
+// The backup is the recovery net; refreshing it with a plain copy could leave it
+// truncated by the same interruption it exists to survive.
+#[test]
+fn refreshing_the_backup_leaves_no_staging_file() {
+    let dir = temp_dir("backup-staging");
+    let path = dir.join("config.json");
+    write_atomic(&path, &registered()).unwrap();
+
+    load_durable(&path);
+
+    assert!(backup_path(&path).is_file());
+    assert!(!sibling(&path, "config.bak.tmp.json").exists());
+}
+
+// Autosave and window-geometry persistence both reach `save_config`, so two
+// saves can overlap. A shared staging name let one overwrite the other's staged
+// JSON before its rename ran.
+#[test]
+fn concurrent_saves_do_not_share_a_staging_file() {
+    let dir = temp_dir("staging-unique");
+    let path = dir.join("config.json");
+
+    let first = staging_path(&path);
+    let second = staging_path(&path);
+
+    assert_ne!(first, second);
+}
+
 // Losing the config is bad; losing the evidence of what was lost is worse.
 #[test]
 fn an_unusable_config_is_quarantined_rather_than_overwritten() {

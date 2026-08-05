@@ -27,6 +27,26 @@ pub async fn file_matches(
     Ok(digest.eq_ignore_ascii_case(expected_hash))
 }
 
+/// `file_matches` without a runtime to await on.
+///
+/// Startup recovery (`engine_recovery`) has to decide whether an install is
+/// trustworthy before Tauri's `setup` returns, and it decides whether to launch
+/// an executable - so a size check alone is not enough. Hashing the model costs
+/// seconds, which is why this is not on the normal startup path: it runs only
+/// when a registration has been lost and an install is about to be re-adopted.
+pub fn file_matches_blocking(path: &Path, expected_size: u64, expected_hash: &str) -> bool {
+    if path
+        .metadata()
+        .map(|metadata| metadata.len() != expected_size)
+        .unwrap_or(true)
+    {
+        return false;
+    }
+    sha256_file(path)
+        .map(|digest| digest.eq_ignore_ascii_case(expected_hash))
+        .unwrap_or(false)
+}
+
 pub async fn verify_download(
     path: &Path,
     artifact: &DownloadArtifact,

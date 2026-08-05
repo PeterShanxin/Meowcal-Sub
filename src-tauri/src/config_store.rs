@@ -157,9 +157,7 @@ pub enum Recovery {
 pub fn load_durable(path: &Path) -> (AppConfig, Recovery) {
     let reason = match read_from(path) {
         LoadOutcome::Loaded(config) => {
-            // Only refresh the backup from a config that just parsed, so a bad
-            // file can never become the fallback for its own recovery.
-            let _ = fs::copy(path, backup_path(path));
+            refresh_backup(path);
             return (*config, Recovery::None);
         }
         LoadOutcome::Missing => return (AppConfig::default(), Recovery::FirstRun),
@@ -170,11 +168,40 @@ pub fn load_durable(path: &Path) -> (AppConfig, Recovery) {
         // Keep the unusable original: it is the only evidence of what was lost,
         // and the next successful save would otherwise write over it.
         let _ = fs::rename(path, quarantine_path(path));
+        // Put the recovery back on disk now rather than trusting some later save
+        // to do it. Nothing guarantees one runs - a crash, Task Manager, or the
+        // update handoff all end the process without saving - and the next
+        // launch would then find no config at all, take the `Missing` path, and
+        // start from defaults. That would turn a survivable corruption into the
+        // very loss this module exists to prevent, one session later.
+        if let Err(error) = write_atomic(path, &config) {
+            tracing::error!("Recovered config could not be written back: {error}");
+        }
         return (*config, Recovery::RestoredFromBackup(reason));
     }
 
     let _ = fs::rename(path, quarantine_path(path));
     (AppConfig::default(), Recovery::Defaulted(reason))
+}
+
+/// Keep the last-known-good copy in step with a config that just parsed.
+///
+/// Staged and renamed rather than copied straight over. A plain `fs::copy` can
+/// be interrupted halfway, leaving a truncated backup - and the backup would
+/// then fail in exactly the interruption class it exists to survive, so the next
+/// corrupt config would fall through to defaults with no fallback at all.
+///
+/// A failure to refresh is logged rather than propagated: the config itself
+/// loaded fine, so the app should still start. But it must not pass silently,
+/// because it means the recovery net is not there.
+fn refresh_backup(path: &Path) {
+    let backup = backup_path(path);
+    let staged = sibling(path, "config.bak.tmp.json");
+    let result = fs::copy(path, &staged).and_then(|_| fs::rename(&staged, &backup));
+    if let Err(error) = result {
+        let _ = fs::remove_file(&staged);
+        tracing::warn!("Could not refresh the config backup: {error}");
+    }
 }
 
 /// Write the config so that it is either wholly the old one or wholly the new.
@@ -190,7 +217,7 @@ pub fn write_atomic(path: &Path, config: &AppConfig) -> Result<(), String> {
 
     // Same directory as the target: `fs::rename` is only atomic within a volume,
     // and a temp dir can easily be on another one.
-    let temp = sibling(path, "config.tmp.json");
+    let temp = staging_path(path);
     fs::write(&temp, json).map_err(|error| format!("Failed to stage config: {error}"))?;
     fs::rename(&temp, path).map_err(|error| {
         // The staged file is useless once the rename failed, and leaving it
@@ -198,6 +225,23 @@ pub fn write_atomic(path: &Path, config: &AppConfig) -> Result<(), String> {
         let _ = fs::remove_file(&temp);
         format!("Failed to replace config: {error}")
     })
+}
+
+/// A staging name no concurrent save will also be using.
+///
+/// Saves are not serialised: autosave from the UI and the window-geometry
+/// persistence both reach `save_config`, so two can overlap. Sharing one
+/// `config.tmp.json` let the second writer overwrite the first's staged JSON
+/// before its rename ran - so a save could report success having written the
+/// other one's state - or steal the file outright and make the rename fail.
+/// A per-save name removes the interference entirely.
+fn staging_path(path: &Path) -> PathBuf {
+    static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    let ticket = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    sibling(
+        path,
+        &format!("config.tmp.{}.{ticket}.json", std::process::id()),
+    )
 }
 
 /// Refuse to write away an engine registration that is still on disk.
