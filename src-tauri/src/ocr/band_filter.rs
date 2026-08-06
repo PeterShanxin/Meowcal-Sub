@@ -19,6 +19,7 @@ pub struct BandFilter {
     tracker: Option<BandTracker>,
     frame_interval_ms: u64,
     started: Instant,
+    held_lines: usize,
 }
 
 impl BandFilter {
@@ -27,6 +28,31 @@ impl BandFilter {
             tracker: None,
             frame_interval_ms: frame_interval_ms.max(1),
             started: Instant::now(),
+            held_lines: 0,
+        }
+    }
+
+    /// How many lines the last frame's filtering held back.
+    ///
+    /// The pipeline needs this to tell an empty region from one whose text was
+    /// discarded here. Without it the capture loop reached its empty branch and
+    /// reported `[FILTER: empty] No text detected`, telling the viewer the same,
+    /// while a subtitle was plainly on screen and this filter had just thrown
+    /// away 109 lines of it. `ocr_gate` exists so that text is never discarded
+    /// silently; the band filter was routing around that. See issue #59.
+    pub fn held_lines(&self) -> usize {
+        self.held_lines
+    }
+
+    /// Why the last frame produced nothing, in the capture loop's own words.
+    ///
+    /// The per-band detail is already logged above as `[BAND: ...]`; this is the
+    /// one word the empty branch needs so that its line agrees with them.
+    pub fn skip_reason(&self) -> &'static str {
+        if self.held_lines > 0 {
+            "band_held"
+        } else {
+            "empty"
         }
     }
 
@@ -36,6 +62,7 @@ impl BandFilter {
     /// rectangles - passes through untouched. Filtering on absent evidence
     /// would silently blank the overlay for anyone on such a path.
     pub fn apply(&mut self, result: OcrResult) -> OcrResult {
+        self.held_lines = 0;
         if result.boxes.len() != result.lines.len() || result.lines.is_empty() {
             return result;
         }
@@ -51,6 +78,7 @@ impl BandFilter {
         let at_ms = self.started.elapsed().as_millis() as u64;
         let banding = tracker.observe(&result.lines, &result.boxes, at_ms);
 
+        self.held_lines = banding.dropped.iter().map(|band| band.lines).sum();
         for band in &banding.dropped {
             // Glimpses are held every few seconds all session long; logging each
             // would bury the drops that explain a subtitle actually vanishing.
@@ -117,6 +145,26 @@ mod tests {
             last = filter.apply(frame(1000.0, 300.0 + cue as f32 * 60.0, 20 + cue));
         }
         assert!(!last.is_empty(), "a subtitle band must keep being read");
+    }
+
+    // The pipeline reports one of these to the viewer and writes it to the log,
+    // and they mean opposite things: nothing was on screen, or something was and
+    // this filter discarded it. Reporting the second as the first is why the
+    // ninety-second blackout in #59 survived to 0.6.6 undiagnosed.
+    #[test]
+    fn a_held_frame_is_not_reported_as_an_empty_one() {
+        let mut filter = BandFilter::new(250);
+
+        filter.apply(OcrResult::empty());
+        assert_eq!(filter.held_lines(), 0);
+        assert_eq!(filter.skip_reason(), "empty");
+
+        // One sighting of a band nothing is known about is held as a glimpse -
+        // the result is empty, but text was read and thrown away here.
+        let held = filter.apply(frame(1000.0, 300.0, 20));
+        assert!(held.is_empty(), "the frame should come back empty");
+        assert_eq!(filter.held_lines(), 1);
+        assert_eq!(filter.skip_reason(), "band_held");
     }
 
     // Reselecting the region changes the coordinate space, so a band remembered

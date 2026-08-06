@@ -24,6 +24,16 @@ pub enum OcrRejection {
     /// furniture - a menu, a stat readout, a wall of body text - rather than a
     /// line of dialogue.
     TooLong,
+    /// Recognised characters, but most of the line is OCR noise - symbols wedged
+    /// inside words, as in `Wh€reythe MFtiÄhave relatively;thinnedput?`. The
+    /// model can only render nonsense from it, and spending the one translation
+    /// slot on it costs the real dialogue behind it.
+    Garbled,
+    /// Text was read, but every line of it sat in a band judged not to carry
+    /// dialogue. Distinct from an empty region because the two need opposite
+    /// responses, and reporting this as "no text detected" is what left the
+    /// blackout in issue #59 undiagnosable from a user's log.
+    BandHeld,
 }
 
 impl OcrRejection {
@@ -33,6 +43,8 @@ impl OcrRejection {
             OcrRejection::TooShort => "tooShort",
             OcrRejection::Untranslatable => "untranslatable",
             OcrRejection::TooLong => "tooLong",
+            OcrRejection::Garbled => "garbled",
+            OcrRejection::BandHeld => "bandHeld",
         }
     }
 }
@@ -76,6 +88,12 @@ pub fn classify(text: &str, min_significant_chars: usize) -> Option<OcrRejection
 
     if crate::llm::is_untranslatable_text(text) {
         return Some(OcrRejection::Untranslatable);
+    }
+
+    // Last, because it is the most expensive test and the least certain. A line
+    // that failed any rule above was never going to be translated anyway.
+    if crate::ocr_corruption::is_mostly_noise(text) {
+        return Some(OcrRejection::Garbled);
     }
 
     None
@@ -158,6 +176,49 @@ mod tests {
         assert_eq!(OcrRejection::TooShort.as_str(), "tooShort");
         assert_eq!(OcrRejection::Untranslatable.as_str(), "untranslatable");
         assert_eq!(OcrRejection::TooLong.as_str(), "tooLong");
+        assert_eq!(OcrRejection::Garbled.as_str(), "garbled");
+        assert_eq!(OcrRejection::BandHeld.as_str(), "bandHeld");
+    }
+
+    // Verbatim from the session in issue #59. Each of these reached the model and
+    // could only come back as nonsense, and each held the one translation slot
+    // while real dialogue went past.
+    #[test]
+    fn rejects_a_line_that_is_mostly_ocr_noise() {
+        assert_eq!(
+            classify("Wh€reythe MFtiÄhave relatively;thinnedput?", MODERATE),
+            Some(OcrRejection::Garbled)
+        );
+    }
+
+    // Two tokens is not enough of a sample to condemn a line, however bad one of
+    // them looks - see `ocr_corruption::MIN_TOKENS_TO_JUDGE`. Dropping a real
+    // subtitle is permanent; letting a mangled one through costs 250ms.
+    #[test]
+    fn a_short_line_is_not_rejected_on_a_single_bad_token() {
+        assert_eq!(classify("of qrßinary•Magebraft.", MODERATE), None);
+    }
+
+    // Chinese has no spaces, so the whole line is one token and one ordinary
+    // character used to condemn all of it.
+    #[test]
+    fn an_ordinary_chinese_line_is_not_rejected_as_noise() {
+        assert_eq!(classify("他说:我们明天再谈吧", MODERATE), None);
+        assert_eq!(classify("第一季/第二季都很精彩", MODERATE), None);
+    }
+
+    // The other side of the same rule. Dropping a real subtitle is the worse
+    // error, so a line carrying some noise but mostly text still goes through.
+    #[test]
+    fn accepts_a_line_that_is_mostly_readable() {
+        assert_eq!(
+            classify("bf//dzz:: However, isn't he a hero from an era", MODERATE),
+            None
+        );
+        assert_eq!(
+            classify("where the Mystics have relatively thinned out?", MODERATE),
+            None
+        );
     }
 
     #[test]

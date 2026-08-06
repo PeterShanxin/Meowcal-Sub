@@ -16,8 +16,20 @@ pub mod capture;
 /// OCR (Optical Character Recognition) - reads text from images
 pub mod ocr;
 
+/// Scores how badly OCR mangled a line, so a worse re-read cannot replace a better one
+pub mod ocr_corruption;
+
 /// Decides which recognised lines are reliable enough to translate
 pub mod ocr_gate;
+
+/// Decides when to tell the viewer why nothing is showing
+pub mod pipeline_notices;
+
+/// Compares a read against the last few lines, not just the last one
+pub mod ocr_recent_lines;
+
+/// What to do with a read that repeats a line already translated
+pub mod pipeline_repeat_policy;
 
 /// Tells a re-read of the subtitle already on screen from fresh dialogue
 pub mod ocr_stability;

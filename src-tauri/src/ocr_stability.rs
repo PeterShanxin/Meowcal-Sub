@@ -71,7 +71,13 @@ pub fn classify(previous: &str, current: &str) -> LineChange {
     // A read that lost characters is OCR dropping them, not dialogue getting
     // shorter. Suppressing it keeps the overlay from flickering back to a
     // partial version of a line it already showed in full.
-    if contains_subsequence(&previous, &current) {
+    //
+    // Only when what is left is most of the line, though. Normalising strips
+    // spaces and punctuation, so a two-word reply is contained in plenty of
+    // unrelated dialogue - `No.` is inside `I don't know.`, `Wait.` inside
+    // `I told you to wait outside` - and treating those as re-reads silently
+    // swallowed the short exchanges that make up much of a script.
+    if contains_subsequence(&previous, &current) && current.len() * 2 >= previous.len() {
         return LineChange::Repeat;
     }
 

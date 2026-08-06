@@ -188,9 +188,27 @@ pub fn classify(stats: &BandStats, region_width: f32) -> Verdict {
 /// the cue genuinely changes.
 pub fn is_same_cue(width: f32, chars: usize, previous_width: f32, previous_chars: usize) -> bool {
     let width_slack = (0.08 * previous_width).max(8.0);
-    let chars_slack = ((0.15 * previous_chars as f32) as usize).max(2);
+    let chars_slack = ((CHAR_COUNT_SLACK * previous_chars as f32) as usize).max(2);
     (width - previous_width).abs() <= width_slack && chars.abs_diff(previous_chars) <= chars_slack
 }
+
+/// How far the character count may wobble between two reads of one cue.
+///
+/// Fifteen percent was calibrated on Chinese, where a cue is a fixed number of
+/// glyphs and OCR either reads one or misreads it. English does not behave that
+/// way: it drops and merges whole words, and issue #59 measured a single
+/// unchanged subtitle read as 27, 27, 13, 16, 27 characters inside two seconds -
+/// a 52% swing on text that never changed.
+///
+/// Every one of those wobbles counted as a fresh cue, inflating the rate three-
+/// to fourfold and pushing a real subtitle band past `MAX_CUE_RATE_PER_MINUTE`
+/// into `Churning`. Fifty-five percent covers the measured swing.
+///
+/// Widening this cannot hide a real cue change, because the width test still has
+/// to pass as well - and it costs little in the other direction: merging two
+/// cues halves the rate, and measured subtitles ran at 37-44 against a floor of
+/// 10, so there is room to spare before a band would read as `Static`.
+const CHAR_COUNT_SLACK: f32 = 0.55;
 
 #[cfg(test)]
 mod tests {

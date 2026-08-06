@@ -28,6 +28,10 @@
     tooShort: "Only stray marks found in the selected area",
     untranslatable: "Nothing translatable in the selected area",
     tooLong: "Too much text in the selected area — narrow it to the subtitle line",
+    garbled: "The text in this area came back too garbled to translate",
+    // Not the viewer's fault and not fixable by moving the region, so this one
+    // says what the app is doing rather than asking for a change.
+    bandHeld: "Waiting — the text here does not look like dialogue yet",
   };
 
   function unreadableHint(reason) {

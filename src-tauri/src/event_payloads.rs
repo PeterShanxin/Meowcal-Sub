@@ -46,6 +46,20 @@ impl TranslationPayload {
         )
     }
 
+    /// Nothing to show for this frame, saying which kind of nothing it is.
+    ///
+    /// An empty region and one whose every line the band filter held need
+    /// opposite responses from the viewer, and the pipeline reported both as
+    /// "no text detected" - while a subtitle was on screen and 109 lines of it
+    /// had just been discarded. See `BandFilter::held_lines` and issue #59.
+    pub(crate) fn region_quiet(session_id: u64, capture_id: u64, held_lines: usize) -> Self {
+        if held_lines > 0 {
+            Self::source_unreadable(session_id, capture_id, OcrRejection::BandHeld)
+        } else {
+            Self::no_subtitle_text(session_id, capture_id)
+        }
+    }
+
     /// OCR read the region but the line was not reliable enough to translate.
     pub(crate) fn source_unreadable(
         session_id: u64,

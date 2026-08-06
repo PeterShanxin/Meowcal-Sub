@@ -53,6 +53,42 @@ impl Observation {
     }
 }
 
+/// How long a band that was carrying subtitles may stay demoted before its
+/// evidence is thrown away and it is judged again from scratch.
+///
+/// A demotion feeds itself. `WINDOW_MS` is ninety seconds, and every noisy read
+/// arriving while the band is held refreshes the observations that caused the
+/// demotion - so one bad stretch can silence a subtitle track for as long as the
+/// noise lasts. The measured session lost 71.7 seconds in one go and 30.5 in
+/// another, with OCR reading text on 87 frames throughout. See issue #59.
+///
+/// Thirty seconds bounds that. The cost is paid by a band that really is
+/// credits: it is re-admitted, gathers observations again, and is demoted once
+/// more. Leaking a second or two of credits every thirty is a far better trade
+/// than losing half a minute of dialogue, because the viewer can read credits
+/// unaided and cannot recover dialogue that was never shown.
+///
+/// This bounds an unbroken run of `Churning`, which is the measured failure. A
+/// band that alternates between `Churning` and another excluded verdict clears
+/// the clock each time and is not covered; the rate thresholds either side of
+/// the subtitle band make that alternation unlikely for a single band, and
+/// clocking every exclusion would put `Static` - a frozen screen, correctly
+/// judged and producing no new evidence - back on trial every thirty seconds.
+pub(super) const MAX_DEMOTION_MS: u64 = 30_000;
+
+/// Frames a re-admitted band is judged on before it may be demoted again.
+///
+/// Expiry leaves the window empty, and an empty window reads as `Glimpsed` -
+/// which is *excluded*, so without this the band spends its first frames back
+/// still dropped, then reaches `MIN_OBSERVATIONS` and is re-demoted on the same
+/// eight noisy frames that demoted it before. Measured on the branch's own test
+/// scenario, that returned the band for five frames in thirty seconds.
+///
+/// Holding it included for a full window instead means the second judgement is
+/// made on as much evidence as the first, rather than on the first eight frames
+/// after a reset.
+pub(super) const READMITTED_GRACE_FRAMES: usize = 12;
+
 /// One band's recent history.
 #[derive(Debug)]
 pub(super) struct TrackedBand {
@@ -61,6 +97,10 @@ pub(super) struct TrackedBand {
     window: VecDeque<Observation>,
     settled: Option<Verdict>,
     disagreeing: usize,
+    /// When this band stopped being judged a subtitle, if it ever was one.
+    demoted_since_ms: Option<u64>,
+    /// Frames left of the reprieve granted by an expired demotion.
+    grace_frames: usize,
 }
 
 impl TrackedBand {
@@ -71,6 +111,30 @@ impl TrackedBand {
             window: VecDeque::new(),
             settled: None,
             disagreeing: 0,
+            demoted_since_ms: None,
+            grace_frames: 0,
+        }
+    }
+
+    /// Throw away the evidence behind a demotion that has lasted too long.
+    ///
+    /// Called before this frame is recorded, so the band is judged on what
+    /// arrives next rather than on the stretch that demoted it.
+    ///
+    /// An empty window reads as `Glimpsed`, not `Warming`, and `Glimpsed` is
+    /// excluded - so clearing alone would hand the band back several frames
+    /// later and then re-demote it on the first full window of noise. The grace
+    /// frames are what actually re-admit it; see `READMITTED_GRACE_FRAMES`.
+    pub(super) fn expire_a_stale_demotion(&mut self, at_ms: u64) {
+        let overdue = self
+            .demoted_since_ms
+            .is_some_and(|since| at_ms.saturating_sub(since) >= MAX_DEMOTION_MS);
+        if overdue {
+            self.window.clear();
+            self.settled = None;
+            self.disagreeing = 0;
+            self.demoted_since_ms = None;
+            self.grace_frames = READMITTED_GRACE_FRAMES;
         }
     }
 
@@ -80,7 +144,16 @@ impl TrackedBand {
     /// Everything else takes effect at once: a band that has never been a
     /// subtitle has nothing to protect, and holding a promotion back would cost
     /// exactly the cues this exists to keep.
-    pub(super) fn settle(&mut self, raw: Verdict) -> Verdict {
+    pub(super) fn settle(&mut self, raw: Verdict, at_ms: u64) -> Verdict {
+        // A band just handed back its chance is included while it gathers the
+        // evidence to be judged on. Without this it is dropped for the first
+        // frames after the reset and then demoted again on a short window.
+        if self.grace_frames > 0 {
+            self.grace_frames -= 1;
+            self.settled = Some(Verdict::Warming);
+            self.demoted_since_ms = None;
+            return Verdict::Warming;
+        }
         let settled = match self.settled {
             Some(Verdict::Subtitle) if raw != Verdict::Subtitle => {
                 self.disagreeing += 1;
@@ -96,6 +169,20 @@ impl TrackedBand {
                 raw
             }
         };
+        // Only `Churning` is put on the clock, because only `Churning` feeds
+        // itself: it is reached by the cue rate being *inflated*, and the noisy
+        // reads that inflate it keep arriving and keep refreshing the window.
+        //
+        // `Static` is the opposite - a band judged static is one nothing is
+        // happening in, so there is no stream of new evidence to re-litigate,
+        // and expiring it would re-admit a frozen screen every thirty seconds
+        // for nothing. `Scattered` is a property of where the text sits rather
+        // than how fast it changes, and moves only when the text does.
+        if settled == Verdict::Churning {
+            self.demoted_since_ms.get_or_insert(at_ms);
+        } else {
+            self.demoted_since_ms = None;
+        }
         self.settled = Some(settled);
         settled
     }
@@ -174,142 +261,5 @@ fn scatter(values: &[f32]) -> f32 {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    const INTERVAL: u64 = 261;
-
-    #[test]
-    fn observations_older_than_the_window_are_forgotten() {
-        let mut band = TrackedBand::new(1000.0);
-        band.record(1000.0, 600.0, 900.0, 20, 0);
-        band.record(1000.0, 600.0, 900.0, 20, WINDOW_MS / 2);
-        assert_eq!(band.stats(INTERVAL).observations, 2);
-        band.record(1000.0, 600.0, 900.0, 20, WINDOW_MS + 1);
-        assert_eq!(
-            band.stats(INTERVAL).observations,
-            2,
-            "the first observation should have aged out"
-        );
-    }
-
-    #[test]
-    fn a_band_drifts_toward_where_it_is_actually_seen() {
-        let mut band = TrackedBand::new(1000.0);
-        for _ in 0..40 {
-            band.record(1010.0, 600.0, 900.0, 20, 0);
-        }
-        assert!(band.centre_y() > 1008.0, "{}", band.centre_y());
-        assert!(band.centre_y() <= 1010.0);
-    }
-
-    // A left-aligned band holds its left edge while its centre and right edge
-    // move with the length of each line. The smallest of the three is what
-    // counts, so this must read as holding position.
-    #[test]
-    fn a_left_aligned_band_is_judged_on_its_left_edge() {
-        let mut band = TrackedBand::new(1000.0);
-        for (index, right) in [700.0, 1100.0, 850.0, 1300.0, 900.0].iter().enumerate() {
-            band.record(1000.0, 300.0, *right, 20, index as u64 * INTERVAL);
-        }
-        assert_eq!(band.stats(INTERVAL).centre_scatter, 0.0);
-    }
-
-    #[test]
-    fn a_band_seen_once_has_no_scatter_to_speak_of() {
-        let mut band = TrackedBand::new(1000.0);
-        band.record(1000.0, 600.0, 900.0, 20, 0);
-        let stats = band.stats(INTERVAL);
-        assert_eq!(stats.centre_scatter, 0.0);
-        assert_eq!(stats.cues, 1);
-    }
-
-    #[test]
-    fn holding_the_same_reading_counts_as_one_cue() {
-        let mut band = TrackedBand::new(1000.0);
-        for frame in 0..20u64 {
-            band.record(1000.0, 600.0, 900.0, 20, frame * INTERVAL);
-        }
-        assert_eq!(band.stats(INTERVAL).cues, 1);
-    }
-
-    #[test]
-    fn each_genuinely_new_reading_is_another_cue() {
-        let mut band = TrackedBand::new(1000.0);
-        for frame in 0..6u64 {
-            let right = 900.0 + frame as f32 * 200.0;
-            band.record(
-                1000.0,
-                600.0,
-                right,
-                20 + frame as usize * 12,
-                frame * INTERVAL,
-            );
-        }
-        assert_eq!(band.stats(INTERVAL).cues, 6);
-    }
-
-    // A subtitle band that reads as something else for a frame or two must keep
-    // being translated. That flicker is what makes a short line fail to appear.
-    #[test]
-    fn an_established_subtitle_band_survives_a_brief_disagreement() {
-        let mut band = TrackedBand::new(1000.0);
-        assert_eq!(band.settle(Verdict::Subtitle), Verdict::Subtitle);
-        for frame in 0..HOLD_THROUGH_FRAMES - 1 {
-            assert_eq!(
-                band.settle(Verdict::Churning),
-                Verdict::Subtitle,
-                "frame {frame} should still be translated"
-            );
-        }
-    }
-
-    #[test]
-    fn a_sustained_disagreement_does_demote_it() {
-        let mut band = TrackedBand::new(1000.0);
-        band.settle(Verdict::Subtitle);
-        for _ in 0..HOLD_THROUGH_FRAMES {
-            band.settle(Verdict::Churning);
-        }
-        assert_eq!(band.settle(Verdict::Churning), Verdict::Churning);
-    }
-
-    // The protection is for a band that has earned it, not for anything that
-    // happens to be included at the time.
-    #[test]
-    fn a_band_that_was_never_a_subtitle_is_demoted_at_once() {
-        let mut band = TrackedBand::new(1000.0);
-        band.settle(Verdict::Warming);
-        assert_eq!(band.settle(Verdict::Scattered), Verdict::Scattered);
-    }
-
-    // Recognition is immediate in the other direction, or a subtitle waits
-    // eight frames to appear - the very failure this exists to prevent.
-    #[test]
-    fn becoming_a_subtitle_takes_effect_immediately() {
-        let mut band = TrackedBand::new(1000.0);
-        band.settle(Verdict::Glimpsed);
-        assert_eq!(band.settle(Verdict::Subtitle), Verdict::Subtitle);
-    }
-
-    // A disagreement that does not persist must not accumulate towards a later
-    // demotion, or enough scattered single frames eventually add up to one.
-    #[test]
-    fn a_recovered_band_starts_its_grace_period_over() {
-        let mut band = TrackedBand::new(1000.0);
-        band.settle(Verdict::Subtitle);
-        for _ in 0..HOLD_THROUGH_FRAMES - 1 {
-            band.settle(Verdict::Churning);
-        }
-        band.settle(Verdict::Subtitle);
-        assert_eq!(band.settle(Verdict::Churning), Verdict::Subtitle);
-    }
-
-    #[test]
-    fn a_band_goes_stale_only_after_its_retirement_age() {
-        let mut band = TrackedBand::new(1000.0);
-        band.record(1000.0, 600.0, 900.0, 20, 1_000);
-        assert!(!band.is_stale(1_000 + WINDOW_MS, WINDOW_MS));
-        assert!(band.is_stale(1_001 + WINDOW_MS + 1, WINDOW_MS));
-    }
-}
+#[path = "band_window_tests.rs"]
+mod tests;
