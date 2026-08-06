@@ -74,29 +74,47 @@ Exit code: 0
 GitHub reported **no status checks and no workflow runs** for PR #80 head
 `b8bd48f08e52fb62c7b5cd2d086be7f40024e793`.
 
-Reason: PR #80 was created as a **draft**.
-- The repository's CI workflow (`.github/workflows/test.yml`) triggers on
-  `pull_request` (default activity types `opened`, `synchronize`, `reopened`)
-  and `push` to `main`. It has no path filter, so a docs-only change would
-  normally still run it.
-- GitHub does not dispatch `pull_request` workflow runs while a pull request is
-  in draft state. The activity-type list in
-  `events-that-trigger-workflows` includes `ready_for_review` precisely because
-  marking a draft ready is what releases the workflow run.
-- Every other recent `pull_request`-event CI run in this repository came from a
-  non-draft branch (`fix/config-durability`, `docs/architecture-ratchets-30`,
-  etc.). None came from the draft branch `recovery/epic36-remote-baseline-79`.
+Two facts explain this, and both are now evidenced:
 
-Expected resolution: mark PR #80 ready for review, then `pull_request` runs are
-dispatched and results are recorded in this document and the PR body.
+1. **Draft-state suppression.** PR #80 was created as a **draft**. GitHub does
+   not dispatch `pull_request` workflow runs while a pull request is in draft
+   state; the `ready_for_review` activity type exists in the event's type list
+   precisely because marking a draft ready is what releases the run. The
+   repository's CI workflow (`.github/workflows/test.yml`) triggers on
+   `pull_request` with the default activity types (`opened`, `synchronize`,
+   `reopened`) and on `push` to `main`. It has no path filter, so a docs-only
+   change would normally still run it. Every other recent `pull_request`-event
+   CI run in this repository came from a non-draft branch
+   (`fix/config-durability`, `docs/architecture-ratchets-30`, etc.); none came
+   from the draft branch `recovery/epic36-remote-baseline-79`.
+
+2. **GitHub Actions global incident (2026-08-06).** After the PR was marked
+   ready for review and a `synchronize` push was made (head
+   `01fdf94dda866496d658820808c0dd7ae4e206f7`), no workflow run was still
+   dispatched. GitHub Status reported an ongoing incident affecting Actions
+   starting 2026-08-06 15:22 UTC
+   (<https://www.githubstatus.com/incidents/qcvjkzcs7j74>): "Workflow runs are
+   still failing, and jobs may remain queued for an extended period before
+   starting or may time out"; "Webhook deliveries may be delayed." The
+   `pull_request` webhook that would normally create the CI run was therefore
+   not delivered/processed during the window of this revision. The repository's
+   Actions permission is enabled (`allowed_actions: all`, `enabled: true`) and
+   the CI workflow is `active`; there is no repository-side reason the run
+   would not be created once GitHub recovers.
+
+Expected resolution: when the GitHub Actions incident clears, the `pull_request`
+webhook for head `01fdf94dda866496d658820808c0dd7ae4e206f7` will be delivered
+and the CI workflow will create its three jobs (Lint & Format, Tests,
+Frontend & Browser). Results will be recorded in this document and the PR body
+after they complete. The PR must not be merged before those checks pass.
 
 ### 3.3 Verification table
 
 | Evidence | Environment | Commit | Result |
 |---|---|---|---|
 | Clean-main local baseline | Windows 11 ARM64 (26200), Rust 1.93, Node 22 | `f8c62d4450...` | Pass (all 16 stages) |
-| Revised-branch local verification | Windows 11 ARM64 (26200), Rust 1.93, Node 22 | `9392e946e25a98adafa558560465066105c5ac82` | Pass (277 Rust unit, 16 IPC, 201 frontend, 4 browser smoke, 0 vulnerabilities) |
-| GitHub PR checks | GitHub Actions `windows-latest` | `9392e946e25a...` | Pending until PR marked ready |
+| Revised-branch local verification | Windows 11 ARM64 (26200), Rust 1.93, Node 22 | `01fdf94dda866496d658820808c0dd7ae4e206f7` | Pass (277 Rust unit, 16 IPC, 201 frontend, 4 browser smoke, 0 vulnerabilities) |
+| GitHub PR checks | GitHub Actions `windows-latest` | `01fdf94dda...` | Not run — GitHub Actions global incident (2026-08-06 15:22 UTC, ongoing); draft state also suppressed earlier runs |
 
 Local `verify.ps1` results are **not** remote CI. They are a clean-checkout
 baseline and a docs-only-delta confirmation; only GitHub-hosted checks count as
