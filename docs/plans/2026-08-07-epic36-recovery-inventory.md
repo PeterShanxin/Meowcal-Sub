@@ -95,8 +95,8 @@ dispatched and results are recorded in this document and the PR body.
 | Evidence | Environment | Commit | Result |
 |---|---|---|---|
 | Clean-main local baseline | Windows 11 ARM64 (26200), Rust 1.93, Node 22 | `f8c62d4450...` | Pass (all 16 stages) |
-| Revised-branch local verification | Windows 11 ARM64 (26200), Rust 1.93, Node 22 | current branch head (see PR #80) | Pass (277 Rust unit, 16 IPC, 201 frontend, 4 browser smoke, 0 vulnerabilities) |
-| GitHub PR checks | GitHub Actions `windows-latest` | current branch head (see PR #80) | Pending until PR marked ready |
+| Revised-branch local verification | Windows 11 ARM64 (26200), Rust 1.93, Node 22 | `9392e946e25a98adafa558560465066105c5ac82` | Pass (277 Rust unit, 16 IPC, 201 frontend, 4 browser smoke, 0 vulnerabilities) |
+| GitHub PR checks | GitHub Actions `windows-latest` | `9392e946e25a...` | Pending until PR marked ready |
 
 Local `verify.ps1` results are **not** remote CI. They are a clean-checkout
 baseline and a docs-only-delta confirmation; only GitHub-hosted checks count as
