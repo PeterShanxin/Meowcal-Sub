@@ -2,8 +2,8 @@
 
 **Date**: 2026-08-07 02:00+08
 **Author**: recovery automation (issue #79)
-**Status**: revision 2, awaiting external re-review
-**PR**: #80 (draft)
+**Status**: revision 3, awaiting external re-review
+**PR**: #80 (ready for review)
 
 ## 1. Incident Summary
 
@@ -69,56 +69,52 @@ Exit code: 0
 | Browser bridge smoke | PASS | 4/4 playwright tests |
 | Dependency audit | PASS | 0 high-severity vulnerabilities |
 
-### 3.2 Remote CI status for head `b8bd48f` (before revision)
+### 3.2 Remote CI status
 
-GitHub reported **no status checks and no workflow runs** for PR #80 head
-`b8bd48f08e52fb62c7b5cd2d086be7f40024e793`.
+GitHub reported **no status checks and no workflow runs** for PR #80 across
+heads `b8bd48f08e52fb62c7b5cd2d086be7f40024e793` through
+`01fdf94dda866496d658820808c0dd7ae4e206f7`.
 
-Two facts explain this, and both are now evidenced:
+What is known about the workflow configuration:
 
-1. **Draft-state suppression.** PR #80 was created as a **draft**. GitHub does
-   not dispatch `pull_request` workflow runs while a pull request is in draft
-   state; the `ready_for_review` activity type exists in the event's type list
-   precisely because marking a draft ready is what releases the run. The
-   repository's CI workflow (`.github/workflows/test.yml`) triggers on
-   `pull_request` with the default activity types (`opened`, `synchronize`,
-   `reopened`) and on `push` to `main`. It has no path filter, so a docs-only
-   change would normally still run it. Every other recent `pull_request`-event
-   CI run in this repository came from a non-draft branch
-   (`fix/config-durability`, `docs/architecture-ratchets-30`, etc.); none came
-   from the draft branch `recovery/epic36-remote-baseline-79`.
+- The repository's CI workflow (`.github/workflows/test.yml`) triggers on
+  `pull_request` and on `push` to `main`. It has no path filter, so a docs-only
+  change would normally still run it, and it contains no draft-state condition
+  or guard.
+- A bare `pull_request:` trigger uses the default activity types `opened`,
+  `synchronize`, and `reopened`. Marking a draft PR ready emits the
+  `ready_for_review` activity, which is not included in the default types, so
+  marking ready alone does not dispatch a run for this workflow.
+- PR #80 initially received no GitHub Actions workflow run despite an `opened`
+  event and subsequent branch updates. The repository workflow does not exclude
+  draft pull requests, so the original cause remains undetermined.
+- After the PR became ready, a new synchronization occurred during an active
+  GitHub Actions incident affecting workflow dispatch and webhook delivery.
+  GitHub Status reported the incident starting 2026-08-06 15:22 UTC
+  (<https://www.githubstatus.com/incidents/qcvjkzcs7j74>): "Workflow runs are
+  still failing, and jobs may remain queued for an extended period before
+  starting or may time out"; "Webhook deliveries may be delayed." That incident
+  is a plausible explanation for the missing post-ready run, but causation is
+  not established with certainty.
 
-2. **GitHub Actions global incident (2026-08-06).** After the PR was marked
-   ready for review and a `synchronize` push was made (head
-   `01fdf94dda866496d658820808c0dd7ae4e206f7`), no workflow run was still
-   dispatched. GitHub Status reported an ongoing incident affecting Actions
-   starting 2026-08-06 15:22 UTC
-   (<https://www.githubstatus.com/incidents/qcvjkzcs7j74>): "Workflow runs are
-   still failing, and jobs may remain queued for an extended period before
-   starting or may time out"; "Webhook deliveries may be delayed." The
-   `pull_request` webhook that would normally create the CI run was therefore
-   not delivered/processed during the window of this revision. The repository's
-   Actions permission is enabled (`allowed_actions: all`, `enabled: true`) and
-   the CI workflow is `active`; there is no repository-side reason the run
-   would not be created once GitHub recovers.
-
-Expected resolution: when the GitHub Actions incident clears, the `pull_request`
-webhook for head `01fdf94dda866496d658820808c0dd7ae4e206f7` will be delivered
-and the CI workflow will create its three jobs (Lint & Format, Tests,
-Frontend & Browser). Results will be recorded in this document and the PR body
-after they complete. The PR must not be merged before those checks pass.
+Remote CI remains pending and must pass before merge. No claim is made that
+GitHub will replay an earlier webhook after the incident clears; a fresh
+supported event (a legitimate `synchronize` from a new commit, or `reopened`
+via close/reopen if necessary) may be required to trigger the runs.
 
 ### 3.3 Verification table
 
 | Evidence | Environment | Commit | Result |
 |---|---|---|---|
 | Clean-main local baseline | Windows 11 ARM64 (26200), Rust 1.93, Node 22 | `f8c62d4450...` | Pass (all 16 stages) |
-| Revised-branch local verification | Windows 11 ARM64 (26200), Rust 1.93, Node 22 | `01fdf94dda866496d658820808c0dd7ae4e206f7` | Pass (277 Rust unit, 16 IPC, 201 frontend, 4 browser smoke, 0 vulnerabilities) |
-| GitHub PR checks | GitHub Actions `windows-latest` | `01fdf94dda...` | Not run — GitHub Actions global incident (2026-08-06 15:22 UTC, ongoing); draft state also suppressed earlier runs |
+| Earlier verified local run (revision 2) | Windows 11 ARM64 (26200), Rust 1.93, Node 22 | `01fdf94dda866496d658820808c0dd7ae4e206f7` | Pass (277 Rust unit, 16 IPC, 201 frontend, 4 browser smoke, 0 vulnerabilities) |
+| Final correction head local verification | Windows 11 ARM64 (26200), Rust 1.93, Node 22 | exact final head — see PR #80 body and issue #79 comment | Recorded only in PR/issue metadata after the run; not embedded in the commit itself |
+| GitHub PR checks | GitHub Actions `windows-latest` | latest head | Pending — no run created; see §3.2 |
 
 Local `verify.ps1` results are **not** remote CI. They are a clean-checkout
 baseline and a docs-only-delta confirmation; only GitHub-hosted checks count as
-remote CI.
+remote CI. A commit is only reported as verified if the full command was run on
+that exact commit.
 
 ## 4. Content and Provenance Audit — the ten blanket-discarded Rust files
 
@@ -130,7 +126,7 @@ noted; several are behavior-changing fixes for OPEN product issues #59/#60/#71.
 
 | File/group | Damaged-tree Git status | Provenance | Semantic purpose | Behavior impact | Remote-main equivalent | Classification | Target | Decision | Reason |
 |---|---|---|---|---|---|---|---|---|---|
-| `src-tauri/src/engine_launch.rs` (206) | Tracked | `21b3697` only | Engine worker-thread policy: `worker_threads` (cores−4, floor 4), `launch_args` appends `--threads` on ARM64 only, honours a manifest-pinned thread count | **Changes behavior** on ARM64 (adds `--threads`); tied to evidence `2026-08-05-arm64-engine-thread-sweep.json` | None on remote `main` (no `--threads`/thread-count logic anywhere) | Candidate #32 engine-runtime boundary + behavior change | #32 or separate #60 follow-up | Reimplement cleanly later; do not copy | New module on 196-commit-stale base; behavior change needs its own ARM64 measurement and review |
+| `src-tauri/src/engine_launch.rs` (206) | Tracked | `21b3697` only | Engine worker-thread policy: `worker_threads` (cores−4, floor 4), `launch_args` appends `--threads` on ARM64 only, honours a manifest-pinned thread count | **Changes behavior** on ARM64 (adds `--threads`); tied to evidence `2026-08-05-arm64-engine-thread-sweep.json` | None on remote `main` (no `--threads`/thread-count logic anywhere) | Separate product issue — behavior-changing ARM64 engine runtime policy | #60 (exclusive) | Reimplement cleanly later in #60; do not copy | Changes ARM64 runtime thread policy; must not enter structural refactor #32 |
 | `src-tauri/src/http_config.rs` (143) | Tracked | `21b3697` only | Dev-mode (browser HTTP) config load/save with the #64/#71 durability fix, reusing `config_store`/`config_save`; 500 on refused save | **Changes behavior**: fixes the #71 bug (dev-mode truncated-config reset, app-owned fields blanked) | Remote `http_server.rs` has inline non-durable `load/save_standalone_config` (lines 73-103) | Separate product issue | #71 (OPEN) | File separate follow-up; reimplement cleanly | Fixes an OPEN correctness issue; belongs to its own PR with browser-mode verification |
 | `src-tauri/src/http_config_tests.rs` (279) | Tracked | `21b3697` only | Tests for `http_config` (recovery, provenance, app-owned preservation) | Test-only | None | Separate product issue | #71 (OPEN) | File separate follow-up | Test pair of `http_config.rs` |
 | `src-tauri/src/ocr_corruption.rs` (201) | Tracked | `21b3697` only | OCR-noise scoring: `corruption_share`, `is_worse_read`, `is_mostly_noise`; comparative rather than absolute; CJK-safe | **Changes behavior**: refuses mangled re-reads (display quality) | None (grep finds no corruption scoring) | Separate product issue | #59 (OPEN) | File separate follow-up; reimplement cleanly | Fixes OPEN issue #59; needs fresh OCR session evidence |
@@ -265,7 +261,7 @@ Recovery decisions totals:
 
 ### Accepted (documentation/metadata only)
 
-- This recovery inventory document (revision 2).
+- This recovery inventory document (revision 3).
 
 ### Retain as Design Reference Only
 
@@ -319,7 +315,7 @@ begins only after this recovery PR merges and #79 closes, and inspects current
 | Order | Issue | Planned PR scope | Primary files | Explicit exclusions | Automated gates | Manual gate |
 |---|---|---|---|---|---|---|
 | 1 | #31 | Extract `commands.rs` adapters; lifecycle/window/config services; generic IPC adapters; diagnostics support | `src-tauri/src/commands.rs`, `src-tauri/src/commands/*.rs`, `main.rs`, `config.rs`, `http_server.rs`, `lib.rs` | Engine/translation internals (#32), frontend (#33), overlay/selector (#34) | format, clippy, unit, IPC integration, bridge contract | Start/stop/settings/tray/capture smoke matching pre-refactor baseline |
-| 2 | #32 | Engine manifest/install/runtime services; transport; prompt/response; validation/retry; context; pipeline orchestration; translation diagnostics | `src-tauri/src/llm/*.rs`, `engine_manifest.rs`, `engine_install_transaction.rs`, `hy_mt_runtime.rs`, `pipeline_*.rs` | Generic Tauri lifecycle (#31), frontend presentation (#33) | format, clippy, unit, IPC integration | Fresh native Windows translation regression after final structural change |
+| 2 | #32 | Engine manifest/install/runtime services; transport; prompt/response; validation/retry; context; pipeline orchestration; translation diagnostics | `src-tauri/src/llm/*.rs`, `engine_manifest.rs`, `engine_install_transaction.rs`, `hy_mt_runtime.rs`, `pipeline_*.rs` | Generic Tauri lifecycle (#31), frontend presentation (#33), and **all behavior-changing engine-runtime work such as `engine_launch.rs`, which belongs exclusively to #60** | format, clippy, unit, IPC integration | Fresh native Windows translation regression after final structural change |
 | 3 | #33 | Main-window bootstrap; setup presentation; engine/OCR readiness; session controls; settings adapters; developer diagnostics | `src/scripts/main.js`, `src/ui/*.ts`, `src/entries/main.ts` | Backend state machines, overlay/selector (#34) | format, lint, typecheck, build, frontend unit, browser smoke | Tauri manual setup/start/stop/settings regression |
 | 4 | #34 | Overlay/selector state, geometry, interactions, event adapters, cleanup ownership | `src/scripts/overlay.js`, `src/scripts/selector.js`, extracted overlay/selector modules | Backend capture/translation, main/setup (#33) | format, lint, typecheck, frontend unit | Mixed-DPI, drag, resize, click-through, clipping, region persistence regression |
 | Final | #35 | Clean-checkout and closure of Epic #36 | None (verification only) | No structural refactor | Full `verify.ps1 -Stage All` on clean clone of merged `main` | Full Windows x64 + ARM64 matrix after all lanes merge |
@@ -373,6 +369,8 @@ Windows behavior.
    completion without fresh Windows evidence. The remote evidence policy above
    explicitly prevents this.
 
-7. **Draft-state CI suppression**: PR #80 shows no checks until marked ready.
-   This is expected GitHub behaviour for draft PRs; it is not a repo defect and
-   is being resolved by marking the PR ready after this revision.
+7. **Remote CI still pending**: PR #80 has received no GitHub Actions workflow
+   run so far. The workflow does not exclude draft pull requests, so the
+   original cause of the missing draft-era runs is undetermined; the GitHub
+   Actions incident is a plausible but not certain explanation for the missing
+   post-ready run (see §3.2). Remote CI must pass before merge.
