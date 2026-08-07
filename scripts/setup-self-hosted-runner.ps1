@@ -11,14 +11,20 @@
     Check mode installs nothing and changes nothing. It reports every missing
     prerequisite in one pass rather than stopping at the first.
 
+    Registration is a one-time act per host. This repository operates its runner
+    on demand in the foreground and does NOT install it as a Windows service;
+    see the operating model in docs/SELF_HOSTED_RUNNERS.md before using
+    -Mode Install or -InstallService for anything other than a new or replaced
+    host.
+
+.EXAMPLE
+    .\scripts\setup-self-hosted-runner.ps1 -Mode Status
+
 .EXAMPLE
     .\scripts\setup-self-hosted-runner.ps1 -Mode Check
 
 .EXAMPLE
-    .\scripts\setup-self-hosted-runner.ps1 -Mode Install -Role all -InstallService
-
-.EXAMPLE
-    .\scripts\setup-self-hosted-runner.ps1 -Mode Status
+    .\scripts\setup-self-hosted-runner.ps1 -Mode Install -Role all
 #>
 [CmdletBinding()]
 param(
@@ -40,6 +46,8 @@ param(
 
     [string]$RunnerVersion = "",
 
+    # Not this repository's operating model: the runner is run on demand in the
+    # foreground. Use only when the owner explicitly asks for a service.
     [switch]$InstallService,
 
     # Windows account the service runs as, for example 'DOMAIN\user'. Required in
