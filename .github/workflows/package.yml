@@ -1,5 +1,13 @@
 name: Windows Packages
 
+# Packaging runs on the owner's self-hosted Windows runners. The architecture
+# input selects a custom label, never a GitHub-hosted runner, so there is no
+# expression here that can fall back to paid Windows minutes. If the matching
+# runner is offline the job queues; that is deliberate. Returning to hosted
+# runners is a reviewed revert, not an automatic failover.
+#
+# See docs/SELF_HOSTED_RUNNERS.md.
+
 on:
   workflow_dispatch:
     inputs:
@@ -24,7 +32,17 @@ permissions:
 jobs:
   package:
     name: ${{ inputs.architecture || 'x64' }} MSI and NSIS bundles
-    runs-on: ${{ inputs.architecture == 'arm64' && 'windows-11-arm' || 'windows-latest' }}
+    # One host may carry both package labels, or they may be split onto
+    # architecture-native hosts later; that is a runner registration decision and
+    # needs no change here. An unrecognized architecture lands on the x64 label
+    # and is then rejected by "Resolve package contract" below.
+    #
+    # The continuation lines sit at the same column on purpose, so YAML folds
+    # this to a single line before the expression parser sees it.
+    runs-on: >-
+      ${{ inputs.architecture == 'arm64'
+      && fromJSON('["self-hosted", "Windows", "meowcal-package-arm64"]')
+      || fromJSON('["self-hosted", "Windows", "meowcal-package-x64"]') }}
     steps:
       - name: Require the update signing key
         shell: pwsh
@@ -62,22 +80,16 @@ jobs:
           "target=$($targets[$architecture])" >> $env:GITHUB_OUTPUT
           "artifact=meowcal-sub-$architecture-packages" >> $env:GITHUB_OUTPUT
 
+      # A clean checkout on purpose, unlike CI. `git clean -ffdx` removes the
+      # previous run's target directory and bundle output, so a release build
+      # never reuses incremental artifacts or inherits a stale bundle. The extra
+      # cold-build minutes are local compute and cost nothing.
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 24
-          cache: npm
-
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: ${{ steps.package.outputs.target }}
-
-      - uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: src-tauri
-          shared-key: package-${{ steps.package.outputs.architecture }}
-
+      # Node, Rust, both Windows target triples, and the MSVC cross-linker are
+      # host properties installed and checked by
+      # scripts/setup-self-hosted-runner.ps1. Packaging deliberately does not
+      # restore a dependency cache: a release build starts cold.
       - name: Install locked frontend dependencies
         shell: pwsh
         run: npm ci --ignore-scripts
