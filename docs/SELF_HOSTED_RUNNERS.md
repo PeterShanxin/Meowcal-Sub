@@ -63,6 +63,88 @@ machine. The same applies to attaching these runners to any other repository, or
 registering them at organization scope where another repository could schedule
 work on them. Register at **repository scope only**.
 
+## Operating model: on-demand foreground
+
+**Standing policy. This is how the runner is operated; it is not a temporary
+state to be tidied up.**
+
+The runner is **already registered with GitHub, permanently**. It runs as an
+**on-demand foreground process**, started when a self-hosted run is needed and
+stopped when that work is done. It is deliberately **not** a Windows service.
+
+- **Do not re-register the runner** for normal work. Registration already
+  happened; `-Mode Install` is for a new host, a lost host, or a label change.
+- **Do not install it as a Windows service** unless the repository owner asks
+  for that explicitly. See [the service account
+  section](#the-service-account-matters-more-than-it-looks) for the constraint
+  that makes a service more than a convenience toggle.
+- **Never fall back to a GitHub-hosted Windows runner** because the runner
+  happens to be offline. Starting it is the fix; queuing is the safe default.
+
+### Finding the runner
+
+Do not hard-code the path. The canonical directory is the `-RunnerDirectory`
+default on `scripts/setup-self-hosted-runner.ps1`, so read it from there:
+
+```powershell
+$runnerDirectory =
+    (Get-Help .\scripts\setup-self-hosted-runner.ps1 -Parameter RunnerDirectory).defaultValue
+```
+
+Registration status always comes from GitHub, never from a local guess:
+
+```powershell
+.\scripts\setup-self-hosted-runner.ps1 -Mode Status
+```
+
+### The procedure for a self-hosted CI or packaging run
+
+1. **Check status first.** If the runner is already `online`, skip to step 4 —
+   do not start a second one.
+2. **Start the existing runner in the background**, so it does not block the
+   shell you are working in, and keep enough identity to stop the right process
+   later. The long-lived process is `Runner.Listener`, living under the runner
+   directory; matching on that path is what distinguishes this runner from any
+   other on the machine:
+
+   ```powershell
+   Start-Process -FilePath (Join-Path $runnerDirectory "run.cmd") `
+       -WorkingDirectory $runnerDirectory -WindowStyle Minimized
+   $listener = Get-Process -Name Runner.Listener -ErrorAction SilentlyContinue |
+       Where-Object { $_.Path -like "$runnerDirectory\*" }
+   ```
+
+3. **Wait until GitHub reports it `online`** before relying on it. A started
+   process is not yet a registered, connected runner.
+4. **Trigger the work, or let an existing queued run service itself.** If a run
+   is already queued because the runner was offline, bringing the runner online
+   drains that queue. **Do not re-trigger it** — that produces a duplicate run
+   competing for the same single runner.
+5. **Wait for every relevant job to finish**, then inspect results. With one
+   runner, jobs execute sequentially, so a run with three jobs is three
+   sequential waits, not one.
+6. **Stop the runner only when nothing relevant is left.** Check both that the
+   runner is not `busy` and that no queued or in-progress job remains that
+   should complete — including runs you did not trigger:
+
+   ```powershell
+   gh api repos/PeterShanxin/Meowcal-Sub/actions/runs `
+     --jq '.workflow_runs[] | select(.status != "completed") | "\(.id) \(.name) \(.status)"'
+   ```
+
+   Then stop the process you recorded in step 2:
+
+   ```powershell
+   $listener | Stop-Process
+   ```
+
+**Never stop a busy runner.** Killing the listener mid-job fails that job and
+leaves the workspace part-written. If several unrelated jobs are queued, let them
+drain rather than stopping after the first one finishes.
+
+A stopped runner does not fail anything. Later jobs queue until it is started
+again, and GitHub cancels a job that stays queued for 24 hours.
+
 ## Runner labels
 
 Workflows select runners by custom label, never by the bare `self-hosted` label
@@ -121,11 +203,16 @@ each, and exits non-zero if any are missing. It installs nothing.
 
 ## Registering a runner
 
+**The runner on this machine is already registered.** This section is for a new
+host, a replaced host, or a label change — not for day-to-day work. To use the
+existing runner, follow [the operating model](#operating-model-on-demand-foreground)
+instead.
+
 Requires repository admin rights and an authenticated `gh`.
 
 ```powershell
 .\scripts\setup-self-hosted-runner.ps1 -Mode Check
-.\scripts\setup-self-hosted-runner.ps1 -Mode Install -Role all -InstallService
+.\scripts\setup-self-hosted-runner.ps1 -Mode Install -Role all
 ```
 
 `-Mode Install` re-runs every prerequisite check and refuses to continue if any
@@ -140,7 +227,7 @@ Useful switches:
 | `-Role ci` \| `package` \| `all` | Which labels to claim. Default `all`. |
 | `-RunnerDirectory` | Default `C:\actions-runner\meowcal-sub`. |
 | `-RunnerName` | Default `<COMPUTERNAME>-meowcal`. |
-| `-InstallService` | Register as a Windows service that starts with the machine. |
+| `-InstallService` | Register as a Windows service. **Not the operating model here** — only on the owner's explicit request. |
 | `-RunnerVersion` | Pin a runner version instead of taking the latest. |
 
 ### Registration tokens
@@ -160,8 +247,16 @@ workspace inside one could be reached by `git clean -ffdx`.
 
 Recommended, in rough order of value:
 
-- Run the runner service under a **dedicated local account**, not your
-  interactive account, and give that account no more than it needs.
+- Be aware of what the on-demand foreground model costs here: the runner inherits
+  the interactive account that started it, so anything that account can reach, a
+  pull request's build scripts can reach too, for as long as the runner is
+  running. Starting it only when work needs it and stopping it afterwards is what
+  bounds that window, which is a reason to follow [the operating
+  model](#operating-model-on-demand-foreground) rather than leave it running.
+- A **dedicated local account** narrows that reach further, and is the stronger
+  isolation if the host holds anything sensitive. It requires a service, so it is
+  the owner's call — see
+  [running it as a service](#running-it-as-a-windows-service-if-that-is-ever-asked-for).
 - Keep the runner directory out of any synced folder (OneDrive, Dropbox).
 - Keep unrelated personal credentials off the host: no personal SSH keys, cloud
   credential helpers, password manager CLIs, or `gh` sessions configured for the
@@ -192,7 +287,12 @@ rebuilds cold. If that becomes annoying, register **two runner instances** in
 separate directories — one `-Role ci`, one `-Role package` — so each keeps its
 own `_work`.
 
-## Service lifecycle
+## Running it as a Windows service, if that is ever asked for
+
+**Not the current model.** The runner is operated on demand in the foreground,
+per [the operating model](#operating-model-on-demand-foreground). Do not install
+a service unless the repository owner explicitly asks. This section records what
+that would take, and why it is not a one-switch decision.
 
 ### The service account matters more than it looks
 
@@ -214,15 +314,10 @@ Install the service under the account that owns the toolchain:
 scripts never accept, store, or log a Windows password. `-Mode Check` reports
 this as an advisory whenever `cargo` is user-scoped.
 
-The alternative, if you would rather not run a service under your own account, is
-to run the runner in the foreground, which inherits your environment as-is:
-
-```powershell
-C:\actions-runner\meowcal-sub\run.cmd
-```
-
-A foreground runner works exactly like the service for job execution. It just
-stops when you close the window or log out.
+This constraint is a large part of why the foreground model is the one in use: a
+foreground runner inherits your environment as-is, so it needs no password and no
+account decision. It executes jobs identically to a service; it simply stops when
+you stop it or log out, which is exactly the intent.
 
 With `-InstallService`, the runner is a Windows service named
 `actions.runner.<owner>-<repo>.<runner-name>`.
@@ -233,11 +328,10 @@ Stop-Service actions.runner.*                      # stop; running jobs finish
 Start-Service actions.runner.*
 ```
 
-Without the service, run it in the foreground and stop it with Ctrl+C:
-
-```powershell
-C:\actions-runner\meowcal-sub\run.cmd
-```
+Starting and stopping the foreground runner, which is the model actually in use,
+is covered in [the operating
+model](#operating-model-on-demand-foreground) — including how to find the runner
+directory without hard-coding it and how to avoid stopping a busy runner.
 
 A stopped runner does not fail jobs. They queue.
 
@@ -249,7 +343,9 @@ need nothing from you. To force one, remove and re-register.
 ### Replacing or re-labelling
 
 Re-run `-Mode Install`. The script passes `--replace`, so re-registering the same
-name updates the labels rather than creating a duplicate.
+name updates the labels rather than creating a duplicate. This is for a changed
+host or a changed label set only — re-registering is not part of using the
+runner, and normal work must not do it.
 
 ### Removing
 

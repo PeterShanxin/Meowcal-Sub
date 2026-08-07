@@ -158,6 +158,40 @@ DPI/window behavior.
 - Superseded pull request runs cancel; `main` runs do not, because a cancelled
   post-merge run leaves `main` unverified.
 
+## Self-hosted runner operating model
+
+The runner is **already registered** and is operated **on demand in the
+foreground**. It is deliberately not a Windows service. `docs/SELF_HOSTED_RUNNERS.md`
+holds the full procedure; these are the standing rules.
+
+- Never re-register the runner as part of normal work. `-Mode Install` is for a
+  new host, a replaced host, or a label change.
+- Never install it as a Windows service unless the owner explicitly asks.
+- Never resolve an offline runner by routing work to a GitHub-hosted Windows
+  runner. Starting the runner is the fix.
+- Discover the runner directory rather than hard-coding it:
+  `(Get-Help .\scripts\setup-self-hosted-runner.ps1 -Parameter RunnerDirectory).defaultValue`.
+  Read registration state from GitHub with `-Mode Status`.
+
+Before relying on a self-hosted CI or packaging run:
+
+1. check status, and do not start a second runner if one is already online;
+2. if offline, start the existing `run.cmd` **without blocking your shell**, and
+   keep the `Runner.Listener` process under that directory so you can stop the
+   right one later;
+3. wait for GitHub to report it `online` - a started process is not yet a
+   connected runner;
+4. let an already-queued run drain rather than re-triggering it, which would
+   duplicate work on a single runner;
+5. wait for every relevant job, remembering that one runner executes jobs
+   sequentially;
+6. stop the runner only once it is not busy **and** no queued or in-progress job
+   remains that should complete, including runs you did not trigger.
+
+Never stop a busy runner: it fails that job and leaves the workspace
+part-written. When several unrelated jobs are queued, let them drain instead of
+stopping after the first.
+
 ## Manual gate
 
 After every visible behavior change, require fresh Windows evidence on the
