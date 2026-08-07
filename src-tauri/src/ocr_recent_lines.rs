@@ -54,6 +54,7 @@ impl RecentLines {
 
         let newest = self.entries.len().saturating_sub(1);
         let mut strongest = LineChange::New;
+        let mut repeat_of = None;
         for (position, (line, _)) in self.entries.iter().enumerate() {
             // The full comparison only against the line actually on screen.
             // `ocr_stability` treats a read contained inside the previous one as
@@ -71,45 +72,27 @@ impl RecentLines {
                 LineChange::New
             };
             match verdict {
-                LineChange::Repeat => return LineChange::Repeat,
+                LineChange::Repeat => {
+                    repeat_of = Some(position);
+                    break;
+                }
                 LineChange::Extended => strongest = LineChange::Extended,
                 LineChange::New => {}
             }
         }
+
+        if let Some(position) = repeat_of {
+            // Seeing the cue again means it is still on screen, so the window
+            // has to measure time since it was last *seen* rather than since it
+            // was translated. Clocking from the translation expired a cue that
+            // had never left - a paused frame, a title card, a lyric - and the
+            // next read of it came back `New` against an empty deque and earned
+            // a second, differently worded translation over the one the viewer
+            // was already reading.
+            self.entries[position].1 = now;
+            return LineChange::Repeat;
+        }
         strongest
-    }
-
-    /// Whether this read is a worse rendering of something already on screen.
-    ///
-    /// Asked only of reads that are about to be translated. The comparison is
-    /// against the remembered line this read most resembles - the one it would
-    /// replace - because a cue is re-read many times and only some of those
-    /// reads are legible. See `ocr_corruption`.
-    pub fn is_worse_than_a_recent_read(&self, current: &str) -> bool {
-        self.most_similar(current)
-            .is_some_and(|line| crate::ocr_corruption::is_worse_read(current, line))
-    }
-
-    /// The remembered line sharing the most characters with this read.
-    ///
-    /// Only lines that share more than nothing are eligible: with no floor, an
-    /// unrelated line would be returned as "most similar" merely by being the
-    /// only candidate, and a worse-read comparison against unrelated dialogue
-    /// would suppress real subtitles.
-    fn most_similar(&self, current: &str) -> Option<&str> {
-        let current_chars = crate::ocr_stability::normalize(current);
-        self.entries
-            .iter()
-            .map(|(line, _)| {
-                let score = crate::ocr_stability::similarity(
-                    &crate::ocr_stability::normalize(line),
-                    &current_chars,
-                );
-                (line.as_str(), score)
-            })
-            .filter(|(_, score)| *score >= SAME_CUE_FLOOR)
-            .max_by(|(_, left), (_, right)| left.total_cmp(right))
-            .map(|(line, _)| line)
     }
 
     /// Remember a line that was sent for translation.

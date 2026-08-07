@@ -1665,15 +1665,10 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
                 tokio::time::sleep(pacer.remaining_for(frame_started)).await;
                 continue;
             }
-            // Only for a cue already on screen - see `is_worse_read`.
-            if line_change == crate::ocr_stability::LineChange::Extended
-                && recent_lines.is_worse_than_a_recent_read(&current_text)
-            {
-                debug!(source = %current_text, "[FILTER: worse_reread] OCR text");
-                translation_manager.record_ocr_line(&current_text);
-                tokio::time::sleep(pacer.remaining_for(frame_started)).await;
-                continue;
-            }
+            // Deliberately no "is this read worse than the last?" check here: a
+            // noisier re-read is `Repeat` and was skipped above, so only `New`
+            // and `Extended` remain, and `Extended` *contains* the last read -
+            // a second row arriving, not a rival rendering. See `ocr_corruption`.
 
             // Claiming the single translation slot is the point of no return:
             // everything below records the line as handled, so it runs only if

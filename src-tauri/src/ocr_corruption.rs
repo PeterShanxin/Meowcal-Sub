@@ -175,26 +175,19 @@ pub fn corruption_share(text: &str) -> f32 {
     garbled as f32 / tokens.len() as f32
 }
 
-/// Whether `candidate` is a worse read than `current` of the same cue.
-///
-/// Only ever asked about two reads believed to be the same subtitle, so it does
-/// not need to know what the cue says - only which reading of it is cleaner.
-///
-/// Ties go to the reading already on screen. A cue is re-read ten times, and
-/// swapping between two equally good readings would flicker the line for no
-/// gain; the viewer is already reading the one that is up.
-pub fn is_worse_read(candidate: &str, current: &str) -> bool {
-    let candidate_noise = corruption_share(candidate);
-    let current_noise = corruption_share(current);
-    if candidate_noise != current_noise {
-        return candidate_noise > current_noise;
-    }
-    // Equally clean, so prefer the longer read: OCR drops glyphs and whole words
-    // far more often than it invents them, and the recorded session's worst
-    // replacements were fragments - `Mystics have` landing on top of the full
-    // `where the Mystics have relatively thinned out?`.
-    candidate.chars().count() < current.chars().count()
-}
+// There was an `is_worse_read` here, comparing two reads of one cue and keeping
+// the cleaner. It is gone, and the note is worth more than the code was.
+//
+// A noisier re-read of the line on screen is classified `Repeat` and never
+// reaches the translator, so the comparison had nothing left to protect against.
+// The only caller that survived asked it about `Extended` reads - which, by the
+// definition in `ocr_stability`, *contain* the previous read. Scoring the whole
+// candidate against its own prefix charged the newly arrived row's OCR noise to
+// a baseline that never held that row, so any noise in the new text made the
+// share strictly greater and the read was dropped. Dropped reads are never
+// remembered, so the second row of a two-line cue would never appear at all.
+//
+// See issue #59.
 
 #[cfg(test)]
 #[path = "ocr_corruption_tests.rs"]

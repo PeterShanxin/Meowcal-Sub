@@ -55,49 +55,11 @@ fn mangled_reads_score_as_noise() {
     }
 }
 
-// The clearest instance in the session: a correct rendering was on screen for
-// 0.6 seconds and then replaced by a mangled read of the same cue.
-#[test]
-fn a_mangled_re_read_is_recognised_as_worse_than_the_good_one() {
-    let good = "where the Mystics have relatively thinned out?";
-    let mangled = "where the Mystics have @lätiv.elYJthinned'.out?";
-
-    assert!(is_worse_read(mangled, good));
-    assert!(!is_worse_read(good, mangled));
-}
-
-// The other half of the same failure: OCR reads one row of a two-line cue and
-// the fragment replaces the whole line.
-#[test]
-fn a_fragment_does_not_replace_the_whole_line_it_came_from() {
-    let whole = "where the Mystics have relatively thinned out?";
-    let fragment = "Mystics have";
-
-    assert!(is_worse_read(fragment, whole));
-    assert!(!is_worse_read(whole, fragment));
-}
-
-// A cue is re-read ten times or more. Swapping between two equally good readings
-// would flicker the line for nothing, so the one already on screen stays.
-#[test]
-fn an_equally_good_read_does_not_displace_the_one_on_screen() {
-    let current = "However, isn't he a hero from an era";
-    let same_length_and_equally_clean = "However, isn't he a hero from an ero";
-
-    assert!(!is_worse_read(same_length_and_equally_clean, current));
-    assert!(!is_worse_read(current, current));
-}
-
-// A later read that is genuinely better must still win, or the first read of a
-// cue would be frozen in place however bad it was.
-#[test]
-fn a_cleaner_later_read_is_allowed_through() {
-    let mangled_first = "bf//dzz:: However, isn't he a hero";
-    let clean_later = "However, isn't he a hero from an era";
-
-    assert!(!is_worse_read(clean_later, mangled_first));
-    assert!(is_worse_read(mangled_first, clean_later));
-}
+// The tests that stood here exercised `is_worse_read`, which has been removed -
+// see the note in `ocr_corruption.rs`. They asserted the comparison was sound in
+// isolation, and it was; what was unsound was every place it could be reached
+// from. A test that pins a helper nothing may safely call is worse than no test,
+// because it reads as coverage of a behaviour the app does not have.
 
 // The symbol has to be *inside* a word. Subtitles carry standalone symbols -
 // a dash for a speaker change, a musical note for lyrics - and those are real.

@@ -43,10 +43,21 @@ impl Notices {
     ) -> Option<TranslationPayload> {
         self.empty_frames = self.empty_frames.saturating_add(1);
         let settled = self.empty_frames >= EMPTY_OCR_CLEAR_FRAMES;
-        if !settled || busy || self.showing == Some("empty") {
+        // Keyed on which kind of nothing this is, not merely on "a quiet frame".
+        // An empty region and a band whose every line was held produce different
+        // payloads, and keying both as "empty" meant the change between them
+        // never re-emitted: an ordinary gap between cues latched "no text
+        // detected", and the held stretch that followed - the case this exists
+        // to report - was deduped against it and never announced.
+        let key = if held_lines > 0 {
+            crate::ocr_gate::OcrRejection::BandHeld.as_str()
+        } else {
+            "empty"
+        };
+        if !settled || busy || self.showing == Some(key) {
             return None;
         }
-        self.showing = Some("empty");
+        self.showing = Some(key);
         Some(TranslationPayload::region_quiet(
             session_id, capture_id, held_lines,
         ))
@@ -129,6 +140,31 @@ mod tests {
         assert!(notices
             .unreadable_source(1, 3, OcrRejection::TooShort, false)
             .is_none());
+    }
+
+    // The failure that made the blackout in #59 undiagnosable. An ordinary gap
+    // between cues reports an empty region; the band then gets demoted and every
+    // line of the next cue is held. Both arrive here as "no text this frame", so
+    // keying them alike deduped the second against the first and the overlay
+    // went on insisting the area was empty while a subtitle sat in it.
+    #[test]
+    fn a_band_hold_after_a_quiet_gap_is_still_reported() {
+        let mut notices = Notices::new();
+        for _ in 0..EMPTY_OCR_CLEAR_FRAMES {
+            quiet(&mut notices);
+        }
+
+        let held = notices
+            .quiet_region(1, 9, 3, false)
+            .expect("a band hold is a different notice from an empty region");
+        let json = serde_json::to_value(&held).expect("payload should serialize");
+        assert_eq!(json["displayState"], "sourceUnreadable");
+        assert_eq!(json["warnings"][0], OcrRejection::BandHeld.as_str());
+
+        // ...and it is still sent only once while it lasts.
+        assert!(notices.quiet_region(1, 10, 3, false).is_none());
+        // Going back to a genuinely empty region is a change, so it speaks again.
+        assert!(quiet(&mut notices).is_some());
     }
 
     // A translation in flight will speak for itself; a notice now would race it.

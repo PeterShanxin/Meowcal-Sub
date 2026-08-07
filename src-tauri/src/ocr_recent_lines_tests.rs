@@ -88,44 +88,23 @@ fn repeating_one_row_outweighs_extending_another() {
     );
 }
 
-// The point of the scoring: a mangled re-read must not replace the clean line
-// already on screen.
-#[test]
-fn a_mangled_re_read_is_recognised_as_worse_than_what_is_displayed() {
-    let now = Instant::now();
-    let recent = seen(&["where the Mystics have relatively thinned out?"], now);
-
-    assert!(recent.is_worse_than_a_recent_read("Wh€reythe MFtiÄhave relatively;thinnedput?"));
-}
-
-// And a cleaner later read must still be allowed to replace a mangled one.
-#[test]
-fn a_cleaner_later_read_is_not_judged_worse() {
-    let now = Instant::now();
-    let recent = seen(&["bf//dzz:: However, isn't he a hero from an era"], now);
-
-    assert!(!recent.is_worse_than_a_recent_read("However, isn't he a hero from an era"));
-}
-
-// Unrelated dialogue must never be paired off against a remembered line: doing
-// so would let an ordinary new subtitle be suppressed for scoring worse than
-// something it has nothing to do with.
+// The second row of a two-line cue arrives carrying OCR noise of its own. It has
+// to be translated anyway: it is the only read that will ever contain that row,
+// and a read the pipeline declines to translate is never remembered, so
+// declining once declines for the life of the cue.
 //
-// The last pair is the one that matters. It sits in the band that a lower floor
-// admitted - similar enough to be picked as "most similar", different enough
-// that `ocr_stability` calls it fresh dialogue - and it is shorter, so it lost
-// the length tie-break and vanished.
+// Both strings are taken from this branch's own `ocr_gate` fixtures, and the
+// gate passes the second - one garbled token in five is under its threshold. A
+// later filter refusing what the gate deliberately admitted is the bug.
 #[test]
-fn unrelated_dialogue_is_not_compared_against_a_remembered_line() {
+fn a_second_row_arriving_with_noise_is_still_translated() {
     let now = Instant::now();
-    let recent = seen(&["where the Mystics have relatively thinned out?"], now);
-    assert!(!recent.is_worse_than_a_recent_read("Hey"));
-    assert!(!recent.is_worse_than_a_recent_read("Lionheart"));
+    let mut recent = seen(&["Where the Mystics have"], now);
 
-    let exchange = seen(&["You should have told me before."], now);
-    assert!(
-        !exchange.is_worse_than_a_recent_read("You should go."),
-        "a shorter, loosely similar line is fresh dialogue, not a worse re-read"
+    assert_eq!(
+        recent.classify("Where the Mystics have relatively;thinnedput?", now),
+        LineChange::Extended,
+        "the row that just appeared is new text, not a competing rendering"
     );
 }
 
@@ -155,7 +134,7 @@ fn a_short_reply_is_not_swallowed_by_the_lines_behind_it() {
 
 // An empty memory is the state at session start and after the region empties.
 #[test]
-fn nothing_remembered_means_nothing_to_be_worse_than() {
+fn nothing_remembered_means_every_read_is_new() {
     let now = Instant::now();
     let mut recent = RecentLines::new();
 
@@ -163,7 +142,30 @@ fn nothing_remembered_means_nothing_to_be_worse_than() {
         recent.classify("Where are you going?", now),
         LineChange::New
     );
-    assert!(!recent.is_worse_than_a_recent_read("Where are you going?"));
+}
+
+// A cue that stays on screen longer than the window - a paused frame, a title
+// card, a lyric - must not age out from under itself. Clocking the window from
+// the translation rather than from the last sighting expired a line that had
+// never left, and the next read came back `New` against an empty memory and
+// earned a second, differently worded translation over the one being read.
+#[test]
+fn a_cue_still_on_screen_does_not_expire_and_get_translated_twice() {
+    let start = Instant::now();
+    let line = "Where the Mystics have relatively thinned out?";
+    let mut recent = seen(&[line], start);
+
+    // Re-read every 250ms for well past the six-second window.
+    let mut at = start;
+    for _ in 0..40 {
+        at += Duration::from_millis(250);
+        assert_eq!(
+            recent.classify(line, at),
+            LineChange::Repeat,
+            "still the same cue at {:?}",
+            at.duration_since(start)
+        );
+    }
 }
 
 // The subtitle leaving the region has to reset the memory, or the identical cue
