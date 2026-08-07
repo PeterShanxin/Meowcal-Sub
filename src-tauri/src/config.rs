@@ -310,8 +310,8 @@ impl TranslationConfig {
         self.prompt_max_context_chars = self.prompt_max_context_chars.clamp(0, 5_000);
         self.context_reset_gap_ms = self.context_reset_gap_ms.clamp(0, 120_000);
 
-        // Foundry Local can take a while to warm up (especially NPU models). Keep a sane
-        // minimum timeout even if an older config had a too-aggressive default.
+        // Foundry warm-up can be slow (NPU models especially), so an older config's
+        // aggressive value is raised. Translation caps it again - see `backend_budget`.
         self.foundry_local.timeout_ms = self.foundry_local.timeout_ms.clamp(2_000, 120_000);
         if self.foundry_local.timeout_ms < 15_000 {
             self.foundry_local.timeout_ms = 30_000;
