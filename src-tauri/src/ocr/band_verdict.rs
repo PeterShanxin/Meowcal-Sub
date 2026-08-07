@@ -186,9 +186,18 @@ pub fn classify(stats: &BandStats, region_width: f32) -> Verdict {
 /// a motionless subtitle indistinguishable from an animation. The bounding box
 /// width and the character count both survive a wrong glyph, and both move when
 /// the cue genuinely changes.
+///
+/// The slacks are measured against the *larger* of the two readings. The wobble
+/// goes in both directions - issue #59 measured one static English cue read as
+/// 27, 27, 13, 16, 27 characters - and a tolerance anchored to the previous
+/// read alone lets a read that *grows* past the smaller count split one cue in
+/// two. Symmetric slacks judge the pair by how far apart they are, not by which
+/// arrived first.
 pub fn is_same_cue(width: f32, chars: usize, previous_width: f32, previous_chars: usize) -> bool {
-    let width_slack = (0.08 * previous_width).max(8.0);
-    let chars_slack = ((CHAR_COUNT_SLACK * previous_chars as f32) as usize).max(2);
+    let wider = previous_width.max(width);
+    let longer = previous_chars.max(chars);
+    let width_slack = (0.08 * wider).max(8.0);
+    let chars_slack = ((CHAR_COUNT_SLACK * longer as f32) as usize).max(2);
     (width - previous_width).abs() <= width_slack && chars.abs_diff(previous_chars) <= chars_slack
 }
 
@@ -202,7 +211,9 @@ pub fn is_same_cue(width: f32, chars: usize, previous_width: f32, previous_chars
 ///
 /// Every one of those wobbles counted as a fresh cue, inflating the rate three-
 /// to fourfold and pushing a real subtitle band past `MAX_CUE_RATE_PER_MINUTE`
-/// into `Churning`. Fifty-five percent covers the measured swing.
+/// into `Churning`. Fifty-five percent covers the measured swing in both
+/// directions - the 27 -> 13 drop and the 16 -> 27 growth are within the same
+/// tolerance because it is measured against the larger read.
 ///
 /// Widening this cannot hide a real cue change, because the width test still has
 /// to pass as well - and it costs little in the other direction: merging two
@@ -353,6 +364,19 @@ mod tests {
         // Same subtitle, one character read wrongly and the box a pixel wider.
         assert!(is_same_cue(301.0, 23, 300.0, 23));
         assert!(is_same_cue(300.0, 24, 300.0, 23));
+    }
+
+    // The measurement that moved `CHAR_COUNT_SLACK` from 15% to 55% (issue #59):
+    // one unchanged English subtitle read as 27, 27, 13, 16, 27 characters
+    // inside two seconds. Under the old slack the 27 -> 13 swing was a new cue
+    // every wobble, inflating the rate three- to fourfold and judging a real
+    // subtitle band `Churning`.
+    #[test]
+    fn the_measured_character_wobble_is_one_cue() {
+        assert!(is_same_cue(300.0, 27, 300.0, 27));
+        assert!(is_same_cue(300.0, 13, 300.0, 27));
+        assert!(is_same_cue(300.0, 16, 300.0, 27));
+        assert!(is_same_cue(300.0, 27, 300.0, 13));
     }
 
     #[test]
