@@ -70,4 +70,32 @@ Assert-Lines @("aarch64-pc-windows-msvc", "x86_64-pc-windows-msvc") `
 $missing = Get-CommandVersion -Command "cargo" -Arguments @("definitely-not-a-subcommand")
 Assert-Equal $null $missing "A failing command probe must return null."
 
+# The declared engine majors are read from package.json. Under
+# Set-StrictMode -Version Latest, dot-notation access to an absent key throws and
+# would abort the whole prerequisite report at the first gap, defeating the
+# report-everything-in-one-pass contract. A missing key must return null instead.
+$engineFixtureRoot = Join-Path ([System.IO.Path]::GetTempPath()) (
+    "meowcal-engine-fixture-" + [guid]::NewGuid().ToString("N")
+)
+New-Item -ItemType Directory -Path $engineFixtureRoot | Out-Null
+try {
+    '{ "engines": { "node": ">=24 <25" } }' |
+        Set-Content -LiteralPath (Join-Path $engineFixtureRoot "package.json") -Encoding utf8
+
+    Assert-Equal 24 (Get-DeclaredEngineMajor -RepositoryRoot $engineFixtureRoot -Engine "node") `
+        "Declared node major."
+    Assert-Equal $null (Get-DeclaredEngineMajor -RepositoryRoot $engineFixtureRoot -Engine "npm") `
+        "A package.json without an npm engine must return null, not throw."
+
+    '{ "name": "no-engines" }' |
+        Set-Content -LiteralPath (Join-Path $engineFixtureRoot "package.json") -Encoding utf8
+    Assert-Equal $null (Get-DeclaredEngineMajor -RepositoryRoot $engineFixtureRoot -Engine "node") `
+        "A package.json without an engines block must return null, not throw."
+
+    Assert-Equal $null (Get-DeclaredEngineMajor -RepositoryRoot (Join-Path $engineFixtureRoot "absent") -Engine "node") `
+        "A missing package.json must return null, not throw."
+} finally {
+    Remove-Item -LiteralPath $engineFixtureRoot -Recurse -Force -ErrorAction SilentlyContinue
+}
+
 Write-Host "runner-prerequisites contract tests passed."

@@ -159,12 +159,18 @@ function Get-DeclaredEngineMajor {
         return $null
     }
 
-    $engines = (Get-Content -Raw -LiteralPath $packageJson | ConvertFrom-Json).engines
-    if (-not $engines -or -not $engines.$Engine) {
+    # Read as a hashtable and index it. Under Set-StrictMode -Version Latest,
+    # dot-notation access to an absent property on a ConvertFrom-Json object
+    # throws PropertyNotFoundException, which would abort the whole prerequisite
+    # report at the first missing key instead of listing every problem in one
+    # pass. Hashtable indexing returns $null for a missing key.
+    $package = Get-Content -Raw -LiteralPath $packageJson | ConvertFrom-Json -AsHashtable
+    $engines = $package["engines"]
+    if (-not $engines -or -not $engines.ContainsKey($Engine)) {
         return $null
     }
 
-    $match = [regex]::Match($engines.$Engine, '>=\s*(\d+)')
+    $match = [regex]::Match($engines[$Engine], '>=\s*(\d+)')
     if ($match.Success) { [int]$match.Groups[1].Value } else { $null }
 }
 
