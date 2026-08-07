@@ -12,6 +12,7 @@
     "dev:tauri-web": "vite --host 127.0.0.1 --port 1420 --strictPort",
     "build:web": "vite build",
     "version:check": "node scripts/check-version-sync.mjs",
+    "runners:check": "node scripts/check-workflow-runners.mjs",
     "typecheck": "tsc --noEmit",
     "prepare:validation": "pwsh -NoProfile -File scripts/prepare-validation-resources.ps1",
     "dev:backend": "npm run prepare:validation && cd src-tauri && cargo run --locked -- --http-only",
@@ -21,7 +22,7 @@
     "eval:subtitles": "pwsh -NoProfile -File scripts/run-subtitle-eval.ps1",
     "test:frontend": "vitest run --coverage",
     "test:browser": "playwright test",
-    "frontend:check": "npm run version:check && npm run format:check && npm run lint && npm run typecheck && npm run build:web && npm run test:frontend && npm run test:browser",
+    "frontend:check": "npm run version:check && npm run runners:check && npm run format:check && npm run lint && npm run typecheck && npm run build:web && npm run test:frontend && npm run test:browser",
     "tauri": "tauri",
     "tauri:dev": "tauri dev",
     "tauri:build": "tauri build"

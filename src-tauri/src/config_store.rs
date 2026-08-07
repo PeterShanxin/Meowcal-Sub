@@ -52,7 +52,18 @@ pub fn load_config(app: &tauri::AppHandle) -> AppConfig {
         }
     };
 
-    let (config, recovery) = load_durable(&path);
+    load_and_report(&path)
+}
+
+/// Load, record the provenance, and say what was recovered.
+///
+/// Split from `load_config` so the browser dev server can reach it: that path
+/// has no `AppHandle`, and until it did, it carried its own loader with the
+/// original #64 bug - reading the same `%APPDATA%` file the installed app uses.
+/// A door that resets the user's config is not less serious for being a dev one,
+/// and the fix is to have one loader rather than two - see issue #71.
+pub fn load_and_report(path: &Path) -> AppConfig {
+    let (config, recovery) = load_durable(path);
     // Every save this session is gated on this. A config reconstructed from a
     // backup is usable but is not evidence of the user's settings, so it must
     // never refresh the backup or overwrite a config that becomes readable

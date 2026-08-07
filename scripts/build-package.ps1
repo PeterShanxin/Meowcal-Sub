@@ -24,11 +24,23 @@ if (-not $CargoTargetDir) {
     $CargoTargetDir = Join-Path ([IO.Path]::GetTempPath()) "meowcal-sub-build-$Architecture"
 }
 
-# ARM64 rustc can exhaust its compiler stack while compiling the release graph
-# with the default parallel/LTO/strip combination. These settings are the
-# smallest configuration proven to produce the ARM64 installer on this repo.
-if ($Architecture -eq "arm64") {
+# rustc is a host-architecture process whatever it targets, so the ARM64
+# compiler-stack limit follows the host, not the package. Serializing rustc is
+# enough on its own to cross-build x64 from an ARM64 host - measured in
+# docs/evidence/2026-08-07-arm64-host-cross-builds-x64-package.json - and it
+# changes build time only, never the emitted code.
+# Read the machine, not the process: PROCESSOR_ARCHITECTURE reports AMD64 to an
+# emulated x64 shell on an ARM64 machine.
+$hostIsArm64 =
+    [System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture -eq "Arm64"
+if ($hostIsArm64) {
     $env:CARGO_BUILD_JOBS = "1"
+}
+
+# The rest relaxes the release profile itself and therefore changes the binary
+# that ships. It stays tied to the ARM64 *target*, which is where it was proven,
+# so an x64 package is optimized identically no matter which host built it.
+if ($Architecture -eq "arm64") {
     $env:CARGO_PROFILE_RELEASE_CODEGEN_UNITS = "1"
     $env:CARGO_PROFILE_RELEASE_LTO = "false"
     $env:CARGO_PROFILE_RELEASE_STRIP = "false"

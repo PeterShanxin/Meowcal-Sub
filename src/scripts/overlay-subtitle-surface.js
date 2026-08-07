@@ -20,9 +20,9 @@
   }
 
   /**
-   * @param {{ replaceText?: boolean, clearText?: boolean, hint?: string }} presentation
+   * @param {{ replaceText?: boolean, clearText?: boolean, keepText?: boolean, hint?: string }} presentation
    * @param {string} translated
-   * @returns {{ mode: "text" | "hint" | "clear", showContainer: boolean }}
+   * @returns {{ mode: "text" | "hint" | "keep" | "clear", showContainer: boolean }}
    */
   function resolveSubtitleSurface(presentation, translated) {
     if (presentation?.replaceText) {
@@ -32,6 +32,16 @@
       return { mode: "clear", showContainer: false };
     }
     const hasHint = nonEmpty(presentation?.hint);
+    // `keep` exists because "does not clear" and "shows a hint" used to be
+    // contradictory: the hint path blanked the line on its way to showing the
+    // banner, so a state that declined to clear the text lost it anyway. That
+    // is the wrong trade for a line the engine merely failed to *replace* in
+    // time - the previous translation is still the best thing on screen, and
+    // under the sustained load of issue #60 the viewer would otherwise get a
+    // warning banner where a readable line used to be, for most of a session.
+    if (presentation?.keepText && hasHint) {
+      return { mode: "keep", showContainer: true };
+    }
     return { mode: hasHint ? "hint" : "clear", showContainer: hasHint };
   }
 

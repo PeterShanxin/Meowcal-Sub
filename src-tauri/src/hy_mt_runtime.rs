@@ -163,7 +163,10 @@ pub fn start(runtime: &ManagedLocalRuntimeConfig) -> Result<String, String> {
         .args(["--port", &port])
         .args(["-c", &manifest.launch.context_size.to_string()])
         .args(["-ngl", &runtime_spec.gpu_layers.to_string()])
-        .args(&manifest.launch.extra_args)
+        .args(crate::engine_launch::launch_args(
+            &manifest.launch.extra_args,
+            crate::engine_launch::available_cores(),
+        ))
         .stdin(Stdio::null())
         .stdout(Stdio::from(stdout))
         .stderr(Stdio::from(stderr));

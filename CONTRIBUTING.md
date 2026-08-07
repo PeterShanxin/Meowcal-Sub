@@ -80,8 +80,10 @@ Run the authoritative repository gate from the root:
 ```
 
 Use `-Stage Lint`, `-Stage Test`, or `-Stage Frontend` only for focused local
-iteration. The default `All` stage is the contributor handoff gate and equals
-the union of the current required GitHub checks. The frontend stage installs
+iteration. The default `All` stage is the contributor handoff gate. It runs
+against your host architecture; CI additionally repeats the Rust lint and test
+stages for the other shipped architecture, so a green local run is the handoff
+bar rather than a promise that CI will agree. The frontend stage installs
 the locked npm graph, checks formatting and lint, runs DOM-independent unit
 tests, exercises browser mode against the real Rust HTTP backend, and audits
 dependencies for high-severity vulnerabilities. It also enforces production
@@ -91,6 +93,17 @@ floors.
 Rust dependency resolution is locked by `src-tauri/Cargo.lock`; verification
 uses `--locked`. Frontend dependency resolution is locked by
 `package-lock.json`; verification uses `npm ci`.
+
+## Continuous integration
+
+CI runs on the owner's self-hosted Windows runners. Do **not** register your
+personal computer as a runner: a runner executes repository code directly on the
+host, so attaching one is a decision the repository owner makes, not a way to
+speed up your own pull request. `scripts/verify.ps1` is your equivalent of CI.
+
+If no runner is online, your job queues rather than failing over to a
+GitHub-hosted runner. That is intentional. See
+[`docs/SELF_HOSTED_RUNNERS.md`](docs/SELF_HOSTED_RUNNERS.md).
 
 ## Manual Windows validation
 

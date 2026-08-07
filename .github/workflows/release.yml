@@ -11,9 +11,21 @@ on:
 permissions:
   contents: read
 
+# Two runs of the same version would race for the release tag. Queue them instead
+# of cancelling: a half-finished release run has already reserved a tag, and
+# cancelling it leaves that reservation behind with nothing attached to it.
+concurrency:
+  group: release-${{ inputs.version }}
+  cancel-in-progress: false
+
 jobs:
   validate:
     name: Validate release contract
+    # Stays GitHub-hosted on purpose. This job is Linux, bills at 1x, runs in
+    # about a minute, and holds `contents: write` to reserve the release tag.
+    # Moving it to the self-hosted host would save nothing measurable and would
+    # put release-write permission on a long-lived machine that also executes
+    # contributor pull request code. See docs/SELF_HOSTED_RUNNERS.md.
     runs-on: ubuntu-latest
     permissions:
       contents: write

@@ -7,6 +7,7 @@
 // 3. Implementations for each backend (Mock)
 // =============================================================================
 
+mod chat_wire;
 mod context;
 mod foundry_local;
 mod manager;
@@ -210,6 +211,15 @@ pub enum TranslationDisplayState {
     /// while text plainly sits in it sends them to move a region that was never
     /// the problem. The machine-readable reason travels in `warnings`.
     SourceUnreadable,
+    /// The engine took longer than a subtitle stays on screen, so the line was
+    /// abandoned rather than waited for.
+    ///
+    /// Distinct from `TemporarilyUnavailable`: the engine answered, is
+    /// answering, and will answer again - it is losing a race with the video,
+    /// which is a machine-is-busy problem and not an engine-is-down problem.
+    /// The two need different advice, and issue #60 is the case where showing
+    /// nothing at all made a busy machine look like a broken app.
+    EngineSlow,
     Stopped,
 }
 
