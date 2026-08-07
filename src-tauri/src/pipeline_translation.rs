@@ -24,6 +24,7 @@
 use crate::event_payloads::TranslationPayload;
 use crate::ipc::{IpcMessage, SubtitleUpdatePayload};
 use crate::llm::{BackendId, TranslationManager, TranslationOutcome};
+use crate::pipeline_deadline::{await_within_deadline, SlotOutcome, TRANSLATION_DEADLINE};
 use crate::pipeline_session::{PipelineClock, PipelineToken};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -167,6 +168,42 @@ impl Translator {
         true
     }
 
+    /// Report a line the engine did not finish in time, and give the slot back.
+    ///
+    /// Returning from `run` drops the translation future, which disconnects the
+    /// HTTP request and stops the server generating, and drops `InFlightGuard`,
+    /// which frees the slot for the next capture.
+    ///
+    /// The notice matters as much as the cancellation. Before this, a slow call
+    /// produced silence - `is_busy` suppressed the loop's notices and no result
+    /// ever arrived - so a busy machine and a broken engine looked identical to
+    /// the viewer. Emitting the state under the frame's own `capture_id` keeps
+    /// it in the ordering the frontend accepts.
+    fn abandon_slow_translation(&self, frame: &Frame) {
+        let waited_ms = TRANSLATION_DEADLINE.as_millis() as u64;
+        warn!(
+            session_id = self.session_id,
+            capture_id = frame.token.capture_id,
+            deadline_ms = waited_ms,
+            "Abandoned translation that missed its deadline"
+        );
+        // Dropping the backend future skips every diagnostics write inside it,
+        // so without this a chronically slow engine reports as perfectly healthy
+        // while the overlay says the opposite.
+        self.manager.record_abandoned(waited_ms as u128);
+        if let Err(error) = self.app.emit(
+            "translation-update",
+            TranslationPayload::engine_slow(
+                self.session_id,
+                frame.token.capture_id,
+                waited_ms,
+                frame.started.elapsed().as_millis() as u64,
+            ),
+        ) {
+            warn!("⚠️ Failed to emit engine-slow notice: {}", error);
+        }
+    }
+
     async fn run(&self, frame: Frame, mut stop_rx: watch::Receiver<bool>) {
         let translation_id = self.clock.begin_translation();
 
@@ -177,19 +214,22 @@ impl Translator {
             &self.target_language,
             frame.context_prompt.as_deref(),
         );
-        let outcome = tokio::select! {
-            outcome = translation => outcome,
-            changed = stop_rx.changed() => {
-                if changed.is_ok() && *stop_rx.borrow() {
+        let outcome =
+            match await_within_deadline(translation, TRANSLATION_DEADLINE, &mut stop_rx).await {
+                SlotOutcome::Finished(outcome) => outcome,
+                SlotOutcome::Cancelled => {
                     info!(
                         session_id = self.session_id,
                         capture_id = frame.token.capture_id,
                         "Cancelled in-flight translation"
                     );
+                    return;
                 }
-                return;
-            }
-        };
+                SlotOutcome::DeadlineMissed => {
+                    self.abandon_slow_translation(&frame);
+                    return;
+                }
+            };
         let model_ms = model_started.elapsed().as_millis() as u64;
 
         let TranslationOutcome {

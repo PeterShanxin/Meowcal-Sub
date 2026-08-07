@@ -18,6 +18,7 @@
     "sourceOnly",
     "noSubtitleText",
     "sourceUnreadable",
+    "engineSlow",
     "stopped",
   ]);
 
@@ -96,6 +97,22 @@
           replaceText: false,
           clearText: false,
           hint: unreadableHint(Array.isArray(warnings) ? warnings[0] : warnings),
+          severity: "warn",
+          persist: true,
+        };
+      case "engineSlow":
+        // The engine is working, just losing a race with the video. Saying it
+        // is unavailable would send the viewer to repair a healthy engine; the
+        // thing they can actually act on is the load on their machine.
+        return {
+          state: normalized,
+          replaceText: false,
+          clearText: false,
+          // Not merely "do not clear": the line must be actively kept. A hint
+          // state used to blank the text on its way to showing the banner, so
+          // declining to clear was not enough to hold on to it.
+          keepText: true,
+          hint: "Translation engine is falling behind — close other heavy apps",
           severity: "warn",
           persist: true,
         };

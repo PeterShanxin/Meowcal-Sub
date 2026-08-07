@@ -1,0 +1,47 @@
+{
+  "schemaVersion": 1,
+  "generatedAtUtc": "2026-08-05T18:40:00Z",
+  "testedCommit": "8bc8e1a577fb86cc2d79936c74fccd8b28a15e9e",
+  "architecture": "aarch64",
+  "windowsBuild": "11 Pro 10.0.26200",
+  "scenario": "Abort an in-flight chat completion and watch whether llama-server frees its slot",
+  "issue": 60,
+  "sourceLanguage": "en-US",
+  "targetLanguage": "zh-CN",
+  "question": "The pipeline holds one translation slot because the server serialises anyway. A client-side deadline only buys throughput if abandoning the request also stops the server generating. If the server finishes the abandoned work instead, the next request queues behind it and the deadline buys staleness protection and nothing else. Which is it?",
+  "method": {
+    "runtime": "llama-b10155-opencl-adreno-arm64",
+    "model": "HY-MT1.5-1.8B-Q4_K_M",
+    "serverArgs": ["-c", "2048", "-ngl", "0", "--jinja", "--no-webui", "--parallel", "1"],
+    "port": 11441,
+    "steps": [
+      "Send two short completions to warm the slot and confirm normal release.",
+      "Send a long generation (12 repeated sentences, high max_tokens) so it is certainly still running.",
+      "Close the client socket mid-generation without reading the response.",
+      "Send a further completion immediately and time how long it waits.",
+      "Read the server's own log for the task lifecycle."
+    ],
+    "decidedBy": "llama-server's log, not client-side timing - client timing alone cannot tell a cancelled generation from a fast one"
+  },
+  "results": {
+    "abandonedTaskId": 12,
+    "serverLog": [
+      "0.04.481.616 W srv stop: cancel task, id_task = 12",
+      "0.04.490.815 I slot release: id 0 | task 12 | stop processing: n_tokens = 307, truncated = 0",
+      "0.04.490.846 I slot get_availabl: id 0 | task -1 | selected slot by LCP similarity",
+      "0.04.495.475 I slot launch_slot_: id 0 | task 15 | processing task, is_child = 0"
+    ],
+    "slotReleaseAfterDisconnectMs": 9,
+    "nextTaskStartedAfterReleaseMs": 5,
+    "tokensGeneratedBeforeCancel": 307,
+    "nextTaskCompletedMs": 267
+  },
+  "finding": "Disconnecting the client cancels the generation. The server logged `cancel task` for the abandoned task and released the slot 9ms later, having stopped at 307 tokens rather than running to max_tokens. The following request started 5ms after that release and completed in 267ms - it did not queue behind the abandoned work.",
+  "decision": "The deadline in `pipeline_deadline::TRANSLATION_DEADLINE` is worth having on throughput grounds, not only staleness grounds. Dropping the translation future disconnects the request, which returns the engine to the next line almost immediately. This file exists because that claim is load-bearing: if it were false, every abandoned line would leave the engine saturated, the next line would also miss its deadline, and the overlay's `engineSlow` hint would become permanent.",
+  "limitations": [
+    "One runtime and one model. The behaviour is llama.cpp's server, so it should hold across the runtimes this app ships, but it was not re-run on the x64 Vulkan build.",
+    "`--parallel 1`. With more slots the queueing question changes shape, though cancellation itself would not.",
+    "Measured on an idle machine. Under the sustained load of issue #60 the release should still be prompt - it is a cancellation check, not compute - but the 9ms figure is a floor rather than a guarantee."
+  ],
+  "manualStatus": "not-required"
+}

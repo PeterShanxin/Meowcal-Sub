@@ -1,0 +1,37 @@
+{
+  "schemaVersion": 1,
+  "generatedAtUtc": "2026-08-05T12:10:00Z",
+  "testedCommit": "98353c8",
+  "architecture": "aarch64",
+  "windowsBuild": "26200",
+  "scenario": "engine-worker-thread-sweep",
+  "issue": 60,
+  "sourceLanguage": "en-US",
+  "targetLanguage": "zh-CN",
+  "question": "What worker-thread count should the app give the translation engine, and does capping it fix the multi-second stalls reported in issue #60?",
+  "method": {
+    "design": "One llama-server per setting, started and stopped around each measurement, driven with twelve real subtitle lines after a warm-up call. Each setting measured twice: on an otherwise quiet machine, and again under a synthetic load of eight busy threads held for the duration.",
+    "runtime": "llama-b10155-opencl-adreno-arm64 (the manifest-pinned build)",
+    "model": "HY-MT1.5-1.8B-Q4_K_M",
+    "args": "-c 2048 -ngl 0 --jinja --no-webui --parallel 1, plus --threads N where stated",
+    "host": "Snapdragon X Elite X1E80100, 12 cores, 31.6 GB RAM",
+    "note": "-ngl 0 is the shipped ARM64 execution policy; see docs/ARCHITECTURE.md and 2026-08-05-arm64-adreno-offload-ab.json."
+  },
+  "results": [
+    { "threads": "default", "idleP50Ms": 443, "idleTokensPerSecond": 19.3, "loadedP50Ms": 986, "loadedP90Ms": 22695, "loadedMaxMs": 57270 },
+    { "threads": 4, "idleP50Ms": 313, "idleTokensPerSecond": 26.3, "loadedP50Ms": 1130, "loadedP90Ms": 20466, "loadedMaxMs": 53312 },
+    { "threads": 6, "idleP50Ms": 298, "idleTokensPerSecond": 27.4, "loadedP50Ms": 358, "loadedP90Ms": 3814, "loadedMaxMs": 82580 },
+    { "threads": 8, "idleP50Ms": 337, "idleTokensPerSecond": 24.8, "loadedP50Ms": 370, "loadedP90Ms": 377, "loadedMaxMs": 86146 },
+    { "threads": 12, "idleP50Ms": 385, "idleTokensPerSecond": 21.5, "loadedP50Ms": 455, "loadedP90Ms": 776, "loadedMaxMs": 85264 }
+  ],
+  "finding": "llama.cpp's unset default was the slowest configuration tested on an idle host: 443ms median and 19.3 tok/s, against 298ms and 27.4 tok/s at six threads and 337ms and 24.8 tok/s at eight. Under load the settings separate differently - eight threads held a p90 of 377ms against six's 3814ms and the default's 22695ms. Eight was therefore chosen: it costs 39ms of idle median against the best setting and returns a tenfold better p90 on a busy machine, which is the frame a subtitle app is judged on.",
+  "counterFinding": "Capping threads does not fix the tail, and the rationale originally given in issue #60 - that llama.cpp stalls at its thread barrier when a worker is descheduled - is not supported by this data. Every setting tested, including the chosen one, still produced single calls between 53 and 86 seconds under sustained load. The stalls are not a thread-count problem, so the translation slot needs its own deadline; that is implemented separately and is what actually bounds the outage.",
+  "decision": "Ship --threads derived from the host core count as cores minus four, floored at four, computed in src-tauri/src/engine_launch.rs rather than pinned in the manifest, since the manifest is one embedded document shipped to every machine. A manifest that pins a thread count is honoured unchanged.",
+  "limitations": [
+    "One machine, one core count. The cores-minus-four rule is extrapolated from a single 12-core measurement and is not evidence for 4-, 8- or 16-core hosts.",
+    "Twelve lines per setting, so the loaded maxima are single observations rather than a distribution.",
+    "The synthetic load is eight busy threads, which is not the shape of the reporter's real load (an installer build plus a browser plus other applications).",
+    "Measured against the server directly. Capture, OCR and overlay are not exercised, so this is not capture-to-overlay evidence."
+  ],
+  "manualStatus": "measured; one machine, one core count, server-level only"
+}

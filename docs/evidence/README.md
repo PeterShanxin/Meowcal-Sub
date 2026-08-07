@@ -76,3 +76,40 @@ The `Windows Packages` workflow also produced the native x64 MSI and NSIS
 artifact bundle on `2883966` (run `30699524713`, artifact
 `meowcal-sub-x64-packages`). This proves x64 package generation only; it does
 not prove x64 runtime behavior, performance, or installer lifecycle behavior.
+
+`2026-08-05-arm64-engine-thread-sweep.json` picks the engine's `--threads`
+value from measurement rather than intuition, and records a counter-finding.
+llama.cpp's unset default was the slowest configuration tested on an idle host
+(443ms median, 19.3 tok/s); eight threads held a loaded p90 of 377ms where six
+reached 3814ms and the default 22695ms. Eight was chosen for that reason.
+
+The counter-finding matters more than the choice: capping threads does **not**
+fix the tail. Every setting tested, including the chosen one, still produced
+single calls between 53 and 86 seconds under sustained load, which refutes the
+thread-barrier explanation originally offered in issue #60. The translation
+slot's own deadline is what bounds that outage. Reproduce with one server per
+setting on a spare loopback port:
+
+```powershell
+llama-server.exe -m <model> --port 11440 -c 2048 -ngl 0 --jinja --no-webui `
+  --parallel 1 --threads <N>
+```
+
+Twelve lines per setting on one 12-core machine, so the loaded maxima are
+single observations and the cores-minus-four rule is extrapolated from a single
+core count. Because of that last point the rule is applied only on `aarch64`,
+where it was measured; elsewhere `available_parallelism` counts logical CPUs and
+"cores minus four" could exceed the physical core count outright.
+
+`2026-08-05-arm64-abandoned-request-frees-slot.json` checks the claim the
+translation deadline rests on: that abandoning a request also stops the engine
+generating. It does. Disconnecting mid-generation made llama-server log `cancel
+task`, release the slot 9ms later having stopped at 307 tokens rather than
+running to `max_tokens`, and start the next request 5ms after that.
+
+This deserves its own file because the deadline's value depends entirely on it.
+If the server finished abandoned work instead, the next line would queue behind
+it and miss its deadline too, and the overlay's "engine is falling behind" hint
+would become permanent rather than occasional — the deadline would buy staleness
+protection and no throughput at all. Decided from the server's own log rather
+than client timing, which cannot tell a cancelled generation from a fast one.
