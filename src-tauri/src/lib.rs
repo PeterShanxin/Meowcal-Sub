@@ -30,6 +30,7 @@ pub mod overlay;
 
 /// Ownership of the WinUI OverlayHost child process
 pub mod overlay_host_process;
+pub mod pipeline_deadline;
 pub mod pipeline_pacing;
 pub mod pipeline_session;
 pub mod pipeline_translation;
@@ -47,6 +48,7 @@ pub mod config_save;
 pub mod engine_artifact_io;
 pub mod engine_config;
 pub mod engine_install_transaction;
+pub mod engine_launch;
 pub mod engine_manifest;
 pub mod engine_preflight;
 
