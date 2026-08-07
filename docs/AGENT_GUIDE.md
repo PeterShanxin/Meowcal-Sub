@@ -96,6 +96,16 @@ For focused iteration only:
 .\scripts\verify.ps1 -Stage Frontend
 ```
 
+`-Target` names a Rust triple instead of the host's. CI uses it to cover both
+shipped architectures from one machine, because the crate compiles different code
+for each - see the `cfg(target_arch)` split in `engine_launch.rs`. Windows x64
+emulation runs one way only, so `-Target aarch64-pc-windows-msvc` is refused on
+an x64 host rather than silently building something it cannot execute.
+
+```powershell
+.\scripts\verify.ps1 -Stage Test -Target x86_64-pc-windows-msvc
+```
+
 The default `All` stage is required before handoff. It runs its own contract
 tests, prepares validation resources, uses the tracked Cargo and npm lockfiles,
 and includes the real browser-to-Rust bridge smoke. A failed clean-checkout
@@ -105,8 +115,11 @@ On ARM64, set `CARGO_BUILD_JOBS=1` for any cargo invocation against a cold
 target directory - a fresh worktree, a cleaned tree, a new machine. Parallel
 rustc exhausts its compiler stack and fails with `STATUS_STACK_BUFFER_OVERRUN`
 (`0xc0000409`) on several unrelated dependencies at once, which reads as a
-dependency problem and is not one. `build-package.ps1` already applies this for
-release builds; `verify.ps1` and a bare `cargo test` do not.
+dependency problem and is not one. rustc is a host-architecture process whatever
+it targets, so a cross-build to x64 needs this too. `verify.ps1` now applies it
+itself when the host is ARM64 *and* the target directory is cold, and
+`build-package.ps1` applies it on any ARM64 host. An explicit `CARGO_BUILD_JOBS`
+from the caller always wins. A bare `cargo test` still does neither.
 
 A fresh worktree also needs `scripts\prepare-validation-resources.ps1` before
 its first build, or the Tauri build script stops on a missing
@@ -126,6 +139,58 @@ window, installer, or runtime-process behavior.
 `build-package.ps1` applies the verified ARM64 compiler safeguards. Browser mode
 does not prove Windows OCR, capture, selector, overlay, tray, installer, or
 DPI/window behavior.
+
+## Continuous integration
+
+- CI and Windows packaging run on the owner's self-hosted Windows runners,
+  selected by the custom labels `meowcal-ci`, `meowcal-package-x64`, and
+  `meowcal-package-arm64`. `docs/SELF_HOSTED_RUNNERS.md` is the contract.
+- No workflow may name a GitHub-hosted **Windows** runner, directly or through a
+  conditional, a matrix value, or a default. When no runner is online, jobs queue.
+  That is the designed behavior; returning to hosted runners is a reviewed
+  revert, never an automatic failover.
+- `meowcal-ci` requires an ARM64 host. It is the only host that can build and
+  execute both shipped architectures, which is what keeps the x64 evidence the
+  hosted runners used to provide.
+- Three release jobs stay on `ubuntu-latest` deliberately, because
+  `RELEASE_MIRROR_TOKEN` and release-write permission belong on an ephemeral host
+  rather than one that also runs contributor pull request code.
+- Superseded pull request runs cancel; `main` runs do not, because a cancelled
+  post-merge run leaves `main` unverified.
+
+## Self-hosted runner operating model
+
+The runner is **already registered** and is operated **on demand in the
+foreground**. It is deliberately not a Windows service. `docs/SELF_HOSTED_RUNNERS.md`
+holds the full procedure; these are the standing rules.
+
+- Never re-register the runner as part of normal work. `-Mode Install` is for a
+  new host, a replaced host, or a label change.
+- Never install it as a Windows service unless the owner explicitly asks.
+- Never resolve an offline runner by routing work to a GitHub-hosted Windows
+  runner. Starting the runner is the fix.
+- Discover the runner directory rather than hard-coding it:
+  `(Get-Help .\scripts\setup-self-hosted-runner.ps1 -Parameter RunnerDirectory).defaultValue`.
+  Read registration state from GitHub with `-Mode Status`.
+
+Before relying on a self-hosted CI or packaging run:
+
+1. check status, and do not start a second runner if one is already online;
+2. if offline, start the existing `run.cmd` **without blocking your shell**, and
+   keep the `Runner.Listener` process under that directory so you can stop the
+   right one later;
+3. wait for GitHub to report it `online` - a started process is not yet a
+   connected runner;
+4. let an already-queued run drain rather than re-triggering it, which would
+   duplicate work on a single runner;
+5. wait for every relevant job, remembering that one runner executes jobs
+   sequentially;
+6. stop the runner only once it is not busy **and** no queued or in-progress job
+   remains that should complete, including runs you did not trigger.
+
+Never stop a busy runner: it fails that job and leaves the workspace
+part-written. When several unrelated jobs are queued, let them drain instead of
+stopping after the first.
 
 ## Manual gate
 
@@ -153,6 +218,8 @@ other required manual gates remain outstanding.
 - `CONTRIBUTING.md`, this guide, and `docs/CODING_STANDARDS.md`: normative.
 - `docs/ARCHITECTURE.md`: current and target module ownership.
 - `docs/MAINTAINABILITY_BASELINE.md`: enforced ceilings and ratchet procedure.
+- `docs/SELF_HOSTED_RUNNERS.md`: runner labels, host contract, and who may
+  attach one.
 - `docs/adr/`: accepted or proposed cross-cutting decisions.
 - `docs/plans/`: dated plans and evidence, not standing policy.
 - `docs/archive/`: superseded historical context.

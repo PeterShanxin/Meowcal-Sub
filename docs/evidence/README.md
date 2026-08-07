@@ -113,3 +113,17 @@ it and miss its deadline too, and the overlay's "engine is falling behind" hint
 would become permanent rather than occasional — the deadline would buy staleness
 protection and no throughput at all. Decided from the server's own log rather
 than client timing, which cannot tell a cancelled generation from a fast one.
+
+`2026-08-07-arm64-host-cross-builds-x64-package.json` answers the question the
+self-hosted runner migration (#82) turns on: whether one Windows ARM64 host can
+produce a correct x64 package, or whether x64 packaging needs its own machine.
+It can. A cold `build-package.ps1 -Architecture x64` on the Snapdragon X Elite
+host produced both bundles with updater signatures in 11.5 minutes, and the
+packaged executable's PE machine type is `0x8664`, so it is genuinely x64 rather
+than an ARM64 binary carrying x64 file names.
+
+The same file records the second half of the answer: an x64 Rust test binary
+*executes* on that host under Windows emulation. That is what lets CI keep the
+x64 coverage the hosted runners used to provide instead of trading it for ARM64
+coverage. Emulation runs one way only, so the reverse does not hold and an x64
+host cannot stand in for this one.
