@@ -58,13 +58,13 @@ const SAME_LINE_SIMILARITY: f32 = 0.45;
 
 /// Classify the current OCR text against the last line that was translated.
 pub fn classify(previous: &str, current: &str) -> LineChange {
-    let previous = normalize(previous);
-    let current = normalize(current);
+    let previous_norm = normalize(previous);
+    let current_norm = normalize(current);
 
-    if previous.is_empty() {
+    if previous_norm.is_empty() {
         return LineChange::New;
     }
-    if previous == current {
+    if previous_norm == current_norm {
         return LineChange::Repeat;
     }
 
@@ -77,28 +77,57 @@ pub fn classify(previous: &str, current: &str) -> LineChange {
     // unrelated dialogue - `No.` is inside `I don't know.`, `Wait.` inside
     // `I told you to wait outside` - and treating those as re-reads silently
     // swallowed the short exchanges that make up much of a script.
-    if contains_subsequence(&previous, &current) && current.len() * 2 >= previous.len() {
+    if contains_subsequence(&previous_norm, &current_norm)
+        && current_norm.len() * 2 >= previous_norm.len()
+    {
         return LineChange::Repeat;
     }
 
     // Growth is only worth retranslating when it carries a clause. A stray
     // glyph resolved at either edge of the strip grows the read too, and
     // retranslating on it swaps a good line on screen for a different one.
-    if contains_subsequence(&current, &previous) {
-        return if current.len() - previous.len() >= EXTENDED_MIN_NEW_CHARS {
+    if contains_subsequence(&current_norm, &previous_norm) {
+        return if current_norm.len() - previous_norm.len() >= EXTENDED_MIN_NEW_CHARS
+            && !wears_a_garbled_prefix(previous, current)
+        {
             LineChange::Extended
         } else {
             LineChange::Repeat
         };
     }
 
-    if previous.len().max(current.len()) >= MIN_CHARS_FOR_SIMILARITY
-        && similarity(&previous, &current) >= SAME_LINE_SIMILARITY
+    if previous_norm.len().max(current_norm.len()) >= MIN_CHARS_FOR_SIMILARITY
+        && similarity(&previous_norm, &current_norm) >= SAME_LINE_SIMILARITY
     {
         return LineChange::Repeat;
     }
 
     LineChange::New
+}
+
+/// Whether the read is the previous line wearing a garbled prefix - the
+/// clearest instance in issue #59, where a clean `However, isn't he a hero
+/// from an era` was followed a frame later by `bf//dzz:: However, isn't he a
+/// hero from an era` and the second, worse read replaced the good translation
+/// on screen.
+///
+/// Growth here is not a second row arriving; the previous line is still
+/// present in full, and the new characters are OCR noise prepended to it. The
+/// marker is in the raw text (the `//`), so this must see the raw strings,
+/// not the normalised rows the rest of `classify` works on - normalising
+/// strips exactly the punctuation that proves it.
+///
+/// Only a prefix is judged. A second row appends at the end, and a suffix that
+/// arrives carrying its own noise is still the only read that will ever
+/// contain that row - see `ocr_recent_lines`.
+fn wears_a_garbled_prefix(previous: &str, current: &str) -> bool {
+    if !current.ends_with(previous) {
+        return false;
+    }
+    let prefix = &current[..current.len() - previous.len()];
+    // The prefix is the whole growth, so `MIN_TOKENS_TO_JUDGE` has nothing to
+    // say; one garbled token in a prefix of one token is exactly the signal.
+    crate::ocr_corruption::corruption_share(prefix) >= 0.5
 }
 
 /// Reduce a read to the characters that carry meaning. Spacing and punctuation
@@ -319,6 +348,35 @@ mod tests {
                 "{previous} -> {current}"
             );
         }
+    }
+
+    // The headline instance from issue #59. The clean line was translated; the
+    // next read of the same cue wore a garbled prefix. It is not a second row
+    // arriving - it is the same line read worse - and retranslating it put
+    // `bf//dzz:: 不过...` over the good `不过...` 0.66 seconds later.
+    #[test]
+    fn a_re_read_wearing_a_garbled_prefix_is_not_extended() {
+        assert_eq!(
+            classify(
+                "However, isn't he a hero from an era",
+                "bf//dzz:: However, isn't he a hero from an era"
+            ),
+            LineChange::Repeat
+        );
+    }
+
+    // The mirror of the above: real content appearing at the front of a line
+    // that was still drawing is new text, not noise - `where the Mystics have`
+    // arriving after the tail was read alone is worth retranslating.
+    #[test]
+    fn a_clean_prefix_growth_is_still_extended() {
+        assert_eq!(
+            classify(
+                "relatively thinned out?",
+                "where the Mystics have relatively thinned out?"
+            ),
+            LineChange::Extended
+        );
     }
 
     #[test]

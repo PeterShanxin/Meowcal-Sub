@@ -134,12 +134,13 @@ fn resembles(line: &str, current: &str) -> bool {
 /// How much two reads must share before one is treated as a rendering of the
 /// other.
 ///
-/// Being wrong here costs a suppressed subtitle: `is_worse_than_a_recent_read`
-/// pairs a read against the remembered line it most resembles, and its caller
-/// drops the frame. Genuinely unrelated English dialogue in the recorded session
+/// Being wrong here costs a suppressed subtitle: `resembles` asks whether a read
+/// is a re-read of a remembered line, and a false positive drops a genuinely
+/// new line. Genuinely unrelated English dialogue in the recorded session
 /// reached 0.33 at p95, so this sits just above that - but "just above p95" also
 /// means roughly one unrelated pair in twenty still clears it, which is why the
-/// caller asks only about reads already judged to be the same cue.
+/// caller limits the comparison to the remembered window rather than the whole
+/// session.
 const SAME_CUE_FLOOR: f32 = 0.45;
 
 #[cfg(test)]

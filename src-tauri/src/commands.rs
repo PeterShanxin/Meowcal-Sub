@@ -1667,8 +1667,8 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
             }
             // Deliberately no "is this read worse than the last?" check here: a
             // noisier re-read is `Repeat` and was skipped above, so only `New`
-            // and `Extended` remain, and `Extended` *contains* the last read -
-            // a second row arriving, not a rival rendering. See `ocr_corruption`.
+            // and `Extended` remain. `Extended` *contains* the last read - a
+            // garbled prefix is refused in `ocr_stability`. See `ocr_corruption`.
 
             // Claiming the single translation slot is the point of no return:
             // everything below records the line as handled, so it runs only if
