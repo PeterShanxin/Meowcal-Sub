@@ -101,6 +101,17 @@ tests, prepares validation resources, uses the tracked Cargo and npm lockfiles,
 and includes the real browser-to-Rust bridge smoke. A failed clean-checkout
 prerequisite is a repository defect, not a reason to skip verification.
 
+On ARM64, set `CARGO_BUILD_JOBS=1` for any cargo invocation against a cold
+target directory - a fresh worktree, a cleaned tree, a new machine. Parallel
+rustc exhausts its compiler stack and fails with `STATUS_STACK_BUFFER_OVERRUN`
+(`0xc0000409`) on several unrelated dependencies at once, which reads as a
+dependency problem and is not one. `build-package.ps1` already applies this for
+release builds; `verify.ps1` and a bare `cargo test` do not.
+
+A fresh worktree also needs `scripts\prepare-validation-resources.ps1` before
+its first build, or the Tauri build script stops on a missing
+`resources\OverlayHost.exe`.
+
 Browser mode does not prove Tauri-only capture, OCR, selector, overlay, tray,
 window, installer, or runtime-process behavior.
 

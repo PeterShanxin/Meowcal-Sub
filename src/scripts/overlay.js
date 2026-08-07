@@ -652,17 +652,16 @@ async function setupEventListeners(elements) {
                 setSubtitleContainerVisible(subtitleContainer, false);
                 clearSubtitleHint(subtitleHint, subtitleHintText);
             } else {
-                // Hint-only states must keep the box on screen; otherwise a warming,
-                // unavailable, or source-only pipeline looks identical to a dead one.
-                overlayState.currentText = '';
-                subtitleText.textContent = '';
-                setSubtitleHint(
-                    subtitleHint,
-                    subtitleHintText,
-                    presentation.hint,
-                    presentation.severity,
-                    presentation.persist
-                );
+                // Hint-bearing states keep the box on screen, or a warming/unavailable
+                // pipeline looks identical to a dead one. 'keep' also holds the line
+                // already showing: blanking it for an "engine is behind" banner would
+                // cost the viewer the very thing they were reading.
+                if (surface.mode !== 'keep') {
+                    overlayState.currentText = '';
+                    subtitleText.textContent = '';
+                }
+                setSubtitleHint(subtitleHint, subtitleHintText, presentation.hint,
+                    presentation.severity, presentation.persist);
                 setSubtitleContainerVisible(subtitleContainer, surface.showContainer);
             }
 

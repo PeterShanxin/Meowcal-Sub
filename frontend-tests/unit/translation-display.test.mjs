@@ -15,6 +15,7 @@ describe("translation display states", () => {
     ["sourceOnly", false, false],
     ["noSubtitleText", false, false],
     ["sourceUnreadable", false, false],
+    ["engineSlow", false, false],
     ["stopped", false, true],
   ])("presents %s without mislabeling source text", (state, replaceText, clearText) => {
     expect(getTranslationPresentation(state)).toMatchObject({
@@ -49,6 +50,26 @@ describe("translation display states", () => {
   it("falls back to a generic reason when the backend sends an unknown one", () => {
     const presentation = getTranslationPresentation("sourceUnreadable", "", ["somethingNew"]);
     expect(presentation.hint).toBe("Subtitle text in this area could not be read");
+  });
+
+  // Issue #60: a busy machine used to look like a broken app, because a slow
+  // call blanked the overlay and said nothing. The engine is answering here, so
+  // this must not read as an outage, and it must not clear the line either -
+  // the previous translation is the best thing still on screen.
+  it("says the engine is behind rather than unavailable", () => {
+    const presentation = getTranslationPresentation("engineSlow");
+    expect(presentation).toMatchObject({
+      hint: "Translation engine is falling behind — close other heavy apps",
+      severity: "warn",
+      persist: true,
+      clearText: false,
+      replaceText: false,
+      // `clearText: false` alone did not achieve this: the overlay's hint path
+      // blanked the text on its way to showing the banner, so the line was lost
+      // anyway. `keepText` is the flag the surface resolver actually acts on.
+      keepText: true,
+    });
+    expect(presentation.hint).not.toMatch(/unavailable|failed|error/i);
   });
 
   it("labels passthrough payloads from older backends as source only", () => {

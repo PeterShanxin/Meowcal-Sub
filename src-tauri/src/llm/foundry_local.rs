@@ -1,4 +1,7 @@
 use crate::config::FoundryLocalConfig;
+use crate::llm::chat_wire::{
+    generation_rate, ChatCompletionRequest, ChatCompletionResponse, ChatMessage,
+};
 use crate::llm::{
     build_subtitle_translation_prompt, subtitle_output::sanitize_subtitle_translation_output,
     transport_errors::describe_request_failure, BackendId, FoundryLocalPhase, LlmError,
@@ -149,35 +152,6 @@ pub struct ModelData {
     pub id: String,
     #[serde(default)]
     pub object: String,
-}
-
-/// Request to /v1/chat/completions endpoint
-#[derive(Debug, Serialize)]
-struct ChatCompletionRequest {
-    model: String,
-    messages: Vec<ChatMessage>,
-    temperature: f32,
-    top_k: u32,
-    top_p: f32,
-    repeat_penalty: f32,
-    max_tokens: u32,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-struct ChatMessage {
-    role: String,
-    content: String,
-}
-
-/// Response from /v1/chat/completions endpoint
-#[derive(Debug, Deserialize)]
-struct ChatCompletionResponse {
-    choices: Vec<ChatChoice>,
-}
-
-#[derive(Debug, Deserialize)]
-struct ChatChoice {
-    message: ChatMessage,
 }
 
 /// Foundry Local backend using OpenAI-compatible API
@@ -1633,6 +1607,7 @@ impl TranslatorBackend for FoundryLocalBackend {
 
         let current_namespace = self.preferred_api_namespace();
         let url = self.api_url_for(&base_url, current_namespace, "chat/completions");
+        let request_started = std::time::Instant::now();
         debug!("Sending translation request to Foundry Local: {}", url);
         info!(
             target: "translation_io",
@@ -1689,6 +1664,9 @@ impl TranslatorBackend for FoundryLocalBackend {
             .unwrap_or_default();
         let translated = sanitize_subtitle_translation_output(&translated);
 
+        let elapsed_ms = request_started.elapsed().as_millis() as u64;
+        let completion_tokens = completion.completion_tokens();
+
         debug!(
             "Foundry Local translated {} chars to {} chars",
             text.chars().count(),
@@ -1698,6 +1676,9 @@ impl TranslatorBackend for FoundryLocalBackend {
             target: "translation_io",
             source_chars = text.chars().count(),
             translated_chars = translated.chars().count(),
+            completion_tokens,
+            elapsed_ms,
+            tokens_per_second = generation_rate(completion_tokens, elapsed_ms),
             "Translation response"
         );
 

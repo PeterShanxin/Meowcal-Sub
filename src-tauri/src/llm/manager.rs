@@ -18,10 +18,25 @@ use tokio::time::{timeout, Duration};
 use tracing::{debug, info, warn};
 
 const DEFAULT_BACKEND_TIMEOUT_MS: u64 = 2500;
-/// Per-attempt ceiling with no context attached. Above the observed p99 of ~5s
-/// on a warm local model, so ordinary slow lines still land; far below the
-/// total budget, so a stall is abandoned in time to retry it.
-const UNCONTEXTED_ATTEMPT_TIMEOUT_MS: u64 = 6500;
+/// Per-attempt ceiling with no context attached. Comfortably above the measured
+/// p99 of 2291ms on a warm local model, so ordinary slow lines still land; far
+/// below the total budget, so a stall is abandoned in time to retry it.
+///
+/// The whole chain - two attempts and the passthrough - has to finish inside
+/// `pipeline_deadline::TRANSLATION_DEADLINE`, which abandons the line outright.
+/// At the previous 6500 the first attempt alone outlived it, so for anyone with
+/// context-aware translation off the retry and the Mock source-passthrough below
+/// were unreachable: a viewer who would have seen the untranslated source line
+/// saw nothing at all.
+///
+/// The old value was larger than the contexted cap on purpose - without context
+/// there is no tier to degrade to, so a retry is the only recourse and each
+/// attempt was given more room. Under an outer deadline that no longer fits, and
+/// two attempts that both finish beat one that gets cut off.
+const UNCONTEXTED_ATTEMPT_TIMEOUT_MS: u64 = DEFAULT_BACKEND_TIMEOUT_MS;
+
+use crate::pipeline_deadline::backend_budget;
+
 const MAX_TRANSLATION_INPUT_CHARS: usize = 2000;
 const FOUNDRY_TRANSIENT_MAX_RETRIES: usize = 2;
 const FOUNDRY_TRANSIENT_RETRY_DELAY_MS: u64 = 600;
@@ -215,6 +230,29 @@ impl TranslationManager {
             .collect()
     }
 
+    /// Record a line the pipeline gave up on before any backend answered.
+    ///
+    /// Every other diagnostics write happens inside the backend future, so
+    /// dropping that future at the deadline skipped all of them. `last_error`
+    /// and `last_latency` are last-write-wins, so a run of abandoned lines left
+    /// the last *successful* line's latency standing and no error at all - the
+    /// overlay saying the engine is behind while the panel showed it healthy.
+    ///
+    /// Attributed to the local engine because that is the call that was holding
+    /// the slot, and the only one whose speed the viewer can act on.
+    pub fn record_abandoned(&self, waited_ms: u128) {
+        let backend = if self.config.enable_foundry_local {
+            BackendId::FoundryLocal
+        } else {
+            BackendId::Mock
+        };
+        lock_or_recover(&self.diagnostics).record_error(
+            backend,
+            "abandoned_deadline",
+            Some(waited_ms),
+        );
+    }
+
     /// Return diagnostics snapshot for frontend.
     pub fn diagnostics_snapshot(&self) -> TranslationDiagnostics {
         let backends = self.list_backends();
@@ -350,7 +388,12 @@ impl TranslationManager {
 
             let started = Instant::now();
             let timeout_ms = self.timeout_ms_for_backend(id);
-            let total_timeout = Duration::from_millis(timeout_ms);
+            // Bounded by the pipeline's deadline as well as by config: the retry
+            // loop below measures its remaining budget against this, and if it
+            // measures against thirty seconds while the line is abandoned at
+            // five, it starts a retry that is killed mid-flight and never
+            // reaches the passthrough.
+            let total_timeout = Duration::from_millis(timeout_ms).min(backend_budget());
             let max_attempts = if id == BackendId::FoundryLocal {
                 1 + FOUNDRY_TRANSIENT_MAX_RETRIES
             } else {
@@ -974,261 +1017,5 @@ impl ContextTier {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::config::{ContextLevel, TranslationConfig};
-    use crate::llm::LlmError;
-    use async_trait::async_trait;
-    use std::sync::atomic::AtomicUsize;
-
-    struct TestBackend {
-        id: BackendId,
-        available: bool,
-        ready_state: ReadyState,
-        response: Result<String, LlmError>,
-        delay_ms: u64,
-    }
-
-    struct CountingBackend {
-        calls: Arc<AtomicUsize>,
-        response: Result<String, LlmError>,
-    }
-
-    #[async_trait]
-    impl TranslatorBackend for CountingBackend {
-        fn id(&self) -> BackendId {
-            BackendId::FoundryLocal
-        }
-
-        fn name(&self) -> &'static str {
-            "Counting Foundry"
-        }
-
-        fn is_available(&self) -> bool {
-            true
-        }
-
-        fn ready_state(&self) -> ReadyState {
-            ReadyState::Ready
-        }
-
-        fn notes(&self) -> String {
-            String::new()
-        }
-
-        async fn translate(
-            &self,
-            _text: &str,
-            _source_language: &str,
-            _target_language: &str,
-        ) -> Result<String, LlmError> {
-            self.calls.fetch_add(1, Ordering::SeqCst);
-            self.response.clone()
-        }
-    }
-
-    #[async_trait]
-    impl TranslatorBackend for TestBackend {
-        fn id(&self) -> BackendId {
-            self.id
-        }
-
-        fn name(&self) -> &'static str {
-            "Test"
-        }
-
-        fn is_available(&self) -> bool {
-            self.available
-        }
-
-        fn ready_state(&self) -> ReadyState {
-            self.ready_state
-        }
-
-        fn notes(&self) -> String {
-            String::new()
-        }
-
-        async fn translate(
-            &self,
-            _text: &str,
-            _source_language: &str,
-            _target_language: &str,
-        ) -> Result<String, LlmError> {
-            if self.delay_ms > 0 {
-                tokio::time::sleep(Duration::from_millis(self.delay_ms)).await;
-            }
-            self.response.clone()
-        }
-    }
-
-    fn base_config() -> TranslationConfig {
-        TranslationConfig {
-            enable_foundry_local: true,
-            allow_mock_fallback: true,
-            enable_context_aware: true,
-            context_level: ContextLevel::MemoryAndRecent,
-            context_recent_count: 3,
-            context_budget_percent: 15,
-            context_summary_cooldown_ms: 5_000,
-            prompt_max_source_chars: 300,
-            prompt_max_context_chars: 600,
-            context_buffer_size: 12,
-            context_reset_gap_ms: 6_000,
-            foundry_local: crate::config::FoundryLocalConfig::default(),
-            ocr: crate::config::OcrConfig::default(),
-        }
-    }
-
-    #[tokio::test]
-    async fn test_fallback_ordering() {
-        // Test fallback from FoundryLocal (fails) to Mock
-        let backends: Vec<Box<dyn TranslatorBackend>> = vec![
-            Box::new(TestBackend {
-                id: BackendId::FoundryLocal,
-                available: true,
-                ready_state: ReadyState::Ready,
-                response: Err(LlmError::ApiError("boom".to_string())),
-                delay_ms: 0,
-            }),
-            Box::new(TestBackend {
-                id: BackendId::Mock,
-                available: true,
-                ready_state: ReadyState::Ready,
-                response: Ok("mock_response".to_string()),
-                delay_ms: 0,
-            }),
-        ];
-
-        let diagnostics = Arc::new(Mutex::new(TranslationDiagnosticsState::default()));
-        let manager = TranslationManager::with_backends(base_config(), backends, diagnostics, 200);
-
-        let outcome = manager
-            .translate_with_fallback("hello", "en-US", "zh-CN")
-            .await;
-
-        assert_eq!(outcome.backend_used, BackendId::Mock);
-        assert_eq!(outcome.translated, "mock_response");
-        assert_eq!(
-            outcome.display_state,
-            TranslationDisplayState::TemporarilyUnavailable
-        );
-    }
-
-    #[tokio::test]
-    async fn test_backend_timeout_fallback() {
-        let mut config = base_config();
-        config.foundry_local.timeout_ms = 10;
-        // Test timeout fallback from FoundryLocal to Mock
-        let backends: Vec<Box<dyn TranslatorBackend>> = vec![
-            Box::new(TestBackend {
-                id: BackendId::FoundryLocal,
-                available: true,
-                ready_state: ReadyState::Ready,
-                response: Ok("slow".to_string()),
-                delay_ms: 50,
-            }),
-            Box::new(TestBackend {
-                id: BackendId::Mock,
-                available: true,
-                ready_state: ReadyState::Ready,
-                response: Ok("fast".to_string()),
-                delay_ms: 0,
-            }),
-        ];
-
-        let diagnostics = Arc::new(Mutex::new(TranslationDiagnosticsState::default()));
-        let manager = TranslationManager::with_backends(config, backends, diagnostics, 10);
-
-        let outcome = manager
-            .translate_with_fallback("hello", "en-US", "zh-CN")
-            .await;
-
-        assert_eq!(outcome.backend_used, BackendId::Mock);
-        assert_eq!(outcome.translated, "fast");
-        assert_eq!(
-            outcome.display_state,
-            TranslationDisplayState::TemporarilyUnavailable
-        );
-    }
-
-    #[tokio::test]
-    async fn test_zh_cn_to_en_validation_rejection_is_not_retried() {
-        let calls = Arc::new(AtomicUsize::new(0));
-        let backends: Vec<Box<dyn TranslatorBackend>> = vec![
-            Box::new(CountingBackend {
-                calls: Arc::clone(&calls),
-                response: Ok("a".repeat(150)),
-            }),
-            Box::new(TestBackend {
-                id: BackendId::Mock,
-                available: true,
-                ready_state: ReadyState::Ready,
-                response: Ok("你好".to_string()),
-                delay_ms: 0,
-            }),
-        ];
-
-        let diagnostics = Arc::new(Mutex::new(TranslationDiagnosticsState::default()));
-        let manager = TranslationManager::with_backends(base_config(), backends, diagnostics, 500);
-        let outcome = manager
-            .translate_with_fallback("你好", "zh-CN", "en-US")
-            .await;
-
-        assert_eq!(calls.load(Ordering::SeqCst), 1);
-        assert_eq!(
-            outcome.display_state,
-            TranslationDisplayState::TemporarilyUnavailable
-        );
-        assert_eq!(outcome.translated, "你好");
-    }
-
-    #[tokio::test]
-    async fn test_not_ready_foundry_reports_warming_without_translation() {
-        let backends: Vec<Box<dyn TranslatorBackend>> = vec![
-            Box::new(TestBackend {
-                id: BackendId::FoundryLocal,
-                available: true,
-                ready_state: ReadyState::NotReady,
-                response: Ok("unused".to_string()),
-                delay_ms: 0,
-            }),
-            Box::new(TestBackend {
-                id: BackendId::Mock,
-                available: true,
-                ready_state: ReadyState::Ready,
-                response: Ok("你好".to_string()),
-                delay_ms: 0,
-            }),
-        ];
-
-        let diagnostics = Arc::new(Mutex::new(TranslationDiagnosticsState::default()));
-        let manager = TranslationManager::with_backends(base_config(), backends, diagnostics, 500);
-        let outcome = manager
-            .translate_with_fallback("你好", "zh-CN", "en-US")
-            .await;
-
-        assert_eq!(outcome.display_state, TranslationDisplayState::Warming);
-    }
-
-    #[tokio::test]
-    async fn test_disabled_foundry_reports_source_only() {
-        let mut config = base_config();
-        config.enable_foundry_local = false;
-        let backends: Vec<Box<dyn TranslatorBackend>> = vec![Box::new(TestBackend {
-            id: BackendId::Mock,
-            available: true,
-            ready_state: ReadyState::Ready,
-            response: Ok("你好".to_string()),
-            delay_ms: 0,
-        })];
-
-        let diagnostics = Arc::new(Mutex::new(TranslationDiagnosticsState::default()));
-        let manager = TranslationManager::with_backends(config, backends, diagnostics, 500);
-        let outcome = manager
-            .translate_with_fallback("你好", "zh-CN", "en-US")
-            .await;
-
-        assert_eq!(outcome.display_state, TranslationDisplayState::SourceOnly);
-    }
-}
+#[path = "manager_tests.rs"]
+mod tests;

@@ -37,6 +37,25 @@ describe("overlay subtitle surface", () => {
     });
   });
 
+  // Issue #60. `hint` blanks the line to make room for the banner, which is
+  // right for a pipeline that has nothing to show and wrong for one whose last
+  // translation is still the best thing on screen. Under sustained load most
+  // calls are slow, so getting this wrong replaces the subtitles with a warning
+  // for most of a session.
+  it("keeps the previous line on screen while the engine is behind", () => {
+    expect(surfaceFor("engineSlow", "foundry_local", "")).toEqual({
+      mode: "keep",
+      showContainer: true,
+    });
+  });
+
+  it("still hides the box for a keepText state with nothing to say", () => {
+    expect(resolveSubtitleSurface({ keepText: true, hint: "" }, "")).toEqual({
+      mode: "clear",
+      showContainer: false,
+    });
+  });
+
   it("hides the box when translation stops", () => {
     expect(surfaceFor("stopped", "foundry_local", "")).toEqual({
       mode: "clear",
