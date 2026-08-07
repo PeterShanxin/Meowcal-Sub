@@ -25,6 +25,9 @@ use tower_http::cors::{Any, CorsLayer};
 use tracing::info;
 
 use crate::config::{AppConfig, CaptureRegion};
+use crate::http_config::{
+    get_settings, load_standalone_config, save_settings, standalone_config_path,
+};
 use crate::llm::{
     BackendId, BackendInfo, FoundryLocalBackend, FoundryLocalPhase, ReadyState,
     TranslationDiagnostics, TranslationDiagnosticsState, TranslatorBackend, FAST_PROBE_TIMEOUT_MS,
@@ -47,7 +50,7 @@ pub struct HttpAppState {
 
 impl HttpAppState {
     pub fn new() -> Self {
-        let config_path = get_standalone_config_path();
+        let config_path = standalone_config_path();
         let config = load_standalone_config(&config_path);
 
         Self {
@@ -63,43 +66,6 @@ impl Default for HttpAppState {
     fn default() -> Self {
         Self::new()
     }
-}
-
-// =============================================================================
-// STANDALONE CONFIG HELPERS
-// =============================================================================
-
-/// Get config path without Tauri's AppHandle
-fn get_standalone_config_path() -> PathBuf {
-    if cfg!(target_os = "windows") {
-        if let Ok(appdata) = std::env::var("APPDATA") {
-            return PathBuf::from(appdata)
-                .join("com.meowcal.sub")
-                .join("config.json");
-        }
-    }
-    // Fallback
-    PathBuf::from("config.json")
-}
-
-/// Load config without Tauri's AppHandle
-fn load_standalone_config(path: &PathBuf) -> AppConfig {
-    if let Ok(content) = std::fs::read_to_string(path) {
-        if let Ok(config) = serde_json::from_str::<AppConfig>(&content) {
-            return config;
-        }
-    }
-    AppConfig::default()
-}
-
-/// Save config without Tauri's AppHandle
-fn save_standalone_config(path: &PathBuf, config: &AppConfig) -> Result<(), String> {
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
-    }
-    let json = serde_json::to_string_pretty(config).map_err(|e| e.to_string())?;
-    std::fs::write(path, json).map_err(|e| e.to_string())?;
-    Ok(())
 }
 
 // =============================================================================
@@ -177,30 +143,6 @@ async fn get_ocr_languages_http() -> impl IntoResponse {
     match result {
         Ok(Ok(langs)) => Json(langs),
         _ => Json(vec![]),
-    }
-}
-
-/// GET /api/settings - Get current settings
-async fn get_settings(State(state): State<HttpAppState>) -> impl IntoResponse {
-    let config = lock_or_recover(&state.config).clone();
-    Json(config)
-}
-
-/// POST /api/settings - Save settings
-async fn save_settings(
-    State(state): State<HttpAppState>,
-    Json(settings): Json<AppConfig>,
-) -> impl IntoResponse {
-    // Update in-memory config
-    {
-        let mut config = lock_or_recover(&state.config);
-        *config = settings.clone();
-    }
-
-    // Persist to disk
-    match save_standalone_config(&state.config_path, &settings) {
-        Ok(_) => Json(serde_json::json!({ "success": true })),
-        Err(e) => Json(serde_json::json!({ "success": false, "error": e })),
     }
 }
 

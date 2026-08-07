@@ -60,6 +60,7 @@ pub mod commands;
 mod event_payloads;
 
 /// HTTP server for browser dev mode
+pub mod http_config;
 pub mod http_server;
 pub mod hy_mt_installer;
 pub mod hy_mt_runtime;

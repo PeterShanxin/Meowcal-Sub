@@ -41,7 +41,8 @@ pub enum Provenance {
     Fallback,
 }
 
-/// Set once per launch by `config_store::load_config`.
+/// Set once per launch by `config_store::load_and_report`, whether the app or
+/// the browser dev server was the one that loaded.
 ///
 /// A static rather than a field on `AppState` because every save site already
 /// reaches `save_config` with nothing but an `AppHandle`, and threading a flag
@@ -106,7 +107,7 @@ pub fn save_to(path: &Path, config: &AppConfig, provenance: Provenance) -> Resul
 
     let mut config = config.clone();
     if let LoadOutcome::Loaded(ref disk) = on_disk {
-        preserve_runtime(disk, &mut config);
+        preserve_app_owned(disk, &mut config);
     }
     write_atomic(path, &config)?;
 
@@ -121,22 +122,49 @@ pub fn save_to(path: &Path, config: &AppConfig, provenance: Provenance) -> Resul
     Ok(())
 }
 
-/// Refuse to write away an engine registration that is still on disk.
+/// Refuse to write away the settings the app owns and the UI never sends.
 ///
-/// `FoundryLocalConfig::preserve_managed_runtime_from` already guards settings
-/// saves, but it preserves from the in-memory config - which, after a bad load,
-/// is the default with no runtime at all. So the guard was blind in exactly the
-/// case it existed for, and the first save after a bad load made the loss
-/// permanent. Consulting the file closes that: the engine is app-owned, so a
-/// runtime present on disk and absent in memory is always the bug, never intent.
-fn preserve_runtime(on_disk: &AppConfig, config: &mut AppConfig) {
-    if config.translation.foundry_local.managed_runtime.is_some() {
-        return;
+/// Some of the config is not the settings form's to give: the engine
+/// registration, the capture region, the DPI scale it was measured at, and the
+/// window geometry are all written by the app as it runs. A caller that saves a
+/// settings payload has no value for them, and `AppConfig`'s `default` fills
+/// each absent key with a blank - so writing that payload straight through
+/// erases them.
+///
+/// `commands::save_settings` re-attaches all four from `AppState` before saving,
+/// which is why the Tauri path never lost them. That is caller discipline, and
+/// the browser dev server did not have it: its settings save wrote the POSTed
+/// body as-is, blanking the capture region in the *installed app's* config file
+/// (#68, #71). Doing it here instead means the guarantee follows the file rather
+/// than the caller, and a third entry point cannot quietly reintroduce the bug.
+///
+/// Absence is the only trigger. A caller that *does* carry a value - the Tauri
+/// path, which reads the live region and geometry - still overwrites what is on
+/// disk, because moving the capture region has to be savable.
+fn preserve_app_owned(on_disk: &AppConfig, config: &mut AppConfig) {
+    if config.translation.foundry_local.managed_runtime.is_none() {
+        config
+            .translation
+            .foundry_local
+            .preserve_managed_runtime_from(&on_disk.translation.foundry_local);
     }
-    config
-        .translation
-        .foundry_local
-        .preserve_managed_runtime_from(&on_disk.translation.foundry_local);
+    if config.last_capture_region.is_none() {
+        config.last_capture_region = on_disk.last_capture_region;
+    }
+    if config.last_capture_scale_factor.is_none() {
+        config.last_capture_scale_factor = on_disk.last_capture_scale_factor;
+    }
+    // Geometry is a struct rather than an `Option`, so "not supplied" has to be
+    // read off the fields. A window with no position and no size was never
+    // measured; a maximised flag alone cannot restore a window.
+    let supplied = &config.window_preferences;
+    let unset = supplied.width.is_none()
+        && supplied.height.is_none()
+        && supplied.x.is_none()
+        && supplied.y.is_none();
+    if unset {
+        config.window_preferences = on_disk.window_preferences.clone();
+    }
 }
 
 /// Keep the last-known-good copy in step with a config that just parsed.
