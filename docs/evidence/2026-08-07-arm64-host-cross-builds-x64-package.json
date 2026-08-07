@@ -1,0 +1,48 @@
+{
+  "schemaVersion": 1,
+  "generatedAtUtc": "2026-08-07T04:44:39Z",
+  "architecture": "aarch64",
+  "productVersion": "0.6.7",
+  "target": "x64",
+  "question": "Can one Windows ARM64 host produce a correct, signed x64 package, so that a single self-hosted runner can cover both shipped architectures?",
+  "answer": "yes",
+  "host": {
+    "cpu": "Snapdragon(R) X Elite - X1E80100",
+    "systemType": "ARM64-based PC",
+    "memoryGiB": 31.6,
+    "rustcHost": "aarch64-pc-windows-msvc",
+    "rustupTargets": ["aarch64-pc-windows-msvc", "x86_64-pc-windows-msvc"],
+    "msvcCrossLinker": "VC/Tools/MSVC/14.50.35717/bin/Hostarm64/x64/link.exe",
+    "dotnetSdk": "10.0.103"
+  },
+  "build": {
+    "command": "scripts/build-package.ps1 -Architecture x64",
+    "overlayHost": "succeeded",
+    "cargoBuildJobs": 1,
+    "coldTargetDirectory": true,
+    "wallClockMinutes": 11.5,
+    "updaterSigningKey": "throwaway key generated outside the repository; never committed"
+  },
+  "artifacts": [
+    {
+      "file": "Meowcal Sub_0.6.7_x64-setup.exe",
+      "bytes": 24710613,
+      "sha256": "7C6C159D535D3119111DDEC4458E77E12284B5FF6F34AADB170C28CDF231D2BB",
+      "updaterSignature": "present"
+    },
+    {
+      "file": "Meowcal Sub_0.6.7_x64_en-US.msi",
+      "bytes": 35893248,
+      "sha256": "57030F7ABF3D77815269D447A2D8E6DB1CA30523F3D0A48FA58A5E2B2A09D030",
+      "updaterSignature": "present"
+    }
+  ],
+  "peMachineType": "0x8664",
+  "peMachineTypeMeaning": "IMAGE_FILE_MACHINE_AMD64, so the packaged executable is genuinely x64 and not an ARM64 binary with x64 naming",
+  "alsoVerified": {
+    "x64TestBinariesExecuteOnThisHost": true,
+    "note": "A Rust test binary built for x86_64-pc-windows-msvc runs on this host under Windows x64 emulation and reports std::env::consts::ARCH as x86_64. Emulation is one-directional: an x64 host cannot execute ARM64 binaries."
+  },
+  "manualStatus": "artifact-built-not-installed",
+  "limits": "This proves the x64 package builds, signs, and reports the correct machine type when cross-built from an ARM64 host. It is not installation, capture, OCR, overlay, or runtime evidence on x64 hardware, and it does not replace the manual Windows gate."
+}

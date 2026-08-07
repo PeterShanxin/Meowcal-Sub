@@ -43,7 +43,8 @@ function Invoke-VerifyUnderTest {
         [ValidateSet("All", "Lint", "Test", "Frontend")]
         [string]$Stage,
         [string]$CargoFailOn = "",
-        [string]$NpmFailOn = ""
+        [string]$NpmFailOn = "",
+        [string]$Target = ""
     )
 
     Remove-Item -LiteralPath $cargoLog -Force -ErrorAction SilentlyContinue
@@ -62,7 +63,11 @@ function Invoke-VerifyUnderTest {
         $env:FAKE_NPM_LOG = $npmLog
         $env:FAKE_NPM_FAIL_ON = $NpmFailOn
         $env:MEOWCAL_VERIFY_CONTRACT_ACTIVE = "1"
-        & pwsh -NoProfile -File $verifyScript -Stage $Stage
+        if ([string]::IsNullOrEmpty($Target)) {
+            & pwsh -NoProfile -File $verifyScript -Stage $Stage
+        } else {
+            & pwsh -NoProfile -File $verifyScript -Stage $Stage -Target $Target
+        }
         $exitCode = $LASTEXITCODE
         $cargoCommands = if (Test-Path -LiteralPath $cargoLog) {
             @(Get-Content -LiteralPath $cargoLog)
@@ -133,6 +138,7 @@ exit /b 0
     Assert-Lines @(
         "ci --ignore-scripts",
         "run version:check",
+        "run runners:check",
         "run format:check",
         "run lint",
         "run typecheck",
@@ -154,6 +160,7 @@ exit /b 0
     Assert-Lines @(
         "ci --ignore-scripts",
         "run version:check",
+        "run runners:check",
         "run format:check",
         "run lint",
         "run typecheck",
@@ -163,6 +170,32 @@ exit /b 0
         "run test:browser",
         "audit --audit-level=high"
     ) $all.NpmCommands "All stage npm"
+
+    # A named target is how one machine covers both shipped architectures. These
+    # use the x64 triple because every supported host can execute x64 binaries,
+    # while only an ARM64 host can execute ARM64 ones.
+    $crossLint = Invoke-VerifyUnderTest -Stage Lint -Target "x86_64-pc-windows-msvc"
+    Assert-Equal 0 $crossLint.ExitCode "Cross lint stage exit code."
+    Assert-Lines @(
+        "fmt --check",
+        "clippy --locked --target x86_64-pc-windows-msvc -- -D warnings"
+    ) $crossLint.CargoCommands "Cross lint stage"
+
+    $crossTest = Invoke-VerifyUnderTest -Stage Test -Target "x86_64-pc-windows-msvc"
+    Assert-Equal 0 $crossTest.ExitCode "Cross test stage exit code."
+    Assert-Lines @(
+        "test --locked --target x86_64-pc-windows-msvc --lib",
+        "test --locked --target x86_64-pc-windows-msvc --test integration_ipc"
+    ) $crossTest.CargoCommands "Cross test stage"
+
+    # "host" must stay byte-identical to passing nothing, or the local gate and
+    # CI stop being the same contract.
+    $explicitHost = Invoke-VerifyUnderTest -Stage Test -Target "host"
+    Assert-Equal 0 $explicitHost.ExitCode "Explicit host target exit code."
+    Assert-Lines @(
+        "test --locked --lib",
+        "test --locked --test integration_ipc"
+    ) $explicitHost.CargoCommands "Explicit host target"
 
     $failure = Invoke-VerifyUnderTest -Stage All -CargoFailOn "clippy"
     Assert-Equal 23 $failure.ExitCode "Failure propagation."
@@ -177,6 +210,7 @@ exit /b 0
     Assert-Lines @(
         "ci --ignore-scripts",
         "run version:check",
+        "run runners:check",
         "run format:check",
         "run lint"
     ) $npmFailure.NpmCommands "Npm failure short-circuit"

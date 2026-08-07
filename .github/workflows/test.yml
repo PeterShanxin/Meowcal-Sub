@@ -1,13 +1,28 @@
-# CI pipeline for Meowcal-Sub
-# Runs on every PR to main and pushes to main.
-# All jobs use windows-latest because the project depends on Windows APIs.
+# CI pipeline for Meowcal-Sub.
+# Runs on every pull request to main and on pushes to main.
+#
+# Every job runs on the owner's self-hosted Windows runners. `meowcal-ci` is a
+# custom label, so these jobs can never match a GitHub-hosted runner: when no
+# runner is online the work queues instead of quietly spending hosted minutes.
+# That queuing is the designed behavior, not an outage.
+#
+# See docs/SELF_HOSTED_RUNNERS.md for the host contract and the security model.
 
 name: CI
 
 on:
   pull_request:
+    branches: [main]
   push:
     branches: [main]
+
+# Superseded pull request runs are cancelled. On a single self-hosted machine an
+# obsolete run is worse than a wasted bill: it is a queue every later run waits
+# behind. `main` is deliberately excluded from cancellation, because cancelling a
+# post-merge run leaves the branch every other branch is cut from unverified.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
   CARGO_TERM_COLOR: always
@@ -15,61 +30,69 @@ env:
 jobs:
   lint:
     name: Lint & Format
-    runs-on: windows-latest
+    # ARM64 here is load-bearing rather than descriptive. Windows x64 emulation
+    # runs one way only, so only an ARM64 host can build *and execute* both
+    # shipped architectures. The crate compiles different code for each - see the
+    # cfg(target_arch) split in src-tauri/src/engine_launch.rs - and
+    # docs/AGENT_GUIDE.md forbids treating one architecture's evidence as the
+    # other's.
+    runs-on: [self-hosted, Windows, ARM64, meowcal-ci]
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 2
+          # The runner workspace persists between runs. A clean checkout runs
+          # `git clean -ffdx`, which would delete src-tauri/target and
+          # node_modules and force a cold Rust rebuild every single run. Tracked
+          # files are still force-checked-out, so only ignored build output
+          # survives. Packaging keeps the default clean checkout, where
+          # reproducibility outranks speed.
+          clean: false
 
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          components: rustfmt, clippy
-
-      - uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: src-tauri
-
-      - name: Run lint verification
+      # The toolchain is a property of the host, installed and verified by
+      # scripts/setup-self-hosted-runner.ps1, not something CI installs per run.
+      # A self-hosted runner that rewrites its own global Rust and Node
+      # installation on every job is a machine nobody can reason about.
+      - name: Lint the native ARM64 target
         shell: pwsh
-        run: ./scripts/verify.ps1 -Stage Lint
+        run: ./scripts/verify.ps1 -Stage Lint -Target aarch64-pc-windows-msvc
+
+      - name: Lint the x64 target
+        shell: pwsh
+        run: ./scripts/verify.ps1 -Stage Lint -Target x86_64-pc-windows-msvc
 
   test:
     name: Tests
-    runs-on: windows-latest
+    runs-on: [self-hosted, Windows, ARM64, meowcal-ci]
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 2
+          clean: false
 
-      - uses: dtolnay/rust-toolchain@stable
-
-      - uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: src-tauri
-
-      - name: Run test verification
+      - name: Test the native ARM64 target
         shell: pwsh
-        run: ./scripts/verify.ps1 -Stage Test
+        run: ./scripts/verify.ps1 -Stage Test -Target aarch64-pc-windows-msvc
+
+      # Executed, not merely compiled: the ARM64 host runs x64 binaries under
+      # emulation, so this is the same evidence the hosted x64 runner produced.
+      - name: Test the x64 target under emulation
+        shell: pwsh
+        run: ./scripts/verify.ps1 -Stage Test -Target x86_64-pc-windows-msvc
 
   frontend:
     name: Frontend & Browser
-    runs-on: windows-latest
+    runs-on: [self-hosted, Windows, ARM64, meowcal-ci]
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 2
+          clean: false
 
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 24
-          cache: npm
-
-      - uses: dtolnay/rust-toolchain@stable
-
-      - uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: src-tauri
-
+      # Architecture-independent by nature: this stage checks the frontend and
+      # drives browser mode against the host-native Rust backend. The browser
+      # smoke uses the system Google Chrome channel, which the runner host
+      # provides.
       - name: Run frontend and browser verification
         shell: pwsh
         run: ./scripts/verify.ps1 -Stage Frontend
