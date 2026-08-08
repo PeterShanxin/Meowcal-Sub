@@ -182,6 +182,36 @@ Assert-True ((Get-LogonEnvironment)["Path"] -notmatch '%\w+%') `
 $logon = Get-LogonEnvironment
 Assert-True ($logon.ContainsKey("Path") -and $logon["Path"]) "The logon environment has a PATH."
 Assert-True ($logon["Path"] -like "*;*") "The logon PATH has multiple entries."
+
+# A clean environment still has to be a usable one. Windows creates these per
+# session rather than storing them in either registry scope, so an implementation
+# that keeps only registry values silently produces a runner that cannot resolve
+# the user's app data at all.
+#
+# This is not hypothetical: an earlier version of this contract carried an
+# explicit short list, and CI failed with "LOCALAPPDATA is not set" plus a Rust
+# test that could not find the app's config directory. Nothing local caught it,
+# because only a job running under such a runner sees that environment.
+foreach ($required in @("LOCALAPPDATA", "APPDATA", "TEMP", "SystemRoot", "USERPROFILE", "ProgramData", "ComSpec", "PATHEXT")) {
+    Assert-True ([bool]$logon[$required]) `
+        "The runner environment must carry $required; a job cannot run without it."
+}
+
+# ...and the session variables must survive sanitizing, which is what the runner
+# is actually launched with.
+$launched = Get-SanitizedRunnerEnvironment -BaseEnvironment $logon
+Assert-True ([bool]$launched["LOCALAPPDATA"]) "LOCALAPPDATA survives sanitization."
+Assert-True ([bool]$launched["APPDATA"]) "APPDATA survives sanitization."
+
+# PATH must still come from the registry rather than from this process, or the
+# shadowing this whole contract exists to prevent comes straight back.
+$processPath = [System.Environment]::GetEnvironmentVariable("Path")
+$registryPath = Join-EnvironmentPath `
+    -MachinePath ([System.Environment]::GetEnvironmentVariables([System.EnvironmentVariableTarget]::Machine))["Path"] `
+    -UserPath ([System.Environment]::GetEnvironmentVariables([System.EnvironmentVariableTarget]::User))["Path"]
+if ($processPath -ne $registryPath) {
+    Assert-Equal $registryPath $logon["Path"] "PATH is composed from the registry, not inherited from this process."
+}
 Assert-Equal 0 (Test-RunnerEnvironmentIsClean -Environment (Get-SanitizedRunnerEnvironment -BaseEnvironment $logon)).Count `
     "A sanitized logon environment is clean."
 

@@ -134,14 +134,27 @@ function Get-LogonEnvironment {
 
     $environment["Path"] = Join-EnvironmentPath -MachinePath $machine["Path"] -UserPath $user["Path"]
 
-    # A process still needs these, and they are per-session rather than stored in
-    # either scope, so they are carried over deliberately instead of inherited
-    # wholesale. Done before expansion: `%SystemRoot%` is the most common token in
-    # a machine PATH, and SystemRoot is not itself in either registry scope, so
-    # expanding first would leave it unresolved.
-    foreach ($name in @("SystemRoot", "SystemDrive", "COMPUTERNAME", "USERNAME", "USERPROFILE", "USERDOMAIN")) {
-        $value = [System.Environment]::GetEnvironmentVariable($name)
-        if ($value -and -not $environment.ContainsKey($name)) { $environment[$name] = $value }
+    # Windows creates a large set of variables per session rather than storing
+    # them in either registry scope: LOCALAPPDATA, APPDATA, TEMP, ProgramData,
+    # ComSpec, PATHEXT, the PROCESSOR_* family, and more. A process without them
+    # is not a clean environment, it is a broken one.
+    #
+    # An earlier version of this carried a handful of names explicitly and
+    # dropped everything else. CI caught it: jobs on a runner started that way
+    # failed with "LOCALAPPDATA is not set", and a Rust test that resolves the
+    # app's config directory failed as well. A local gate cannot find this,
+    # because only a job running *under* such a runner ever sees the environment.
+    #
+    # So anything this process carries that the registry does not define is kept,
+    # except the contaminating names and PATH. PATH is the variable a shell most
+    # often rewrites for its children and is already composed from the registry
+    # above, which is what stops a shell-local toolchain from winning.
+    $contaminated = [System.Collections.Generic.HashSet[string]]::new(
+        [string[]]@(Get-RunnerContaminatedVariableNames), [System.StringComparer]::OrdinalIgnoreCase)
+    foreach ($entry in ([System.Environment]::GetEnvironmentVariables()).GetEnumerator()) {
+        $name = [string]$entry.Key
+        if ($name -ieq "Path" -or $contaminated.Contains($name)) { continue }
+        if (-not $environment.ContainsKey($name)) { $environment[$name] = $entry.Value }
     }
 
     # Registry scopes hand back REG_EXPAND_SZ values verbatim, so this is where
