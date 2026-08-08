@@ -177,6 +177,28 @@ fn is_cjk_target(target_language: &str) -> bool {
     matches!(language.as_str(), "zh" | "ja" | "ko")
 }
 
+/// Whether a letter is written in the Latin script.
+///
+/// Counting only ASCII letters left the CJK-target guard blind to exactly the
+/// supported sources whose echoes are worth catching: `Ça va déjà?` is entirely
+/// Latin, but five of its eight letters are accented, so the ASCII share fell
+/// below the threshold and a French source echo was accepted as a Chinese
+/// translation.
+///
+/// The ranges are the Latin blocks a subtitle in a supported source language can
+/// reach - Latin-1 Supplement, Extended-A and Extended-B for the western
+/// European languages, Extended Additional for Vietnamese - rather than a full
+/// Unicode script table, which the standard library does not expose. Anything
+/// outside them still counts toward `alphabetic_total`, so an unrecognised
+/// script lowers the Latin share rather than raising it: the guard errs toward
+/// accepting, which is the safe direction here.
+fn is_latin_letter(ch: char) -> bool {
+    if !ch.is_alphabetic() {
+        return false;
+    }
+    ch.is_ascii_alphabetic() || matches!(ch, '\u{00C0}'..='\u{024F}' | '\u{1E00}'..='\u{1EFF}')
+}
+
 /// Whether output for a CJK target came back in the wrong script entirely.
 ///
 /// The mirror of `is_probably_non_english_for_en_target`, which only ever ran
@@ -200,7 +222,7 @@ fn is_probably_not_cjk_for_cjk_target(text: &str) -> bool {
         }
         if ch.is_alphabetic() {
             alphabetic_total += 1;
-            if ch.is_ascii_alphabetic() {
+            if is_latin_letter(ch) {
                 latin_letters += 1;
             }
         }
@@ -213,6 +235,11 @@ fn is_probably_not_cjk_for_cjk_target(text: &str) -> bool {
     latin_letters.saturating_mul(10) >= alphabetic_total.saturating_mul(7)
 }
 
+// Deliberately still counts ASCII letters only, unlike the CJK-target guard
+// above. This one only runs when the output already contains CJK, and there the
+// question is how much of the rest is English rather than which script it is
+// written in; widening it would change the English-target behavior that the
+// 0.6.7 manual gate covered, for no reported defect.
 fn is_probably_non_english_for_en_target(text: &str) -> bool {
     let mut alphabetic_total = 0usize;
     let mut latin_letters = 0usize;
@@ -327,6 +354,25 @@ mod tests {
         ] {
             assert_eq!(
                 validate_translation_output(source, translated, "en-US", "zh-CN"),
+                Err(TranslationOutputRejection::WrongLanguage),
+                "{translated:?} should be rejected for a Chinese target"
+            );
+        }
+    }
+
+    // French, Spanish and German are supported sources, and their echoes carry
+    // accented letters. Counting only ASCII letters put those below the Latin
+    // share the guard needs, so a source echo the guard exists to catch was
+    // accepted and displayed as a Chinese translation.
+    #[test]
+    fn rejects_accented_latin_output_when_the_target_is_chinese() {
+        for (source, translated) in [
+            ("Ça va déjà?", "Ça va déjà?"),
+            ("¿Dónde está la estación?", "¿Dónde está la estación?"),
+            ("Grüße für die Prüfung", "Grüße für die Prüfung"),
+        ] {
+            assert_eq!(
+                validate_translation_output(source, translated, "fr-FR", "zh-CN"),
                 Err(TranslationOutputRejection::WrongLanguage),
                 "{translated:?} should be rejected for a Chinese target"
             );

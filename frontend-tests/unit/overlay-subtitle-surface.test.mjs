@@ -24,15 +24,24 @@ describe("overlay subtitle surface", () => {
     });
   });
 
-  it.each([
-    "warming",
-    "temporarilyUnavailable",
-    "sourceOnly",
-    "noSubtitleText",
-    "sourceUnreadable",
-  ])("keeps the box visible so the %s state is readable", (displayState) => {
-    expect(surfaceFor(displayState, "foundry_local", "")).toEqual({
-      mode: "hint",
+  it.each(["warming", "temporarilyUnavailable", "sourceOnly", "noSubtitleText"])(
+    "keeps the box visible so the %s state is readable",
+    (displayState) => {
+      expect(surfaceFor(displayState, "foundry_local", "")).toEqual({
+        mode: "hint",
+        showContainer: true,
+      });
+    },
+  );
+
+  // A refused read means OCR saw text it could not use, not that the region
+  // emptied. Blanking here handed the viewer a warning banner in place of the
+  // translation they were reading, one quarter-second after it appeared - the
+  // blank-screen symptom of issue #59 arriving through the notice meant to
+  // explain it.
+  it("keeps the previous line on screen while explaining a refused read", () => {
+    expect(surfaceFor("sourceUnreadable", "foundry_local", "")).toEqual({
+      mode: "keep",
       showContainer: true,
     });
   });

@@ -138,3 +138,33 @@ fn a_very_short_line_is_never_rejected_on_one_marker() {
     assert!(!is_mostly_noise("R_4gng"));
     assert!(!is_mostly_noise("of qrßinary•Magebraft."));
 }
+
+// `is_entirely_noise` judges a fragment outright rather than ranking it, so it
+// has to be stricter than a share. The markers it looks for are the same ones
+// that spell `R&D` and `AT&T`, and letting one of those outvote the real words
+// beside it threw away a clause that had genuinely just appeared.
+#[test]
+fn only_a_fragment_with_no_word_in_it_is_entirely_noise() {
+    for fragment in [
+        "bf//dzz::",
+        "Wh€reythe",
+        "@lätiv.elYJthinned'.out",
+        "bf//dzz:: Wh€reythe",
+    ] {
+        assert!(is_entirely_noise(fragment), "{fragment:?} is noise");
+    }
+
+    for fragment in [
+        "R&D department",
+        "AT&T lawyers",
+        "the Q&A session",
+        "However,",
+        "",
+        "   ",
+    ] {
+        assert!(
+            !is_entirely_noise(fragment),
+            "{fragment:?} contains a word and is not noise"
+        );
+    }
+}

@@ -168,6 +168,36 @@ fn a_cue_still_on_screen_does_not_expire_and_get_translated_twice() {
     }
 }
 
+// Refreshing a line that is not the newest one leaves the deque out of
+// timestamp order, and expiry only ever looked at the front. A title card
+// re-read every second keeps the front entry fresh forever, and the subtitle
+// remembered *behind* it then never expires: it sits there past the window
+// suppressing the real dialogue that comes round again.
+#[test]
+fn a_refreshed_older_line_does_not_pin_the_lines_behind_it() {
+    let start = Instant::now();
+    let title_card = "Chapter One: the Wandering King";
+    let dialogue = "Where are you going?";
+    let mut recent = seen(&[title_card, dialogue], start);
+
+    // The title card is still on screen, so re-reading it refreshes an entry
+    // that is not at the back of the deque.
+    let refreshed_at = start + Duration::from_secs(5);
+    assert_eq!(
+        recent.classify(title_card, refreshed_at),
+        LineChange::Repeat
+    );
+
+    // The dialogue was last seen eight seconds ago, well past the six-second
+    // window, so hearing it again is the line being spoken again.
+    let much_later = start + Duration::from_secs(8);
+    assert_eq!(
+        recent.classify(dialogue, much_later),
+        LineChange::New,
+        "a line older than the window must expire even when a fresher entry sits in front of it"
+    );
+}
+
 // The subtitle leaving the region has to reset the memory, or the identical cue
 // returning would be suppressed as a re-read of a line no longer on screen.
 #[test]

@@ -120,14 +120,18 @@ pub fn classify(previous: &str, current: &str) -> LineChange {
 /// Only a prefix is judged. A second row appends at the end, and a suffix that
 /// arrives carrying its own noise is still the only read that will ever
 /// contain that row - see `ocr_recent_lines`.
+///
+/// The prefix has to be noise *all the way through*. Scoring it by share let one
+/// marker-bearing token outvote clean words beside it, and the marker that
+/// catches `bf//dzz` is the same ampersand that spells `R&D` and `AT&T`: a
+/// prefix like `R&D department ` scored exactly the rejection threshold, so a
+/// clause that had genuinely just appeared was suppressed and never translated.
 fn wears_a_garbled_prefix(previous: &str, current: &str) -> bool {
     if !current.ends_with(previous) {
         return false;
     }
     let prefix = &current[..current.len() - previous.len()];
-    // The prefix is the whole growth, so `MIN_TOKENS_TO_JUDGE` has nothing to
-    // say; one garbled token in a prefix of one token is exactly the signal.
-    crate::ocr_corruption::corruption_share(prefix) >= 0.5
+    crate::ocr_corruption::is_entirely_noise(prefix)
 }
 
 /// Reduce a read to the characters that carry meaning. Spacing and punctuation
@@ -377,6 +381,26 @@ mod tests {
             ),
             LineChange::Extended
         );
+    }
+
+    // A prefix that carries a corruption marker is not automatically noise. An
+    // ampersand between letters is the marker that catches `bf//dzz`, and it is
+    // also how `R&D`, `AT&T` and `Q&A` are spelled. Judging the prefix by share
+    // let one such token outvote the clean words beside it, and the clause that
+    // had just appeared was never translated.
+    #[test]
+    fn genuine_prefix_growth_carrying_a_marker_is_still_extended() {
+        for (previous, current) in [
+            ("is hiring", "R&D department is hiring"),
+            ("filed the paperwork", "AT&T lawyers filed the paperwork"),
+            ("starts at seven", "the Q&A session starts at seven"),
+        ] {
+            assert_eq!(
+                classify(previous, current),
+                LineChange::Extended,
+                "{previous} -> {current}"
+            );
+        }
     }
 
     #[test]

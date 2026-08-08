@@ -161,6 +161,23 @@ pub fn is_mostly_noise(text: &str) -> bool {
         && corruption_share(text) >= MAX_CORRUPTION_SHARE
 }
 
+/// Whether a run of text is noise all the way through, with no word in it.
+///
+/// Stricter than a share, and deliberately so. A share lets one marker-bearing
+/// token outvote the clean words beside it, which is fine when the run is a
+/// whole line being ranked and wrong when it is a two-token fragment being
+/// judged outright: the marker that catches `bf//dzz` is the same ampersand that
+/// spells `R&D`, `AT&T` and `Q&A`, so `R&D department` scored exactly the
+/// rejection threshold and a real clause was thrown away.
+///
+/// Requiring every token to be garbled keeps the reads this was built for -
+/// `bf//dzz::`, `Wh€reythe` - and lets any run containing an actual word
+/// through. An empty run is not noise; it is nothing.
+pub fn is_entirely_noise(text: &str) -> bool {
+    let mut tokens = text.split_whitespace().peekable();
+    tokens.peek().is_some() && tokens.all(is_garbled)
+}
+
 /// How much of a line is OCR noise, from 0.0 (clean) to 1.0 (entirely mangled).
 ///
 /// Measured over tokens rather than characters so that one long mangled word

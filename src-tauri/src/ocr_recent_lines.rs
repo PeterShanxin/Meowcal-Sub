@@ -109,14 +109,23 @@ impl RecentLines {
         self.entries.clear();
     }
 
+    /// Drop every entry older than the window, wherever it sits.
+    ///
+    /// Not just the front. `classify` refreshes whichever entry a repeat matched,
+    /// and that entry is often not the newest - a title card re-read while
+    /// dialogue plays under it, a cue whose other row arrived later. Refreshing
+    /// in place leaves the deque out of timestamp order, so expiring only from
+    /// the front let a fresh entry pin expired ones behind it: the dialogue they
+    /// held came round again outside the window and was still suppressed as a
+    /// repeat.
+    ///
+    /// Refreshing in place is what keeps the last entry the line most recently
+    /// *translated*, which is the one `classify` compares in full. Moving a
+    /// refreshed entry to the back instead would hand that comparison to a line
+    /// that is merely still on screen.
     fn forget_stale(&mut self, now: Instant) {
-        while let Some((_, seen)) = self.entries.front() {
-            if now.duration_since(*seen) > WINDOW {
-                self.entries.pop_front();
-            } else {
-                break;
-            }
-        }
+        self.entries
+            .retain(|(_, seen)| now.duration_since(*seen) <= WINDOW);
     }
 }
 
