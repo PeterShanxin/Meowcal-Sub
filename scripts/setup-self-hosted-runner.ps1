@@ -314,14 +314,17 @@ function Register-Runner {
 
 function Start-RunnerProcess {
     <#
-        Starts the registered runner with the environment a fresh logon would
-        have, rather than the environment of whatever shell invoked this.
+        Starts the registered runner with the caller's environment corrected in
+        exactly two ways, rather than replaced wholesale.
 
         A foreground runner inherits its launcher's environment, so starting it
         from an IDE or agent session makes that session's process environment
         into CI configuration. That is not theoretical - see #88. Node's preload
-        hooks are removed outright, and PATH is rebuilt from the machine and user
-        scopes so a shell-local toolchain cannot shadow the host's.
+        hooks are removed outright, and PATH is replaced by the machine-then-user
+        composition so a shell-local toolchain cannot shadow the host's.
+        Everything else the caller carries is left alone: rebuilding the
+        environment instead produced a runner that could not find Program Files
+        or LOCALAPPDATA.
 
         The Node/npm majors are checked against package.json engines *in the
         clean environment* before the runner is allowed to accept work. Checking
@@ -345,7 +348,7 @@ function Start-RunnerProcess {
     $existing = @(Get-Process -Name Runner.Listener -ErrorAction SilentlyContinue |
             Where-Object { $_.Path -and $_.Path -like "$Directory\*" })
 
-    $environment = Get-SanitizedRunnerEnvironment -BaseEnvironment (Get-LogonEnvironment)
+    $environment = Get-SanitizedRunnerEnvironment -BaseEnvironment (Get-RunnerBaseEnvironment)
 
     # Report what the caller was carrying, so the operator can see whether their
     # shell was the problem rather than guessing after a red CI run.

@@ -12,10 +12,18 @@
 # preload blocked npm from deleting files in `node_modules/.bin`. The repository
 # was fine. The launch environment was not.
 #
-# The rule here is narrow on purpose: rebuild the environment a fresh logon would
-# have, and drop a short, named list of preload variables that must never reach
-# CI. Erasing arbitrary user variables would trade one unpredictable environment
-# for another.
+# The rule here is narrow on purpose: keep the real process environment, replace
+# PATH with the deterministic machine-then-user composition, and drop a short,
+# named list of preload variables that must never reach CI.
+#
+# Narrow because the wide version was tried and failed. Rebuilding the whole
+# environment from the registry scopes plus a hand-written list of session
+# variables looked cleaner and produced a runner that could not find Program
+# Files, LOCALAPPDATA, or the app's own config directory. Windows creates a large
+# set of values per session that live in neither registry scope, so any such list
+# is incomplete by construction. Removing what is known to break CI is the whole
+# job; erasing everything unfamiliar trades one unpredictable environment for
+# another.
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
@@ -114,56 +122,48 @@ function Expand-EnvironmentTokens {
     $expanded
 }
 
-function Get-LogonEnvironment {
+function Get-RunnerBaseEnvironment {
     <#
-        Reads the Machine and User environment scopes rather than copying this
-        process's environment. That is the difference that matters: a shell can
-        prepend its own toolchain to PATH for its children, and copying the
-        process environment would carry that injection into the runner. The
-        registry scopes are what a freshly opened shell would see.
+        The environment the runner is launched with: this process's environment,
+        with PATH replaced by the deterministic machine-then-user composition.
 
-        PATH is the one variable that must be recombined rather than overwritten,
-        because Windows composes it as machine-then-user at logon.
+        The sanitization here is deliberately narrow, and the narrowness is the
+        lesson. An earlier version rebuilt the whole environment from the Machine
+        and User registry scopes plus a hand-written list of session variables.
+        That is not a logon environment - Windows creates a large set of values
+        per session that live in neither scope - so the result was clean and
+        unusable. CI proved it three ways on one runner: Playwright resolved
+        `undefined\Program Files\Google\Chrome\...`, a Rust test looking for the
+        installed app's config found only "config.json", and the developer
+        environment contract failed with "LOCALAPPDATA is not set".
+
+        Starting from the real process environment is complete by construction,
+        so no list has to be maintained and nothing can be forgotten. Only two
+        things are then corrected, because only two things were ever wrong:
+
+          - PATH is replaced outright, never merged. A shell that puts its own
+            toolchain in front of the host's is the injection that made CI
+            resolve a managed Node 22 over the host's Node 24, and keeping any
+            caller-local entry would preserve exactly that.
+          - The Node preload hooks are dropped by name (see the caller).
+
+        Everything else the caller carries is left alone, which is what #88 asked
+        for: remove what is known to break CI, not everything unfamiliar.
     #>
     $machine = [System.Environment]::GetEnvironmentVariables([System.EnvironmentVariableTarget]::Machine)
     $user = [System.Environment]::GetEnvironmentVariables([System.EnvironmentVariableTarget]::User)
 
-    $environment = @{}
-    foreach ($entry in $machine.GetEnumerator()) { $environment[$entry.Key] = $entry.Value }
-    foreach ($entry in $user.GetEnumerator()) { $environment[$entry.Key] = $entry.Value }
+    $environment = Get-CurrentProcessEnvironment
 
-    $environment["Path"] = Join-EnvironmentPath -MachinePath $machine["Path"] -UserPath $user["Path"]
+    # Registry scopes hand back REG_EXPAND_SZ verbatim, so `%SystemRoot%\System32`
+    # arrives as literal text. Test-Path rejects that, which would make
+    # Find-CommandInPath report an installed tool as missing. Expanded against the
+    # process environment, which is complete and already holds the tokens.
+    $environment["Path"] = Expand-EnvironmentTokens `
+        -Value (Join-EnvironmentPath -MachinePath $machine["Path"] -UserPath $user["Path"]) `
+        -Environment $environment
 
-    # Windows creates a large set of variables per session rather than storing
-    # them in either registry scope: LOCALAPPDATA, APPDATA, TEMP, ProgramData,
-    # ComSpec, PATHEXT, the PROCESSOR_* family, and more. A process without them
-    # is not a clean environment, it is a broken one.
-    #
-    # An earlier version of this carried a handful of names explicitly and
-    # dropped everything else. CI caught it: jobs on a runner started that way
-    # failed with "LOCALAPPDATA is not set", and a Rust test that resolves the
-    # app's config directory failed as well. A local gate cannot find this,
-    # because only a job running *under* such a runner ever sees the environment.
-    #
-    # So anything this process carries that the registry does not define is kept,
-    # except the contaminating names and PATH. PATH is the variable a shell most
-    # often rewrites for its children and is already composed from the registry
-    # above, which is what stops a shell-local toolchain from winning.
-    $contaminated = [System.Collections.Generic.HashSet[string]]::new(
-        [string[]]@(Get-RunnerContaminatedVariableNames), [System.StringComparer]::OrdinalIgnoreCase)
-    foreach ($entry in ([System.Environment]::GetEnvironmentVariables()).GetEnumerator()) {
-        $name = [string]$entry.Key
-        if ($name -ieq "Path" -or $contaminated.Contains($name)) { continue }
-        if (-not $environment.ContainsKey($name)) { $environment[$name] = $entry.Value }
-    }
-
-    # Registry scopes hand back REG_EXPAND_SZ values verbatim, so this is where
-    # `%SystemRoot%\System32` becomes a path the runner and Test-Path can use.
-    $expanded = @{}
-    foreach ($key in $environment.Keys) {
-        $expanded[$key] = Expand-EnvironmentTokens -Value ([string]$environment[$key]) -Environment $environment
-    }
-    $expanded
+    $environment
 }
 
 function Join-EnvironmentPath {

@@ -172,48 +172,88 @@ Assert-Equal "%NOT_A_VARIABLE%\bin" `
     (Expand-EnvironmentTokens -Value "%NOT_A_VARIABLE%\bin" -Environment $tokens) `
     "An unresolvable token is preserved."
 
-Assert-True ((Get-LogonEnvironment)["Path"] -notmatch '%\w+%') `
+Assert-True ((Get-RunnerBaseEnvironment)["Path"] -notmatch '%\w+%') `
     "The assembled logon PATH carries no unexpanded tokens."
 
-# --- The real logon environment ----------------------------------------------
+# --- The environment the runner is actually launched with --------------------
 
-# Reading the registry scopes must produce something usable on this machine, or
-# the runner would be started with an environment that cannot find anything.
-$logon = Get-LogonEnvironment
-Assert-True ($logon.ContainsKey("Path") -and $logon["Path"]) "The logon environment has a PATH."
-Assert-True ($logon["Path"] -like "*;*") "The logon PATH has multiple entries."
-
-# A clean environment still has to be a usable one. Windows creates these per
-# session rather than storing them in either registry scope, so an implementation
-# that keeps only registry values silently produces a runner that cannot resolve
-# the user's app data at all.
+# The whole failure class this section guards: an environment can be perfectly
+# clean and still unusable. Rebuilding it from the registry scopes plus a
+# hand-written list of session variables produced exactly that, and CI proved it
+# three separate ways on one runner:
 #
-# This is not hypothetical: an earlier version of this contract carried an
-# explicit short list, and CI failed with "LOCALAPPDATA is not set" plus a Rust
-# test that could not find the app's config directory. Nothing local caught it,
-# because only a job running under such a runner sees that environment.
-foreach ($required in @("LOCALAPPDATA", "APPDATA", "TEMP", "SystemRoot", "USERPROFILE", "ProgramData", "ComSpec", "PATHEXT")) {
-    Assert-True ([bool]$logon[$required]) `
+#   Playwright:  Chromium ... not found at undefined\Program Files\Google\Chrome\...
+#   Rust:        the installed app's config resolved to bare "config.json"
+#   #97 gate:    LOCALAPPDATA is not set
+#
+# Starting from the real process environment is complete by construction. These
+# assertions pin that completeness so no future narrowing can quietly return.
+$launched = Get-SanitizedRunnerEnvironment -BaseEnvironment (Get-RunnerBaseEnvironment)
+
+Assert-True ($launched.ContainsKey("Path") -and $launched["Path"]) "The runner environment has a PATH."
+Assert-True ($launched["Path"] -like "*;*") "The runner PATH has multiple entries."
+Assert-True ($launched["Path"] -notmatch '%\w+%') "The runner PATH carries no unexpanded tokens."
+
+# Each of these is load-bearing for a job that CI actually runs: Program Files
+# for Playwright's browser lookup, LOCALAPPDATA/APPDATA for the app's config
+# directory, TEMP/TMP for every toolchain that writes scratch files.
+foreach ($required in @(
+        "LOCALAPPDATA", "APPDATA", "TEMP", "TMP", "ProgramData",
+        "ProgramFiles", "ProgramW6432", "SystemRoot", "SystemDrive",
+        "USERPROFILE", "ComSpec", "PATHEXT", "NUMBER_OF_PROCESSORS")) {
+    Assert-True ([bool]$launched[$required]) `
         "The runner environment must carry $required; a job cannot run without it."
 }
+Assert-True ([bool]$launched["ProgramFiles(x86)"]) `
+    "The runner environment must carry ProgramFiles(x86)."
 
-# ...and the session variables must survive sanitizing, which is what the runner
-# is actually launched with.
-$launched = Get-SanitizedRunnerEnvironment -BaseEnvironment $logon
-Assert-True ([bool]$launched["LOCALAPPDATA"]) "LOCALAPPDATA survives sanitization."
-Assert-True ([bool]$launched["APPDATA"]) "APPDATA survives sanitization."
-
-# PATH must still come from the registry rather than from this process, or the
-# shadowing this whole contract exists to prevent comes straight back.
-$processPath = [System.Environment]::GetEnvironmentVariable("Path")
-$registryPath = Join-EnvironmentPath `
-    -MachinePath ([System.Environment]::GetEnvironmentVariables([System.EnvironmentVariableTarget]::Machine))["Path"] `
-    -UserPath ([System.Environment]::GetEnvironmentVariables([System.EnvironmentVariableTarget]::User))["Path"]
-if ($processPath -ne $registryPath) {
-    Assert-Equal $registryPath $logon["Path"] "PATH is composed from the registry, not inherited from this process."
+# TEMP and TMP have to name somewhere that exists, not merely be present.
+foreach ($scratch in @("TEMP", "TMP")) {
+    Assert-True (Test-Path -LiteralPath $launched[$scratch]) `
+        "$scratch must point at a real directory, got '$($launched[$scratch])'."
 }
-Assert-Equal 0 (Test-RunnerEnvironmentIsClean -Environment (Get-SanitizedRunnerEnvironment -BaseEnvironment $logon)).Count `
-    "A sanitized logon environment is clean."
+
+# An ordinary variable belonging to the caller is none of this contract's
+# business. Sanitizing removes what is known to break CI, not everything
+# unfamiliar.
+$env:MEOWCAL_UNRELATED_PROBE = "kept"
+try {
+    $withUnrelated = Get-SanitizedRunnerEnvironment -BaseEnvironment (Get-RunnerBaseEnvironment)
+    Assert-Equal "kept" $withUnrelated["MEOWCAL_UNRELATED_PROBE"] `
+        "An unrelated caller variable survives; narrow sanitization is the point."
+} finally {
+    Remove-Item Env:\MEOWCAL_UNRELATED_PROBE -ErrorAction SilentlyContinue
+}
+
+# ...but a caller-local PATH injection must not survive, because that is the
+# shadowing that made CI resolve a managed Node over the host's.
+$originalPath = $env:Path
+try {
+    $injected = Join-Path ([System.IO.Path]::GetTempPath()) "meowcal-injected-toolchain"
+    $env:Path = "$injected;$originalPath"
+    $afterInjection = Get-SanitizedRunnerEnvironment -BaseEnvironment (Get-RunnerBaseEnvironment)
+    Assert-True ($afterInjection["Path"] -notlike "*$injected*") `
+        "A PATH entry injected by the caller must not reach the runner."
+} finally {
+    $env:Path = $originalPath
+}
+
+# PATH comes from the registry composition rather than from this process.
+$registryPath = Expand-EnvironmentTokens -Environment (Get-CurrentProcessEnvironment) -Value (
+    Join-EnvironmentPath `
+        -MachinePath ([System.Environment]::GetEnvironmentVariables([System.EnvironmentVariableTarget]::Machine))["Path"] `
+        -UserPath ([System.Environment]::GetEnvironmentVariables([System.EnvironmentVariableTarget]::User))["Path"])
+Assert-Equal $registryPath $launched["Path"] `
+    "PATH is the machine-then-user composition, not whatever this process carries."
+
+# Node and npm must resolve deterministically from that PATH.
+foreach ($tool in @("node", "npm")) {
+    Assert-True ([bool](Find-CommandInPath -Path $launched["Path"] -Command $tool)) `
+        "$tool must resolve on the clean runner PATH."
+}
+
+Assert-Equal 0 (Test-RunnerEnvironmentIsClean -Environment $launched).Count `
+    "The launched environment is clean."
 
 # --- The documented start path does not bypass the contract ------------------
 

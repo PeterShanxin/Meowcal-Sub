@@ -111,8 +111,12 @@ Registration status always comes from GitHub, never from a local guess:
    .\scripts\setup-self-hosted-runner.ps1 -Mode Start
    ```
 
-   It rebuilds the environment from the machine and user scopes, drops Node's
-   preload hooks, refuses to start when the resolved Node/npm majors do not match
+   It corrects your environment in two places rather than replacing it: PATH
+   becomes the machine-then-user composition, so a shell-local toolchain cannot
+   shadow the host's, and Node's preload hooks are dropped. Everything else you
+   are carrying is left alone — rebuilding the environment instead was tried and
+   produced a runner that could not find Program Files or `LOCALAPPDATA`. It then
+   refuses to start when the resolved Node/npm majors do not match
    `package.json` engines, and prints the toolchain it will use. Add
    `-VerifyEnvironmentOnly` to see all of that without starting anything.
 
