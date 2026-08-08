@@ -96,6 +96,14 @@
           state: normalized,
           replaceText: false,
           clearText: false,
+          // The region still holds text; only this read of it was unusable. The
+          // previous translation is therefore the best thing on screen, and the
+          // capture loop will offer another read a quarter-second later. As with
+          // `engineSlow`, declining to clear is not enough - the hint path blanks
+          // the line on its way to showing the banner - so the line has to be
+          // actively kept. `noSubtitleText` is the state that clears, because
+          // there the region genuinely emptied.
+          keepText: true,
           hint: unreadableHint(Array.isArray(warnings) ? warnings[0] : warnings),
           severity: "warn",
           persist: true,

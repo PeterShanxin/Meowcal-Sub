@@ -53,6 +53,28 @@ describe("translation display states", () => {
     });
   });
 
+  // The rejection states exist so a refused read does not cost the viewer the
+  // line they were reading. `clearText: false` does not achieve that on its own:
+  // the overlay's hint path blanks the text on its way to showing the banner, so
+  // a garbled frame arriving 250ms after a good translation replaced a readable
+  // line with a warning. `keepText` is the flag the surface resolver acts on.
+  it("keeps the last good translation while explaining a refused read", () => {
+    for (const reason of ["tooShort", "untranslatable", "tooLong", "garbled", "bandHeld"]) {
+      expect(getTranslationPresentation("sourceUnreadable", "", [reason])).toMatchObject({
+        clearText: false,
+        replaceText: false,
+        keepText: true,
+      });
+    }
+  });
+
+  // The counterpart, and the reason this is not simply "never clear": an empty
+  // region is the state where the previous translation *must* go, or a stale
+  // line sits over the video after the subtitles stop.
+  it("still retires the line when the region is genuinely empty", () => {
+    expect(getTranslationPresentation("noSubtitleText").keepText).toBeFalsy();
+  });
+
   it("falls back to a generic reason when the backend sends an unknown one", () => {
     const presentation = getTranslationPresentation("sourceUnreadable", "", ["somethingNew"]);
     expect(presentation.hint).toBe("Subtitle text in this area could not be read");

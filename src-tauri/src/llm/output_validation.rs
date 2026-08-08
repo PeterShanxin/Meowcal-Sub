@@ -177,6 +177,89 @@ fn is_cjk_target(target_language: &str) -> bool {
     matches!(language.as_str(), "zh" | "ja" | "ko")
 }
 
+/// Whether a letter is written in the Latin script.
+///
+/// Counting only ASCII letters left the CJK-target guard blind to exactly the
+/// supported sources whose echoes are worth catching: `Ça va déjà?` is entirely
+/// Latin, but five of its eight letters are accented, so the ASCII share fell
+/// below the threshold and a French source echo was accepted as a Chinese
+/// translation.
+///
+/// The ranges are the Latin blocks a subtitle in a supported source language can
+/// reach - Latin-1 Supplement, Extended-A and Extended-B for the western
+/// European languages, Extended Additional for Vietnamese - rather than a full
+/// Unicode script table, which the standard library does not expose. Anything
+/// outside them still counts toward `alphabetic_total`, so an unrecognised
+/// script lowers the Latin share rather than raising it: the guard errs toward
+/// accepting, which is the safe direction here.
+fn is_latin_letter(ch: char) -> bool {
+    if !ch.is_alphabetic() {
+        return false;
+    }
+    ch.is_ascii_alphabetic() || matches!(ch, '\u{00C0}'..='\u{024F}' | '\u{1E00}'..='\u{1EFF}')
+}
+
+/// Whether the whole output is one word shaped like a proper name.
+///
+/// `MIN_CHARS_TO_JUDGE_SCRIPT` gives short output the benefit of the doubt so a
+/// name the model chose not to render survives, and `Saber` clears it on length.
+/// `Dvořák` is the same kind of output one character longer, and once accented
+/// letters count as Latin its share went from below the threshold to 6/6: a name
+/// turned into a quality notice.
+///
+/// Length cannot separate those, so shape does. A name is **one** token, letters
+/// all the way through, written in one of the two ways a name is conventionally
+/// set: `Dvořák` or `DVOŘÁK`. Hyphens and apostrophes join parts that are each
+/// judged that way, so `Jean-Luc` and `O'Brien` are names rather than words that
+/// capitalise in the middle.
+///
+/// Both cases are needed, and neither may be dropped: subtitles routinely set a
+/// name in capitals, and accepting only `Dvořák` rejected `DVOŘÁK`.
+///
+/// What this refuses is every read the guard exists for, each of which is also a
+/// single token. `MFtiÄhave` and `THINNEDput` resume capitals after lowercase,
+/// which is neither shape; `R_4gng` and `Wh€reythe` carry characters that are not
+/// letters at all; `thinnedput` never capitalises. A phrase such as
+/// `Ça va déjà?` is three tokens and never reaches here.
+///
+/// The residue is deliberate and bounded: a one-word source echo that happens to
+/// be capitalised - `Bonjour`, `ATTENTION` - is indistinguishable from a name
+/// without a lexicon, and is accepted. That is the same trade `Saber` already
+/// made, on one word rather than on a sentence.
+fn looks_like_a_proper_name(text: &str) -> bool {
+    let mut tokens = text.split_whitespace();
+    let (Some(token), None) = (tokens.next(), tokens.next()) else {
+        return false;
+    };
+
+    // Sentence punctuation around the name is the model's, not the name's.
+    let token = token.trim_matches(|ch: char| !ch.is_alphanumeric());
+    if token.is_empty() {
+        return false;
+    }
+    token
+        .split(['-', '\''])
+        .all(|part| !part.is_empty() && is_one_name_part(part))
+}
+
+/// One hyphen- or apostrophe-separated piece of a name: `Dvořák`, `DVOŘÁK`, `O`.
+fn is_one_name_part(part: &str) -> bool {
+    if !part.chars().all(char::is_alphabetic) {
+        return false;
+    }
+    let mut chars = part.chars();
+    let Some(first) = chars.next() else {
+        return false;
+    };
+    if !first.is_uppercase() {
+        return false;
+    }
+    // Either the rest stays lowercase or the whole part stays uppercase. A part
+    // that mixes the two is the mangled shape, whichever way round it mixes.
+    let rest: Vec<char> = chars.collect();
+    rest.iter().all(|ch| !ch.is_uppercase()) || rest.iter().all(|ch| !ch.is_lowercase())
+}
+
 /// Whether output for a CJK target came back in the wrong script entirely.
 ///
 /// The mirror of `is_probably_non_english_for_en_target`, which only ever ran
@@ -200,7 +283,7 @@ fn is_probably_not_cjk_for_cjk_target(text: &str) -> bool {
         }
         if ch.is_alphabetic() {
             alphabetic_total += 1;
-            if ch.is_ascii_alphabetic() {
+            if is_latin_letter(ch) {
                 latin_letters += 1;
             }
         }
@@ -210,9 +293,20 @@ fn is_probably_not_cjk_for_cjk_target(text: &str) -> bool {
     if latin_letters == 0 || non_whitespace_chars < MIN_CHARS_TO_JUDGE_SCRIPT {
         return false;
     }
+    // A name the model chose not to render is a real translation, and the length
+    // floor above stops covering those the moment accented letters count as
+    // Latin. See `looks_like_a_proper_name` for how narrow this is.
+    if looks_like_a_proper_name(text) {
+        return false;
+    }
     latin_letters.saturating_mul(10) >= alphabetic_total.saturating_mul(7)
 }
 
+// Deliberately still counts ASCII letters only, unlike the CJK-target guard
+// above. This one only runs when the output already contains CJK, and there the
+// question is how much of the rest is English rather than which script it is
+// written in; widening it would change the English-target behavior that the
+// 0.6.7 manual gate covered, for no reported defect.
 fn is_probably_non_english_for_en_target(text: &str) -> bool {
     let mut alphabetic_total = 0usize;
     let mut latin_letters = 0usize;
@@ -254,117 +348,5 @@ fn is_probably_non_english_for_en_target(text: &str) -> bool {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn rejects_zh_cn_to_en_extreme_output_as_too_long() {
-        let translated = "a".repeat(150);
-        assert_eq!(
-            validate_translation_output("你好", &translated, "zh-CN", "en-US"),
-            Err(TranslationOutputRejection::TooLong)
-        );
-    }
-
-    #[test]
-    fn allows_realistic_short_cjk_to_english_expansion() {
-        for (source, translated, language) in [
-            ("谢谢", "Thank you.", "zh-CN"),
-            (
-                "先不提时钟塔",
-                "Let's not talk about the clock tower for now.",
-                "zh-CN",
-            ),
-            ("もういい", "That's enough for now.", "ja-JP"),
-        ] {
-            assert!(
-                validate_translation_output(source, translated, language, "en-US").is_ok(),
-                "{language} case should pass"
-            );
-        }
-    }
-
-    #[test]
-    fn returns_stable_rejection_reasons() {
-        let cases = [
-            ("你好", "", TranslationOutputRejection::EmptyOutput),
-            (
-                "这是一个足够长的字幕文本用于测试",
-                "go go go go go go go go",
-                TranslationOutputRejection::RepetitionLoop,
-            ),
-            (
-                "你好",
-                "You are a subtitle translator. Translate the subtitle into English. Subtitle: 你好",
-                TranslationOutputRejection::PromptEcho,
-            ),
-            ("需要鳗鱼。", "需要鲨鱼。", TranslationOutputRejection::WrongLanguage),
-        ];
-        for (source, translated, expected) in cases {
-            assert_eq!(
-                validate_translation_output(source, translated, "zh-CN", "en-US"),
-                Err(expected)
-            );
-        }
-    }
-
-    #[test]
-    fn allows_mixed_and_non_english_target_cases() {
-        assert!(validate_translation_output("需要", "OK 好", "zh-CN", "en-US").is_ok());
-        assert!(validate_translation_output("Need eel.", "需要鲨鱼。", "en-US", "zh-CN",).is_ok());
-    }
-
-    // The mirror gap in issue #59. With `zh-CN` selected there was no
-    // wrong-language check at all, so Latin noise passed validation and was
-    // shown as a translation. The first two are quoted from that session; the
-    // third is the same shape.
-    #[test]
-    fn rejects_latin_output_when_the_target_is_chinese() {
-        for (source, translated) in [
-            ("MFtiÄhave", "MFtiÄhave"),
-            ("R_4gng", "R_4gng"),
-            ("thinnedput", "thinnedput"),
-        ] {
-            assert_eq!(
-                validate_translation_output(source, translated, "en-US", "zh-CN"),
-                Err(TranslationOutputRejection::WrongLanguage),
-                "{translated:?} should be rejected for a Chinese target"
-            );
-        }
-    }
-
-    // A translation that keeps a name in Latin script is a real translation, and
-    // the longest-lived garbage line of that session was rejected while this
-    // shape has to survive.
-    #[test]
-    fn allows_a_chinese_translation_that_carries_latin_text() {
-        assert!(validate_translation_output(
-            "Imageong - Settings - Updates Discombobulating",
-            "Imageong • 设置 — 更新功能让一切变得混乱",
-            "en-US",
-            "zh-CN",
-        )
-        .is_ok());
-    }
-
-    // Short output gets the benefit of the doubt: a one-word cue can legitimately
-    // come back as a name, and rejecting turns a usable line into a notice.
-    #[test]
-    fn allows_short_latin_output_and_output_with_no_letters() {
-        assert!(validate_translation_output("Saber", "Saber", "en-US", "zh-CN").is_ok());
-        assert!(validate_translation_output("12:30", "12:30", "en-US", "zh-CN").is_ok());
-    }
-
-    // Japanese and Korean targets get the same guard; only the language tag
-    // differs, and reading it wrongly would leave those targets unprotected.
-    #[test]
-    fn the_guard_covers_the_other_cjk_targets() {
-        for target in ["ja-JP", "ko-KR", "zh-Hans-CN"] {
-            assert_eq!(
-                validate_translation_output("MFtiÄhave", "MFtiÄhave", "en-US", target),
-                Err(TranslationOutputRejection::WrongLanguage),
-                "{target} should be treated as a CJK target"
-            );
-        }
-    }
-}
+#[path = "output_validation_tests.rs"]
+mod tests;
