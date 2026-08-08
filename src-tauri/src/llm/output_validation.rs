@@ -208,16 +208,24 @@ fn is_latin_letter(ch: char) -> bool {
 /// turned into a quality notice.
 ///
 /// Length cannot separate those, so shape does. A name is **one** token, letters
-/// all the way through, capitalised once at the front. That admits `Dvořák`,
-/// `François` and `Pokémon`, and refuses every read this guard exists for, each
-/// of which is also a single token: `MFtiÄhave` capitalises in the middle,
-/// `R_4gng` carries a digit and an underscore, `thinnedput` never capitalises at
-/// all. A phrase such as `Ça va déjà?` is three tokens and never reaches here.
+/// all the way through, written in one of the two ways a name is conventionally
+/// set: `Dvořák` or `DVOŘÁK`. Hyphens and apostrophes join parts that are each
+/// judged that way, so `Jean-Luc` and `O'Brien` are names rather than words that
+/// capitalise in the middle.
+///
+/// Both cases are needed, and neither may be dropped: subtitles routinely set a
+/// name in capitals, and accepting only `Dvořák` rejected `DVOŘÁK`.
+///
+/// What this refuses is every read the guard exists for, each of which is also a
+/// single token. `MFtiÄhave` and `THINNEDput` resume capitals after lowercase,
+/// which is neither shape; `R_4gng` and `Wh€reythe` carry characters that are not
+/// letters at all; `thinnedput` never capitalises. A phrase such as
+/// `Ça va déjà?` is three tokens and never reaches here.
 ///
 /// The residue is deliberate and bounded: a one-word source echo that happens to
-/// be capitalised - `Bonjour` - is indistinguishable from a name without a
-/// lexicon, and is accepted. That is the same trade `Saber` already made, on one
-/// line of dialogue rather than on a sentence.
+/// be capitalised - `Bonjour`, `ATTENTION` - is indistinguishable from a name
+/// without a lexicon, and is accepted. That is the same trade `Saber` already
+/// made, on one word rather than on a sentence.
 fn looks_like_a_proper_name(text: &str) -> bool {
     let mut tokens = text.split_whitespace();
     let (Some(token), None) = (tokens.next(), tokens.next()) else {
@@ -226,14 +234,30 @@ fn looks_like_a_proper_name(text: &str) -> bool {
 
     // Sentence punctuation around the name is the model's, not the name's.
     let token = token.trim_matches(|ch: char| !ch.is_alphanumeric());
-    let mut chars = token.chars();
+    if token.is_empty() {
+        return false;
+    }
+    token
+        .split(['-', '\''])
+        .all(|part| !part.is_empty() && is_one_name_part(part))
+}
+
+/// One hyphen- or apostrophe-separated piece of a name: `Dvořák`, `DVOŘÁK`, `O`.
+fn is_one_name_part(part: &str) -> bool {
+    if !part.chars().all(char::is_alphabetic) {
+        return false;
+    }
+    let mut chars = part.chars();
     let Some(first) = chars.next() else {
         return false;
     };
-    if !first.is_alphabetic() || !first.is_uppercase() {
+    if !first.is_uppercase() {
         return false;
     }
-    chars.all(|ch| ch.is_alphabetic() && !ch.is_uppercase())
+    // Either the rest stays lowercase or the whole part stays uppercase. A part
+    // that mixes the two is the mangled shape, whichever way round it mixes.
+    let rest: Vec<char> = chars.collect();
+    rest.iter().all(|ch| !ch.is_uppercase()) || rest.iter().all(|ch| !ch.is_lowercase())
 }
 
 /// Whether output for a CJK target came back in the wrong script entirely.

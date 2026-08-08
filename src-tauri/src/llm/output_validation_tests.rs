@@ -128,6 +128,17 @@ fn allows_an_accented_proper_name_for_a_cjk_target() {
         "Müller",
         "Zoë",
         "Dvořák.",
+        // Subtitles routinely set a name in capitals, and a name is still a name
+        // in either case.
+        "DVOŘÁK",
+        "FRANÇOIS",
+        "POKÉMON",
+        // Hyphens and apostrophes are ordinary inside a name. Each part is
+        // judged on its own so `Jean-Luc` is two names rather than one word
+        // that capitalises in the middle.
+        "Jean-Luc",
+        "O'Brien",
+        "JEAN-LUC",
     ] {
         assert!(
             validate_translation_output(name, name, "en-US", "zh-CN").is_ok(),
@@ -149,6 +160,10 @@ fn the_proper_name_exemption_does_not_admit_garbled_single_tokens() {
         // No initial capital, so not a name however it is spelled.
         "thinnedput",
         "déjàdéjàdéjà",
+        // Capitals resuming after lowercase is the mangled shape, in either
+        // direction, and neither reading of the case rule may admit it.
+        "THINNEDput",
+        "Wh€reythe",
     ] {
         assert_eq!(
             validate_translation_output(text, text, "en-US", "zh-CN"),
