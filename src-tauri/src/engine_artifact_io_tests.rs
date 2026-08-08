@@ -37,6 +37,31 @@ fn a_long_trace_is_bounded() {
     assert!(reason.contains("line 20"), "the tail is kept: {reason}");
 }
 
+// Bounding by lines is not enough: PowerShell can put the whole diagnosis on one
+// very long line, and Expand-Archive's messages quote both paths before saying
+// what went wrong. Keeping only the first MAX_CHARS would then report the paths
+// and drop the sentence that matters.
+#[test]
+fn a_single_long_line_keeps_its_useful_tail() {
+    let filler = "x".repeat(2000);
+    let stderr = format!(
+        "Expand-Archive : Something went wrong with {filler} \
+         because the disk is full"
+    );
+
+    let reason = extraction_reason(stderr.as_bytes());
+
+    assert!(
+        reason.contains("because the disk is full"),
+        "the cause at the end was truncated away: {reason}"
+    );
+    assert!(
+        reason.chars().count() < 1000,
+        "the reason is not bounded: {} chars",
+        reason.chars().count()
+    );
+}
+
 // The real shape of a Windows PowerShell 5.1 failure. The cause is at the
 // top and the last four lines are a fixed trailer, so keeping "the last few
 // lines" reports the trailer and throws the cause away - which is how a real

@@ -306,11 +306,19 @@ fn extraction_reason(stderr: &[u8]) -> String {
         _ => joined,
     };
 
-    if reason.chars().count() <= MAX_CHARS {
+    // Keeping the first MAX_CHARS would have thrown away the cause whenever
+    // PowerShell put the whole diagnosis on one long line - and it does, because
+    // Expand-Archive quotes both paths before saying what went wrong. Both ends
+    // are kept: the start names what failed, the end says why.
+    let characters: Vec<char> = reason.chars().collect();
+    if characters.len() <= MAX_CHARS {
         return reason;
     }
-    let truncated: String = reason.chars().take(MAX_CHARS).collect();
-    format!("{truncated}...")
+    let head: String = characters[..MAX_CHARS / 2].iter().collect();
+    let tail: String = characters[characters.len() - (MAX_CHARS - MAX_CHARS / 2)..]
+        .iter()
+        .collect();
+    format!("{head} ... {tail}")
 }
 
 fn emit_progress<R: Runtime>(app: &AppHandle<R>, line: impl Into<String>) {
