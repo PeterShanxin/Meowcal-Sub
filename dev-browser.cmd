@@ -18,9 +18,18 @@ echo.
 echo Starting HTTP backend and frontend servers...
 echo.
 
-REM Set custom target dir to avoid OneDrive file locking issues
-set "CARGO_TARGET_DIR=D:\cargo-build"
-if not exist "%CARGO_TARGET_DIR%" mkdir "%CARGO_TARGET_DIR%"
+REM Resolve the build directory. Browser mode builds with whatever toolchain is
+REM already on PATH, so it asks for the build directory only and does not fail
+REM when no Visual Studio installation can be found.
+set "MEOWCAL_PS=powershell"
+where pwsh >nul 2>&1 && set "MEOWCAL_PS=pwsh"
+
+for /f "usebackq tokens=1,* delims==" %%A in (`%MEOWCAL_PS% -NoProfile -ExecutionPolicy Bypass -File "%~dp0scripts\dev-environment.ps1" -Emit CargoTargetDir`) do set "%%A=%%B"
+
+if not defined CARGO_TARGET_DIR (
+    echo ERROR: could not resolve a build directory. See the message above.
+    exit /b 1
+)
 
 REM Start the HTTP backend in a new window
 echo [1/2] Starting HTTP backend server (port 3001)...
