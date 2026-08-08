@@ -1,6 +1,6 @@
 use crate::capture;
 use crate::config::{save_config, AppConfig, CaptureRegion};
-use crate::event_payloads::{CaptureStatusPayload, TranslationPayload, EMPTY_OCR_CLEAR_FRAMES};
+use crate::event_payloads::{CaptureStatusPayload, TranslationPayload};
 use crate::ipc::{
     IpcMessage, IpcServer, OverlaySettingsData, RegionData, SetRegionPayload, SettingsSyncPayload,
 };
@@ -10,6 +10,7 @@ use crate::llm::{
 };
 use crate::ocr::WindowsOcr;
 use crate::overlay;
+use crate::pipeline_repeat_policy as repeat_policy;
 use crate::pipeline_session::PipelineClock;
 use crate::startup_gate::StartupGate;
 use crate::sync_utils::lock_or_recover;
@@ -279,8 +280,6 @@ const CONTEXT_SUMMARY_MAX_RETRIES: usize = 3;
 const CONTEXT_SUMMARY_RETRY_DELAY_MS: u64 = 500;
 /// Wait time after Foundry becomes ready before summarizing (prevents race conditions)
 const CONTEXT_SUMMARY_STABILITY_DELAY_MS: u64 = 900;
-/// Cooldown before retrying mock backend after failures
-const MOCK_RETRY_COOLDOWN_MS: u64 = 2500;
 /// Overlay fade-out duration - MUST match `OVERLAY_VISIBILITY_FADE_MS` in overlay.js
 const OVERLAY_HIDE_FADE_MS: u64 = 220;
 
@@ -1460,15 +1459,13 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
             target_language.clone(),
         );
 
-        let mut last_text = String::new();
+        // Several lines rather than one: see `ocr_recent_lines` and issue #59.
+        let mut recent_lines = crate::ocr_recent_lines::RecentLines::new();
         let mut last_attempt_at = Instant::now()
-            .checked_sub(Duration::from_millis(MOCK_RETRY_COOLDOWN_MS))
+            .checked_sub(crate::pipeline_repeat_policy::MOCK_RETRY_COOLDOWN)
             .unwrap_or_else(Instant::now);
         let mut last_capture_region: Option<CaptureRegion> = None;
-        let mut empty_ocr_frames: u32 = 0;
-        // The loop runs several times a second. Re-emitting the same notice every
-        // pass would flood the overlay, so only a change of reason is reported.
-        let mut last_notice: Option<&'static str> = None;
+        let mut notices = crate::pipeline_notices::Notices::new();
 
         let use_persistent = match capture::init_capture_session() {
             Ok(_) => {
@@ -1533,10 +1530,10 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
             {
                 debug!("Capture region changed, resetting subtitle context");
                 translation_manager.reset_context();
-                last_text.clear();
+                recent_lines.clear();
                 translator.set_last_backend_was_mock(true);
                 last_attempt_at = Instant::now()
-                    .checked_sub(Duration::from_millis(MOCK_RETRY_COOLDOWN_MS))
+                    .checked_sub(crate::pipeline_repeat_policy::MOCK_RETRY_COOLDOWN)
                     .unwrap_or_else(Instant::now);
                 // Keep this monotonic: resetting to 0 can allow old summarization tasks to
                 // accidentally validate again once the counter reaches the same value.
@@ -1603,32 +1600,23 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
             let ocr_result = band_filter.apply(ocr_result);
 
             if ocr_result.is_empty() {
-                debug!("[FILTER: empty] No text detected, skipping");
-                empty_ocr_frames = empty_ocr_frames.saturating_add(1);
-
-                // A subtitle that leaves the region must leave the overlay too.
-                // Waiting a few frames keeps single-frame OCR misses from
-                // flickering the line away between subtitle changes.
-                if empty_ocr_frames >= EMPTY_OCR_CLEAR_FRAMES
-                    && last_notice != Some("empty")
-                    && !translator.is_busy()
+                debug!("[FILTER: {}] skipping", band_filter.skip_reason());
+                let held = band_filter.held_lines();
+                let busy = translator.is_busy();
+                if let Some(quiet) = notices.quiet_region(session_id, token.capture_id, held, busy)
                 {
-                    last_notice = Some("empty");
                     // The cleared line has to be translatable again: without this
                     // the duplicate filter would suppress the identical subtitle
                     // when it returns, leaving the overlay permanently blank.
-                    last_text.clear();
-                    let _ = app.emit(
-                        "translation-update",
-                        TranslationPayload::no_subtitle_text(session_id, token.capture_id),
-                    );
+                    recent_lines.clear();
+                    let _ = app.emit("translation-update", quiet);
                 }
 
                 tokio::time::sleep(pacer.remaining_for(frame_started)).await;
                 continue;
             }
 
-            empty_ocr_frames = 0;
+            notices.saw_text();
 
             let current_text = ocr_result.text.trim().to_string();
 
@@ -1640,48 +1628,32 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
                     current_text.chars().count(),
                     min_significant_chars
                 );
-                // Text *is* in the region, so the overlay must stop claiming the
-                // region is empty. Staying silent leaves whichever notice is on
-                // screen contradicting what the viewer can see.
-                if last_notice != Some(rejection.as_str()) && !translator.is_busy() {
-                    last_notice = Some(rejection.as_str());
-                    let _ = app.emit(
-                        "translation-update",
-                        TranslationPayload::source_unreadable(
-                            session_id,
-                            token.capture_id,
-                            rejection,
-                        ),
-                    );
+                let busy = translator.is_busy();
+                if let Some(notice) =
+                    notices.unreadable_source(session_id, token.capture_id, rejection, busy)
+                {
+                    let _ = app.emit("translation-update", notice);
                 }
                 tokio::time::sleep(pacer.remaining_for(frame_started)).await;
                 continue;
             }
 
             let now = Instant::now();
-            // Exact equality alone treated OCR noise - a dropped glyph, a comma
-            // read as a period - as fresh dialogue, so one subtitle on screen
-            // earned two or three translations in a row.
-            let line_change = crate::ocr_stability::classify(&last_text, &current_text);
+            let line_change = recent_lines.classify(&current_text, now);
             let mut force_retry_duplicate = false;
             if line_change == crate::ocr_stability::LineChange::Repeat {
-                if !translator.last_backend_was_mock() {
-                    debug!(source = %current_text, "[FILTER: duplicate_line] OCR text");
-                    translation_manager.record_ocr_line(&current_text);
-                    tokio::time::sleep(pacer.remaining_for(frame_started)).await;
-                    continue;
+                match repeat_policy::decide(
+                    translator.last_backend_was_mock(),
+                    now.duration_since(last_attempt_at),
+                ) {
+                    repeat_policy::RepeatAction::Skip(reason) => {
+                        debug!(source = %current_text, "[FILTER: {reason}] OCR text");
+                        translation_manager.record_ocr_line(&current_text);
+                        tokio::time::sleep(pacer.remaining_for(frame_started)).await;
+                        continue;
+                    }
+                    repeat_policy::RepeatAction::RetryPassthrough => force_retry_duplicate = true,
                 }
-
-                if now.duration_since(last_attempt_at)
-                    < Duration::from_millis(MOCK_RETRY_COOLDOWN_MS)
-                {
-                    debug!("[FILTER: duplicate_mock_cooldown] OCR text");
-                    translation_manager.record_ocr_line(&current_text);
-                    tokio::time::sleep(pacer.remaining_for(frame_started)).await;
-                    continue;
-                }
-
-                force_retry_duplicate = true;
             }
 
             if !force_retry_duplicate
@@ -1693,6 +1665,10 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
                 tokio::time::sleep(pacer.remaining_for(frame_started)).await;
                 continue;
             }
+            // Deliberately no "is this read worse than the last?" check here: a
+            // noisier re-read is `Repeat` and was skipped above, so only `New`
+            // and `Extended` remain. `Extended` *contains* the last read - a
+            // garbled prefix is refused in `ocr_stability`. See `ocr_corruption`.
 
             // Claiming the single translation slot is the point of no return:
             // everything below records the line as handled, so it runs only if
@@ -1716,8 +1692,8 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
                 continue;
             }
 
-            last_text = current_text.clone();
-            last_notice = None;
+            recent_lines.remember(&current_text, now);
+            notices.translated();
             last_attempt_at = now;
             // Bumped here, not in the task: see `Translator`.
             context_generation.fetch_add(1, Ordering::SeqCst);

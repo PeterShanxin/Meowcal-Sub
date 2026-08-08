@@ -40,6 +40,12 @@ describe("translation display states", () => {
     ["tooShort", "Only stray marks found in the selected area"],
     ["untranslatable", "Nothing translatable in the selected area"],
     ["tooLong", "Too much text in the selected area — narrow it to the subtitle line"],
+    // These two keys are produced by `OcrRejection::as_str` on the Rust side.
+    // Nothing else pins them together: an unknown key silently falls back to the
+    // generic hint below, so renaming one would downgrade the overlay without
+    // failing anything.
+    ["garbled", "The text in this area came back too garbled to translate"],
+    ["bandHeld", "Waiting — the text here does not look like dialogue yet"],
   ])("explains %s without claiming the area is empty", (reason, hint) => {
     expect(getTranslationPresentation("sourceUnreadable", "", [reason])).toMatchObject({
       hint,

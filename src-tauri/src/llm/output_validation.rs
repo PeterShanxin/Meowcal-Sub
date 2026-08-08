@@ -63,6 +63,9 @@ pub(crate) fn validate_translation_output(
     if is_english_target(target_language) && is_probably_non_english_for_en_target(translated) {
         return Err(TranslationOutputRejection::WrongLanguage);
     }
+    if is_cjk_target(target_language) && is_probably_not_cjk_for_cjk_target(translated) {
+        return Err(TranslationOutputRejection::WrongLanguage);
+    }
     Ok(())
 }
 
@@ -155,6 +158,59 @@ fn is_english_target(target_language: &str) -> bool {
         .next()
         .map(|lang| lang.eq_ignore_ascii_case("en"))
         .unwrap_or(false)
+}
+
+/// Shortest output worth judging by script.
+///
+/// A one-word cue can legitimately come back as a proper noun the model chose
+/// not to render - and a name is exactly the case where Latin-only output is
+/// correct rather than broken. Below this the benefit of the doubt is cheaper
+/// than the alternative: rejecting turns a usable line into a quality notice.
+const MIN_CHARS_TO_JUDGE_SCRIPT: usize = 6;
+
+fn is_cjk_target(target_language: &str) -> bool {
+    let language = target_language
+        .split('-')
+        .next()
+        .unwrap_or_default()
+        .to_ascii_lowercase();
+    matches!(language.as_str(), "zh" | "ja" | "ko")
+}
+
+/// Whether output for a CJK target came back in the wrong script entirely.
+///
+/// The mirror of `is_probably_non_english_for_en_target`, which only ever ran
+/// when the target was English. With `zh-CN` selected there was no equivalent
+/// check, so Latin noise passed validation and was displayed as a translation:
+/// `MFtiÄhave` came back as `MFtiÄhave`, `R_4gng` as `R_4gng`. See issue #59.
+///
+/// Any CJK at all is enough to pass. A translation that keeps a name in Latin
+/// script - `Imageong • 设置 — 更新功能让一切变得混乱` - is a real translation, and
+/// judging it by proportion would reject exactly the mixed lines that are right.
+fn is_probably_not_cjk_for_cjk_target(text: &str) -> bool {
+    let mut alphabetic_total = 0usize;
+    let mut latin_letters = 0usize;
+    let mut non_whitespace_chars = 0usize;
+    for ch in text.chars() {
+        if !ch.is_whitespace() {
+            non_whitespace_chars += 1;
+        }
+        if is_cjk_char(ch) {
+            return false;
+        }
+        if ch.is_alphabetic() {
+            alphabetic_total += 1;
+            if ch.is_ascii_alphabetic() {
+                latin_letters += 1;
+            }
+        }
+    }
+    // No letters at all is a timestamp, a number, a row of punctuation - none of
+    // which a CJK translation would have added characters to.
+    if latin_letters == 0 || non_whitespace_chars < MIN_CHARS_TO_JUDGE_SCRIPT {
+        return false;
+    }
+    latin_letters.saturating_mul(10) >= alphabetic_total.saturating_mul(7)
 }
 
 fn is_probably_non_english_for_en_target(text: &str) -> bool {
@@ -256,5 +312,59 @@ mod tests {
     fn allows_mixed_and_non_english_target_cases() {
         assert!(validate_translation_output("需要", "OK 好", "zh-CN", "en-US").is_ok());
         assert!(validate_translation_output("Need eel.", "需要鲨鱼。", "en-US", "zh-CN",).is_ok());
+    }
+
+    // The mirror gap in issue #59. With `zh-CN` selected there was no
+    // wrong-language check at all, so Latin noise passed validation and was
+    // shown as a translation. The first two are quoted from that session; the
+    // third is the same shape.
+    #[test]
+    fn rejects_latin_output_when_the_target_is_chinese() {
+        for (source, translated) in [
+            ("MFtiÄhave", "MFtiÄhave"),
+            ("R_4gng", "R_4gng"),
+            ("thinnedput", "thinnedput"),
+        ] {
+            assert_eq!(
+                validate_translation_output(source, translated, "en-US", "zh-CN"),
+                Err(TranslationOutputRejection::WrongLanguage),
+                "{translated:?} should be rejected for a Chinese target"
+            );
+        }
+    }
+
+    // A translation that keeps a name in Latin script is a real translation, and
+    // the longest-lived garbage line of that session was rejected while this
+    // shape has to survive.
+    #[test]
+    fn allows_a_chinese_translation_that_carries_latin_text() {
+        assert!(validate_translation_output(
+            "Imageong - Settings - Updates Discombobulating",
+            "Imageong • 设置 — 更新功能让一切变得混乱",
+            "en-US",
+            "zh-CN",
+        )
+        .is_ok());
+    }
+
+    // Short output gets the benefit of the doubt: a one-word cue can legitimately
+    // come back as a name, and rejecting turns a usable line into a notice.
+    #[test]
+    fn allows_short_latin_output_and_output_with_no_letters() {
+        assert!(validate_translation_output("Saber", "Saber", "en-US", "zh-CN").is_ok());
+        assert!(validate_translation_output("12:30", "12:30", "en-US", "zh-CN").is_ok());
+    }
+
+    // Japanese and Korean targets get the same guard; only the language tag
+    // differs, and reading it wrongly would leave those targets unprotected.
+    #[test]
+    fn the_guard_covers_the_other_cjk_targets() {
+        for target in ["ja-JP", "ko-KR", "zh-Hans-CN"] {
+            assert_eq!(
+                validate_translation_output("MFtiÄhave", "MFtiÄhave", "en-US", target),
+                Err(TranslationOutputRejection::WrongLanguage),
+                "{target} should be treated as a CJK target"
+            );
+        }
     }
 }
