@@ -194,21 +194,24 @@ pub async fn extract_zip(archive: &Path, destination: &Path) -> Result<(), Strin
     // step later as "executable missing after extraction", throwing away the
     // stderr that says why. Promoting errors to terminating and exiting non-zero
     // is what makes the captured output below actually reachable.
-    let script = "param([string]$archive,[string]$destination) \
-                  $ErrorActionPreference = 'Stop'; \
-                  try { Expand-Archive -LiteralPath $archive -DestinationPath $destination -Force } \
-                  catch { Write-Error $_; exit 1 }";
+    //
+    // The paths arrive through the environment rather than as arguments after
+    // `-Command`. `-Command` does not bind trailing arguments to a `param()`
+    // block - it appends them to the command text - so the previous form ran
+    // `Expand-Archive -LiteralPath '' -DestinationPath ''` and failed every time
+    // with "the argument is null or empty". Passing them as variables also means
+    // a path containing a quote or a space cannot alter the command.
+    let script = "$ErrorActionPreference = 'Stop'; \
+                  try { \
+                    Expand-Archive -LiteralPath $env:MEOWCAL_EXTRACT_ARCHIVE \
+                      -DestinationPath $env:MEOWCAL_EXTRACT_DESTINATION -Force \
+                  } catch { Write-Error $_; exit 1 }";
     // Captured rather than inherited: `.status()` let PowerShell's diagnosis go
     // to a console nobody was reading.
     let output = crate::windowless_command::tokio_command("powershell")
-        .args([
-            "-NoProfile",
-            "-NonInteractive",
-            "-Command",
-            script,
-            archive.to_string_lossy().as_ref(),
-            destination.to_string_lossy().as_ref(),
-        ])
+        .args(["-NoProfile", "-NonInteractive", "-Command", script])
+        .env("MEOWCAL_EXTRACT_ARCHIVE", archive)
+        .env("MEOWCAL_EXTRACT_DESTINATION", destination)
         .output()
         .await
         .map_err(|error| format!("ENGINE_EXTRACT_START: {error}"))?;
@@ -220,17 +223,54 @@ pub async fn extract_zip(archive: &Path, destination: &Path) -> Result<(), Strin
         output.status.code(),
         archive.display(),
         destination.display(),
-        extraction_reason(&output.stderr)
+        failure_reason(&output.stderr, &output.stdout)
     ))
+}
+
+/// The reason a failed extraction reported, wherever it landed.
+///
+/// PowerShell writes cmdlet errors to stderr, but a native tool invoked beneath
+/// it can report on stdout and exit non-zero. Falling back keeps the message
+/// useful instead of reporting "no error output" next to a real failure.
+fn failure_reason(stderr: &[u8], stdout: &[u8]) -> String {
+    let reason = extraction_reason(stderr);
+    if reason == NO_OUTPUT {
+        let fallback = extraction_reason(stdout);
+        if fallback != NO_OUTPUT {
+            return fallback;
+        }
+    }
+    reason
+}
+
+const NO_OUTPUT: &str = "no error output";
+
+/// A line of PowerShell's error trailer rather than the error itself.
+///
+/// Windows PowerShell follows every error record with a fixed block: the source
+/// line, a `~~~~` marker under the offending token, `CategoryInfo`, and
+/// `FullyQualifiedErrorId`. None of it says what went wrong, and all of it sits
+/// *after* the sentence that does.
+fn is_trace_noise(line: &str) -> bool {
+    line.starts_with('+') || (line.starts_with("At ") && line.contains("char:"))
 }
 
 /// The useful part of a PowerShell failure.
 ///
-/// `Expand-Archive` prefixes each error with a banner and then wraps the detail
-/// across several lines; the last non-empty lines carry the cause. Capped so a
-/// stack trace cannot bury the message in a wizard dialog.
+/// Issue #66 again: keeping "the last few lines" looked right against a short
+/// synthetic fixture and was wrong against a real one, because the trailer above
+/// is exactly four lines long. A genuine failure therefore arrived as
+/// `CategoryInfo ...; FullyQualifiedErrorId ...`, which is the same as reporting
+/// nothing. The trailer is dropped first, and the tail of what remains is kept -
+/// so a cause at the top of a PowerShell record and a cause at the end of some
+/// other tool's output both survive.
+///
+/// Bounded by lines and by characters, because the wizard shows this text and a
+/// single enormous line would bury the dialog just as effectively as a trace.
 fn extraction_reason(stderr: &[u8]) -> String {
     const MAX_LINES: usize = 4;
+    const MAX_CHARS: usize = 600;
+
     let text = String::from_utf8_lossy(stderr);
     let lines: Vec<&str> = text
         .lines()
@@ -238,9 +278,39 @@ fn extraction_reason(stderr: &[u8]) -> String {
         .filter(|line| !line.is_empty())
         .collect();
     if lines.is_empty() {
-        return "no error output".to_string();
+        return NO_OUTPUT.to_string();
     }
-    lines[lines.len().saturating_sub(MAX_LINES)..].join("; ")
+
+    // If every line is trailer, something is better than nothing: report what
+    // there is rather than claiming there was no output at all.
+    let meaningful: Vec<&str> = lines
+        .iter()
+        .copied()
+        .filter(|line| !is_trace_noise(line))
+        .collect();
+    let kept = if meaningful.is_empty() {
+        lines
+    } else {
+        meaningful
+    };
+
+    let joined = kept[kept.len().saturating_sub(MAX_LINES)..].join("; ");
+
+    // Windows PowerShell writes each record as `<source> : <message>`, and for a
+    // `-Command` invocation the source is the whole script echoed back. That is
+    // a paragraph of our own code in front of the one sentence the operator
+    // needs, so the message is taken from after the first separator. Output that
+    // carries no separator is left exactly as it is.
+    let reason = match joined.split_once(" : ") {
+        Some((_, message)) if !message.trim().is_empty() => message.trim().to_string(),
+        _ => joined,
+    };
+
+    if reason.chars().count() <= MAX_CHARS {
+        return reason;
+    }
+    let truncated: String = reason.chars().take(MAX_CHARS).collect();
+    format!("{truncated}...")
 }
 
 fn emit_progress<R: Runtime>(app: &AppHandle<R>, line: impl Into<String>) {
@@ -269,77 +339,5 @@ fn sha256_file(path: &Path) -> Result<String, String> {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::engine_manifest::EngineManifest;
-    use std::time::{SystemTime, UNIX_EPOCH};
-
-    // Issue #66: the reason has to reach the wizard, not a console nobody sees.
-    #[test]
-    fn an_extraction_failure_keeps_the_reason() {
-        let stderr = b"Expand-Archive : The process cannot access the file \
-                       'llama.dll' because it is being used by another process.\n\
-                       At line:1 char:1\n";
-        let reason = extraction_reason(stderr);
-
-        assert!(reason.contains("being used by another process"));
-    }
-
-    // A silent failure must still say that it was silent, rather than trailing
-    // off into an empty string that reads like a truncated message.
-    #[test]
-    fn an_extraction_failure_without_output_says_so() {
-        assert_eq!(extraction_reason(b""), "no error output");
-    }
-
-    // PowerShell can emit a long trace; the wizard shows this text, so the tail
-    // that carries the cause is kept and the rest dropped.
-    #[test]
-    fn a_long_trace_is_trimmed_to_its_last_lines() {
-        let stderr = (1..=20)
-            .map(|n| format!("line {n}"))
-            .collect::<Vec<_>>()
-            .join("\n");
-        let reason = extraction_reason(stderr.as_bytes());
-
-        assert_eq!(reason, "line 17; line 18; line 19; line 20");
-    }
-
-    #[tokio::test]
-    async fn same_sized_corrupt_artifact_is_not_treated_as_installed() {
-        let path = fixture_path("integrity", "bin");
-        std::fs::write(&path, b"trusted").unwrap();
-        let expected_hash = sha256_file(&path).unwrap();
-        assert!(file_matches(&path, 7, &expected_hash).await.unwrap());
-        std::fs::write(&path, b"corrupt").unwrap();
-        assert!(!file_matches(&path, 7, &expected_hash).await.unwrap());
-        std::fs::remove_file(path).unwrap();
-    }
-
-    #[tokio::test]
-    async fn corrupt_runtime_executable_requires_repair() {
-        let manifest = EngineManifest::shipped().unwrap();
-        let runtime = manifest.runtime_for_current_arch().unwrap();
-        let path = fixture_path("runtime-corrupt", "exe");
-        std::fs::write(&path, vec![0; runtime.executable.size_bytes as usize]).unwrap();
-        assert!(!file_matches(
-            &path,
-            runtime.executable.size_bytes,
-            &runtime.executable.sha256
-        )
-        .await
-        .unwrap());
-        std::fs::remove_file(path).unwrap();
-    }
-
-    fn fixture_path(label: &str, extension: &str) -> std::path::PathBuf {
-        let unique = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_nanos();
-        std::env::temp_dir().join(format!(
-            "meowcal-{label}-{}-{unique}.{extension}",
-            std::process::id()
-        ))
-    }
-}
+#[path = "engine_artifact_io_tests.rs"]
+mod tests;
