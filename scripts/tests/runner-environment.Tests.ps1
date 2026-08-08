@@ -128,19 +128,52 @@ $probeEnvironment = Get-SanitizedRunnerEnvironment -BaseEnvironment @{
 
 $node = Find-CommandInPath -Path $probeEnvironment["Path"] -Command "node"
 if ($node) {
-    $reported = Invoke-InRunnerEnvironment -Environment $probeEnvironment -FilePath $node -Arguments @("-v")
-    Assert-True ($reported -match '^v\d+') `
-        "node -v probed in the clean environment returned '$reported'; a dropped preload must not break it."
+    $probe = Invoke-InRunnerEnvironment -Environment $probeEnvironment -FilePath $node -Arguments @("-v")
+    Assert-True ($probe.Output -match '^v\d+') `
+        "node -v probed in the clean environment returned '$($probe.Output)'; a dropped preload must not break it."
+    Assert-Equal 0 $probe.ExitCode "A healthy node probe exits zero."
 }
 
-# npm is a .cmd shim, which CreateProcess cannot execute directly. If this
-# regresses, every npm version check silently fails.
+# npm is a .cmd shim. If executing it regresses, every npm version check
+# silently fails.
 $npm = Find-CommandInPath -Path $probeEnvironment["Path"] -Command "npm"
 if ($npm) {
-    $reportedNpm = Invoke-InRunnerEnvironment -Environment $probeEnvironment -FilePath $npm -Arguments @("-v")
-    Assert-True ($reportedNpm -match '^\d+') `
-        "npm -v probed in the clean environment returned '$reportedNpm'; the .cmd shim must be executable."
+    $npmProbe = Invoke-InRunnerEnvironment -Environment $probeEnvironment -FilePath $npm -Arguments @("-v")
+    Assert-True ($npmProbe.Output -match '^\d+') `
+        "npm -v probed in the clean environment returned '$($npmProbe.Output)'; the .cmd shim must be executable."
+    Assert-Equal 0 $npmProbe.ExitCode "A healthy npm probe exits zero."
 }
+
+# A shim can print something version-shaped and still fail. The exit code has to
+# come back with the text, or the preflight approves a toolchain that cannot run.
+$failingShim = Join-Path ([System.IO.Path]::GetTempPath()) "meowcal-failing-shim-$([System.Guid]::NewGuid().ToString('N')).cmd"
+try {
+    Set-Content -LiteralPath $failingShim -Value "@echo off`r`necho 24.0.0`r`nexit /b 3" -Encoding ascii
+    $failed = Invoke-InRunnerEnvironment -Environment $probeEnvironment -FilePath $failingShim
+    Assert-Equal "24.0.0" $failed.Output "The printed line is still reported."
+    Assert-Equal 3 $failed.ExitCode "A nonzero exit is reported rather than discarded."
+} finally {
+    Remove-Item -LiteralPath $failingShim -Force -ErrorAction SilentlyContinue
+}
+
+# --- Registry values are expanded ---------------------------------------------
+
+# Machine and User scopes store REG_EXPAND_SZ, so a PATH entry can arrive as the
+# literal text `%SystemRoot%\System32`. Test-Path rejects that, so an unexpanded
+# value makes Find-CommandInPath report an installed tool as missing.
+$tokens = @{ "SystemRoot" = "C:\Windows"; "Path" = "%SystemRoot%\System32;%USERPROFILE%\.cargo\bin"; "USERPROFILE" = "C:\Users\someone" }
+Assert-Equal "C:\Windows\System32;C:\Users\someone\.cargo\bin" `
+    (Expand-EnvironmentTokens -Value $tokens["Path"] -Environment $tokens) `
+    "Registry tokens are expanded against the reconstructed environment."
+
+# An unknown token is left alone rather than replaced with emptiness, which would
+# silently shorten PATH.
+Assert-Equal "%NOT_A_VARIABLE%\bin" `
+    (Expand-EnvironmentTokens -Value "%NOT_A_VARIABLE%\bin" -Environment $tokens) `
+    "An unresolvable token is preserved."
+
+Assert-True ((Get-LogonEnvironment)["Path"] -notmatch '%\w+%') `
+    "The assembled logon PATH carries no unexpanded tokens."
 
 # --- The real logon environment ----------------------------------------------
 
@@ -163,5 +196,17 @@ Assert-True ($runnerDoc -match '-Mode\s+Start') `
     "docs/SELF_HOSTED_RUNNERS.md must document the sanitized start path."
 Assert-True ($runnerDoc -notmatch 'Start-Process\s+-FilePath\s+\(Join-Path\s+\$runnerDirectory\s+"run\.cmd"\)') `
     "docs/SELF_HOSTED_RUNNERS.md must not tell operators to launch run.cmd from their own shell."
+
+# One contract, not two. The agent guide and the post-install message used to send
+# operators straight at run.cmd, which reproduces the very failure being fixed.
+$agentGuide = Get-Content -LiteralPath (Join-Path $repositoryRoot "docs\AGENT_GUIDE.md") -Raw
+Assert-True ($agentGuide -match '-Mode\s+Start') `
+    "docs/AGENT_GUIDE.md must point at the sanitized start path."
+Assert-True ($agentGuide -notmatch 'start the existing `run\.cmd`') `
+    "docs/AGENT_GUIDE.md must not tell agents to start run.cmd directly."
+
+$setupScript = Get-Content -LiteralPath (Join-Path $repositoryRoot "scripts\setup-self-hosted-runner.ps1") -Raw
+Assert-True ($setupScript -notmatch 'Start it with: \$RunnerDirectory') `
+    "The post-install message must not hand out the raw run.cmd path."
 
 Write-Host "runner environment contract tests passed." -ForegroundColor Green

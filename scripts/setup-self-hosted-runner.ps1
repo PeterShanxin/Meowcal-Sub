@@ -46,13 +46,13 @@ param(
 
     [string]$RunnerVersion = "",
 
-    # Not this repository's operating model: the runner is run on demand in the
-    # foreground. Use only when the owner explicitly asks for a service.
     # -Mode Start only: resolve and verify the clean environment, report what it
     # would use, and stop without launching. Lets the contract be exercised on a
     # machine whose runner must not be disturbed.
     [switch]$VerifyEnvironmentOnly,
 
+    # Not this repository's operating model: the runner is run on demand in the
+    # foreground. Use only when the owner explicitly asks for a service.
     [switch]$InstallService,
 
     # Windows account the service runs as, for example 'DOMAIN\user'. Required in
@@ -338,15 +338,12 @@ function Start-RunnerProcess {
         throw "No runner installation found in $Directory. Register one with -Mode Install first."
     }
 
+    # Checked but not acted on yet. -VerifyEnvironmentOnly promises the checks, and
+    # inspecting the clean environment while a runner is already online is exactly
+    # when an operator wants them; returning here would report success without
+    # having verified anything.
     $existing = @(Get-Process -Name Runner.Listener -ErrorAction SilentlyContinue |
             Where-Object { $_.Path -and $_.Path -like "$Directory\*" })
-    if ($existing.Count -gt 0) {
-        # Starting a second listener against the same registration fails with a
-        # session conflict, and stopping the first one could kill a running job.
-        Write-Host "A runner listener is already running for this directory (PID $($existing[0].Id))." -ForegroundColor Yellow
-        Write-Host "Leave it alone: it may be executing a job right now." -ForegroundColor Yellow
-        return
-    }
 
     $environment = Get-SanitizedRunnerEnvironment -BaseEnvironment (Get-LogonEnvironment)
 
@@ -374,7 +371,17 @@ function Start-RunnerProcess {
         # Probed in the clean environment, not this one. A broken preload in the
         # caller's shell would otherwise make a perfectly good npm report nothing
         # and be blamed for it.
-        $reported = Invoke-InRunnerEnvironment -Environment $environment -FilePath $tool.Path -Arguments @("-v")
+        $probe = Invoke-InRunnerEnvironment -Environment $environment -FilePath $tool.Path -Arguments @("-v")
+        if ($probe.ExitCode -ne 0) {
+            # A shim can print something version-shaped and still fail. Trusting
+            # the text alone would approve a toolchain that cannot run.
+            throw @(
+                "$($tool.Name) at $($tool.Path) exited $($probe.ExitCode) when asked for its version.",
+                "It reported '$($probe.Output)'$(if ($probe.Error) { " and '$($probe.Error)'" }).",
+                "Fix that installation before starting the runner; CI would fail on npm ci."
+            ) -join " "
+        }
+        $reported = $probe.Output
         $actual = if ($reported -match '(\d+)') { $Matches[1] } else { $null }
         if ($actual -ne $expected) {
             throw @(
@@ -387,7 +394,15 @@ function Start-RunnerProcess {
     }
 
     if ($WhatIfOnly) {
-        Write-Host "Environment verified. -WhatIf requested, so the runner was not started." -ForegroundColor Green
+        Write-Host "Environment verified. -VerifyEnvironmentOnly requested, so the runner was not started." -ForegroundColor Green
+        return
+    }
+
+    if ($existing.Count -gt 0) {
+        # Starting a second listener against the same registration fails with a
+        # session conflict, and stopping the first one could kill a running job.
+        Write-Host "A runner listener is already running for this directory (PID $($existing[0].Id))." -ForegroundColor Yellow
+        Write-Host "Leave it alone: it may be executing a job right now." -ForegroundColor Yellow
         return
     }
 
@@ -466,7 +481,9 @@ switch ($Mode) {
         if ($InstallService) {
             Write-Host "Registered as a service. It starts with Windows." -ForegroundColor Green
         } else {
-            Write-Host "Registered. Start it with: $RunnerDirectory\run.cmd" -ForegroundColor Green
+            # Deliberately not `run.cmd`: that inherits this shell's environment,
+            # which is the failure #88 exists to prevent.
+            Write-Host "Registered. Start it with: .\scripts\setup-self-hosted-runner.ps1 -Mode Start" -ForegroundColor Green
         }
     }
 

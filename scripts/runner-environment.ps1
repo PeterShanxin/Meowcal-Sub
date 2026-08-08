@@ -76,6 +76,44 @@ function Get-CurrentProcessEnvironment {
     $environment
 }
 
+function Expand-EnvironmentTokens {
+    <#
+        Expands `%NAME%` references using a supplied environment table.
+
+        The Machine and User scopes store `REG_EXPAND_SZ` values, so a PATH entry
+        can come back as the literal text `%SystemRoot%\System32`. Windows expands
+        those at logon; reading the registry directly does not. Handing an
+        unexpanded value to a process leaves it unable to resolve tools, and
+        `Test-Path` rejects it outright, so `Find-CommandInPath` would report a
+        perfectly good toolchain as missing.
+
+        Expansion is against the reconstructed table rather than this process, so
+        the result describes the runner's environment and not the caller's. A
+        token naming something the table does not define is left alone: replacing
+        it with emptiness would silently shorten PATH.
+    #>
+    param(
+        [Parameter(Mandatory)][AllowEmptyString()][string]$Value,
+        [Parameter(Mandatory)][hashtable]$Environment
+    )
+
+    # Two passes: a value may reference a variable that itself contains a token.
+    # Deeper nesting than that does not occur in practice and looping forever on a
+    # self-referential value would be worse than leaving it.
+    $expanded = $Value
+    foreach ($pass in 1..2) {
+        $expanded = [regex]::Replace($expanded, '%([^%]+)%', {
+                param($match)
+                $name = $match.Groups[1].Value
+                foreach ($key in $Environment.Keys) {
+                    if ($key -ieq $name) { return [string]$Environment[$key] }
+                }
+                $match.Value
+            })
+    }
+    $expanded
+}
+
 function Get-LogonEnvironment {
     <#
         Reads the Machine and User environment scopes rather than copying this
@@ -98,13 +136,21 @@ function Get-LogonEnvironment {
 
     # A process still needs these, and they are per-session rather than stored in
     # either scope, so they are carried over deliberately instead of inherited
-    # wholesale.
+    # wholesale. Done before expansion: `%SystemRoot%` is the most common token in
+    # a machine PATH, and SystemRoot is not itself in either registry scope, so
+    # expanding first would leave it unresolved.
     foreach ($name in @("SystemRoot", "SystemDrive", "COMPUTERNAME", "USERNAME", "USERPROFILE", "USERDOMAIN")) {
         $value = [System.Environment]::GetEnvironmentVariable($name)
         if ($value -and -not $environment.ContainsKey($name)) { $environment[$name] = $value }
     }
 
-    $environment
+    # Registry scopes hand back REG_EXPAND_SZ values verbatim, so this is where
+    # `%SystemRoot%\System32` becomes a path the runner and Test-Path can use.
+    $expanded = @{}
+    foreach ($key in $environment.Keys) {
+        $expanded[$key] = Expand-EnvironmentTokens -Value ([string]$environment[$key]) -Environment $environment
+    }
+    $expanded
 }
 
 function Join-EnvironmentPath {
@@ -157,8 +203,13 @@ function Find-CommandInPath {
 
 function Invoke-InRunnerEnvironment {
     <#
-        Runs a command with the sanitized environment and returns its first
-        non-empty stdout line.
+        Runs a command with the sanitized environment and reports its first
+        non-empty stdout line *and* its exit code.
+
+        The exit code is returned rather than discarded because a broken or
+        managed shim can print a plausible version and then fail. Accepting the
+        printed line alone would let the preflight approve a toolchain that
+        cannot actually run, which is the whole thing this check exists to catch.
 
         Probing a toolchain with this process's environment answers the wrong
         question and gets it wrong in the exact case that matters: a broken
@@ -194,10 +245,14 @@ function Invoke-InRunnerEnvironment {
 
     $process = [System.Diagnostics.Process]::Start($startInfo)
     $standardOutput = $process.StandardOutput.ReadToEnd()
-    [void]$process.StandardError.ReadToEnd()
+    $standardError = $process.StandardError.ReadToEnd()
     $process.WaitForExit()
 
-    @($standardOutput -split "`r?`n" | Where-Object { $_.Trim() }) | Select-Object -First 1
+    [pscustomobject]@{
+        Output   = @($standardOutput -split "`r?`n" | Where-Object { $_.Trim() }) | Select-Object -First 1
+        Error    = @($standardError -split "`r?`n" | Where-Object { $_.Trim() }) | Select-Object -First 1
+        ExitCode = $process.ExitCode
+    }
 }
 
 function Test-RunnerEnvironmentIsClean {
