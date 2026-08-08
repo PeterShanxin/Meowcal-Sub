@@ -199,6 +199,43 @@ fn is_latin_letter(ch: char) -> bool {
     ch.is_ascii_alphabetic() || matches!(ch, '\u{00C0}'..='\u{024F}' | '\u{1E00}'..='\u{1EFF}')
 }
 
+/// Whether the whole output is one word shaped like a proper name.
+///
+/// `MIN_CHARS_TO_JUDGE_SCRIPT` gives short output the benefit of the doubt so a
+/// name the model chose not to render survives, and `Saber` clears it on length.
+/// `Dvořák` is the same kind of output one character longer, and once accented
+/// letters count as Latin its share went from below the threshold to 6/6: a name
+/// turned into a quality notice.
+///
+/// Length cannot separate those, so shape does. A name is **one** token, letters
+/// all the way through, capitalised once at the front. That admits `Dvořák`,
+/// `François` and `Pokémon`, and refuses every read this guard exists for, each
+/// of which is also a single token: `MFtiÄhave` capitalises in the middle,
+/// `R_4gng` carries a digit and an underscore, `thinnedput` never capitalises at
+/// all. A phrase such as `Ça va déjà?` is three tokens and never reaches here.
+///
+/// The residue is deliberate and bounded: a one-word source echo that happens to
+/// be capitalised - `Bonjour` - is indistinguishable from a name without a
+/// lexicon, and is accepted. That is the same trade `Saber` already made, on one
+/// line of dialogue rather than on a sentence.
+fn looks_like_a_proper_name(text: &str) -> bool {
+    let mut tokens = text.split_whitespace();
+    let (Some(token), None) = (tokens.next(), tokens.next()) else {
+        return false;
+    };
+
+    // Sentence punctuation around the name is the model's, not the name's.
+    let token = token.trim_matches(|ch: char| !ch.is_alphanumeric());
+    let mut chars = token.chars();
+    let Some(first) = chars.next() else {
+        return false;
+    };
+    if !first.is_alphabetic() || !first.is_uppercase() {
+        return false;
+    }
+    chars.all(|ch| ch.is_alphabetic() && !ch.is_uppercase())
+}
+
 /// Whether output for a CJK target came back in the wrong script entirely.
 ///
 /// The mirror of `is_probably_non_english_for_en_target`, which only ever ran
@@ -230,6 +267,12 @@ fn is_probably_not_cjk_for_cjk_target(text: &str) -> bool {
     // No letters at all is a timestamp, a number, a row of punctuation - none of
     // which a CJK translation would have added characters to.
     if latin_letters == 0 || non_whitespace_chars < MIN_CHARS_TO_JUDGE_SCRIPT {
+        return false;
+    }
+    // A name the model chose not to render is a real translation, and the length
+    // floor above stops covering those the moment accented letters count as
+    // Latin. See `looks_like_a_proper_name` for how narrow this is.
+    if looks_like_a_proper_name(text) {
         return false;
     }
     latin_letters.saturating_mul(10) >= alphabetic_total.saturating_mul(7)

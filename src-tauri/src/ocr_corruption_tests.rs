@@ -150,6 +150,14 @@ fn only_a_fragment_with_no_word_in_it_is_entirely_noise() {
         "Wh€reythe",
         "@lätiv.elYJthinned'.out",
         "bf//dzz:: Wh€reythe",
+        // Debris standing on its own carries no marker for `is_garbled` to
+        // find, because there is nothing around it to be wedged between. A
+        // stray `0` beside a mangled token is still a mangled read, not a word.
+        "bf//dzz:: 0",
+        "0 bf//dzz::",
+        "bf//dzz:: ::",
+        "艹 0 艹",
+        "0 00 —",
     ] {
         assert!(is_entirely_noise(fragment), "{fragment:?} is noise");
     }
@@ -159,6 +167,10 @@ fn only_a_fragment_with_no_word_in_it_is_entirely_noise() {
         "AT&T lawyers",
         "the Q&A session",
         "However,",
+        // A number beside a real word does not make the run debris.
+        "1500 soldiers",
+        // Two or more CJK characters are content, not a stray radical.
+        "他说",
         "",
         "   ",
     ] {

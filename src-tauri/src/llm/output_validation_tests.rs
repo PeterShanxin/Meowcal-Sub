@@ -113,6 +113,51 @@ fn allows_a_chinese_translation_that_carries_latin_text() {
     .is_ok());
 }
 
+// The same benefit of the doubt has to survive counting accented letters as
+// Latin. `Saber` clears the length floor and is accepted on length alone;
+// `Dvořák`, `François` and `Pokémon` are the same kind of output one character
+// longer, and counting their accents as Latin took their share from below the
+// threshold to 6/6 and turned a name into a quality notice.
+#[test]
+fn allows_an_accented_proper_name_for_a_cjk_target() {
+    for name in [
+        "Dvořák",
+        "François",
+        "Pokémon",
+        "Beyoncé",
+        "Müller",
+        "Zoë",
+        "Dvořák.",
+    ] {
+        assert!(
+            validate_translation_output(name, name, "en-US", "zh-CN").is_ok(),
+            "{name:?} is a name, not a wrong-language result"
+        );
+    }
+}
+
+// ...and the exemption has to stay narrow enough that the reads it was built to
+// catch still fail. Every one of these is a single token too, so the shape of
+// the token is what separates them from a name.
+#[test]
+fn the_proper_name_exemption_does_not_admit_garbled_single_tokens() {
+    for text in [
+        // Capitals in the middle: OCR noise, not a name.
+        "MFtiÄhave",
+        // Digits and an underscore inside a word.
+        "R_4gng",
+        // No initial capital, so not a name however it is spelled.
+        "thinnedput",
+        "déjàdéjàdéjà",
+    ] {
+        assert_eq!(
+            validate_translation_output(text, text, "en-US", "zh-CN"),
+            Err(TranslationOutputRejection::WrongLanguage),
+            "{text:?} should still be rejected for a Chinese target"
+        );
+    }
+}
+
 // Short output gets the benefit of the doubt: a one-word cue can legitimately
 // come back as a name, and rejecting turns a usable line into a notice.
 #[test]

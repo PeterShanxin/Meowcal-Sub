@@ -180,6 +180,34 @@ fn a_re_read_wearing_a_garbled_prefix_is_not_extended() {
     );
 }
 
+// The same instance with a stray glyph in the noise. `0`, `::` and lone
+// radicals carry no marker of their own - there is nothing around them for a
+// symbol to be wedged between - so a prefix that is a mangled token plus debris
+// is still the same cue read worse, not a second row.
+#[test]
+fn a_garbled_prefix_carrying_stray_debris_is_not_extended() {
+    for (previous, current) in [
+        (
+            "However, isn't he a hero from an era",
+            "bf//dzz:: 0 However, isn't he a hero from an era",
+        ),
+        (
+            "However, isn't he a hero from an era",
+            "0 bf//dzz:: However, isn't he a hero from an era",
+        ),
+        (
+            "where the Mystics have relatively thinned out?",
+            "Wh€reythe :: where the Mystics have relatively thinned out?",
+        ),
+    ] {
+        assert_eq!(
+            classify(previous, current),
+            LineChange::Repeat,
+            "{previous} -> {current}"
+        );
+    }
+}
+
 // The mirror of the above: real content appearing at the front of a line
 // that was still drawing is new text, not noise - `where the Mystics have`
 // arriving after the tail was read alone is worth retranslating.
