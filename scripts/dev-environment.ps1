@@ -58,6 +58,33 @@ function Get-VswherePath {
     return $null
 }
 
+function Get-VisualStudioDirectoryRank {
+    <#
+        Ranks a Visual Studio directory name so newest sorts first.
+
+        The names mix two schemes: a release year ("2019", "2022") and a product
+        version ("18"). Sorting them as text puts "2022" above "18" even though
+        2022 is product version 17 and older, so a host with both would
+        initialize the *older* toolchain while claiming newest-first. Years are
+        mapped to their product version; anything else is read as a version
+        already, and an unrecognisable name ranks lowest rather than throwing.
+    #>
+    param([Parameter(Mandatory)][string]$Name)
+
+    $yearToVersion = @{ "2015" = 14; "2017" = 15; "2019" = 16; "2022" = 17 }
+    if ($yearToVersion.ContainsKey($Name)) { return $yearToVersion[$Name] }
+
+    $parsed = 0
+    if ([int]::TryParse($Name, [ref]$parsed)) {
+        # A future year-style directory this table does not know yet would
+        # otherwise outrank every real product version by three orders of
+        # magnitude.
+        if ($parsed -ge 2000) { return $parsed - 2005 }
+        return $parsed
+    }
+    return 0
+}
+
 function Select-NewestInstallation {
     <#
         vswhere does not promise an order, and neither does a directory listing.
@@ -113,9 +140,10 @@ function Get-VisualStudioFallbackPaths {
         program files roots is a bounded last resort; it is not a filesystem
         scan.
 
-        Directory names here are versions or years ("18", "2022"), so the newest
-        sorts last alphabetically and the list is reversed to match the
-        newest-first preference vswhere discovery already applies.
+        Directory names mix release years and product versions ("2022" is version
+        17, "18" is version 18), so they are ranked rather than sorted as text -
+        otherwise "2022" would sort above "18" and the launcher would pick the
+        older toolchain while claiming newest-first.
     #>
     $roots = @($env:ProgramFiles, ${env:ProgramFiles(x86)}) | Where-Object { $_ }
     $found = @()
@@ -125,11 +153,28 @@ function Get-VisualStudioFallbackPaths {
 
         # <root>\<year-or-version>\<edition>\Common7\Tools\VsDevCmd.bat
         $found += @(Get-ChildItem -LiteralPath $visualStudioRoot -Directory -ErrorAction SilentlyContinue |
-            Sort-Object -Property Name -Descending |
+            Sort-Object -Descending -Property @{ Expression = { Get-VisualStudioDirectoryRank -Name $_.Name } } |
             ForEach-Object { Get-ChildItem -LiteralPath $_.FullName -Directory -ErrorAction SilentlyContinue } |
             ForEach-Object { $_.FullName })
     }
     $found
+}
+
+function Test-WindowsSdkPresent {
+    <#
+        `CONTRIBUTING.md` lists the Windows SDK alongside the C++ tools, and a
+        Visual Studio carrying MSVC without an SDK links nothing: the failure
+        arrives deep inside a Rust build as a missing `windows.h` or an unresolved
+        import, which is the late failure this discovery is meant to replace with
+        an early message.
+
+        Read from the registry rather than a guessed path, the same source
+        `scripts/runner-prerequisites.ps1` uses, so an SDK installed off `C:` is
+        still found.
+    #>
+    $registryPath = "HKLM:\SOFTWARE\WOW6432Node\Microsoft\Microsoft SDKs\Windows\v10.0"
+    $installFolder = (Get-ItemProperty -Path $registryPath -ErrorAction SilentlyContinue).InstallationFolder
+    [bool]($installFolder -and (Test-Path -LiteralPath $installFolder))
 }
 
 function Test-VisualStudioCppInstallation {
@@ -172,6 +217,16 @@ function Resolve-VisualStudioDevCmd {
         ) -join " "
     }
 
+    # The SDK is a separate component from the MSVC toolset, so a compiler can be
+    # present without one. Checked after an installation is found, because "no
+    # Visual Studio" and "Visual Studio without an SDK" need different fixes.
+    if (-not (Test-WindowsSdkPresent)) {
+        throw @(
+            "Visual Studio was found at $($usable | Select-Object -First 1), but no Windows 10/11 SDK is registered.",
+            "MSVC cannot link without it. Add the Windows SDK component through the Visual Studio Installer."
+        ) -join " "
+    }
+
     Join-Path ($usable | Select-Object -First 1) "Common7\Tools\VsDevCmd.bat"
 }
 
@@ -204,6 +259,12 @@ function Resolve-CargoTargetDir {
 # Dot-sourcing (from the contract test) must not run the emit path.
 if ($MyInvocation.InvocationName -eq ".") { return }
 
+# Results are emitted under MEOWCAL_RESOLVED_* names rather than the variables
+# they end up as. The launchers clear these before running this script, so a
+# missing line is unambiguously a failure. Emitting CARGO_TARGET_DIR or
+# MEOWCAL_VSDEVCMD directly would make that impossible: both are inputs a
+# developer may already have exported, so an inherited value would survive a
+# failed run and be read as a successful resolution.
 $lines = @()
 
 if ($Emit -in @("All", "CargoTargetDir")) {
@@ -214,7 +275,7 @@ if ($Emit -in @("All", "CargoTargetDir")) {
     if (-not (Test-Path -LiteralPath $targetDirectory -PathType Container)) {
         New-Item -ItemType Directory -Path $targetDirectory -Force | Out-Null
     }
-    $lines += "CARGO_TARGET_DIR=$targetDirectory"
+    $lines += "MEOWCAL_RESOLVED_CARGO_TARGET_DIR=$targetDirectory"
 }
 
 if ($Emit -in @("All", "VisualStudio")) {
@@ -223,8 +284,8 @@ if ($Emit -in @("All", "VisualStudio")) {
         $installations = @(Get-VisualStudioFallbackPaths)
     }
 
-    $lines += "MEOWCAL_VSDEVCMD=$(Resolve-VisualStudioDevCmd -InstallationPaths $installations -Override $env:MEOWCAL_VSDEVCMD)"
-    $lines += "MEOWCAL_HOST_ARCH=$(Get-DeveloperHostArchitecture)"
+    $lines += "MEOWCAL_RESOLVED_VSDEVCMD=$(Resolve-VisualStudioDevCmd -InstallationPaths $installations -Override $env:MEOWCAL_VSDEVCMD)"
+    $lines += "MEOWCAL_RESOLVED_HOST_ARCH=$(Get-DeveloperHostArchitecture)"
 }
 
 $lines | ForEach-Object { Write-Output $_ }

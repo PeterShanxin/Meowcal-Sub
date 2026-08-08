@@ -143,6 +143,25 @@ $withMissingVersion = Select-NewestInstallation -Installations @(
 Assert-Equal "R:\vs\17" $withMissingVersion[0].installationPath `
     "An installation with no reported version does not outrank a real one."
 
+# --- Year-style directory names rank as their product version ----------------
+
+# "2022" is product version 17 and "18" is 18, so sorting the directory names as
+# text puts the older toolchain first. A host with both would then initialize the
+# older compiler while the code claims newest-first.
+Assert-True ((Get-VisualStudioDirectoryRank -Name "18") -gt (Get-VisualStudioDirectoryRank -Name "2022")) `
+    "Version 18 must outrank the 2022 release, which is version 17."
+Assert-True ((Get-VisualStudioDirectoryRank -Name "2022") -gt (Get-VisualStudioDirectoryRank -Name "2019")) `
+    "2022 outranks 2019."
+Assert-True ((Get-VisualStudioDirectoryRank -Name "19") -gt (Get-VisualStudioDirectoryRank -Name "18")) `
+    "A higher product version outranks a lower one."
+Assert-Equal 0 (Get-VisualStudioDirectoryRank -Name "Installer") `
+    "A name that is neither a year nor a version ranks lowest instead of throwing."
+
+# A future year-style directory must not outrank every product version simply by
+# being a four-digit number.
+Assert-True ((Get-VisualStudioDirectoryRank -Name "2028") -lt 100) `
+    "An unknown year is normalized rather than used as a raw number."
+
 # --- Host architecture -------------------------------------------------------
 
 # Hardcoding arm64 is what made the launcher a single-machine script. The value
@@ -160,6 +179,49 @@ foreach ($launcher in @("dev-tauri.cmd", "dev-browser.cmd")) {
     $absolutePaths = [regex]::Matches($contents, '(?m)[A-Za-z]:\\[^"\r\n%]*')
     Assert-Equal 0 $absolutePaths.Count `
         "$launcher names absolute path(s) $(($absolutePaths | ForEach-Object { $_.Value }) -join ', ')."
+}
+
+# --- A failed resolution cannot look like a successful one -------------------
+
+# The launchers clear the helper's output variables and check them, so an
+# inherited MEOWCAL_VSDEVCMD or CARGO_TARGET_DIR cannot survive a failed run and
+# be mistaken for a resolved one. That is why the helper writes MEOWCAL_RESOLVED_*
+# names it alone produces, rather than the variables they become.
+$tauriLauncher = Get-Content -LiteralPath (Join-Path $repositoryRoot "dev-tauri.cmd") -Raw
+$browserLauncher = Get-Content -LiteralPath (Join-Path $repositoryRoot "dev-browser.cmd") -Raw
+
+foreach ($name in @("MEOWCAL_RESOLVED_VSDEVCMD", "MEOWCAL_RESOLVED_HOST_ARCH")) {
+    Assert-True ($tauriLauncher -match [regex]::Escape("set `"$name=`"")) `
+        "dev-tauri.cmd must clear $name before resolving."
+    Assert-True ($tauriLauncher -match [regex]::Escape("if not defined $name")) `
+        "dev-tauri.cmd must fail when $name is missing."
+}
+Assert-True ($browserLauncher -match [regex]::Escape('set "MEOWCAL_RESOLVED_CARGO_TARGET_DIR="')) `
+    "dev-browser.cmd must clear MEOWCAL_RESOLVED_CARGO_TARGET_DIR before resolving."
+
+# An unchecked VsDevCmd failure would continue into the build with no MSVC
+# environment, which fails much later and much less clearly.
+Assert-True ($tauriLauncher -match 'call "%MEOWCAL_RESOLVED_VSDEVCMD%"[\s\S]{0,200}?if %ERRORLEVEL% neq 0') `
+    "dev-tauri.cmd must check the VsDevCmd exit code."
+
+# The emitted names must be the ones the launchers consume, or resolution
+# silently produces nothing either script reads.
+$emitted = & (Join-Path $scriptsDirectory "dev-environment.ps1")
+foreach ($name in @("MEOWCAL_RESOLVED_CARGO_TARGET_DIR", "MEOWCAL_RESOLVED_VSDEVCMD", "MEOWCAL_RESOLVED_HOST_ARCH")) {
+    Assert-True ([bool](@($emitted) -match "^$name=.+")) `
+        "dev-environment.ps1 must emit $name; it emitted: $($emitted -join ' | ')"
+}
+
+# The documented overrides must still reach the helper. Emitting under separate
+# names must not break the inputs a developer sets.
+$env:MEOWCAL_CARGO_TARGET_DIR = $fakeOverride
+try {
+    $overridden = & (Join-Path $scriptsDirectory "dev-environment.ps1") -Emit CargoTargetDir
+    Assert-Equal "MEOWCAL_RESOLVED_CARGO_TARGET_DIR=$fakeOverride" ($overridden | Select-Object -First 1) `
+        "MEOWCAL_CARGO_TARGET_DIR must still override the build directory."
+} finally {
+    Remove-Item Env:\MEOWCAL_CARGO_TARGET_DIR -ErrorAction SilentlyContinue
+    Remove-Item -LiteralPath $fakeOverride -Recurse -Force -ErrorAction SilentlyContinue
 }
 
 Write-Host "dev-environment contract tests passed." -ForegroundColor Green

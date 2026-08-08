@@ -43,6 +43,11 @@ see what the launchers will use:
 pwsh -NoProfile -File scripts\dev-environment.ps1
 ```
 
+It prints `MEOWCAL_RESOLVED_*` lines. Those names are deliberately not the
+variables they become: the launchers clear them first, so a failed resolution
+cannot be mistaken for a `CARGO_TARGET_DIR` or `MEOWCAL_VSDEVCMD` the shell was
+already carrying.
+
 Rust build output goes to `%LOCALAPPDATA%\meowcal-sub\cargo-build` by default,
 which keeps it out of a OneDrive-synced checkout without naming a volume that a
 given machine may not have. To build somewhere else - a faster disk, or an
