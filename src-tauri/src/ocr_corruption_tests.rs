@@ -157,7 +157,7 @@ fn only_a_fragment_with_no_word_in_it_is_entirely_noise() {
         "0 bf//dzz::",
         "bf//dzz:: ::",
         "艹 0 艹",
-        "0 00 —",
+        "0 :: —",
     ] {
         assert!(is_entirely_noise(fragment), "{fragment:?} is noise");
     }
@@ -169,6 +169,11 @@ fn only_a_fragment_with_no_word_in_it_is_entirely_noise() {
         "However,",
         // A number beside a real word does not make the run debris.
         "1500 soldiers",
+        // Nor does a figure standing alone. The debris measured on real reads
+        // is a single stray glyph - `0`, `艹`, `卜` - not a four-digit number,
+        // and a figure is often the whole meaning of the line it arrives in.
+        "1500",
+        "2026",
         // Two or more CJK characters are content, not a stray radical.
         "他说",
         "",

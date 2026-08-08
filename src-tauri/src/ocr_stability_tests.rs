@@ -208,6 +208,25 @@ fn a_garbled_prefix_carrying_stray_debris_is_not_extended() {
     }
 }
 
+// A number is debris when it is a single stray glyph and content when it is a
+// figure. `1500` is exactly four normalised characters, so it clears
+// `EXTENDED_MIN_NEW_CHARS` and reaches the prefix check under its own steam -
+// treating every digit-only token as debris suppressed the one read that
+// carried the figure, and the figure is the meaning of the line.
+#[test]
+fn a_numeric_prefix_that_carries_meaning_is_still_extended() {
+    for (previous, current) in [
+        ("soldiers remain", "1500 soldiers remain"),
+        ("people were rescued", "2026 people were rescued"),
+    ] {
+        assert_eq!(
+            classify(previous, current),
+            LineChange::Extended,
+            "{previous} -> {current}"
+        );
+    }
+}
+
 // The mirror of the above: real content appearing at the front of a line
 // that was still drawing is new text, not noise - `where the Mystics have`
 // arriving after the tail was read alone is worth retranslating.

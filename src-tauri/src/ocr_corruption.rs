@@ -161,25 +161,30 @@ pub fn is_mostly_noise(text: &str) -> bool {
         && corruption_share(text) >= MAX_CORRUPTION_SHARE
 }
 
-/// Fewest letters a token needs before it can count as a word.
+/// Fewest meaningful characters a token needs before it counts as content.
 ///
-/// `0`, `::`, `—` and a lone radical are what OCR leaves behind at the edge of a
-/// subtitle strip, and none of them carries a marker `is_garbled` can find -
-/// there is nothing around them for a symbol to be wedged between. Asking for
-/// two letters is what separates them from `department`, and it costs only the
-/// one-letter words, which cannot reach `EXTENDED_MIN_NEW_CHARS` on their own
-/// anyway.
-const MIN_LETTERS_IN_A_WORD: usize = 2;
+/// The debris measured on real reads is a *single* stray glyph resolved out of a
+/// letterbox edge or a half-drawn stroke - `活下去` became `艹活下去 0 艹`,
+/// `斗转星移` became `0 斗转星移` - together with punctuation that carries
+/// nothing at all. None of it trips `is_garbled`, because there is nothing
+/// around a lone glyph for a symbol to be wedged between, so the length is what
+/// separates it from content.
+///
+/// Two is deliberately the lowest bar that still excludes that debris. Raising
+/// it would start discarding real text: `1500` is four characters and is often
+/// the whole meaning of the line it arrives in.
+const MIN_CHARS_TO_CARRY_MEANING: usize = 2;
 
 /// Whether a token is credible content rather than something OCR left behind.
 ///
-/// Digits are not letters here on purpose. A bare number arriving on its own is
-/// far more often a stray glyph resolved out of a letterbox edge - `活下去`
-/// became `艹活下去 0 艹` - than a subtitle whose new text is only a number, and
-/// a number that does accompany real words is carried by them.
-fn is_a_word(token: &str) -> bool {
+/// Digits count. An earlier version required letters, on the reasoning that a
+/// bare number is more often a stray glyph than a subtitle - true of `0`, false
+/// of `1500`, and the difference is length rather than script. A four-digit
+/// figure also clears `EXTENDED_MIN_NEW_CHARS` on its own, so treating it as
+/// debris suppressed the only read that carried it.
+fn carries_content(token: &str) -> bool {
     !is_garbled(token)
-        && token.chars().filter(|ch| ch.is_alphabetic()).count() >= MIN_LETTERS_IN_A_WORD
+        && token.chars().filter(|ch| ch.is_alphanumeric()).count() >= MIN_CHARS_TO_CARRY_MEANING
 }
 
 /// Whether a run of text is noise all the way through, with no word in it.
@@ -191,13 +196,13 @@ fn is_a_word(token: &str) -> bool {
 /// spells `R&D`, `AT&T` and `Q&A`, so `R&D department` scored exactly the
 /// rejection threshold and a real clause was thrown away.
 ///
-/// Asking whether any token is a *word* rather than whether every token is
+/// Asking whether any token *carries content* rather than whether every token is
 /// garbled is what keeps both halves. `bf//dzz:: 0` has a mangled token and a
-/// scrap of debris and no word in it, so it is noise; `R&D department` has
+/// scrap of debris and nothing else, so it is noise; `R&D department` has
 /// `department`, so it is not. An empty run is not noise; it is nothing.
 pub fn is_entirely_noise(text: &str) -> bool {
     let mut tokens = text.split_whitespace().peekable();
-    tokens.peek().is_some() && !tokens.any(is_a_word)
+    tokens.peek().is_some() && !tokens.any(carries_content)
 }
 
 /// How much of a line is OCR noise, from 0.0 (clean) to 1.0 (entirely mangled).
