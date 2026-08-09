@@ -58,6 +58,10 @@ pub struct RuntimeSpec {
     pub architecture: Architecture,
     pub acceleration: String,
     pub gpu_layers: u32,
+    /// Extra llama-server arguments for this runtime only (aarch64 OpenCL
+    /// keeps the KV cache on the CPU; x64 Vulkan needs none).
+    #[serde(default)]
+    pub launch_args: Vec<String>,
     pub install_directory: String,
     pub archive: DownloadArtifact,
     pub executable: InstalledExecutable,
@@ -223,6 +227,13 @@ impl EngineManifest {
             validate_artifact(&runtime.archive)?;
             validate_relative_path(&runtime.executable.relative_path)?;
             validate_size_hash(runtime.executable.size_bytes, &runtime.executable.sha256)?;
+            if runtime
+                .launch_args
+                .iter()
+                .any(|argument| argument.trim().is_empty())
+            {
+                return invalid("runtime launch policy is unsafe or incomplete");
+            }
         }
         for required in [Architecture::Aarch64, Architecture::X86_64] {
             self.runtime_for(required)?;
@@ -338,57 +349,5 @@ fn invalid<T>(message: impl Into<String>) -> Result<T, ManifestError> {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn shipped_manifest_represents_both_supported_architectures() {
-        let manifest = EngineManifest::shipped().expect("shipped manifest should validate");
-        assert_eq!(manifest.schema_version, 1);
-        assert!(manifest.runtime_for(Architecture::Aarch64).is_ok());
-        assert!(manifest.runtime_for(Architecture::X86_64).is_ok());
-        assert_eq!(manifest.launch.host, "127.0.0.1");
-        assert!(manifest.launch.extra_args.contains(&"--parallel".into()));
-        assert!(!manifest.authenticity.remote_refresh);
-    }
-
-    #[test]
-    fn corrupt_and_unknown_manifests_are_rejected() {
-        assert!(EngineManifest::parse("{").is_err());
-        let unknown_schema =
-            SHIPPED_MANIFEST.replacen("\"schemaVersion\": 1", "\"schemaVersion\": 99", 1);
-        assert!(matches!(
-            EngineManifest::parse(&unknown_schema),
-            Err(ManifestError::Invalid(_))
-        ));
-        let unknown_arch = SHIPPED_MANIFEST.replacen("\"aarch64\"", "\"riscv64\"", 1);
-        assert!(matches!(
-            EngineManifest::parse(&unknown_arch),
-            Err(ManifestError::Invalid(_))
-        ));
-    }
-
-    #[test]
-    fn invalid_hash_and_unsafe_path_are_rejected() {
-        let invalid_hash = SHIPPED_MANIFEST.replacen(
-            "4383ac0c3c8e476de98ff979c2a3f069f8c4fb385e7860cf2d28da896cc477c7",
-            "not-a-sha",
-            1,
-        );
-        assert!(EngineManifest::parse(&invalid_hash).is_err());
-        let unsafe_path = SHIPPED_MANIFEST.replacen("\"hy-mt1.5-1.8b-q4\"", "\"../outside\"", 1);
-        assert!(EngineManifest::parse(&unsafe_path).is_err());
-    }
-
-    #[test]
-    fn downgrade_requires_an_explicit_compatible_rollback_target() {
-        let manifest = EngineManifest::shipped().expect("shipped manifest should validate");
-        assert!(manifest.validate_transition("1.0.0", "1.1.0").is_ok());
-        assert!(manifest.validate_transition("1.0.0", "1.0.0").is_ok());
-        assert!(manifest.validate_transition("1.1.0", "1.0.0").is_ok());
-        assert!(matches!(
-            manifest.validate_transition("2.0.0", "0.9.0"),
-            Err(ManifestError::RollbackRejected(_))
-        ));
-    }
-}
+#[path = "engine_manifest_tests.rs"]
+mod tests;

@@ -95,6 +95,37 @@ async fn is_endpoint_healthy(endpoint: &str) -> bool {
         .unwrap_or(false)
 }
 
+/// The exact `llama-server` argument vector for a managed runtime, built pure
+/// so the launch line is testable without spawning a process. Per-runtime
+/// `launch_args` are appended last; manifest args must not repeat them.
+pub(crate) fn launch_arguments(
+    runtime: &ManagedLocalRuntimeConfig,
+    manifest: &EngineManifest,
+    runtime_spec: &RuntimeSpec,
+    port: &str,
+) -> Vec<String> {
+    let mut arguments = vec![
+        "-m".to_string(),
+        runtime.model_path.clone(),
+        "--alias".to_string(),
+        manifest.model.id.clone(),
+        "--host".to_string(),
+        manifest.launch.host.clone(),
+        "--port".to_string(),
+        port.to_string(),
+        "-c".to_string(),
+        manifest.launch.context_size.to_string(),
+        "-ngl".to_string(),
+        runtime_spec.gpu_layers.to_string(),
+    ];
+    arguments.extend(crate::engine_launch::launch_args(
+        &manifest.launch.extra_args,
+        crate::engine_launch::available_cores(),
+    ));
+    arguments.extend(runtime_spec.launch_args.iter().cloned());
+    arguments
+}
+
 pub fn start(runtime: &ManagedLocalRuntimeConfig) -> Result<String, String> {
     let manifest = EngineManifest::shipped().map_err(|error| error.to_string())?;
     let runtime_spec = manifest
@@ -157,16 +188,7 @@ pub fn start(runtime: &ManagedLocalRuntimeConfig) -> Result<String, String> {
     let mut command = Command::new(&executable);
     command
         .current_dir(log_dir)
-        .args(["-m", &runtime.model_path])
-        .args(["--alias", &manifest.model.id])
-        .args(["--host", &manifest.launch.host])
-        .args(["--port", &port])
-        .args(["-c", &manifest.launch.context_size.to_string()])
-        .args(["-ngl", &runtime_spec.gpu_layers.to_string()])
-        .args(crate::engine_launch::launch_args(
-            &manifest.launch.extra_args,
-            crate::engine_launch::available_cores(),
-        ))
+        .args(launch_arguments(runtime, &manifest, runtime_spec, &port))
         .stdin(Stdio::null())
         .stdout(Stdio::from(stdout))
         .stderr(Stdio::from(stderr));
@@ -303,51 +325,5 @@ pub fn start_configured(runtime: Option<ManagedLocalRuntimeConfig>) {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn install_layout_is_stable_and_port_is_local_only() {
-        let manifest = EngineManifest::shipped().expect("manifest should be valid");
-        let package = manifest
-            .runtime_for_current_arch()
-            .expect("current architecture should be supported");
-        let paths = HyMtInstallPaths::from_cache_root(r"D:\model-cache", &manifest, package);
-        let runtime = paths.managed_config(&manifest);
-
-        assert!(paths.model.ends_with(&manifest.model.artifact.file_name));
-        assert!(paths.executable.ends_with("llama-server.exe"));
-        assert_eq!(endpoint_url(&runtime), "http://127.0.0.1:11436");
-        assert!(package.archive.size_bytes > 0);
-        assert_eq!(package.archive.sha256.len(), 64);
-    }
-
-    #[test]
-    fn release_asset_matches_current_windows_architecture() {
-        let manifest = EngineManifest::shipped().expect("manifest should be valid");
-        let package = manifest
-            .runtime_for_current_arch()
-            .expect("current architecture should be supported");
-        assert!(package.archive.file_name.ends_with(".zip"));
-        assert!(package.archive.url.contains(&package.archive.file_name));
-        assert!(package.executable.relative_path.ends_with(".exe"));
-        assert_eq!(
-            package.gpu_layers,
-            if cfg!(target_arch = "aarch64") { 0 } else { 99 }
-        );
-    }
-
-    #[test]
-    fn occupied_preferred_port_selects_another_loopback_port() {
-        let occupied =
-            TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).expect("fixture listener should bind");
-        let preferred = occupied
-            .local_addr()
-            .expect("fixture address should be available")
-            .port();
-        let selected = select_loopback_port(preferred).expect("fallback port should be selected");
-
-        assert_ne!(selected, preferred);
-        assert!(TcpListener::bind((Ipv4Addr::LOCALHOST, preferred)).is_err());
-    }
-}
+#[path = "hy_mt_runtime_tests.rs"]
+mod tests;
