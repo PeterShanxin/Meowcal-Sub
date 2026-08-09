@@ -28,7 +28,7 @@
 #>
 [CmdletBinding()]
 param(
-    [ValidateSet("Check", "Install", "Status", "Remove")]
+    [ValidateSet("Check", "Install", "Status", "Start", "Remove")]
     [string]$Mode = "Check",
 
     # `ci` needs to execute both architectures and therefore an ARM64 host.
@@ -46,6 +46,11 @@ param(
 
     [string]$RunnerVersion = "",
 
+    # -Mode Start only: resolve and verify the clean environment, report what it
+    # would use, and stop without launching. Lets the contract be exercised on a
+    # machine whose runner must not be disturbed.
+    [switch]$VerifyEnvironmentOnly,
+
     # Not this repository's operating model: the runner is run on demand in the
     # foreground. Use only when the owner explicitly asks for a service.
     [switch]$InstallService,
@@ -62,6 +67,7 @@ Set-StrictMode -Version Latest
 
 $repositoryRoot = Split-Path -Parent $PSScriptRoot
 . (Join-Path $PSScriptRoot "runner-prerequisites.ps1")
+. (Join-Path $PSScriptRoot "runner-environment.ps1")
 
 function Write-Section {
     param([string]$Title)
@@ -123,6 +129,18 @@ function Invoke-PrerequisiteChecks {
     }
     if ($Labels -contains "meowcal-ci") {
         $results += Test-BrowserChannel
+    }
+
+    # Check has to describe the environment the runner will actually get, not the
+    # one this shell happens to have. Reporting the shell's toolchain is how a
+    # green Check once coexisted with a red CI run (#88).
+    $contamination = Test-RunnerEnvironmentIsClean -Environment (Get-CurrentProcessEnvironment)
+    $results += if ($contamination.Count -eq 0) {
+        New-PrerequisiteResult -Name "Launch environment" -Status Ok -Detail "no Node preload variables set"
+    } else {
+        New-PrerequisiteResult -Name "Launch environment" -Status Advisory `
+            -Detail ("this shell sets " + (($contamination | ForEach-Object { $_.Name }) -join ", ")) `
+            -Fix "Start the runner with -Mode Start, which drops these; launching run.cmd directly would pass them to CI."
     }
 
     $results += Test-DiskSpace -Path $RunnerDirectory
@@ -294,6 +312,118 @@ function Register-Runner {
     }
 }
 
+function Start-RunnerProcess {
+    <#
+        Starts the registered runner with the caller's environment corrected in
+        exactly two ways, rather than replaced wholesale.
+
+        A foreground runner inherits its launcher's environment, so starting it
+        from an IDE or agent session makes that session's process environment
+        into CI configuration. That is not theoretical - see #88. Node's preload
+        hooks are removed outright, and PATH is replaced by the machine-then-user
+        composition so a shell-local toolchain cannot shadow the host's.
+        Everything else the caller carries is left alone: rebuilding the
+        environment instead produced a runner that could not find Program Files
+        or LOCALAPPDATA.
+
+        The Node/npm majors are checked against package.json engines *in the
+        clean environment* before the runner is allowed to accept work. Checking
+        this process's own toolchain would answer the wrong question.
+    #>
+    param(
+        [Parameter(Mandatory)][string]$Directory,
+        [Parameter(Mandatory)][string]$RepositoryRoot,
+        [switch]$WhatIfOnly
+    )
+
+    $runCmd = Join-Path $Directory "run.cmd"
+    if (-not (Test-Path -LiteralPath $runCmd -PathType Leaf)) {
+        throw "No runner installation found in $Directory. Register one with -Mode Install first."
+    }
+
+    # Checked but not acted on yet. -VerifyEnvironmentOnly promises the checks, and
+    # inspecting the clean environment while a runner is already online is exactly
+    # when an operator wants them; returning here would report success without
+    # having verified anything.
+    $existing = @(Get-Process -Name Runner.Listener -ErrorAction SilentlyContinue |
+            Where-Object { $_.Path -and $_.Path -like "$Directory\*" })
+
+    $environment = Get-SanitizedRunnerEnvironment -BaseEnvironment (Get-RunnerBaseEnvironment)
+
+    # Report what the caller was carrying, so the operator can see whether their
+    # shell was the problem rather than guessing after a red CI run.
+    foreach ($variable in (Test-RunnerEnvironmentIsClean -Environment (Get-CurrentProcessEnvironment))) {
+        Write-Host "Dropping $($variable.Name) from the runner environment: $($variable.Value)" -ForegroundColor Yellow
+    }
+
+    $nodePath = Find-CommandInPath -Path $environment["Path"] -Command "node"
+    $npmPath = Find-CommandInPath -Path $environment["Path"] -Command "npm"
+    if (-not $nodePath) {
+        throw "No node found on the clean runner PATH. Install Node.js for all users, not only inside a development shell."
+    }
+    if (-not $npmPath) {
+        throw "No npm found on the clean runner PATH. Install Node.js for all users, not only inside a development shell."
+    }
+
+    foreach ($tool in @(
+            @{ Name = "node"; Path = $nodePath; Engine = "node" },
+            @{ Name = "npm"; Path = $npmPath; Engine = "npm" })) {
+        $expected = Get-DeclaredEngineMajor -RepositoryRoot $RepositoryRoot -Engine $tool.Engine
+        if (-not $expected) { continue }
+
+        # Probed in the clean environment, not this one. A broken preload in the
+        # caller's shell would otherwise make a perfectly good npm report nothing
+        # and be blamed for it.
+        $probe = Invoke-InRunnerEnvironment -Environment $environment -FilePath $tool.Path -Arguments @("-v")
+        if ($probe.ExitCode -ne 0) {
+            # A shim can print something version-shaped and still fail. Trusting
+            # the text alone would approve a toolchain that cannot run.
+            throw @(
+                "$($tool.Name) at $($tool.Path) exited $($probe.ExitCode) when asked for its version.",
+                "It reported '$($probe.Output)'$(if ($probe.Error) { " and '$($probe.Error)'" }).",
+                "Fix that installation before starting the runner; CI would fail on npm ci."
+            ) -join " "
+        }
+        $reported = $probe.Output
+        $actual = if ($reported -match '(\d+)') { $Matches[1] } else { $null }
+        if ($actual -ne $expected) {
+            throw @(
+                "The clean runner environment resolves $($tool.Name) $reported at $($tool.Path),",
+                "but package.json declares major $expected. CI would fail on npm ci.",
+                "Install the declared version for all users before starting the runner."
+            ) -join " "
+        }
+        Write-Host "  OK       $($tool.Name) $reported -> $($tool.Path)" -ForegroundColor Green
+    }
+
+    if ($WhatIfOnly) {
+        Write-Host "Environment verified. -VerifyEnvironmentOnly requested, so the runner was not started." -ForegroundColor Green
+        return
+    }
+
+    if ($existing.Count -gt 0) {
+        # Starting a second listener against the same registration fails with a
+        # session conflict, and stopping the first one could kill a running job.
+        Write-Host "A runner listener is already running for this directory (PID $($existing[0].Id))." -ForegroundColor Yellow
+        Write-Host "Leave it alone: it may be executing a job right now." -ForegroundColor Yellow
+        return
+    }
+
+    $startInfo = [System.Diagnostics.ProcessStartInfo]::new()
+    $startInfo.FileName = $runCmd
+    $startInfo.WorkingDirectory = $Directory
+    $startInfo.UseShellExecute = $false
+    $startInfo.EnvironmentVariables.Clear()
+    foreach ($key in $environment.Keys) {
+        $startInfo.EnvironmentVariables[[string]$key] = [string]$environment[$key]
+    }
+
+    $process = [System.Diagnostics.Process]::Start($startInfo)
+    Write-Host ""
+    Write-Host "Runner started in a clean environment (PID $($process.Id))." -ForegroundColor Green
+    Write-Host "It runs until you stop it. Stop it only when nothing is queued or in progress." -ForegroundColor Green
+}
+
 function Show-RunnerStatus {
     param([Parameter(Mandatory)][string]$Repository)
 
@@ -354,13 +484,20 @@ switch ($Mode) {
         if ($InstallService) {
             Write-Host "Registered as a service. It starts with Windows." -ForegroundColor Green
         } else {
-            Write-Host "Registered. Start it with: $RunnerDirectory\run.cmd" -ForegroundColor Green
+            # Deliberately not `run.cmd`: that inherits this shell's environment,
+            # which is the failure #88 exists to prevent.
+            Write-Host "Registered. Start it with: .\scripts\setup-self-hosted-runner.ps1 -Mode Start" -ForegroundColor Green
         }
     }
 
     "Status" {
         Write-Section "Registered runners"
         Show-RunnerStatus -Repository $Repository
+    }
+
+    "Start" {
+        Write-Section "Clean runner environment"
+        Start-RunnerProcess -Directory $RunnerDirectory -RepositoryRoot $repositoryRoot -WhatIfOnly:$VerifyEnvironmentOnly
     }
 
     "Remove" {
