@@ -12,9 +12,9 @@
 import json, glob, os, re, sys, statistics
 
 REQ_TIME_RE = re.compile(
-    r"eval time =\s+([\d.]+) ms / (\d+) tokens \(\s*([\d.]+) ms per token,\s*([\d.]+) tokens per second\)"
+    r"eval time =\s+([\d.]+) ms /\s*(\d+) tokens \(\s*([\d.]+) ms per token,\s*([\d.]+) tokens per second\)"
 )
-TOTAL_TIME_RE = re.compile(r"total time =\s+([\d.]+) ms / (\d+) tokens")
+TOTAL_TIME_RE = re.compile(r"total time =\s+([\d.]+) ms /\s*(\d+) tokens")
 
 
 def percentile(vals, p):
