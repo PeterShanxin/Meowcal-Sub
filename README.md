@@ -7,7 +7,7 @@ a floating overlay.
 Tencent HY-MT is the only supported translation engine in normal mode. The
 current MVP provides app-managed download, integrity verification, startup,
 health checks, repair, transactional promotion, last-known-good rollback,
-shutdown, and a real sample translation. x64 evidence and the full episode
+shutdown, and a real sample translation. x64 runtime evidence and the full episode
 release gate remain open.
 
 ## Status
@@ -69,7 +69,7 @@ not the same thing as an Authenticode certificate.
 - Windows 11;
 - Rust stable with `rustfmt` and `clippy`;
 - Node.js 24 with npm 11;
-- Visual Studio 2022 Build Tools with C++ and Windows SDK;
+- Visual Studio with Desktop development with C++ and the Windows SDK;
 - .NET 9 SDK for the optional WinUI `OverlayHost`.
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for ARM64/x64 setup, worktree rules, and
@@ -78,7 +78,7 @@ the complete validation contract.
 ## Run in Tauri
 
 The helper builds architecture-matched overlay resources, initializes the
-current ARM64 Visual Studio environment, and launches Tauri:
+discovered Visual Studio environment, and launches Tauri:
 
 ```powershell
 .\dev-tauri.cmd
@@ -89,7 +89,7 @@ Developer PowerShell and launch Tauri:
 
 ```powershell
 .\scripts\build-overlayhost.ps1 -Architecture x64
-npx --yes @tauri-apps/cli@2 dev
+npx --no -- tauri dev
 ```
 
 ## Browser development mode
@@ -145,8 +145,9 @@ The ARM64 path serializes release compilation and disables LTO/stripping because
 the current ARM64 Rust compiler can crash under the default parallel profile.
 Generated bundles are under the selected Cargo target directory. Packaging is
 not a release, and installer behavior still requires the manual Windows gate.
-The `Windows Packages` workflow produces x64 bundles on a native Windows x64
-runner; package generation does not replace x64 runtime or performance testing.
+The `Windows Packages` workflow produces both x64 and ARM64 bundles on the
+repository's labeled self-hosted Windows runners; package generation does not
+replace x64 runtime or performance testing.
 
 ## Architecture
 
