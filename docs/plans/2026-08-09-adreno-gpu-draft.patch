@@ -1,0 +1,63 @@
+diff --git a/config/engine-manifest.v1.json b/config/engine-manifest.v1.json
+index c05766c..6e26b64 100644
+--- a/config/engine-manifest.v1.json
++++ b/config/engine-manifest.v1.json
+@@ -25,8 +25,9 @@
+     {
+       "id": "llama-b10155-opencl-adreno-arm64",
+       "architecture": "aarch64",
+-      "acceleration": "cpu",
+-      "gpuLayers": 0,
++      "acceleration": "gpu",
++      "gpuLayers": 99,
++      "launchArgs": ["--no-kv-offload"],
+       "installDirectory": "llama-b10155-opencl-adreno-arm64",
+       "archive": {
+         "fileName": "llama-b10155-bin-win-opencl-adreno-arm64.zip",
+diff --git a/src-tauri/src/engine_manifest.rs b/src-tauri/src/engine_manifest.rs
+index 4103b0b..95e3ec4 100644
+--- a/src-tauri/src/engine_manifest.rs
++++ b/src-tauri/src/engine_manifest.rs
+@@ -58,6 +58,12 @@ pub struct RuntimeSpec {
+     pub architecture: Architecture,
+     pub acceleration: String,
+     pub gpu_layers: u32,
++    /// Extra llama-server arguments specific to this runtime. Keeps per-runtime
++    /// config out of the shared `launch.extra_args` so a flag needed by one
++    /// backend cannot leak to another (aarch64 OpenCL needs `--no-kv-offload`;
++    /// x64 Vulkan does not).
++    #[serde(default)]
++    pub launch_args: Vec<String>,
+     pub install_directory: String,
+     pub archive: DownloadArtifact,
+     pub executable: InstalledExecutable,
+diff --git a/src-tauri/src/hy_mt_runtime.rs b/src-tauri/src/hy_mt_runtime.rs
+index 762190c..7467a77 100644
+--- a/src-tauri/src/hy_mt_runtime.rs
++++ b/src-tauri/src/hy_mt_runtime.rs
+@@ -167,6 +167,7 @@ pub fn start(runtime: &ManagedLocalRuntimeConfig) -> Result<String, String> {
+             &manifest.launch.extra_args,
+             crate::engine_launch::available_cores(),
+         ))
++        .args(&runtime_spec.launch_args)
+         .stdin(Stdio::null())
+         .stdout(Stdio::from(stdout))
+         .stderr(Stdio::from(stderr));
+@@ -331,10 +332,13 @@ mod tests {
+         assert!(package.archive.file_name.ends_with(".zip"));
+         assert!(package.archive.url.contains(&package.archive.file_name));
+         assert!(package.executable.relative_path.ends_with(".exe"));
+-        assert_eq!(
+-            package.gpu_layers,
+-            if cfg!(target_arch = "aarch64") { 0 } else { 99 }
+-        );
++        assert_eq!(package.gpu_layers, 99);
++        // KV stays on CPU for the aarch64 OpenCL runtime: full KV offload
++        // hangs/stalls on Adreno (measured 2026-08-09). x64 Vulkan is
++        // unchanged (no launchArgs).
++        if cfg!(target_arch = "aarch64") {
++            assert_eq!(package.launch_args, vec!["--no-kv-offload".to_string()]);
++        }
+     }
+ 
+     #[test]
