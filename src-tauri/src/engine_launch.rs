@@ -3,8 +3,9 @@
 // =============================================================================
 // The engine is not the only thing running while a subtitle is on screen.
 // Capture, preprocessing, Windows OCR and the WebView overlay all run four
-// times a second on the same cores, and on ARM64 the model runs on those cores
-// too - see the execution policy in `docs/ARCHITECTURE.md`.
+// times a second on the same cores. On ARM64 the model layers run on the
+// Adreno GPU with the KV cache pinned to the CPU, so the engine's CPU draw is
+// smaller but not zero - see the execution policy in `docs/ARCHITECTURE.md`.
 //
 // llama.cpp left to itself takes what it wants, and measurement showed that is
 // the wrong amount in both directions: its unset default was the slowest
@@ -90,8 +91,55 @@ const MEASURED_ON_THIS_ARCHITECTURE: bool = cfg!(target_arch = "aarch64");
 /// second thread count, and llama.cpp honours the last one it parses - silently
 /// overruling exactly the deliberate choice this check exists to protect.
 fn pins_threads(argument: &str) -> bool {
-    let name = argument.split_once('=').map_or(argument, |(name, _)| name);
+    let name = launch_flag_name(argument);
     name == "--threads" || name == "-t"
+}
+
+/// The flag portion of a launch argument, before any `=`-joined value, so
+/// `--port=1` matches as surely as `--port 1`.
+fn launch_flag_name(argument: &str) -> &str {
+    argument.split_once('=').map_or(argument, |(name, _)| name)
+}
+
+/// llama-server flags set by `hy_mt_runtime::launch_arguments` itself: model,
+/// alias, host, port, context size and GPU-layer count. llama.cpp honours the
+/// last occurrence of a repeated flag and manifest args are appended after
+/// these, so a manifest entry naming one of them would silently override the
+/// launcher's ownership - the same hazard `pins_threads` guards, for flags
+/// with no honouring check.
+const LAUNCHER_OWNED_LAUNCH_FLAGS: &[&str] = &[
+    "-m",
+    "--model",
+    "--alias",
+    "--host",
+    "--port",
+    "-c",
+    "--ctx-size",
+    "-ngl",
+    "--n-gpu-layers",
+    "--gpu-layers",
+];
+
+/// Flags owned by other policy that per-runtime args must not silently
+/// override: the thread count (host-dependent, owned here) and the single
+/// request slot (owned by the shared launch policy in the manifest's
+/// `extra_args`).
+const RUNTIME_FORBIDDEN_EXTRA_FLAGS: &[&str] = &["-t", "--threads", "-np", "--parallel"];
+
+/// Whether a shared `extra_args` entry silently overrides a launcher-owned
+/// flag. `--parallel` and `--threads` are legal there by design: the slot
+/// policy belongs to those args, and a pinned thread count is honoured above.
+pub(crate) fn shared_extra_arg_overrides_launcher(argument: &str) -> bool {
+    LAUNCHER_OWNED_LAUNCH_FLAGS.contains(&launch_flag_name(argument))
+}
+
+/// Whether a per-runtime `launch_args` entry silently overrides app-owned
+/// launch configuration: launcher-owned flags, the thread count, or the slot
+/// count. Per-runtime args are appended last with no honouring check, so the
+/// exemptions that shared extra args enjoy do not apply.
+pub(crate) fn runtime_arg_overrides_owned_policy(argument: &str) -> bool {
+    let name = launch_flag_name(argument);
+    LAUNCHER_OWNED_LAUNCH_FLAGS.contains(&name) || RUNTIME_FORBIDDEN_EXTRA_FLAGS.contains(&name)
 }
 
 /// Cores this host reports, or zero when it will not say.

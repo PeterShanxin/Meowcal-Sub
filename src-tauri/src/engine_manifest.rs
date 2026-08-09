@@ -51,8 +51,12 @@ pub struct DownloadArtifact {
     pub license_id: String,
 }
 
+// Unknown fields are rejected so a typo'd key cannot silently drop a policy
+// field (e.g. `launchArg` leaving launch_args empty). Compatible with the
+// authenticity model: the manifest is embedded per app release, so no older
+// build ever parses a newer manifest.
 #[derive(Debug, Clone, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct RuntimeSpec {
     pub id: String,
     pub architecture: Architecture,
@@ -234,6 +238,28 @@ impl EngineManifest {
             {
                 return invalid("runtime launch policy is unsafe or incomplete");
             }
+            if runtime
+                .launch_args
+                .iter()
+                .any(|argument| crate::engine_launch::runtime_arg_overrides_owned_policy(argument))
+            {
+                return invalid("runtime launch policy overrides app-owned launch configuration");
+            }
+            // The shipped b10155 Adreno OpenCL runtime hangs permanently with
+            // the KV cache on the GPU (measured 2026-08-09, issue #60), so its
+            // GPU policy is only valid with KV pinned to the CPU. Scoped to
+            // this exact runtime id on purpose: a CPU-configured Adreno
+            // runtime stays legal, and a future runtime version that fixes the
+            // KV path must not inherit the constraint.
+            if runtime.id == "llama-b10155-opencl-adreno-arm64"
+                && runtime.acceleration == "gpu"
+                && !runtime
+                    .launch_args
+                    .iter()
+                    .any(|argument| argument == "--no-kv-offload")
+            {
+                return invalid("Adreno b10155 GPU launch policy requires --no-kv-offload");
+            }
         }
         for required in [Architecture::Aarch64, Architecture::X86_64] {
             self.runtime_for(required)?;
@@ -256,6 +282,19 @@ impl EngineManifest {
                 .any(|arg| arg.trim().is_empty())
         {
             return invalid("launch policy is unsafe or incomplete");
+        }
+        // Shared extra args may not override launcher-owned flags either.
+        // Exempt by design: `--parallel` is the shared slot policy these args
+        // own, and `-t`/`--threads` is detected and honored by
+        // `engine_launch::launch_args` as a deliberate pin - both visible
+        // choices here, not silent overrides.
+        if self
+            .launch
+            .extra_args
+            .iter()
+            .any(|argument| crate::engine_launch::shared_extra_arg_overrides_launcher(argument))
+        {
+            return invalid("launch policy overrides app-owned launch configuration");
         }
         let license_ids: HashSet<&str> = self
             .licenses

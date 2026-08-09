@@ -46,17 +46,14 @@ fn downgrade_requires_an_explicit_compatible_rollback_target() {
         Err(ManifestError::RollbackRejected(_))
     ));
 }
-// Per-runtime launch args are optional (backwards compatible) and
-// validated like shared launch args: absent field parses to empty, an
-// empty-string argument is rejected.
+// Per-runtime launch args are optional (the x64 runtime ships without the
+// field and validates) and an empty-string argument is rejected.
 #[test]
 fn runtime_launch_args_are_optional_and_validated() {
-    let without_field =
-        SHIPPED_MANIFEST.replacen("      \"launchArgs\": [\"--no-kv-offload\"],\n", "", 1);
-    let manifest = EngineManifest::parse(&without_field).expect("field should be optional");
+    let manifest = EngineManifest::shipped().expect("shipped manifest should validate");
     assert!(manifest
-        .runtime_for(Architecture::Aarch64)
-        .expect("aarch64 runtime should exist")
+        .runtime_for(Architecture::X86_64)
+        .expect("x64 runtime should exist")
         .launch_args
         .is_empty());
     let empty_arg = SHIPPED_MANIFEST.replacen(
@@ -68,4 +65,104 @@ fn runtime_launch_args_are_optional_and_validated() {
         EngineManifest::parse(&empty_arg),
         Err(ManifestError::Invalid(_))
     ));
+}
+// Unknown runtime fields are rejected, so a typo'd key cannot silently drop
+// a policy field into its serde default (e.g. `launchArg` leaving
+// launch_args empty on the Adreno runtime).
+#[test]
+fn unknown_runtime_fields_are_rejected() {
+    let typo = SHIPPED_MANIFEST.replacen(
+        "      \"launchArgs\": [\"--no-kv-offload\"],\n",
+        "      \"launchArgs\": [\"--no-kv-offload\"],\n      \"launch_args\": [],\n",
+        1,
+    );
+    assert!(matches!(
+        EngineManifest::parse(&typo),
+        Err(ManifestError::Invalid(_))
+    ));
+}
+// llama.cpp honors the last occurrence of a repeated flag and per-runtime
+// args are appended after every app-owned argument, so a runtime arg naming
+// launcher-owned configuration would silently override it. Every form -
+// separate value and `=`-joined, short and long alias - must be rejected.
+// Each case keeps `--no-kv-offload` so rejection is attributable to the
+// conflict rule, not the Adreno KV constraint.
+#[test]
+fn runtime_launch_args_cannot_override_app_owned_configuration() {
+    for conflicting in [
+        "[\"--no-kv-offload\", \"-m\", \"other.gguf\"]",
+        "[\"--no-kv-offload\", \"--model\", \"other.gguf\"]",
+        "[\"--no-kv-offload\", \"--alias\", \"other-model\"]",
+        "[\"--no-kv-offload\", \"--host\", \"0.0.0.0\"]",
+        "[\"--no-kv-offload\", \"--port=1\"]",
+        "[\"--no-kv-offload\", \"-c\", \"512\"]",
+        "[\"--no-kv-offload\", \"--ctx-size=512\"]",
+        "[\"--no-kv-offload\", \"-ngl\", \"0\"]",
+        "[\"--no-kv-offload\", \"--n-gpu-layers\", \"0\"]",
+        "[\"--no-kv-offload\", \"--gpu-layers=0\"]",
+        "[\"--no-kv-offload\", \"-t\", \"4\"]",
+        "[\"--no-kv-offload\", \"--threads=4\"]",
+        "[\"--no-kv-offload\", \"--parallel\", \"2\"]",
+        "[\"--no-kv-offload\", \"-np\", \"2\"]",
+    ] {
+        let tampered = SHIPPED_MANIFEST.replacen("[\"--no-kv-offload\"]", conflicting, 1);
+        assert!(
+            matches!(
+                EngineManifest::parse(&tampered),
+                Err(ManifestError::Invalid(_))
+            ),
+            "{conflicting} should be rejected"
+        );
+    }
+    // A benign runtime-specific flag still passes.
+    let benign = SHIPPED_MANIFEST.replacen(
+        "[\"--no-kv-offload\"]",
+        "[\"--no-kv-offload\", \"--flash-attn\"]",
+        1,
+    );
+    assert!(EngineManifest::parse(&benign).is_ok());
+}
+// Shared extra args may not override launcher-owned flags either. Two
+// exemptions keep existing designed behavior: `--parallel` is the shared
+// slot policy these args own, and a pinned thread count is detected and
+// honored by `engine_launch::launch_args` as a deliberate choice.
+#[test]
+fn shared_extra_args_cannot_override_app_owned_configuration() {
+    let conflict = SHIPPED_MANIFEST.replacen(
+        "\"extraArgs\": [\"--jinja\", \"--no-webui\", \"--parallel\", \"1\"]",
+        "\"extraArgs\": [\"--jinja\", \"--no-webui\", \"--host\", \"0.0.0.0\"]",
+        1,
+    );
+    assert!(matches!(
+        EngineManifest::parse(&conflict),
+        Err(ManifestError::Invalid(_))
+    ));
+    let pinned_threads = SHIPPED_MANIFEST.replacen(
+        "\"extraArgs\": [\"--jinja\", \"--no-webui\", \"--parallel\", \"1\"]",
+        "\"extraArgs\": [\"--jinja\", \"--no-webui\", \"--parallel\", \"1\", \"--threads\", \"6\"]",
+        1,
+    );
+    assert!(EngineManifest::parse(&pinned_threads).is_ok());
+}
+// On the shipped b10155 Adreno runtime, GPU offload with the KV cache on the
+// GPU is the measured hang configuration: dropping `--no-kv-offload` while
+// acceleration stays "gpu" must fail validation itself, not just a contract
+// test. The rule is scoped to that runtime id: the same runtime configured
+// for CPU, and any future runtime version, stay expressible.
+#[test]
+fn adreno_b10155_gpu_policy_requires_kv_cache_on_cpu() {
+    let without_constraint =
+        SHIPPED_MANIFEST.replacen("      \"launchArgs\": [\"--no-kv-offload\"],\n", "", 1);
+    assert!(matches!(
+        EngineManifest::parse(&without_constraint),
+        Err(ManifestError::Invalid(_))
+    ));
+    let cpu_fallback = SHIPPED_MANIFEST
+        .replacen("\"acceleration\": \"gpu\"", "\"acceleration\": \"cpu\"", 1)
+        .replacen(
+            "      \"gpuLayers\": 99,\n      \"launchArgs\": [\"--no-kv-offload\"],\n",
+            "      \"gpuLayers\": 0,\n",
+            1,
+        );
+    assert!(EngineManifest::parse(&cpu_fallback).is_ok());
 }

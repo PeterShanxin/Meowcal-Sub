@@ -97,7 +97,8 @@ async fn is_endpoint_healthy(endpoint: &str) -> bool {
 
 /// The exact `llama-server` argument vector for a managed runtime, built pure
 /// so the launch line is testable without spawning a process. Per-runtime
-/// `launch_args` are appended last; manifest args must not repeat them.
+/// `launch_args` are appended last; manifest validation rejects any that name
+/// the app-owned flags above them (see `engine_manifest`).
 pub(crate) fn launch_arguments(
     runtime: &ManagedLocalRuntimeConfig,
     manifest: &EngineManifest,
