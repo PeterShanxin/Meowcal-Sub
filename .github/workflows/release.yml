@@ -184,7 +184,10 @@ jobs:
             Sort-Object Name |
             ForEach-Object {
               $hash = (Get-FileHash -Algorithm SHA256 -LiteralPath $_.FullName).Hash.ToLowerInvariant()
-              "$hash  $($_.Name)"
+              # GitHub rewrites spaces in release asset names to periods. Keep
+              # the checksum manifest aligned with the names users download.
+              $downloadName = $_.Name -replace '[^A-Za-z0-9._-]', '.'
+              "$hash  $downloadName"
             }
           Set-Content -LiteralPath release-assets/SHA256SUMS.txt -Value $checksumLines -Encoding utf8NoBOM
 
