@@ -176,9 +176,11 @@ holds the full procedure; these are the standing rules.
 Before relying on a self-hosted CI or packaging run:
 
 1. check status, and do not start a second runner if one is already online;
-2. if offline, start the existing `run.cmd` **without blocking your shell**, and
-   keep the `Runner.Listener` process under that directory so you can stop the
-   right one later;
+2. if offline, start it with `.\scripts\setup-self-hosted-runner.ps1 -Mode Start`,
+   never `run.cmd` directly - a foreground runner inherits the environment of the
+   shell that launched it, so an agent session becomes CI configuration (#88) -
+   and keep the `Runner.Listener` process under that directory so you can stop
+   the right one later;
 3. wait for GitHub to report it `online` - a started process is not yet a
    connected runner;
 4. let an already-queued run drain rather than re-triggering it, which would

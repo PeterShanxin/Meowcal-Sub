@@ -34,6 +34,7 @@ $resourceScript = Join-Path $PSScriptRoot "prepare-validation-resources.ps1"
 $contractTest = Join-Path $PSScriptRoot "tests\verify.Tests.ps1"
 $engineSupportTest = Join-Path $PSScriptRoot "tests\engine-support.Tests.ps1"
 $runnerPrerequisiteTest = Join-Path $PSScriptRoot "tests\runner-prerequisites.Tests.ps1"
+$runnerEnvironmentTest = Join-Path $PSScriptRoot "tests\runner-environment.Tests.ps1"
 $devEnvironmentTest = Join-Path $PSScriptRoot "tests\dev-environment.Tests.ps1"
 $rustDirectory = Join-Path $repositoryRoot "src-tauri"
 
@@ -110,6 +111,11 @@ if ($env:MEOWCAL_VERIFY_CONTRACT_ACTIVE -ne "1") {
     }
     Write-Host "==> Runner prerequisite contract tests" -ForegroundColor Cyan
     & pwsh -NoProfile -File $runnerPrerequisiteTest
+    if ($LASTEXITCODE -ne 0) {
+        exit $LASTEXITCODE
+    }
+    Write-Host "==> Runner environment contract tests" -ForegroundColor Cyan
+    & pwsh -NoProfile -File $runnerEnvironmentTest
     if ($LASTEXITCODE -ne 0) {
         exit $LASTEXITCODE
     }

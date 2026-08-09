@@ -101,15 +101,30 @@ Registration status always comes from GitHub, never from a local guess:
 
 1. **Check status first.** If the runner is already `online`, skip to step 4 —
    do not start a second one.
-2. **Start the existing runner in the background**, so it does not block the
-   shell you are working in, and keep enough identity to stop the right process
-   later. The long-lived process is `Runner.Listener`, living under the runner
-   directory; matching on that path is what distinguishes this runner from any
-   other on the machine:
+2. **Start the existing runner through the sanitized start path.** Do not launch
+   `run.cmd` yourself: a foreground runner inherits the environment of whatever
+   shell started it, so an IDE or agent session becomes CI configuration. That
+   is how a `NODE_OPTIONS` preload and a managed Node 22 once failed `npm ci` on
+   a correctly registered runner (#88).
 
    ```powershell
-   Start-Process -FilePath (Join-Path $runnerDirectory "run.cmd") `
-       -WorkingDirectory $runnerDirectory -WindowStyle Minimized
+   .\scripts\setup-self-hosted-runner.ps1 -Mode Start
+   ```
+
+   It corrects your environment in two places rather than replacing it: PATH
+   becomes the machine-then-user composition, so a shell-local toolchain cannot
+   shadow the host's, and Node's preload hooks are dropped. Everything else you
+   are carrying is left alone — rebuilding the environment instead was tried and
+   produced a runner that could not find Program Files or `LOCALAPPDATA`. It then
+   refuses to start when the resolved Node/npm majors do not match
+   `package.json` engines, and prints the toolchain it will use. Add
+   `-VerifyEnvironmentOnly` to see all of that without starting anything.
+
+   Keep enough identity to stop the right process later. The long-lived process
+   is `Runner.Listener`, living under the runner directory; matching on that path
+   is what distinguishes this runner from any other on the machine:
+
+   ```powershell
    $listener = Get-Process -Name Runner.Listener -ErrorAction SilentlyContinue |
        Where-Object { $_.Path -like "$runnerDirectory\*" }
    ```
