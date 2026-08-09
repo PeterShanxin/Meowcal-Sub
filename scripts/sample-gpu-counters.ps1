@@ -128,7 +128,8 @@ function Get-Sample {
 while ((Get-Date) -lt $deadline) {
     if (Test-Path -LiteralPath $stopFile) { break }
     $s = Get-Sample
-    ($s | ConvertTo-Json -Compress -Depth 4) | Add-Content -LiteralPath $OutJsonl -Encoding utf8
+    $line = $s | ConvertTo-Json -Compress -Depth 4
+    [System.IO.File]::AppendAllText($OutJsonl, $line + "`n", [System.Text.UTF8Encoding]::new($false))
     Start-Sleep -Milliseconds $IntervalMs
 }
 Write-Host "sampler-done"

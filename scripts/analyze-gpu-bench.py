@@ -41,7 +41,7 @@ def parse_server_log(path):
     model_loaded_re = re.compile(r"llama_server: model loaded")
     if not os.path.exists(path):
         return None
-    for line in open(path, encoding="utf-8", errors="replace"):
+    for line in open(path, encoding="utf-8-sig", errors="replace"):
         m = REQ_TIME_RE.search(line)
         if m:
             gen_ms.append(float(m.group(1)))
@@ -83,7 +83,7 @@ def parse_counters(path):
     gpu_dedicated = []
     llama_shared = []
     n = 0
-    for line in open(path, encoding="utf-8", errors="replace"):
+    for line in open(path, encoding="utf-8-sig", errors="replace"):
         line = line.strip()
         if not line:
             continue
@@ -144,11 +144,11 @@ def summarize_dir(d):
     summary_path = os.path.join(d, "run-summary.json")
     if not os.path.exists(summary_path):
         return None
-    s = json.load(open(summary_path, encoding="utf-8"))
+    s = json.load(open(summary_path, encoding="utf-8-sig"))
     out = {"dir": d, "summary": s}
     report_path = s.get("report_path") or os.path.join(d, "eval-report.json")
     if os.path.exists(report_path):
-        r = json.load(open(report_path, encoding="utf-8"))
+        r = json.load(open(report_path, encoding="utf-8-sig"))
         lat = [x["latencyMs"] for x in r.get("results", [])]
         failed = [x for x in r.get("results", []) if not x.get("passed")]
         reasons = {}

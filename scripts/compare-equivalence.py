@@ -28,7 +28,7 @@ def levenshtein(a, b):
 
 
 def load(path):
-    r = json.load(open(path, encoding="utf-8"))
+    r = json.load(open(path, encoding="utf-8-sig"))
     return {x["caseId"]: x for x in r.get("results", [])}
 
 
