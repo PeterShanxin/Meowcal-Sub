@@ -146,9 +146,9 @@ pub(crate) fn runtime_arg_overrides_owned_policy(argument: &str) -> bool {
 /// effective launch behaviour rather than descriptive metadata:
 ///
 /// - no empty arguments and no silent overrides of app-owned flags (above);
-/// - `acceleration` and `gpu_layers` must agree, because the launcher applies
-///   `-ngl gpu_layers` whatever the label says: "cpu" means zero layers, any
-///   other label means at least one;
+/// - `acceleration` is one of the supported labels and agrees with
+///   `gpu_layers`, because the launcher applies `-ngl gpu_layers` whatever the
+///   label says: "cpu" means zero layers, "gpu"/"vulkan" mean at least one;
 /// - on the tested b10155 Adreno runtime, ANY layer offload
 ///   (`gpu_layers > 0`) requires the KV cache pinned to the CPU. Keyed to the
 ///   layer count on purpose: an edit that flips the label to "cpu" but forgets
@@ -172,7 +172,16 @@ pub(crate) fn validate_runtime_launch_policy(
     {
         return Err("runtime launch policy overrides app-owned launch configuration".to_string());
     }
-    if (runtime.acceleration == "cpu") != (runtime.gpu_layers == 0) {
+    let acceleration_uses_gpu = match runtime.acceleration.as_str() {
+        "cpu" => false,
+        "gpu" | "vulkan" => true,
+        other => {
+            return Err(format!(
+                "runtime launch policy has unsupported acceleration \"{other}\""
+            ));
+        }
+    };
+    if acceleration_uses_gpu != (runtime.gpu_layers > 0) {
         return Err(format!(
             "runtime launch policy is contradictory: acceleration \"{}\" with gpuLayers {}",
             runtime.acceleration, runtime.gpu_layers

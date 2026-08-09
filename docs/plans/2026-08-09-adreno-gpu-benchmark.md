@@ -3,8 +3,10 @@
 Date: 2026-08-09
 Scope: decides the ARM64 manifest runtime configuration for HY-MT1.5-1.8B-Q4_K_M.
 Decision carried into this change: `gpuLayers: 99` + `--no-kv-offload` for the
-aarch64 runtime. Full benchmark detail and raw artifacts live in the benchmark
-worktree (`bench/gpu-adreno-arm64`, `eval-results/gpu-bench/`, gitignored).
+aarch64 runtime only when the host reports the validated Adreno X1-85 and
+driver 31.0.148.0. Other ARM64 GPU/driver configurations use the prior CPU
+policy. Full benchmark detail and raw artifacts live in the benchmark worktree
+(`bench/gpu-adreno-arm64`, `eval-results/gpu-bench/`, gitignored).
 
 ## Critical invariant (do not substitute)
 

@@ -90,9 +90,11 @@ Shared contracts have one owner before parallel decomposition begins:
   while the KV-on-CPU configuration ran a sustained session without hangs.
   Runtime code cannot replace this evidence-backed policy with a global
   GPU-layer default. The evidence covers one machine, so the ARM64 GPU policy
-  is gated (`engine_gpu_gate.rs`) on the validated Adreno X1-85; any other
-  ARM64 GPU, and any GPU launch that never becomes healthy, runs the previous
-  CPU policy instead - translation on CPU beats an unusable accelerator. The
+  is gated (`engine_gpu_gate.rs`) on the validated Adreno X1-85 plus driver
+  31.0.148.0. Any other ARM64 GPU or driver, and any GPU launch that never
+  becomes healthy, runs the previous CPU policy instead - translation on CPU
+  beats an unusable accelerator. A driver update returns to CPU until new
+  sustained evidence deliberately expands the allowlist. The
   manifest also limits the app-owned server to one request slot; subtitle
   translation is serialized intentionally to avoid the ARM64 runtime's
   unstable automatic multi-slot latency. This remains subject to x64 and

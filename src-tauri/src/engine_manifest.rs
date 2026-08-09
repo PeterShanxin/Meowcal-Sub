@@ -66,7 +66,7 @@ pub struct RuntimeSpec {
     pub id: String,
     pub architecture: Architecture,
     /// Descriptive label; the launcher keys off `gpu_layers`, so validation
-    /// requires the two to agree ("cpu" <=> 0 layers, anything else <=> > 0).
+    /// accepts only cpu/gpu/vulkan and requires cpu <=> 0 layers.
     pub acceleration: String,
     pub gpu_layers: u32,
     /// Extra llama-server arguments for this runtime only (aarch64 OpenCL

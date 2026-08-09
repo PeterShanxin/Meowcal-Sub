@@ -191,4 +191,13 @@ fn acceleration_label_and_layer_count_must_agree() {
         EngineManifest::parse(&gpu_without_layers),
         Err(ManifestError::Invalid(_))
     ));
+
+    // A typo must not become an undocumented acceleration mode merely
+    // because it happens to carry a non-zero layer count.
+    let unknown_acceleration =
+        SHIPPED_MANIFEST.replacen("\"acceleration\": \"gpu\"", "\"acceleration\": \"gup\"", 1);
+    assert!(matches!(
+        EngineManifest::parse(&unknown_acceleration),
+        Err(ManifestError::Invalid(_))
+    ));
 }
