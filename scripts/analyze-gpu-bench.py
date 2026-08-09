@@ -96,12 +96,14 @@ def parse_counters(path):
             cpu.append(s["proc_cpu_pct"])
         if "gpu_util_max_pct" in s:
             gpu_util.append(float(s["gpu_util_max_pct"]))
-        if "gpu_util_llama_pid" in s:
+        if any(k.startswith("gpu_util_llama_pid") for k in s):
             for k, v in s.items():
                 if k.startswith("gpu_util_llama_pid"):
                     gpu_llama.append(float(v))
-        if "gpu_engine_llama" in s:
-            gpu_llama_engtype.add(s["gpu_engine_llama"])
+        if any(k.startswith("gpu_engine_llama") for k in s):
+            for k, v in s.items():
+                if k.startswith("gpu_engine_llama"):
+                    gpu_llama_engtype.add(v)
         if "gpu_top_instance_by_luid" in s and s["gpu_top_instance_by_luid"]:
             for part in s["gpu_top_instance_by_luid"].split(";"):
                 if part.split("=")[0] == "luid_0x00000000_0x00010d66":
