@@ -27,14 +27,32 @@ They are not normative and cannot override accepted ADRs or current guidance.
 - Rust stable with `rustfmt` and `clippy`.
 - Node.js 24 and npm 11. The supported major versions are declared in
   `package.json` and `.node-version`.
-- Visual Studio 2022 Build Tools with Desktop development with C++ and the
-  Windows SDK.
+- Visual Studio with Desktop development with C++ and the Windows SDK. Build
+  Tools, Community, Professional and Enterprise all work, and the installation
+  does not have to be on `C:`.
 - .NET 9 SDK when building the optional WinUI `OverlayHost`.
 
-Both Windows ARM64 and x64 are in scope. Use a native developer shell for the
-target architecture. `dev-tauri.cmd` currently initializes the ARM64 Visual
-Studio toolchain; x64 contributors should use an x64 Developer PowerShell until
-the launcher is generalized.
+Both Windows ARM64 and x64 are in scope. `dev-tauri.cmd` discovers the installed
+Visual Studio with `vswhere` and initializes it for the architecture of the host
+it runs on, so ARM64 and x64 contributors both use the same launcher.
+
+`scripts\dev-environment.ps1` makes those decisions and can be run on its own to
+see what the launchers will use:
+
+```powershell
+pwsh -NoProfile -File scripts\dev-environment.ps1
+```
+
+It prints `MEOWCAL_RESOLVED_*` lines. Those names are deliberately not the
+variables they become: the launchers clear them first, so a failed resolution
+cannot be mistaken for a `CARGO_TARGET_DIR` or `MEOWCAL_VSDEVCMD` the shell was
+already carrying.
+
+Rust build output goes to `%LOCALAPPDATA%\meowcal-sub\cargo-build` by default,
+which keeps it out of a OneDrive-synced checkout without naming a volume that a
+given machine may not have. To build somewhere else - a faster disk, or an
+existing build cache you want to keep - set `MEOWCAL_CARGO_TARGET_DIR`. An
+explicit `CARGO_TARGET_DIR` overrides both.
 
 ## Isolated work
 
@@ -43,8 +61,8 @@ its build processes. A typical setup is:
 
 ```powershell
 git fetch origin
-git worktree add D:\CodexWorktrees\meowcal-my-change -b fix/my-change origin/main
-Set-Location D:\CodexWorktrees\meowcal-my-change
+git worktree add ..\meowcal-my-change -b fix/my-change origin/main
+Set-Location ..\meowcal-my-change
 ```
 
 Preserve unrelated and untracked files. Stage explicit paths instead of the

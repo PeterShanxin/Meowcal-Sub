@@ -132,7 +132,7 @@ window, installer, or runtime-process behavior.
 
 ```powershell
 .\dev-browser.cmd                                # browser-only UI iteration
-.\dev-tauri.cmd                                  # current ARM64 Tauri dev flow
+.\dev-tauri.cmd                                  # Tauri dev flow, ARM64 or x64 host
 .\scripts\build-package.ps1 -Architecture auto   # architecture-matched MSI/NSIS
 ```
 
