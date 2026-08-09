@@ -15,6 +15,12 @@ pub struct SubtitleEvalDataset {
     pub provenance: String,
     pub cases: Vec<SubtitleEvalCase>,
     pub rejection_fixtures: Vec<RejectionFixture>,
+    /// Extracted-from-production datasets have no hand-authored reference
+    /// translations: latent quality is judged only by the pipeline validator
+    /// (target-script, passthrough, line-count shape). Authored eval files
+    /// keep the normal requirement that translate cases carry references.
+    #[serde(default)]
+    pub allow_unreferenced_cases: bool,
 }
 
 #[derive(Debug, Deserialize)]
@@ -67,6 +73,9 @@ pub struct LiveCaseResult {
     pub output_chars: usize,
     pub output_lines: usize,
     pub latin_letters: usize,
+    /// Raw model output, captured for artifact generation and pairwise
+    /// qualitative review without re-running the engine.
+    pub output: String,
     pub validator_decision: String,
     pub reason: Option<String>,
 }
@@ -188,18 +197,29 @@ pub fn grade_live_output(
         .chars()
         .filter(|character| character.is_ascii_alphabetic())
         .count();
+    let cjk_letters = trimmed.chars().filter(|c| is_cjk_char(*c)).count();
     let decision = validate_translation_output(
         &case.source_text,
         trimmed,
         &case.source_language,
         &case.target_language,
     );
+    let expects_cjk_target = is_cjk_target(&case.target_language);
+    let script_letters = if expects_cjk_target {
+        cjk_letters
+    } else {
+        latin_letters
+    };
     let shape_reason = if trimmed == case.source_text.trim() {
         Some("source_passthrough")
     } else if output_lines > case.max_output_lines {
         Some("too_many_lines")
-    } else if latin_letters == 0 {
-        Some("no_latin_output")
+    } else if script_letters == 0 {
+        Some(if expects_cjk_target {
+            "no_cjk_output"
+        } else {
+            "no_latin_output"
+        })
     } else {
         None
     };
@@ -213,6 +233,7 @@ pub fn grade_live_output(
         output_chars: trimmed.chars().count(),
         output_lines,
         latin_letters,
+        output: trimmed.to_string(),
         validator_decision: if validator_reason.is_none() {
             "accepted"
         } else {
@@ -221,6 +242,22 @@ pub fn grade_live_output(
         .to_string(),
         reason,
     }
+}
+
+fn is_cjk_target(target_language: &str) -> bool {
+    let language = target_language.to_ascii_lowercase();
+    ["zh", "ja", "ko"]
+        .iter()
+        .any(|script| language.starts_with(script))
+}
+
+fn is_cjk_char(ch: char) -> bool {
+    matches!(ch,
+        '\u{3400}'..='\u{4DBF}'
+        | '\u{4E00}'..='\u{9FFF}'
+        | '\u{F900}'..='\u{FAFF}'
+        | '\u{3040}'..='\u{30FF}'
+        | '\u{AC00}'..='\u{D7AF}')
 }
 
 pub fn build_live_report(
@@ -284,7 +321,9 @@ fn validate_dataset_shape(dataset: &SubtitleEvalDataset) -> Result<(), String> {
             return Err(format!("{}: at least one tag required", case.id));
         }
         match case.expected_action {
-            ExpectedAction::Translate if case.acceptable_outputs.is_empty() => {
+            ExpectedAction::Translate
+                if case.acceptable_outputs.is_empty() && !dataset.allow_unreferenced_cases =>
+            {
                 return Err(format!("{}: acceptable output required", case.id));
             }
             ExpectedAction::Filter if !case.acceptable_outputs.is_empty() => {
@@ -333,6 +372,84 @@ mod tests {
     fn latency_percentiles_use_nearest_rank() {
         assert_eq!(percentile(&[100, 200, 300, 400], 50), 200);
         assert_eq!(percentile(&[100, 200, 300, 400], 95), 400);
+    }
+
+    #[test]
+    fn reference_free_dataset_loads_when_allowed() {
+        let json = r#"{
+            "schemaVersion": 1,
+            "datasetId": "real-session",
+            "provenance": "extracted log",
+            "allowUnreferencedCases": true,
+            "rejectionFixtures": [],
+            "cases": [{
+                "id": "c1",
+                "sourceLanguage": "en-US",
+                "targetLanguage": "zh-CN",
+                "sourceText": "Hello there.",
+                "tags": ["session"],
+                "expectedAction": "translate",
+                "acceptableOutputs": [],
+                "maxOutputLines": 1
+            }]
+        }"#;
+        assert!(load_dataset(json).is_ok());
+    }
+
+    #[test]
+    fn reference_free_dataset_rejected_without_opt_in() {
+        let json = r#"{
+            "schemaVersion": 1,
+            "datasetId": "authored",
+            "provenance": "manual",
+            "rejectionFixtures": [],
+            "cases": [{
+                "id": "c1",
+                "sourceLanguage": "en-US",
+                "targetLanguage": "zh-CN",
+                "sourceText": "Hello there.",
+                "tags": ["manual"],
+                "expectedAction": "translate",
+                "acceptableOutputs": [],
+                "maxOutputLines": 1
+            }]
+        }"#;
+        assert!(load_dataset(json).is_err());
+    }
+
+    #[test]
+    fn cjk_target_grader_accepts_cjk_output() {
+        let case = SubtitleEvalCase {
+            id: "c1".to_string(),
+            source_language: "en-US".to_string(),
+            target_language: "zh-CN".to_string(),
+            source_text: "Hello there.".to_string(),
+            tags: vec!["session".to_string()],
+            expected_action: ExpectedAction::Translate,
+            acceptable_outputs: Vec::new(),
+            max_output_lines: 1,
+        };
+        let result = grade_live_output(&case, 1, "你好。", 10);
+        assert!(result.passed, "{:?}", result.reason);
+        assert_eq!(result.output, "你好。");
+        assert_eq!(result.latin_letters, 0);
+    }
+
+    #[test]
+    fn cjk_target_grader_rejects_latin_only_output() {
+        let case = SubtitleEvalCase {
+            id: "c1".to_string(),
+            source_language: "en-US".to_string(),
+            target_language: "zh-CN".to_string(),
+            source_text: "Hello there.".to_string(),
+            tags: vec!["session".to_string()],
+            expected_action: ExpectedAction::Translate,
+            acceptable_outputs: Vec::new(),
+            max_output_lines: 1,
+        };
+        let result = grade_live_output(&case, 1, "Ni hao ma?", 10);
+        assert_eq!(result.reason.as_deref(), Some("no_cjk_output"));
+        assert!(!result.passed);
     }
 
     #[test]

@@ -96,11 +96,6 @@ async fn run_live(
     // The approved latency budgets are explicitly for a warm model. Exercise
     // one fixed, privacy-safe Chinese-to-English sample before measuring the
     // dataset, and keep this cold-start timing separate in the report.
-    let warmup_started = Instant::now();
-    let warmup_output = backend
-        .translate("你好", "zh-CN", "en-US")
-        .await
-        .map_err(|error| format!("warmup: {error}"))?;
     let warmup_case = SubtitleEvalCase {
         id: "warmup-sample".to_string(),
         source_language: "zh-CN".to_string(),
@@ -111,6 +106,11 @@ async fn run_live(
         acceptable_outputs: Vec::new(),
         max_output_lines: 1,
     };
+    let warmup_started = Instant::now();
+    let warmup_output = backend
+        .translate("你好", "zh-CN", "en-US")
+        .await
+        .map_err(|error| format!("warmup: {error}"))?;
     let warmup = grade_live_output(
         &warmup_case,
         0,
@@ -132,20 +132,37 @@ async fn run_live(
             .filter(|case| case.expected_action == ExpectedAction::Translate)
         {
             let started = Instant::now();
-            let output = backend
+            let attempt = backend
                 .translate(
                     &case.source_text,
                     &case.source_language,
                     &case.target_language,
                 )
-                .await
-                .map_err(|error| format!("{} run {run}: {error}", case.id))?;
-            results.push(grade_live_output(
-                case,
-                run,
-                &output,
-                started.elapsed().as_millis() as u64,
-            ));
+                .await;
+            let elapsed_ms = started.elapsed().as_millis() as u64;
+            let output = match attempt {
+                Ok(output) => output,
+                Err(error) => {
+                    // One slow or failed request must not void an entire
+                    // benchmark session: record the case as failed with the
+                    // engine error as the reason and keep going. The report
+                    // still carries the failure count and latency.
+                    results.push(LiveCaseResult {
+                        case_id: case.id.clone(),
+                        run,
+                        passed: false,
+                        latency_ms: elapsed_ms,
+                        output_chars: 0,
+                        output_lines: 0,
+                        latin_letters: 0,
+                        output: String::new(),
+                        validator_decision: "error".to_string(),
+                        reason: Some(format!("request_error: {error}")),
+                    });
+                    continue;
+                }
+            };
+            results.push(grade_live_output(case, run, &output, elapsed_ms));
         }
     }
     Ok(build_live_report(
