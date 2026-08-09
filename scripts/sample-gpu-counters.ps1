@@ -56,12 +56,12 @@ function Get-Sample {
                     $engPid = [int]$matches[1]
                     $engtype = $matches[5]
                     $gpuEngines[$luid] = [math]::Max($gpuEngines[$luid], $val)
-                    if (-not $gpuTopInstance.ContainsKey($luid) -or $val -gt ($gpuTopInstance[$luid] -split ':' | Select-Object -Last 1)) {
+                    if (-not $gpuTopInstance.Contains($luid) -or $val -gt ($gpuTopInstance[$luid] -split ':' | Select-Object -Last 1)) {
                         $gpuTopInstance[$luid] = "${engPid}:${engtype}:${val}"
                     }
                     if ($engPid -eq $TargetPid) {
                         $key = "gpu_util_llama_pid_$luid"
-                        if (-not $sample.ContainsKey($key) -or $val -gt [double]$sample[$key]) {
+                        if (-not $sample.Contains($key) -or $val -gt [double]$sample[$key]) {
                             $sample[$key] = $val
                             $sample["gpu_engine_llama_$luid"] = $engtype
                         }

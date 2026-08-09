@@ -114,13 +114,13 @@ def parse_counters(path):
             avail.append(s["sys_avail_mb"])
         if "gpu_proc_shared_llama" in s and s["gpu_proc_shared_llama"]:
             for part in s["gpu_proc_shared_llama"].split(";"):
-                v = float(part.split("=")[1])
+                v = float(part.split("=")[1]) / (1024 * 1024)
                 llama_shared.append(v)
         if "gpu_shared_by_luid" in s and s["gpu_shared_by_luid"]:
-            vals = [float(p.split("=")[1]) for p in s["gpu_shared_by_luid"].split(";")]
+            vals = [float(p.split("=")[1]) / (1024 * 1024) for p in s["gpu_shared_by_luid"].split(";")]
             gpu_shared.append(max(vals))
         if "gpu_dedicated_by_luid" in s and s["gpu_dedicated_by_luid"]:
-            vals = [float(p.split("=")[1]) for p in s["gpu_dedicated_by_luid"].split(";")]
+            vals = [float(p.split("=")[1]) / (1024 * 1024) for p in s["gpu_dedicated_by_luid"].split(";")]
             gpu_dedicated.append(max(vals))
     agg = {
         "samples": n,

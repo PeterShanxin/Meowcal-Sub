@@ -41,7 +41,8 @@ param(
     [string]$RuntimeExe = "C:\FormerD\foundry-cache\meowcal-sub\runtime\llama-b10155-opencl-adreno-arm64\llama-server.exe",
     [string]$ModelPath = "C:\FormerD\foundry-cache\meowcal-sub\models\hy-mt1.5-1.8b-q4\HY-MT1.5-1.8B-Q4_K_M.gguf",
     [string]$AppConfigPath,
-    [int]$HealthTimeoutSeconds = 300
+    [int]$HealthTimeoutSeconds = 300,
+    [string[]]$ExtraArgs = @()
 )
 
 $ErrorActionPreference = "Stop"
@@ -128,6 +129,7 @@ $serverArgs = @(
     "--threads", "$Threads"
 )
 if ($Seed -ge 0) { $serverArgs += @("--seed", "$Seed") }
+if ($ExtraArgs.Count -gt 0) { $serverArgs += $ExtraArgs }
 $summary["launch_args"] = $serverArgs
 
 $serverLog = Join-Path $OutDir "server.log"
