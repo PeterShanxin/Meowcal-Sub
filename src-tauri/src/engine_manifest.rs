@@ -6,6 +6,11 @@ use thiserror::Error;
 const SUPPORTED_SCHEMA_VERSION: u32 = 1;
 const SHIPPED_MANIFEST: &str = include_str!("../../config/engine-manifest.v1.json");
 
+/// The runtime the 2026-08-09 Adreno evidence (issue #60) was measured on.
+/// The KV-cache constraint and the hardware gate are scoped to this id so a
+/// future runtime version inherits neither.
+pub(crate) const ADRENO_B10155_RUNTIME_ID: &str = "llama-b10155-opencl-adreno-arm64";
+
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct EngineManifest {
@@ -60,6 +65,8 @@ pub struct DownloadArtifact {
 pub struct RuntimeSpec {
     pub id: String,
     pub architecture: Architecture,
+    /// Descriptive label; the launcher keys off `gpu_layers`, so validation
+    /// requires the two to agree ("cpu" <=> 0 layers, anything else <=> > 0).
     pub acceleration: String,
     pub gpu_layers: u32,
     /// Extra llama-server arguments for this runtime only (aarch64 OpenCL
@@ -231,35 +238,8 @@ impl EngineManifest {
             validate_artifact(&runtime.archive)?;
             validate_relative_path(&runtime.executable.relative_path)?;
             validate_size_hash(runtime.executable.size_bytes, &runtime.executable.sha256)?;
-            if runtime
-                .launch_args
-                .iter()
-                .any(|argument| argument.trim().is_empty())
-            {
-                return invalid("runtime launch policy is unsafe or incomplete");
-            }
-            if runtime
-                .launch_args
-                .iter()
-                .any(|argument| crate::engine_launch::runtime_arg_overrides_owned_policy(argument))
-            {
-                return invalid("runtime launch policy overrides app-owned launch configuration");
-            }
-            // The shipped b10155 Adreno OpenCL runtime hangs permanently with
-            // the KV cache on the GPU (measured 2026-08-09, issue #60), so its
-            // GPU policy is only valid with KV pinned to the CPU. Scoped to
-            // this exact runtime id on purpose: a CPU-configured Adreno
-            // runtime stays legal, and a future runtime version that fixes the
-            // KV path must not inherit the constraint.
-            if runtime.id == "llama-b10155-opencl-adreno-arm64"
-                && runtime.acceleration == "gpu"
-                && !runtime
-                    .launch_args
-                    .iter()
-                    .any(|argument| argument == "--no-kv-offload")
-            {
-                return invalid("Adreno b10155 GPU launch policy requires --no-kv-offload");
-            }
+            crate::engine_launch::validate_runtime_launch_policy(runtime)
+                .map_err(ManifestError::Invalid)?;
         }
         for required in [Architecture::Aarch64, Architecture::X86_64] {
             self.runtime_for(required)?;

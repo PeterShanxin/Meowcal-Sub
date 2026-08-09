@@ -144,11 +144,14 @@ fn shared_extra_args_cannot_override_app_owned_configuration() {
     );
     assert!(EngineManifest::parse(&pinned_threads).is_ok());
 }
-// On the shipped b10155 Adreno runtime, GPU offload with the KV cache on the
-// GPU is the measured hang configuration: dropping `--no-kv-offload` while
-// acceleration stays "gpu" must fail validation itself, not just a contract
-// test. The rule is scoped to that runtime id: the same runtime configured
-// for CPU, and any future runtime version, stay expressible.
+// On the shipped b10155 Adreno runtime, layer offload with the KV cache on
+// the GPU is the measured hang configuration. The guard keys on the
+// effective offload (gpuLayers), not the acceleration label, because the
+// launcher passes `-ngl gpuLayers` regardless of the label: dropping
+// `--no-kv-offload` while layers stay on the GPU must fail validation
+// itself, not just a contract test. The rule is scoped to that runtime id:
+// the same runtime configured for CPU, and any future runtime version,
+// stay expressible.
 #[test]
 fn adreno_b10155_gpu_policy_requires_kv_cache_on_cpu() {
     let without_constraint =
@@ -165,4 +168,27 @@ fn adreno_b10155_gpu_policy_requires_kv_cache_on_cpu() {
             1,
         );
     assert!(EngineManifest::parse(&cpu_fallback).is_ok());
+}
+// The exact Codex P2 counterexample: a "CPU fallback" edit that changes the
+// label but forgets gpuLayers (and drops the KV flag) describes CPU but
+// launches `-ngl 99` - the measured hang. Both halves of the incoherence
+// must be rejected, in both directions.
+#[test]
+fn acceleration_label_and_layer_count_must_agree() {
+    let label_only_cpu = SHIPPED_MANIFEST
+        .replacen("\"acceleration\": \"gpu\"", "\"acceleration\": \"cpu\"", 1)
+        .replacen("      \"launchArgs\": [\"--no-kv-offload\"],\n", "", 1);
+    assert!(matches!(
+        EngineManifest::parse(&label_only_cpu),
+        Err(ManifestError::Invalid(_))
+    ));
+    let gpu_without_layers = SHIPPED_MANIFEST.replacen(
+        "      \"gpuLayers\": 99,\n      \"launchArgs\": [\"--no-kv-offload\"],\n",
+        "      \"gpuLayers\": 0,\n      \"launchArgs\": [\"--no-kv-offload\"],\n",
+        1,
+    );
+    assert!(matches!(
+        EngineManifest::parse(&gpu_without_layers),
+        Err(ManifestError::Invalid(_))
+    ));
 }

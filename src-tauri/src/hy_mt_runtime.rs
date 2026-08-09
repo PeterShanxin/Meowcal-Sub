@@ -10,6 +10,8 @@ use std::time::Duration;
 use tokio::time::{sleep, Instant};
 use tracing::{info, warn};
 
+pub use crate::hy_mt_paths::HyMtInstallPaths;
+
 static OWNED_RUNTIME: OnceLock<Mutex<Option<OwnedRuntime>>> = OnceLock::new();
 
 #[derive(Debug)]
@@ -17,57 +19,6 @@ struct OwnedRuntime {
     child: Child,
     config: ManagedLocalRuntimeConfig,
     port: u16,
-}
-
-#[derive(Debug, Clone)]
-pub struct HyMtInstallPaths {
-    pub root: PathBuf,
-    pub runtime_dir: PathBuf,
-    pub runtime_archive: PathBuf,
-    pub executable: PathBuf,
-    pub model_dir: PathBuf,
-    pub model: PathBuf,
-}
-
-impl HyMtInstallPaths {
-    pub fn from_cache_root(
-        cache_root: impl AsRef<Path>,
-        manifest: &EngineManifest,
-        runtime: &RuntimeSpec,
-    ) -> Self {
-        let root = cache_root.as_ref().join("meowcal-sub");
-        let runtime_dir = root.join("runtime").join(&runtime.install_directory);
-        let model_dir = root.join("models").join(&manifest.model.install_directory);
-        Self {
-            runtime_archive: root.join("runtime").join(&runtime.archive.file_name),
-            executable: runtime_dir.join(&runtime.executable.relative_path),
-            model: model_dir.join(&manifest.model.artifact.file_name),
-            root,
-            runtime_dir,
-            model_dir,
-        }
-    }
-
-    pub fn is_complete(&self, manifest: &EngineManifest, runtime: &RuntimeSpec) -> bool {
-        self.executable
-            .metadata()
-            .map(|metadata| metadata.len() == runtime.executable.size_bytes)
-            .unwrap_or(false)
-            && self
-                .model
-                .metadata()
-                .map(|metadata| metadata.len() == manifest.model.artifact.size_bytes)
-                .unwrap_or(false)
-    }
-
-    pub fn managed_config(&self, manifest: &EngineManifest) -> ManagedLocalRuntimeConfig {
-        ManagedLocalRuntimeConfig {
-            kind: "hy-mt".to_string(),
-            executable_path: self.executable.to_string_lossy().to_string(),
-            model_path: self.model.to_string_lossy().to_string(),
-            port: manifest.launch.preferred_port,
-        }
-    }
 }
 
 pub fn endpoint_url(runtime: &ManagedLocalRuntimeConfig) -> String {
@@ -95,14 +46,57 @@ async fn is_endpoint_healthy(endpoint: &str) -> bool {
         .unwrap_or(false)
 }
 
+/// The acceleration policy a launch actually runs with. The manifest asks;
+/// this decides: the Adreno GPU policy applies only on the validated GPU
+/// (`engine_gpu_gate`) and can be forced off for the startup fallback.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct LaunchPolicy {
+    pub gpu_layers: u32,
+    pub launch_args: Vec<String>,
+    /// Whether this policy puts layers on the GPU. Drives the one-shot CPU
+    /// retry in `ensure_ready`: only a GPU attempt earns a fallback.
+    pub gpu_active: bool,
+}
+
+/// The effective policy for a runtime on this host. Three outcomes:
+///
+/// - not the Adreno runtime (e.g. x64 Vulkan), or it requests no layers:
+///   the manifest policy exactly as shipped;
+/// - the Adreno runtime on the validated GPU, not forced off: the benchmarked
+///   `-ngl 99 --no-kv-offload` configuration;
+/// - the Adreno runtime anywhere else, or forced off after a failed GPU
+///   start: the pre-GPU CPU policy (`-ngl 0`, no KV flag - the flag only
+///   constrains GPU KV offload, and the fallback line should be exactly what
+///   CPU-only releases ran).
+pub(crate) fn effective_launch_policy(
+    runtime_spec: &RuntimeSpec,
+    adreno_gpu_validated: bool,
+    force_cpu: bool,
+) -> LaunchPolicy {
+    let adreno_gpu_requested = runtime_spec.id == crate::engine_manifest::ADRENO_B10155_RUNTIME_ID
+        && runtime_spec.gpu_layers > 0;
+    if adreno_gpu_requested && (force_cpu || !adreno_gpu_validated) {
+        return LaunchPolicy {
+            gpu_layers: 0,
+            launch_args: Vec::new(),
+            gpu_active: false,
+        };
+    }
+    LaunchPolicy {
+        gpu_layers: runtime_spec.gpu_layers,
+        launch_args: runtime_spec.launch_args.clone(),
+        gpu_active: adreno_gpu_requested,
+    }
+}
+
 /// The exact `llama-server` argument vector for a managed runtime, built pure
-/// so the launch line is testable without spawning a process. Per-runtime
-/// `launch_args` are appended last; manifest validation rejects any that name
-/// the app-owned flags above them (see `engine_manifest`).
+/// so the launch line is testable without spawning a process. Policy args are
+/// appended last; manifest validation rejects any that name the app-owned
+/// flags above them (see `engine_launch`).
 pub(crate) fn launch_arguments(
     runtime: &ManagedLocalRuntimeConfig,
     manifest: &EngineManifest,
-    runtime_spec: &RuntimeSpec,
+    policy: &LaunchPolicy,
     port: &str,
 ) -> Vec<String> {
     let mut arguments = vec![
@@ -117,13 +111,13 @@ pub(crate) fn launch_arguments(
         "-c".to_string(),
         manifest.launch.context_size.to_string(),
         "-ngl".to_string(),
-        runtime_spec.gpu_layers.to_string(),
+        policy.gpu_layers.to_string(),
     ];
     arguments.extend(crate::engine_launch::launch_args(
         &manifest.launch.extra_args,
         crate::engine_launch::available_cores(),
     ));
-    arguments.extend(runtime_spec.launch_args.iter().cloned());
+    arguments.extend(policy.launch_args.iter().cloned());
     arguments
 }
 
@@ -132,6 +126,19 @@ pub fn start(runtime: &ManagedLocalRuntimeConfig) -> Result<String, String> {
     let runtime_spec = manifest
         .runtime_for_current_arch()
         .map_err(|error| error.to_string())?;
+    let policy = effective_launch_policy(
+        runtime_spec,
+        crate::engine_gpu_gate::validated_adreno_gpu_present(),
+        false,
+    );
+    start_with_policy(runtime, &manifest, &policy)
+}
+
+fn start_with_policy(
+    runtime: &ManagedLocalRuntimeConfig,
+    manifest: &EngineManifest,
+    policy: &LaunchPolicy,
+) -> Result<String, String> {
     if runtime.kind != "hy-mt" {
         return Err(format!(
             "Unsupported managed runtime kind '{}'",
@@ -189,7 +196,7 @@ pub fn start(runtime: &ManagedLocalRuntimeConfig) -> Result<String, String> {
     let mut command = Command::new(&executable);
     command
         .current_dir(log_dir)
-        .args(launch_arguments(runtime, &manifest, runtime_spec, &port))
+        .args(launch_arguments(runtime, manifest, policy, &port))
         .stdin(Stdio::null())
         .stdout(Stdio::from(stdout))
         .stderr(Stdio::from(stderr));
@@ -201,6 +208,16 @@ pub fn start(runtime: &ManagedLocalRuntimeConfig) -> Result<String, String> {
         command.creation_flags(CREATE_NO_WINDOW);
     }
 
+    info!(
+        "HY-MT launch policy: {}",
+        if policy.gpu_active {
+            "Adreno GPU (validated host, KV cache on CPU)"
+        } else if policy.gpu_layers == 0 {
+            "CPU"
+        } else {
+            "manifest acceleration"
+        }
+    );
     let child = command
         .spawn()
         .map_err(|error| format!("Failed to start HY-MT runtime: {}", error))?;
@@ -242,19 +259,54 @@ pub async fn ensure_ready(
     runtime: &ManagedLocalRuntimeConfig,
     timeout: Duration,
 ) -> Result<String, String> {
-    if let Some(endpoint) = active_owned_endpoint(runtime) {
-        if is_endpoint_healthy(&endpoint).await {
-            return Ok(endpoint);
+    ensure_ready_with_policy(runtime, timeout, false).await
+}
+
+/// Bring the engine up, with the Adreno compatibility fallback: a GPU-policy
+/// launch that never becomes healthy (device init failure, driver problem,
+/// startup wedge - `/health` never going green) is torn down and retried once
+/// with the CPU policy. `/health` on an already-running engine is taken at
+/// face value here; a server that wedges *after* becoming healthy is issue
+/// #103's recovery problem, not this path's.
+async fn ensure_ready_with_policy(
+    runtime: &ManagedLocalRuntimeConfig,
+    timeout: Duration,
+    force_cpu: bool,
+) -> Result<String, String> {
+    if !force_cpu {
+        if let Some(endpoint) = active_owned_endpoint(runtime) {
+            if is_endpoint_healthy(&endpoint).await {
+                return Ok(endpoint);
+            }
         }
     }
 
-    let endpoint = start(runtime)?;
+    let manifest = EngineManifest::shipped().map_err(|error| error.to_string())?;
+    let runtime_spec = manifest
+        .runtime_for_current_arch()
+        .map_err(|error| error.to_string())?;
+    let policy = effective_launch_policy(
+        runtime_spec,
+        crate::engine_gpu_gate::validated_adreno_gpu_present(),
+        force_cpu,
+    );
+
+    let endpoint = start_with_policy(runtime, &manifest, &policy)?;
     let deadline = Instant::now() + timeout;
     while Instant::now() < deadline {
         sleep(Duration::from_millis(500)).await;
         if is_endpoint_healthy(&endpoint).await {
             return Ok(endpoint);
         }
+    }
+
+    if policy.gpu_active {
+        warn!(
+            "HY-MT GPU engine did not become ready within {} seconds; retrying on CPU",
+            timeout.as_secs()
+        );
+        shutdown_owned();
+        return Box::pin(ensure_ready_with_policy(runtime, timeout, true)).await;
     }
 
     Err(format!(

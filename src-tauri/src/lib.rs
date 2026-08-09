@@ -59,6 +59,7 @@ pub mod config_store;
 pub mod config_save;
 pub mod engine_artifact_io;
 pub mod engine_config;
+pub mod engine_gpu_gate;
 pub mod engine_install_transaction;
 pub mod engine_launch;
 pub mod engine_manifest;
@@ -66,6 +67,7 @@ pub mod engine_preflight;
 
 /// Finding an engine that is installed but no longer registered
 pub mod engine_recovery;
+pub mod hy_mt_paths;
 
 /// Tauri commands - functions that JavaScript can call
 pub mod commands;

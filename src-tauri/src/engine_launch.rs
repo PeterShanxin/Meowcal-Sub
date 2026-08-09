@@ -142,6 +142,54 @@ pub(crate) fn runtime_arg_overrides_owned_policy(argument: &str) -> bool {
     LAUNCHER_OWNED_LAUNCH_FLAGS.contains(&name) || RUNTIME_FORBIDDEN_EXTRA_FLAGS.contains(&name)
 }
 
+/// The whole per-runtime launch policy contract, checked against the
+/// effective launch behaviour rather than descriptive metadata:
+///
+/// - no empty arguments and no silent overrides of app-owned flags (above);
+/// - `acceleration` and `gpu_layers` must agree, because the launcher applies
+///   `-ngl gpu_layers` whatever the label says: "cpu" means zero layers, any
+///   other label means at least one;
+/// - on the tested b10155 Adreno runtime, ANY layer offload
+///   (`gpu_layers > 0`) requires the KV cache pinned to the CPU. Keyed to the
+///   layer count on purpose: an edit that flips the label to "cpu" but forgets
+///   the layers would otherwise validate into the measured hang
+///   configuration. Scoped to that exact runtime id, so a future runtime that
+///   fixes the KV path does not inherit the constraint.
+pub(crate) fn validate_runtime_launch_policy(
+    runtime: &crate::engine_manifest::RuntimeSpec,
+) -> Result<(), String> {
+    if runtime
+        .launch_args
+        .iter()
+        .any(|argument| argument.trim().is_empty())
+    {
+        return Err("runtime launch policy is unsafe or incomplete".to_string());
+    }
+    if runtime
+        .launch_args
+        .iter()
+        .any(|argument| runtime_arg_overrides_owned_policy(argument))
+    {
+        return Err("runtime launch policy overrides app-owned launch configuration".to_string());
+    }
+    if (runtime.acceleration == "cpu") != (runtime.gpu_layers == 0) {
+        return Err(format!(
+            "runtime launch policy is contradictory: acceleration \"{}\" with gpuLayers {}",
+            runtime.acceleration, runtime.gpu_layers
+        ));
+    }
+    if runtime.id == crate::engine_manifest::ADRENO_B10155_RUNTIME_ID
+        && runtime.gpu_layers > 0
+        && !runtime
+            .launch_args
+            .iter()
+            .any(|argument| argument == "--no-kv-offload")
+    {
+        return Err("Adreno b10155 GPU launch policy requires --no-kv-offload".to_string());
+    }
+    Ok(())
+}
+
 /// Cores this host reports, or zero when it will not say.
 ///
 /// Zero falls through to `MIN_ENGINE_THREADS`, which is the safe direction: an
