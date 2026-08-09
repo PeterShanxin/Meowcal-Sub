@@ -54,12 +54,42 @@ appears.
 - CPU vs GPU-nokv: 25/100 exact; 75 diverged (backend numerical variation).
   Targeted review of all 24 low-similarity pairs plus a deterministic 20-case
   sample: 31 equivalent, 5 CPU-better, 2 GPU-better, 3 both-bad (OCR noise),
-  1 GPU malformed artifact, 2 uncertain. No systematic semantic regression,
-  no language drift, no truncation, no corruption cascade.
+  1 GPU malformed artifact, 2 uncertain.
+- Supported conclusion: the targeted review found **no systematic
+  GPU-specific quality regression**. The divergence is backend numerical
+  variation producing different-but-usually-valid renderings, with isolated
+  artifacts on both backends; exact-string similarity was not used as a
+  quality proxy. The review was 44 of 100 cases from one session, so it does
+  not prove full equivalence; it gates against a new material failure mode.
 
 ## Product trade-off
 
-GPU-nokv is ~90-100 ms slower at median but materially improves the tail that
-caused #60's outages: p99 3.64 s -> 1.56 s, max 16.9 s -> 3.0 s, >10 s 2 -> 0,
-and frees ~3.4 CPU cores for OCR/capture/overlay contention. Startup adds
-~3-6 s (GPU device init + model upload).
+GPU-nokv is ~90-100 ms slower at median (p50 483 ms CPU vs 576 ms GPU-nokv,
+benchmark workload) but materially improves the tail: p99 3.64 s -> 1.56 s,
+max 16.9 s -> 3.0 s, >10 s calls 2 -> 0, and near-eliminates engine CPU
+contention (~3.6 cores -> ~0.2). Startup adds ~3-6 s (GPU device init +
+model upload; ~11 s measured in the app-level gate under ambient load).
+Attribution care: the product-level improvement in subtitle delivery over
+recent versions also includes earlier pipeline/coalescing fixes; the
+GPU-specific contribution supported by the evidence is (a) sharply reduced
+catastrophic tail latency, (b) removal of >10 s stalls in the app-level gate,
+and (c) near-elimination of engine CPU contention while OCR/capture/overlay
+run.
+
+## App-level gate (2026-08-09, user-observed episode, ~22 min translation)
+
+417 frames -> 417 translations (1:1); model_ms p50 711 / p95 1402 / p99 2129 /
+max 4601 ms; >3 s 2, >10 s 0 (server-side: max 2723 ms, >3 s 0, >10 s 0, 0
+errors). GPU attributed to llama-server (engine "3d") 11.4 % mean / 57.5 %
+p95; engine CPU 0.26 %; working set 3.0-3.2 GB stable. No crash, no silent
+fallback, no subtitle outage/freeze/overlay failure observed. Caveat: system
+free RAM floor 1.2 GB during the session under heavy ambient load
+(OneDrive/Chrome/WorkBuddy) - no failure occurred, but the machine runs with
+little headroom in that state.
+
+Translation quality during the session: 4.8 % flagged anomalies, dominated by
+source-passthrough echoes of garbled OCR inputs plus minor quote artifacts;
+no repetition/truncation/drift. Consistent with baseline HY-MT1.5-1.8B
+behavior on noisy OCR (benchmark grader rejection rate was not worse on
+GPU-nokv: 1.8 % vs 2.5 % CPU). As above, the supported claim is only that the
+targeted review found no systematic GPU-specific regression.
