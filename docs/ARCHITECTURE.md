@@ -81,11 +81,22 @@ Shared contracts have one owner before parallel decomposition begins:
   compatibility checks. UI modules never infer readiness from process names,
   ports, or model IDs.
 - Engine execution policy: the embedded manifest selects acceleration per
-  architecture. ARM64 uses the validated CPU path because the current Adreno
-  OpenCL path corrupts HY-MT output; x64 retains Vulkan acceleration. Runtime
-  code cannot replace this evidence-backed policy with a global GPU-layer
-  default. The manifest also limits the app-owned server to one request slot;
-  subtitle translation is serialized intentionally to avoid the ARM64 runtime's
+  architecture. ARM64 runs the Adreno OpenCL path with full layer offload and
+  the KV cache pinned to the CPU (`gpuLayers: 99` + `--no-kv-offload`); x64
+  retains Vulkan acceleration. The pairing is mandatory: on the tested
+  llama.cpp b10155 + Qualcomm Adreno/OpenCL driver combination, offloading
+  the KV cache to the GPU is associated with permanent hangs after minutes of
+  sustained load and multi-second stalls (measured 2026-08-09, issue #60),
+  while the KV-on-CPU configuration ran a sustained session without hangs.
+  Runtime code cannot replace this evidence-backed policy with a global
+  GPU-layer default. The evidence covers one machine, so the ARM64 GPU policy
+  is gated (`engine_gpu_gate.rs`) on the validated Adreno X1-85 plus driver
+  31.0.148.0. Any other ARM64 GPU or driver, and any GPU launch that never
+  becomes healthy, runs the previous CPU policy instead - translation on CPU
+  beats an unusable accelerator. A driver update returns to CPU until new
+  sustained evidence deliberately expands the allowlist. The
+  manifest also limits the app-owned server to one request slot; subtitle
+  translation is serialized intentionally to avoid the ARM64 runtime's
   unstable automatic multi-slot latency. This remains subject to x64 and
   capture-to-overlay validation.
 - Product version: `src-tauri/tauri.conf.json` is the product version record.
