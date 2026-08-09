@@ -146,6 +146,76 @@ fn cpu_policy_produces_the_cpu_launch_line() {
 }
 
 #[test]
+fn validated_gpu_keeps_normal_policy_and_gets_measured_startup_headroom() {
+    let manifest = EngineManifest::shipped().expect("manifest should be valid");
+    let aarch64 = manifest
+        .runtime_for(Architecture::Aarch64)
+        .expect("aarch64 runtime should exist");
+    let policy = effective_launch_policy(aarch64, true, false);
+    let started = Instant::now();
+    let deadline = started + Duration::from_secs(90);
+
+    let attempt_deadline = readiness_deadline(deadline, started, policy.gpu_active);
+
+    assert!(policy.gpu_active);
+    assert_eq!(attempt_deadline, started + Duration::from_secs(30));
+}
+
+#[test]
+fn failed_gpu_switches_to_cpu_with_remaining_time_under_one_deadline() {
+    let manifest = EngineManifest::shipped().expect("manifest should be valid");
+    let aarch64 = manifest
+        .runtime_for(Architecture::Aarch64)
+        .expect("aarch64 runtime should exist");
+    let started = Instant::now();
+    let deadline = started + Duration::from_secs(90);
+    let gpu_deadline = readiness_deadline(deadline, started, true);
+    let cpu_policy = effective_launch_policy(aarch64, true, true);
+    let cpu_deadline = readiness_deadline(deadline, gpu_deadline, cpu_policy.gpu_active);
+
+    assert_eq!(cpu_policy.gpu_layers, 0);
+    assert!(!cpu_policy.gpu_active);
+    assert_eq!(cpu_deadline, deadline);
+    assert_eq!(
+        cpu_deadline.saturating_duration_since(gpu_deadline),
+        Duration::from_secs(60)
+    );
+    assert_eq!(
+        deadline.saturating_duration_since(started),
+        Duration::from_secs(90)
+    );
+}
+
+#[test]
+fn short_gpu_budget_is_split_and_cpu_only_paths_keep_the_full_deadline() {
+    let manifest = EngineManifest::shipped().expect("manifest should be valid");
+    let aarch64 = manifest
+        .runtime_for(Architecture::Aarch64)
+        .expect("aarch64 runtime should exist");
+    let x64 = manifest
+        .runtime_for(Architecture::X86_64)
+        .expect("x86_64 runtime should exist");
+    let started = Instant::now();
+    let deadline = started + Duration::from_secs(20);
+
+    let gpu_deadline = readiness_deadline(deadline, started, true);
+    let unvalidated_arm = effective_launch_policy(aarch64, false, false);
+    let x64_policy = effective_launch_policy(x64, false, false);
+    let cpu_deadline = readiness_deadline(deadline, started, unvalidated_arm.gpu_active);
+    let x64_deadline = readiness_deadline(deadline, started, x64_policy.gpu_active);
+
+    assert_eq!(gpu_deadline, started + Duration::from_secs(10));
+    assert_eq!(
+        deadline.saturating_duration_since(gpu_deadline),
+        Duration::from_secs(10)
+    );
+    assert_eq!(unvalidated_arm.gpu_layers, 0);
+    assert_eq!(cpu_deadline, deadline);
+    assert_eq!(x64_policy.gpu_layers, 99);
+    assert_eq!(x64_deadline, deadline);
+}
+
+#[test]
 fn occupied_preferred_port_selects_another_loopback_port() {
     let occupied =
         TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).expect("fixture listener should bind");
@@ -184,7 +254,8 @@ async fn forced_cpu_launch_serves_a_real_translation() {
 
     shutdown_owned();
     let runtime = paths.managed_config(&manifest);
-    let endpoint = ensure_ready_with_policy(&runtime, Duration::from_secs(90), true)
+    let timeout = Duration::from_secs(90);
+    let endpoint = ensure_ready_with_policy(&runtime, Instant::now() + timeout, timeout, true)
         .await
         .expect("CPU policy should bring the engine up");
     let config = FoundryLocalConfig {

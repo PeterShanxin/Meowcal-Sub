@@ -7,12 +7,21 @@ use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::sync::{Mutex, OnceLock};
 use std::time::Duration;
-use tokio::time::{sleep, Instant};
+use tokio::time::{sleep, timeout_at, Instant};
 use tracing::{info, warn};
 
 pub use crate::hy_mt_paths::HyMtInstallPaths;
 
 static OWNED_RUNTIME: OnceLock<Mutex<Option<OwnedRuntime>>> = OnceLock::new();
+
+// Measured GPU readiness: 3-6 seconds, about 11 seconds under ambient load.
+const GPU_STARTUP_MAX: Duration = Duration::from_secs(30);
+fn readiness_deadline(overall: Instant, now: Instant, gpu_active: bool) -> Instant {
+    if !gpu_active {
+        return overall;
+    }
+    now + std::cmp::min(GPU_STARTUP_MAX, overall.saturating_duration_since(now) / 2)
+}
 
 #[derive(Debug)]
 struct OwnedRuntime {
@@ -259,28 +268,34 @@ pub async fn ensure_ready(
     runtime: &ManagedLocalRuntimeConfig,
     timeout: Duration,
 ) -> Result<String, String> {
-    ensure_ready_with_policy(runtime, timeout, false).await
+    ensure_ready_with_policy(runtime, Instant::now() + timeout, timeout, false).await
 }
-
-/// Bring the engine up, with the Adreno compatibility fallback: a GPU-policy
-/// launch that never becomes healthy (device init failure, driver problem,
-/// startup wedge - `/health` never going green) is torn down and retried once
-/// with the CPU policy. `/health` on an already-running engine is taken at
-/// face value here; a server that wedges *after* becoming healthy is issue
-/// #103's recovery problem, not this path's.
+/// GPU readiness failure retries on CPU within one deadline; post-ready wedges remain #103.
 async fn ensure_ready_with_policy(
     runtime: &ManagedLocalRuntimeConfig,
+    deadline: Instant,
     timeout: Duration,
     force_cpu: bool,
 ) -> Result<String, String> {
+    let timeout_error = || {
+        format!(
+            "HY-MT runtime did not become ready within {} seconds",
+            timeout.as_secs()
+        )
+    };
     if !force_cpu {
         if let Some(endpoint) = active_owned_endpoint(runtime) {
-            if is_endpoint_healthy(&endpoint).await {
+            let healthy = timeout_at(deadline, is_endpoint_healthy(&endpoint))
+                .await
+                .unwrap_or(false);
+            if healthy {
                 return Ok(endpoint);
             }
         }
     }
-
+    if Instant::now() >= deadline {
+        return Err(timeout_error());
+    }
     let manifest = EngineManifest::shipped().map_err(|error| error.to_string())?;
     let runtime_spec = manifest
         .runtime_for_current_arch()
@@ -290,29 +305,32 @@ async fn ensure_ready_with_policy(
         crate::engine_gpu_gate::validated_adreno_gpu_present(),
         force_cpu,
     );
-
     let endpoint = start_with_policy(runtime, &manifest, &policy)?;
-    let deadline = Instant::now() + timeout;
-    while Instant::now() < deadline {
-        sleep(Duration::from_millis(500)).await;
-        if is_endpoint_healthy(&endpoint).await {
-            return Ok(endpoint);
+    let attempt_started = Instant::now();
+    let attempt_deadline = readiness_deadline(deadline, attempt_started, policy.gpu_active);
+    let healthy = timeout_at(attempt_deadline, async {
+        loop {
+            sleep(Duration::from_millis(500)).await;
+            if is_endpoint_healthy(&endpoint).await {
+                return;
+            }
         }
+    })
+    .await
+    .is_ok();
+    if healthy {
+        return Ok(endpoint);
     }
-
     if policy.gpu_active {
+        let gpu_window = attempt_deadline.saturating_duration_since(attempt_started);
         warn!(
             "HY-MT GPU engine did not become ready within {} seconds; retrying on CPU",
-            timeout.as_secs()
+            gpu_window.as_secs()
         );
         shutdown_owned();
-        return Box::pin(ensure_ready_with_policy(runtime, timeout, true)).await;
+        return Box::pin(ensure_ready_with_policy(runtime, deadline, timeout, true)).await;
     }
-
-    Err(format!(
-        "HY-MT runtime did not become ready within {} seconds",
-        timeout.as_secs()
-    ))
+    Err(timeout_error())
 }
 
 fn active_owned_endpoint(runtime: &ManagedLocalRuntimeConfig) -> Option<String> {
