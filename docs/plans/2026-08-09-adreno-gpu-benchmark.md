@@ -120,7 +120,19 @@ All under the benchmark worktree, `eval-results/gpu-bench/` (gitignored):
 
 ## 8. Sustained-session stability
 
-(pending)
+**Leading GPU config (`-ngl 99 --no-kv-offload`), 13m48s continuous, 1312
+sequential requests:** no crash, no hang, no driver reset, no OpenCL error,
+no allocation failure, no silent CPU fallback (GPU engine utilization stayed
+79.3% mean / 83.6% p95 attributed to the llama-server PID, engine type "3d",
+throughout; engine CPU 1.5% mean). Latency stayed flat across the session:
+server-side p50 567 ms / p95 1072 ms / p99 1557 ms / max 3035 ms, one call
+just over 3 s, zero over 10 s. Working set grew from ~3.0 GB to ~3.7 GB over
+the session (model + KV + graph buffers; no unbounded growth), system RAM
+free floor 5.3 GB of 32 GB.
+
+In contrast, `-ngl 99` with KV cache offloaded hung permanently after ~5.2
+min (see section 4 interim finding), and `-ngl 32` with KV offloaded produced
+clustered 2-24 s generation stalls.
 
 ## 9. Output-equivalence sanity check
 
