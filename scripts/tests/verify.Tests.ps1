@@ -128,7 +128,8 @@ exit /b 0
     Assert-Equal 0 $test.ExitCode "Test stage exit code."
     Assert-Lines @(
         "test --locked --lib",
-        "test --locked --test integration_ipc"
+        "test --locked --test integration_ipc",
+        "test --locked --test command_contracts"
     ) $test.CargoCommands "Test stage"
     Assert-Lines @() $test.NpmCommands "Test stage npm"
 
@@ -155,7 +156,8 @@ exit /b 0
         "fmt --check",
         "clippy --locked -- -D warnings",
         "test --locked --lib",
-        "test --locked --test integration_ipc"
+        "test --locked --test integration_ipc",
+        "test --locked --test command_contracts"
     ) $all.CargoCommands "All stage cargo"
     Assert-Lines @(
         "ci --ignore-scripts",
@@ -185,7 +187,8 @@ exit /b 0
     Assert-Equal 0 $crossTest.ExitCode "Cross test stage exit code."
     Assert-Lines @(
         "test --locked --target x86_64-pc-windows-msvc --lib",
-        "test --locked --target x86_64-pc-windows-msvc --test integration_ipc"
+        "test --locked --target x86_64-pc-windows-msvc --test integration_ipc",
+        "test --locked --target x86_64-pc-windows-msvc --test command_contracts"
     ) $crossTest.CargoCommands "Cross test stage"
 
     # "host" must stay byte-identical to passing nothing, or the local gate and
@@ -194,7 +197,8 @@ exit /b 0
     Assert-Equal 0 $explicitHost.ExitCode "Explicit host target exit code."
     Assert-Lines @(
         "test --locked --lib",
-        "test --locked --test integration_ipc"
+        "test --locked --test integration_ipc",
+        "test --locked --test command_contracts"
     ) $explicitHost.CargoCommands "Explicit host target"
 
     $failure = Invoke-VerifyUnderTest -Stage All -CargoFailOn "clippy"
