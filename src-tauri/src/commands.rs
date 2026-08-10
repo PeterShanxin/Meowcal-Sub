@@ -621,7 +621,7 @@ pub async fn open_area_selector(
     app: AppHandle,
     state: State<'_, AppState>,
 ) -> Result<OpenAreaSelectorResult, String> {
-    selector_window::open(app, &state).await
+    selector_window::open(app, &state.selector_snapshot).await
 }
 
 /// Get the most recent selector background snapshot (if available).
@@ -629,7 +629,7 @@ pub async fn open_area_selector(
 /// Called from JavaScript (selector window): `const snap = await invoke('get_selector_snapshot');`
 #[tauri::command]
 pub fn get_selector_snapshot(state: State<'_, AppState>) -> Option<SelectorSnapshot> {
-    selector_window::snapshot(&state)
+    selector_window::snapshot(&state.selector_snapshot)
 }
 
 /// Close the area selector overlay window
@@ -637,7 +637,7 @@ pub fn get_selector_snapshot(state: State<'_, AppState>) -> Option<SelectorSnaps
 /// Called from JavaScript: `await invoke('close_area_selector');`
 #[tauri::command]
 pub async fn close_area_selector(app: AppHandle, state: State<'_, AppState>) -> Result<(), String> {
-    selector_window::close(&app, &state)
+    selector_window::close(&app, &state.selector_snapshot)
 }
 
 // =============================================================================

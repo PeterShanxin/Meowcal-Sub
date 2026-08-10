@@ -24,9 +24,11 @@ Frontend coverage currently includes only:
 - `src/scripts/wizard-state.js`;
 - `scripts/serve-frontend.mjs`.
 
-The measured result is 89.11% statements, 78.76% branches, 92.59% functions,
-and 88.48% lines. This is not a repository-wide coverage claim. Issue #35 owns
-risk-based expansion after the decomposition lanes land.
+The measured result is 90.85% statements, 82.68% branches, 93.33% functions,
+and 90.41% lines, all above the recorded floors. This is not a repository-wide
+coverage claim. Issue #35 owns risk-based expansion after the decomposition
+lanes land, and owns raising these floors to the measured values: doing it from
+an unrelated lane would tighten the gate under every other in-flight branch.
 
 ## Legacy hotspot ceilings
 

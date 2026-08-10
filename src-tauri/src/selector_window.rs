@@ -7,19 +7,23 @@
 //! regresses to opaque grey, which would hide the desktop the user is
 //! selecting from.
 
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use serde::Serialize;
 use tauri::{async_runtime, AppHandle, Emitter, Manager};
 use tracing::{info, warn};
 
-use crate::app_state::AppState;
 use crate::capture::{self, CaptureResult};
 use crate::config::CaptureRegion;
 use crate::env_flags::env_truthy;
 use crate::ipc::{IpcMessage, IpcServer};
 use crate::sync_utils::lock_or_recover;
+
+/// Where the held snapshot lives. Passing the slot rather than the whole
+/// application state keeps the dependency one-way: `app_state` names this
+/// module's payload type, and this module does not name `AppState`.
+pub type SnapshotSlot = Mutex<Option<SelectorSnapshot>>;
 
 /// A full-screen "desktop snapshot" for the area selector background.
 ///
@@ -52,7 +56,10 @@ pub struct OpenAreaSelectorResult {
 }
 
 /// Open the area selector overlay window.
-pub async fn open(app: AppHandle, state: &AppState) -> Result<OpenAreaSelectorResult, String> {
+pub async fn open(
+    app: AppHandle,
+    snapshot_slot: &SnapshotSlot,
+) -> Result<OpenAreaSelectorResult, String> {
     // We currently prefer the "legacy" webview-based selector because it has a stable
     // desktop-snapshot background and correct DPI mapping.
     //
@@ -87,14 +94,14 @@ pub async fn open(app: AppHandle, state: &AppState) -> Result<OpenAreaSelectorRe
         }
     }
 
-    open_legacy(app, state).await?;
+    open_legacy(app, snapshot_slot).await?;
     Ok(OpenAreaSelectorResult {
         mode: AreaSelectorMode::Legacy,
     })
 }
 
 /// Legacy area selector (kept for fallback if WinUI3 is not available)
-async fn open_legacy(app: AppHandle, state: &AppState) -> Result<(), String> {
+async fn open_legacy(app: AppHandle, snapshot_slot: &SnapshotSlot) -> Result<(), String> {
     info!("Opening area selector...");
 
     let Some(window) = app.get_webview_window("selector") else {
@@ -114,18 +121,18 @@ async fn open_legacy(app: AppHandle, state: &AppState) -> Result<(), String> {
             }
 
             // Store for the selector window to pull on load (and for subsequent opens).
-            *lock_or_recover(&state.selector_snapshot) = Some(snapshot.clone());
+            *lock_or_recover(snapshot_slot) = Some(snapshot.clone());
 
             // Also push it as an event (helps if the selector window is already loaded).
             let _ = window.emit("selector-background-snapshot", snapshot);
         }
         Ok(Err(e)) => {
             warn!("Area selector snapshot capture failed: {}", e);
-            *lock_or_recover(&state.selector_snapshot) = None;
+            *lock_or_recover(snapshot_slot) = None;
         }
         Err(join_err) => {
             warn!("Area selector snapshot task failed: {}", join_err);
-            *lock_or_recover(&state.selector_snapshot) = None;
+            *lock_or_recover(snapshot_slot) = None;
         }
     }
 
@@ -194,12 +201,12 @@ fn encode_snapshot(
 }
 
 /// The most recent selector background snapshot, if one is held.
-pub fn snapshot(state: &AppState) -> Option<SelectorSnapshot> {
-    lock_or_recover(&state.selector_snapshot).clone()
+pub fn snapshot(snapshot_slot: &SnapshotSlot) -> Option<SelectorSnapshot> {
+    lock_or_recover(snapshot_slot).clone()
 }
 
 /// Close the area selector overlay window.
-pub fn close(app: &AppHandle, state: &AppState) -> Result<(), String> {
+pub fn close(app: &AppHandle, snapshot_slot: &SnapshotSlot) -> Result<(), String> {
     info!("Closing area selector...");
 
     let Some(window) = app.get_webview_window("selector") else {
@@ -208,7 +215,7 @@ pub fn close(app: &AppHandle, state: &AppState) -> Result<(), String> {
 
     window.hide().map_err(|e| e.to_string())?;
     // Drop the snapshot to avoid holding a huge base64 string in memory.
-    *lock_or_recover(&state.selector_snapshot) = None;
+    *lock_or_recover(snapshot_slot) = None;
     info!("✅ Area selector closed!");
 
     Ok(())

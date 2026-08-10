@@ -7,7 +7,7 @@ use tokio::sync::watch;
 use crate::config::{AppConfig, CaptureRegion};
 use crate::llm::TranslationDiagnosticsState;
 use crate::pipeline_session::PipelineClock;
-use crate::selector_window::SelectorSnapshot;
+use crate::selector_window::SnapshotSlot;
 use crate::startup_gate::StartupGate;
 use crate::sync_utils::lock_or_recover;
 
@@ -36,7 +36,7 @@ pub struct AppState {
     /// - On some Windows/WebView2 versions, transparent webviews regress to opaque grey/black.
     /// - The selector window is supposed to be fullscreen transparent so the user can see the desktop.
     /// - As a fallback, we capture a screenshot *before* showing the selector and render it as an image.
-    pub selector_snapshot: Mutex<Option<SelectorSnapshot>>,
+    pub selector_snapshot: SnapshotSlot,
 }
 
 impl Default for AppState {
