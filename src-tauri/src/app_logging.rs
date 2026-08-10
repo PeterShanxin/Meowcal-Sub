@@ -124,7 +124,12 @@ pub fn resolve_log_dir() -> PathBuf {
 }
 
 /// The log directory decision itself, testable without touching the
-/// environment: the first non-empty candidate wins.
+/// environment.
+///
+/// A non-blank `MEOWCAL_LOG_DIR` wins. Otherwise `APPDATA` is used verbatim
+/// when present — including a blank value, which resolves a relative
+/// `com.meowcal.sub\logs` path exactly as the pre-extraction code did.
+/// Otherwise the relative `logs` directory is used.
 fn choose_log_dir(custom: Option<&str>, appdata: Option<&str>) -> PathBuf {
     if let Some(dir) = custom {
         let trimmed = dir.trim();
@@ -286,18 +291,29 @@ mod tests {
         assert_eq!(choose_log_dir(None, None), PathBuf::from("logs"));
     }
 
-    fn set_modified(path: &Path, age: Duration) {
+    #[test]
+    fn a_blank_appdata_is_passed_through_unchanged() {
+        // Pre-extraction `main.rs` never trimmed APPDATA, so a blank value
+        // resolved a relative `com.meowcal.sub\logs` path rather than the
+        // `logs` fallback. This structural PR preserves that behavior
+        // deliberately; only MEOWCAL_LOG_DIR is trimmed before use.
+        assert_eq!(
+            choose_log_dir(None, Some("   ")),
+            PathBuf::from("   ").join("com.meowcal.sub").join("logs")
+        );
+    }
+
+    fn set_modified(path: &Path, age: Duration) -> std::io::Result<()> {
         // Windows refuses to set times on a read-only handle, so open for write.
         let file = std::fs::OpenOptions::new()
             .read(true)
             .write(true)
-            .open(path)
-            .expect("open file");
+            .open(path)?;
         let times = std::fs::FileTimes::new().set_modified(SystemTime::now() - age);
-        file.set_times(times).expect("set mtime");
+        file.set_times(times)
     }
 
-    fn log_temp_dir() -> PathBuf {
+    fn log_temp_dir() -> std::io::Result<PathBuf> {
         static COUNTER: OnceLock<AtomicU64> = OnceLock::new();
         let dir = std::env::temp_dir().join(format!(
             "meowcal-app-logging-{}-{}",
@@ -307,22 +323,22 @@ mod tests {
                 .fetch_add(1, Ordering::Relaxed)
         ));
         let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).expect("temp dir");
-        dir
+        std::fs::create_dir_all(&dir)?;
+        Ok(dir)
     }
 
     #[test]
-    fn logs_older_than_retention_are_deleted() {
-        let dir = log_temp_dir();
+    fn logs_older_than_retention_are_deleted() -> std::io::Result<()> {
+        let dir = log_temp_dir()?;
         let old = dir.join("old.log");
         let fresh = dir.join("fresh.log");
         let not_a_log = dir.join("notes.txt");
-        std::fs::write(&old, "old").unwrap();
-        std::fs::write(&fresh, "fresh").unwrap();
-        std::fs::write(&not_a_log, "notes").unwrap();
+        std::fs::write(&old, "old")?;
+        std::fs::write(&fresh, "fresh")?;
+        std::fs::write(&not_a_log, "notes")?;
 
-        set_modified(&old, Duration::from_secs(8 * 24 * 60 * 60));
-        set_modified(&fresh, Duration::from_secs(60 * 60));
+        set_modified(&old, Duration::from_secs(8 * 24 * 60 * 60))?;
+        set_modified(&fresh, Duration::from_secs(60 * 60))?;
 
         cleanup_old_logs(&dir, 7);
 
@@ -331,6 +347,7 @@ mod tests {
         assert!(not_a_log.exists(), "non-.log files must never be deleted");
 
         let _ = std::fs::remove_dir_all(&dir);
+        Ok(())
     }
 
     #[test]
