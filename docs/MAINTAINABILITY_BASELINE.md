@@ -6,9 +6,9 @@ ratchets. Machine-readable values live in
 
 ## Enforced baseline
 
-Measured on 2026-08-02 after the overlay translucency and OCR thresholding milestone:
+Measured on 2026-08-10 after the #31 command-boundary extraction:
 
-- 101 production files under `src/` and `src-tauri/src/`;
+- 166 production files under `src/` and `src-tauri/src/`;
 - 400 lines maximum for a new `.rs`, `.js`, `.html`, or `.css` production file;
 - 17 explicit legacy files above that ceiling;
 - 10 existing ESLint warnings, with zero allowed errors;
@@ -31,20 +31,21 @@ risk-based expansion after the decomposition lanes land.
 ## Legacy hotspot ceilings
 
 Every production file over 400 lines is listed with its measured ceiling in the
-machine-readable baseline. The largest and decomposition-owned hotspots are:
+machine-readable baseline, which is authoritative. The largest and
+decomposition-owned hotspots are:
 
 | File                                 | Ceiling | Reduction owner      |
 | ------------------------------------ | ------: | -------------------- |
-| `src-tauri/src/commands.rs`          |   2,112 | #31                  |
 | `src/scripts/main.js`                |   1,987 | #33                  |
-| `src-tauri/src/llm/foundry_local.rs` |   1,720 | #32                  |
-| `src-tauri/src/llm/manager.rs`       |   1,234 | #32                  |
-| `src/scripts/overlay.js`             |   1,131 | #34                  |
+| `src-tauri/src/llm/foundry_local.rs` |   1,700 | #32                  |
+| `src-tauri/src/commands.rs`          |   1,574 | #31                  |
+| `src/scripts/overlay.js`             |   1,129 | #34                  |
+| `src-tauri/src/llm/manager.rs`       |   1,021 | #32                  |
 | `src/scripts/selector.js`            |     820 | #34                  |
 | `src-tauri/src/llm/context.rs`       |     732 | #32                  |
-| `src-tauri/src/http_server.rs`       |     727 | #31 adapter boundary |
-| `src-tauri/src/config.rs`            |     625 | #31                  |
-| `src-tauri/src/main.rs`              |     578 | #31                  |
+| `src-tauri/src/http_server.rs`       |     669 | #31 adapter boundary |
+| `src-tauri/src/config.rs`            |     595 | #31                  |
+| `src-tauri/src/main.rs`              |     510 | #31                  |
 
 The remaining explicit exceptions are styles, HTML, and focused platform
 modules recorded in the JSON manifest. They have the same no-growth rule even

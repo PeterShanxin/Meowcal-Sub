@@ -24,7 +24,8 @@
 // the engine can both be alive without a session running.
 // =============================================================================
 
-use crate::commands::{stop_translation, AppState};
+use crate::app_state::AppState;
+use crate::commands::stop_translation;
 use crate::sync_utils::lock_or_recover;
 use tauri::{AppHandle, State};
 use tracing::info;

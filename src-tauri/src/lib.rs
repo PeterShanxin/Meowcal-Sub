@@ -10,8 +10,14 @@
 // --- Public Modules ---
 // These are the main parts of our app, organized by functionality:
 
+/// Shared application state that persists across Tauri commands
+pub mod app_state;
+
 /// Screen capture functionality - takes screenshots of selected areas
 pub mod capture;
+
+/// Opt-in switches read from the environment
+pub mod env_flags;
 
 /// OCR (Optical Character Recognition) - reads text from images
 pub mod ocr;
@@ -45,10 +51,19 @@ pub mod overlay;
 
 /// Ownership of the WinUI OverlayHost child process
 pub mod overlay_host_process;
+
+/// Sending overlay messages to the WinUI OverlayHost
+pub mod overlay_ipc;
 pub mod pipeline_deadline;
 pub mod pipeline_pacing;
 pub mod pipeline_session;
 pub mod pipeline_translation;
+
+/// The capture-area selector window and its desktop-snapshot background
+pub mod selector_window;
+
+/// Reading and writing the settings the UI edits
+pub mod settings_service;
 pub mod startup_gate;
 pub mod subtitle_eval;
 
@@ -101,6 +116,9 @@ pub mod window_lifecycle;
 /// Subprocesses that do not flash a console window over playback
 pub mod windowless_command;
 pub mod wizard_contracts;
+
+/// Showing and hiding the setup wizard window
+pub mod wizard_window;
 
 // =============================================================================
 // RE-EXPORTS

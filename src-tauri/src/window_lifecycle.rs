@@ -1,4 +1,4 @@
-use crate::commands::AppState;
+use crate::app_state::AppState;
 use crate::config::WindowPreferences;
 use crate::sync_utils::lock_or_recover;
 use std::sync::atomic::{AtomicBool, Ordering};
