@@ -13,6 +13,9 @@
 /// Shared application state that persists across Tauri commands
 pub mod app_state;
 
+/// Where session logs go, and how old ones are retired
+pub mod app_logging;
+
 /// Screen capture functionality - takes screenshots of selected areas
 pub mod capture;
 
@@ -112,6 +115,8 @@ pub mod system_info;
 /// Quiescing the app so an update installer can replace its files
 pub mod update_handoff;
 
+/// System tray icon and menu
+pub mod tray;
 pub mod window_lifecycle;
 /// Subprocesses that do not flash a console window over playback
 pub mod windowless_command;

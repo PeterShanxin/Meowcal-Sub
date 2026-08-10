@@ -17,13 +17,10 @@
     windows_subsystem = "windows"
 )]
 
-use tauri::{
-    menu::{Menu, MenuItem},
-    tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
-    Manager,
-};
-use tracing::{info, warn};
-use tracing_subscriber::{EnvFilter, FmtSubscriber};
+use std::sync::Arc;
+
+use tauri::Manager;
+use tracing::info;
 
 // Import our custom modules
 use meowcal_sub::app_state::AppState;
@@ -32,10 +29,6 @@ use meowcal_sub::env_flags::env_truthy;
 use meowcal_sub::ipc::{IpcMessage, IpcServer};
 use meowcal_sub::sync_utils::lock_or_recover;
 use meowcal_sub::{http_server, legacy_translate_locally};
-use std::sync::Arc;
-
-const LOG_RETENTION_DAYS: u64 = 7;
-const DEFAULT_LOG_FILTER: &str = "meowcal_sub=debug,translation_io=info,tauri=info,axum=info,tower_http=info,hyper=warn,hyper_util=warn,reqwest=warn";
 
 // =============================================================================
 // OVERLAY HOST PROCESS MANAGEMENT
@@ -54,109 +47,6 @@ fn get_runtime_id() -> &'static str {
     }
 }
 
-fn resolve_log_filter() -> EnvFilter {
-    let custom = std::env::var("MEOWCAL_LOG_FILTER").ok();
-    let rust_log = std::env::var("RUST_LOG").ok();
-
-    for candidate in [custom, rust_log].into_iter().flatten() {
-        let trimmed = candidate.trim();
-        if trimmed.is_empty() {
-            continue;
-        }
-
-        match EnvFilter::try_new(trimmed) {
-            Ok(filter) => return filter,
-            Err(err) => {
-                eprintln!("Invalid log filter '{}': {}", trimmed, err);
-            }
-        }
-    }
-
-    EnvFilter::new(DEFAULT_LOG_FILTER)
-}
-
-fn resolve_log_dir() -> std::path::PathBuf {
-    if let Ok(dir) = std::env::var("MEOWCAL_LOG_DIR") {
-        let trimmed = dir.trim();
-        if !trimmed.is_empty() {
-            return std::path::PathBuf::from(trimmed);
-        }
-    }
-
-    if let Ok(appdata) = std::env::var("APPDATA") {
-        return std::path::PathBuf::from(appdata)
-            .join("com.meowcal.sub")
-            .join("logs");
-    }
-
-    std::path::PathBuf::from("logs")
-}
-
-// =============================================================================
-// IPC MESSAGE HANDLER
-// =============================================================================
-
-/// Handle IPC messages from OverlayHost
-fn handle_ipc_message(app: &tauri::AppHandle, message: IpcMessage) {
-    info!("📨 IPC message received: {}", message.message_type);
-
-    match message.message_type.as_str() {
-        "Selector.Result" => {
-            // Parse selector result and update capture region
-            if let Some(payload) = message.payload {
-                if let Ok(result) =
-                    serde_json::from_value::<meowcal_sub::ipc::SelectorResultPayload>(payload)
-                {
-                    info!(
-                        "✅ Selector result: ({},{}) {}x{} @ {}% DPI",
-                        result.region_physical.x,
-                        result.region_physical.y,
-                        result.region_physical.width,
-                        result.region_physical.height,
-                        (result.dpi / 96.0) * 100.0
-                    );
-
-                    // Update backend state with new region
-                    let state: tauri::State<AppState> = app.state();
-                    let new_region = meowcal_sub::config::CaptureRegion {
-                        x: result.region_physical.x,
-                        y: result.region_physical.y,
-                        width: result.region_physical.width,
-                        height: result.region_physical.height,
-                    };
-
-                    *lock_or_recover(&state.capture_region) = Some(new_region);
-
-                    // Save to config
-                    {
-                        let mut config = lock_or_recover(&state.config);
-                        config.last_capture_region = Some(new_region);
-                        meowcal_sub::config_save::save_or_warn(app, &config, "the capture region");
-                    }
-                }
-            }
-        }
-
-        "Selector.Cancelled" => {
-            info!("❌ Area selection cancelled");
-        }
-
-        "Region.Updated" => {
-            info!("📍 Region updated by user (drag/resize)");
-            // TODO: Update backend state if we want live updates
-        }
-
-        "Overlay.SettingsClicked" | "Overlay.SettingsRequested" => {
-            info!("⚙️ Settings button clicked - bringing main window to front");
-            // TODO: Focus main settings window
-        }
-
-        _ => {
-            warn!("⚠️ Unknown IPC message type: {}", message.message_type);
-        }
-    }
-}
-
 // =============================================================================
 // MAIN FUNCTION
 // =============================================================================
@@ -166,54 +56,7 @@ fn main() {
     let args: Vec<String> = std::env::args().collect();
     let http_only_mode = args.iter().any(|arg| arg == "--http-only");
     // --- Step 1: Set up logging ---
-    if http_only_mode {
-        // Log to console in HTTP-only mode for easier debugging
-        let filter = resolve_log_filter();
-        let subscriber = FmtSubscriber::builder()
-            .with_env_filter(filter)
-            .with_ansi(true)
-            .pretty()
-            .finish();
-        tracing::subscriber::set_global_default(subscriber)
-            .expect("setting default subscriber failed");
-    } else {
-        // Log to file in normal mode - per-session with unique timestamp
-        // Create logs directory if it doesn't exist
-        let logs_dir = resolve_log_dir();
-        std::fs::create_dir_all(&logs_dir).ok();
-
-        // Clean up old log files (older than LOG_RETENTION_DAYS days)
-        cleanup_old_logs(&logs_dir, LOG_RETENTION_DAYS);
-
-        // Generate session-unique log filename with full timestamp
-        let now = chrono::Local::now();
-        let log_filename = format!("meowcal-sub_{}.log", now.format("%Y-%m-%d_%H-%M-%S"));
-        let log_path = logs_dir.join(&log_filename);
-
-        // Create a file appender for this specific session
-        let file = std::fs::OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(&log_path)
-            .expect("Failed to open log file");
-
-        let (non_blocking, guard) = tracing_appender::non_blocking(file);
-
-        let filter = resolve_log_filter();
-        let subscriber = FmtSubscriber::builder()
-            .with_env_filter(filter)
-            .with_writer(non_blocking)
-            .with_ansi(false) // File logs shouldn't have color codes
-            .pretty()
-            .finish();
-
-        tracing::subscriber::set_global_default(subscriber)
-            .expect("setting default subscriber failed");
-
-        // INFO: We must keep the guard alive!
-        // We'll leak it since main() runs for the whole app duration
-        Box::leak(Box::new(guard));
-    }
+    meowcal_sub::app_logging::init(http_only_mode);
 
     info!("🐱 Meowcal Sub starting up...");
 
@@ -319,7 +162,7 @@ fn main() {
                 // --- Start IPC server ---
                 let app_handle = app.handle().clone();
                 let ipc_handler = Arc::new(move |message: IpcMessage| {
-                    handle_ipc_message(&app_handle, message);
+                    meowcal_sub::ipc::handle_ipc_message(&app_handle, message);
                 });
 
                 let ipc_server = Arc::new(IpcServer::new(ipc_handler));
@@ -340,70 +183,9 @@ fn main() {
                 ));
             }
 
-            // Create menu items for the tray
-            let show_item = MenuItem::with_id(app, "show", "Show Window", true, None::<&str>)?;
-            let select_area_item =
-                MenuItem::with_id(app, "select_area", "Select Area", true, None::<&str>)?;
-            let settings_item = MenuItem::with_id(app, "settings", "Settings", true, None::<&str>)?;
-            let quit_item = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
+            // Create menu items and the tray icon
+            meowcal_sub::tray::setup(app)?;
 
-            // Build the tray menu
-            let menu = Menu::with_items(
-                app,
-                &[&show_item, &select_area_item, &settings_item, &quit_item],
-            )?;
-
-            // Create the tray icon
-            let _tray = TrayIconBuilder::new()
-                .icon(app.default_window_icon().unwrap().clone())
-                .menu(&menu)
-                .tooltip("Meowcal Sub - Click to show")
-                .on_menu_event(|app, event| {
-                    match event.id.as_ref() {
-                        "show" => {
-                            info!("Tray: Show window clicked");
-                            if let Some(window) = app.get_webview_window("main") {
-                                let _ = window.show();
-                                let _ = window.set_focus();
-                            }
-                        }
-                        "select_area" => {
-                            info!("Tray: Select area clicked");
-                            // TODO: Implement area selection
-                        }
-                        "settings" => {
-                            info!("Tray: Settings clicked");
-                            if let Some(window) = app.get_webview_window("main") {
-                                let _ = window.show();
-                                let _ = window.set_focus();
-                            }
-                        }
-                        "quit" => {
-                            info!("Tray: Quit clicked");
-                            app.exit(0);
-                        }
-                        _ => {}
-                    }
-                })
-                .on_tray_icon_event(|tray, event| {
-                    if let TrayIconEvent::Click {
-                        button,
-                        button_state,
-                        ..
-                    } = event
-                    {
-                        if button == MouseButton::Left && button_state == MouseButtonState::Up {
-                            let app = tray.app_handle();
-                            if let Some(window) = app.get_webview_window("main") {
-                                let _ = window.show();
-                                let _ = window.set_focus();
-                            }
-                        }
-                    }
-                })
-                .build(app)?;
-
-            info!("✅ System tray set up successfully!");
             Ok(())
         })
         // Keep long-lived windows available from the tray.
@@ -461,50 +243,4 @@ fn run_http_only_mode() {
             eprintln!("❌ HTTP server error: {}", e);
         }
     });
-}
-
-// =============================================================================
-// LOG CLEANUP
-// =============================================================================
-
-/// Clean up old log files to prevent folder bloat.
-/// Deletes log files older than `max_age_days` days.
-fn cleanup_old_logs(logs_dir: &std::path::Path, max_age_days: u64) {
-    use std::fs;
-    use std::time::{Duration, SystemTime};
-
-    let max_age = Duration::from_secs(max_age_days * 24 * 60 * 60);
-    let now = SystemTime::now();
-
-    let entries = match fs::read_dir(logs_dir) {
-        Ok(entries) => entries,
-        Err(_) => return, // Directory doesn't exist or can't be read
-    };
-
-    for entry in entries.flatten() {
-        let path = entry.path();
-
-        // Only process .log files
-        if path.extension().is_none_or(|ext| ext != "log") {
-            continue;
-        }
-
-        // Check file modification time
-        let metadata = match fs::metadata(&path) {
-            Ok(m) => m,
-            Err(_) => continue,
-        };
-
-        let modified = match metadata.modified() {
-            Ok(t) => t,
-            Err(_) => continue,
-        };
-
-        // Delete if older than max_age
-        if let Ok(age) = now.duration_since(modified) {
-            if age > max_age {
-                let _ = fs::remove_file(&path);
-            }
-        }
-    }
 }

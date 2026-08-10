@@ -11,6 +11,11 @@ const mainRs = readFileSync(
   "utf8",
 );
 
+const trayRs = readFileSync(
+  fileURLToPath(new URL("../../src-tauri/src/tray.rs", import.meta.url)),
+  "utf8",
+);
+
 const defaultCapability = JSON.parse(
   readFileSync(
     fileURLToPath(new URL("../../src-tauri/capabilities/default.json", import.meta.url)),
@@ -26,12 +31,13 @@ const titlebar = readFileSync(
 const windowByLabel = (label) => config.app.windows.find((entry) => entry.label === label);
 
 describe("tauri window chrome", () => {
-  // Tauri creates a tray icon for `app.trayIcon`, and main.rs builds a second
-  // one with the menu and click handlers. Declaring both put two identical cats
-  // in the tray, only one of which responded to clicks.
+  // Tauri creates a tray icon for `app.trayIcon`, and the tray module builds a
+  // second one with the menu and click handlers. Declaring both put two
+  // identical cats in the tray, only one of which responded to clicks.
   it("declares the tray icon in exactly one place", () => {
     expect(config.app.trayIcon).toBeUndefined();
-    expect(mainRs).toContain("TrayIconBuilder::new()");
+    expect(mainRs).not.toContain("TrayIconBuilder::new()");
+    expect(trayRs).toContain("TrayIconBuilder::new()");
   });
 
   it.each(["main", "foundry-wizard"])("draws its own title bar on %s", (label) => {
