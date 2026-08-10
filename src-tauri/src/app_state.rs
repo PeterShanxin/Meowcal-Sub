@@ -60,9 +60,16 @@ impl AppState {
     ///
     /// Work already in flight was framed against the old region, so it is
     /// invalidated here rather than being allowed to land on the overlay.
+    ///
+    /// Both guards are held to the end deliberately. A reader that acquired
+    /// the region lock between the two writes would pair the new region with
+    /// the old scale factor and capture the wrong physical pixels.
     pub fn set_capture_region(&self, region: CaptureRegion, scale_factor: f64) {
-        *lock_or_recover(&self.capture_region) = Some(region);
-        *lock_or_recover(&self.capture_scale_factor) = scale_factor;
+        let mut capture_region = lock_or_recover(&self.capture_region);
+        *capture_region = Some(region);
+
+        let mut capture_scale_factor = lock_or_recover(&self.capture_scale_factor);
+        *capture_scale_factor = scale_factor;
         self.pipeline_clock.invalidate_capture();
     }
 
