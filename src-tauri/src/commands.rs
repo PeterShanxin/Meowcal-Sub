@@ -14,6 +14,7 @@ use crate::pipeline_repeat_policy as repeat_policy;
 use crate::pipeline_session::PipelineClock;
 use crate::startup_gate::StartupGate;
 use crate::sync_utils::lock_or_recover;
+use crate::system_info::SystemInfo;
 use crate::wizard_contracts::WizardTranslationTest;
 use crate::{hy_mt_installer, hy_mt_runtime};
 use scopeguard::defer;
@@ -106,60 +107,12 @@ impl Default for AppState {
 // SYSTEM INFO
 // =============================================================================
 
-/// Information about the system, returned to the UI
-#[derive(Serialize)]
-pub struct SystemInfo {
-    /// Operating system info
-    pub os: String,
-    /// CPU architecture (should be aarch64 on Copilot+ PCs)
-    pub arch: String,
-    /// Whether we're on a Copilot+ PC (NPU available)
-    pub is_copilot_plus: bool,
-    /// Whether Phi Silica API is available
-    pub phi_silica_available: bool,
-    /// Whether Windows OCR is available
-    pub windows_ocr_available: bool,
-}
-
 /// Get information about the system
 ///
 /// Called from JavaScript: `const info = await invoke('get_system_info');`
 #[tauri::command]
 pub fn get_system_info() -> SystemInfo {
-    info!("Getting system info...");
-
-    // Check what features are available
-    let is_arm64 = cfg!(target_arch = "aarch64");
-
-    // TODO: Actually detect NPU presence
-    // For now, assume ARM64 Windows = Copilot+ PC
-    let is_copilot_plus = is_arm64 && cfg!(target_os = "windows");
-
-    // TODO: Check if Phi Silica is available (Windows AI APIs)
-    // This will be implemented when we add LLM support
-    let phi_silica_available = false;
-
-    // Windows OCR should be available on all Windows 10/11 systems
-    let windows_ocr_available = cfg!(target_os = "windows");
-
-    let info = SystemInfo {
-        os: std::env::consts::OS.to_string(),
-        arch: std::env::consts::ARCH.to_string(),
-        is_copilot_plus,
-        phi_silica_available,
-        windows_ocr_available,
-    };
-
-    info!(
-        "System: {} {}, Copilot+: {}, Phi Silica: {}, OCR: {}",
-        info.os,
-        info.arch,
-        info.is_copilot_plus,
-        info.phi_silica_available,
-        info.windows_ocr_available
-    );
-
-    info
+    crate::system_info::describe()
 }
 
 // =============================================================================
@@ -170,102 +123,14 @@ pub fn get_system_info() -> SystemInfo {
 /// Returns BCP-47 tags (e.g. ["en-US", "zh-CN"]).
 #[tauri::command]
 pub async fn get_ocr_languages() -> Vec<String> {
-    info!("Getting available OCR languages...");
-    let result = async_runtime::spawn_blocking(WindowsOcr::available_languages).await;
-    match result {
-        Ok(Ok(langs)) => {
-            info!("Found {} OCR language(s): {:?}", langs.len(), langs);
-            langs
-        }
-        Ok(Err(e)) => {
-            warn!("Failed to enumerate OCR languages: {}", e);
-            Vec::new()
-        }
-        Err(e) => {
-            warn!("OCR language enumeration task failed: {}", e);
-            Vec::new()
-        }
-    }
+    crate::ocr_language_packs::available().await
 }
 
 /// Install an OCR language pack via an elevated PowerShell window.
 /// Triggers a UAC prompt — the user must approve the elevation.
 #[tauri::command]
 pub async fn install_ocr_language(language_tag: String) -> Result<(), String> {
-    // Strict allowlist: only accept known BCP-47 tags to prevent command injection
-    // in the elevated PowerShell context.
-    let capability_tag = match language_tag.as_str() {
-        "en-US" => "en-US",
-        "zh-TW" => "zh-Hant",
-        "zh-CN" => "zh-Hans",
-        "ja-JP" => "ja",
-        "ko-KR" => "ko",
-        "es-ES" => "es",
-        "fr-FR" => "fr",
-        "de-DE" => "de",
-        _ => {
-            return Err(format!(
-                "Unsupported language tag: '{}'. Only known languages can be installed.",
-                language_tag
-            ));
-        }
-    }
-    .to_string();
-
-    info!(
-        "Installing OCR language pack: {} (capability tag: {})",
-        language_tag, capability_tag
-    );
-
-    async_runtime::spawn_blocking(move || {
-        // Build the inner (elevated) PowerShell script
-        let inner_script = format!(
-            "Write-Host 'Installing OCR language pack: {tag}...' -ForegroundColor Cyan; \
-             Write-Host ''; \
-             $cap = Get-WindowsCapability -Online | Where-Object {{ $_.Name -Like 'Language.OCR*{tag}*' -and $_.State -ne 'Installed' }}; \
-             if ($cap) {{ \
-                 $cap | Add-WindowsCapability -Online; \
-                 Write-Host ''; \
-                 Write-Host 'Done! OCR language pack installed successfully.' -ForegroundColor Green \
-             }} else {{ \
-                 Write-Host 'Language pack is already installed or not available.' -ForegroundColor Yellow \
-             }}; \
-             Start-Sleep -Seconds 5",
-            tag = capability_tag
-        );
-
-        // Outer PowerShell spawns an elevated inner shell via Start-Process -Verb RunAs
-        let mut cmd = crate::windowless_command::std_command("powershell");
-        cmd.args([
-            "-NoProfile",
-            "-Command",
-            &format!(
-                "Start-Process powershell -Verb RunAs -Wait -ArgumentList '-NoProfile -Command {}'",
-                // Escape single quotes for the nested argument
-                inner_script.replace('\'', "''")
-            ),
-        ]);
-
-        match cmd.status() {
-            Ok(status) if status.success() => {
-                info!("OCR language pack install completed for: {}", language_tag);
-                Ok(())
-            }
-            Ok(status) => {
-                let msg = format!(
-                    "OCR language pack install exited with code: {:?}",
-                    status.code()
-                );
-                warn!("{}", msg);
-                // Still return Ok — the user may have cancelled the UAC prompt,
-                // and we'll re-check available languages on the frontend
-                Ok(())
-            }
-            Err(e) => Err(format!("Failed to launch installer: {}", e)),
-        }
-    })
-    .await
-    .map_err(|e| e.to_string())?
+    crate::ocr_language_packs::install(language_tag).await
 }
 
 // =============================================================================

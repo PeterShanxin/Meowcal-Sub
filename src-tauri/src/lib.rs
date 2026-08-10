@@ -22,6 +22,9 @@ pub mod ocr_corruption;
 /// Decides which recognised lines are reliable enough to translate
 pub mod ocr_gate;
 
+/// Enumerating and installing the Windows OCR language packs
+pub mod ocr_language_packs;
+
 /// Decides when to tell the viewer why nothing is showing
 pub mod pipeline_notices;
 
@@ -87,6 +90,9 @@ pub mod ipc;
 
 /// Synchronization utilities - safe mutex/RwLock handling with poison recovery
 pub mod sync_utils;
+
+/// What this machine can do, reported to the setup UI
+pub mod system_info;
 
 /// Quiescing the app so an update installer can replace its files
 pub mod update_handoff;
