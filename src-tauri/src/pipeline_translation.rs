@@ -288,7 +288,7 @@ impl Translator {
                 timestamp: timestamp.to_string(),
                 backend_used: Some(backend_str),
             };
-            crate::commands::send_overlay_message(
+            crate::overlay_ipc::send_overlay_message(
                 &self.app,
                 IpcMessage::with_payload("Subtitle.Update", subtitle_payload),
             )

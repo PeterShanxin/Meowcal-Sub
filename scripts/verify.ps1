@@ -141,6 +141,12 @@ try {
         Invoke-CargoStep "Rust IPC integration tests" (
             @("test", "--locked") + $targetArguments + @("--test", "integration_ipc")
         )
+        # Outside src/ so they survive module moves unchanged: these pin the
+        # command payload shapes the frontend reads, which a structural
+        # refactor must not alter.
+        Invoke-CargoStep "Rust command contract tests" (
+            @("test", "--locked") + $targetArguments + @("--test", "command_contracts")
+        )
     }
 } finally {
     Pop-Location

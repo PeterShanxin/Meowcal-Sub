@@ -51,9 +51,10 @@ Source OCR is never represented as successful translation.
 | ----------------------- | ------------------------------------------------- | -------------------------------------------------------------------------------------- |
 | Tauri commands          | `src-tauri/src/commands.rs`                       | Thin adapters only; application services own behavior                                  |
 | Browser routes          | `src-tauri/src/http_server.rs`                    | Adapter parity with supported Tauri contracts; explicit `501` for native-only behavior |
-| App/window lifecycle    | `src-tauri/src/main.rs`, `commands.rs`            | One lifecycle service owns restore/show ordering, tray, and shutdown                   |
-| Persisted configuration | `src-tauri/src/config.rs`                         | One versioned config service owns defaults, validation, migration, and writes          |
-| Capture and OCR         | `capture/`, `ocr/`, session code in `commands.rs` | Separate capture/OCR services; pipeline orchestrator owns sequencing                   |
+| Application state       | `src-tauri/src/app_state.rs`                      | One owner for shared session state and the region/scale invariants                     |
+| App/window lifecycle    | `src-tauri/src/main.rs`, `window_lifecycle.rs`, `selector_window.rs`, `wizard_window.rs` | One lifecycle service owns restore/show ordering, tray, and shutdown |
+| Persisted configuration | `src-tauri/src/config.rs`, `settings_service.rs`  | One versioned config service owns defaults, validation, migration, and writes          |
+| Capture and OCR         | `capture/`, `ocr/`, `ocr_language_packs.rs`, session code in `commands.rs` | Separate capture/OCR services; pipeline orchestrator owns sequencing  |
 | Translation             | `llm/manager.rs`                                  | Pipeline service owns attempts and typed outcomes; validators do not own transport     |
 | Engine runtime          | `llm/foundry_local.rs`, command helpers           | Curated engine service owns manifest, install, process, health, repair, rollback       |
 | Compatibility downloads | `legacy_translate_locally.rs`                    | Kept outside normal-mode adapters; legacy/developer compatibility only                  |
@@ -75,6 +76,10 @@ Shared contracts have one owner before parallel decomposition begins:
   `tauri-bridge.js` is the single frontend transport adapter. A command or event
   change updates Rust, bridge mapping, browser parity or explicit limitation,
   and contract tests in the same pull request.
+  `src-tauri/tests/command_contracts.rs` pins command payload shapes from
+  outside `src/`, so it keeps passing unchanged while implementations move
+  between modules. `get_system_info` is deliberately snake_case there; the rest
+  of the surface is camelCase.
 - Engine install state: `engine_install_transaction.rs` owns the versioned
   active/last-known-good record, candidate promotion, interrupted-install
   recovery, and rollback. `engine_preflight.rs` owns Windows, RAM, and storage

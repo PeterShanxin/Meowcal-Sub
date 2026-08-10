@@ -108,7 +108,12 @@ an x64 host rather than silently building something it cannot execute.
 
 The default `All` stage is required before handoff. It runs its own contract
 tests, prepares validation resources, uses the tracked Cargo and npm lockfiles,
-and includes the real browser-to-Rust bridge smoke. A failed clean-checkout
+and includes the real browser-to-Rust bridge smoke.
+
+The Test stage runs named cargo targets, not the whole suite: `--lib`,
+`--test integration_ipc`, and `--test command_contracts`. A new integration
+test target is invisible to the gate until it is added to `verify.ps1` and to
+`scripts/tests/verify.Tests.ps1`, which asserts the exact invocation list. A failed clean-checkout
 prerequisite is a repository defect, not a reason to skip verification.
 
 On ARM64, set `CARGO_BUILD_JOBS=1` for any cargo invocation against a cold

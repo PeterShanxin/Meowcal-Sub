@@ -1,165 +1,43 @@
+use crate::app_state::AppState;
 use crate::capture;
 use crate::config::{save_config, AppConfig, CaptureRegion};
 use crate::event_payloads::{CaptureStatusPayload, TranslationPayload};
 use crate::ipc::{
-    IpcMessage, IpcServer, OverlaySettingsData, RegionData, SetRegionPayload, SettingsSyncPayload,
+    IpcMessage, OverlaySettingsData, RegionData, SetRegionPayload, SettingsSyncPayload,
 };
 use crate::llm::{
     BackendInfo, FoundryLocalBackend, FoundryLocalPhase, TranslationDiagnostics,
-    TranslationDiagnosticsState, TranslationManager, TranslationOutcome, TranslatorBackend,
+    TranslationManager, TranslationOutcome, TranslatorBackend,
 };
 use crate::ocr::WindowsOcr;
 use crate::overlay;
+use crate::overlay_ipc::send_overlay_message;
 use crate::pipeline_repeat_policy as repeat_policy;
-use crate::pipeline_session::PipelineClock;
-use crate::startup_gate::StartupGate;
+use crate::selector_window::{self, OpenAreaSelectorResult, SelectorSnapshot};
 use crate::sync_utils::lock_or_recover;
+use crate::system_info::SystemInfo;
 use crate::wizard_contracts::WizardTranslationTest;
 use crate::{hy_mt_installer, hy_mt_runtime};
 use scopeguard::defer;
 use serde::Serialize;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use tauri::{async_runtime, AppHandle, Emitter, Manager, State};
 use tokio::sync::watch;
 use tracing::{debug, error, info, warn};
 
 // =============================================================================
-// IPC HELPER
-// =============================================================================
-
-fn env_truthy(name: &str) -> bool {
-    std::env::var(name)
-        .map(|v| {
-            matches!(
-                v.trim().to_ascii_lowercase().as_str(),
-                "1" | "true" | "yes" | "on"
-            )
-        })
-        .unwrap_or(false)
-}
-
-/// Send a message to OverlayHost via IPC
-pub(crate) async fn send_overlay_message(app: &AppHandle, message: IpcMessage) {
-    // Premium legacy is the default. The WinUI overlay is still experimental and can be
-    // opaque/black on some systems, so keep it opt-in for now.
-    if !env_truthy("MEOWCAL_USE_WINUI_OVERLAY") {
-        return;
-    }
-
-    if let Some(ipc_server) = app.try_state::<Arc<IpcServer>>() {
-        ipc_server.send(message).await;
-    } else {
-        warn!("⚠️ IPC server not initialized, cannot send message");
-    }
-}
-
-// Shared application state that persists across Tauri commands.
-
-/// The application state, managed by Tauri
-pub struct AppState {
-    pub startup_gate: StartupGate,
-    /// Current app configuration (settings)
-    pub config: Mutex<AppConfig>,
-    /// Whether translation is currently active
-    pub is_running: Mutex<bool>,
-    /// The current capture region (if set)
-    pub capture_region: Mutex<Option<CaptureRegion>>,
-    /// DPI scale factor for the capture region (logical -> physical)
-    pub capture_scale_factor: Mutex<f64>,
-    /// Stop signal sender for the translation loop
-    /// When we send `true` through this, the loop stops
-    pub stop_signal: Mutex<Option<watch::Sender<bool>>>,
-    /// Diagnostics for translation backends
-    pub translation_diagnostics: Arc<Mutex<TranslationDiagnosticsState>>,
-    /// Monotonic session/capture identities used to suppress stale async results.
-    pub pipeline_clock: Arc<PipelineClock>,
-
-    /// Latest "desktop snapshot" for the area selector window.
-    ///
-    /// Why we need this:
-    /// - On some Windows/WebView2 versions, transparent webviews regress to opaque grey/black.
-    /// - The selector window is supposed to be fullscreen transparent so the user can see the desktop.
-    /// - As a fallback, we capture a screenshot *before* showing the selector and render it as an image.
-    pub selector_snapshot: Mutex<Option<SelectorSnapshot>>,
-}
-
-impl Default for AppState {
-    fn default() -> Self {
-        Self {
-            startup_gate: StartupGate::default(),
-            config: Mutex::new(AppConfig::default()),
-            is_running: Mutex::new(false),
-            capture_region: Mutex::new(None),
-            capture_scale_factor: Mutex::new(1.0),
-            stop_signal: Mutex::new(None),
-            translation_diagnostics: Arc::new(Mutex::new(TranslationDiagnosticsState::default())),
-            pipeline_clock: Arc::new(PipelineClock::default()),
-            selector_snapshot: Mutex::new(None),
-        }
-    }
-}
-
-// =============================================================================
 // SYSTEM INFO
 // =============================================================================
-
-/// Information about the system, returned to the UI
-#[derive(Serialize)]
-pub struct SystemInfo {
-    /// Operating system info
-    pub os: String,
-    /// CPU architecture (should be aarch64 on Copilot+ PCs)
-    pub arch: String,
-    /// Whether we're on a Copilot+ PC (NPU available)
-    pub is_copilot_plus: bool,
-    /// Whether Phi Silica API is available
-    pub phi_silica_available: bool,
-    /// Whether Windows OCR is available
-    pub windows_ocr_available: bool,
-}
 
 /// Get information about the system
 ///
 /// Called from JavaScript: `const info = await invoke('get_system_info');`
 #[tauri::command]
 pub fn get_system_info() -> SystemInfo {
-    info!("Getting system info...");
-
-    // Check what features are available
-    let is_arm64 = cfg!(target_arch = "aarch64");
-
-    // TODO: Actually detect NPU presence
-    // For now, assume ARM64 Windows = Copilot+ PC
-    let is_copilot_plus = is_arm64 && cfg!(target_os = "windows");
-
-    // TODO: Check if Phi Silica is available (Windows AI APIs)
-    // This will be implemented when we add LLM support
-    let phi_silica_available = false;
-
-    // Windows OCR should be available on all Windows 10/11 systems
-    let windows_ocr_available = cfg!(target_os = "windows");
-
-    let info = SystemInfo {
-        os: std::env::consts::OS.to_string(),
-        arch: std::env::consts::ARCH.to_string(),
-        is_copilot_plus,
-        phi_silica_available,
-        windows_ocr_available,
-    };
-
-    info!(
-        "System: {} {}, Copilot+: {}, Phi Silica: {}, OCR: {}",
-        info.os,
-        info.arch,
-        info.is_copilot_plus,
-        info.phi_silica_available,
-        info.windows_ocr_available
-    );
-
-    info
+    crate::system_info::describe()
 }
 
 // =============================================================================
@@ -170,102 +48,14 @@ pub fn get_system_info() -> SystemInfo {
 /// Returns BCP-47 tags (e.g. ["en-US", "zh-CN"]).
 #[tauri::command]
 pub async fn get_ocr_languages() -> Vec<String> {
-    info!("Getting available OCR languages...");
-    let result = async_runtime::spawn_blocking(WindowsOcr::available_languages).await;
-    match result {
-        Ok(Ok(langs)) => {
-            info!("Found {} OCR language(s): {:?}", langs.len(), langs);
-            langs
-        }
-        Ok(Err(e)) => {
-            warn!("Failed to enumerate OCR languages: {}", e);
-            Vec::new()
-        }
-        Err(e) => {
-            warn!("OCR language enumeration task failed: {}", e);
-            Vec::new()
-        }
-    }
+    crate::ocr_language_packs::available().await
 }
 
 /// Install an OCR language pack via an elevated PowerShell window.
 /// Triggers a UAC prompt — the user must approve the elevation.
 #[tauri::command]
 pub async fn install_ocr_language(language_tag: String) -> Result<(), String> {
-    // Strict allowlist: only accept known BCP-47 tags to prevent command injection
-    // in the elevated PowerShell context.
-    let capability_tag = match language_tag.as_str() {
-        "en-US" => "en-US",
-        "zh-TW" => "zh-Hant",
-        "zh-CN" => "zh-Hans",
-        "ja-JP" => "ja",
-        "ko-KR" => "ko",
-        "es-ES" => "es",
-        "fr-FR" => "fr",
-        "de-DE" => "de",
-        _ => {
-            return Err(format!(
-                "Unsupported language tag: '{}'. Only known languages can be installed.",
-                language_tag
-            ));
-        }
-    }
-    .to_string();
-
-    info!(
-        "Installing OCR language pack: {} (capability tag: {})",
-        language_tag, capability_tag
-    );
-
-    async_runtime::spawn_blocking(move || {
-        // Build the inner (elevated) PowerShell script
-        let inner_script = format!(
-            "Write-Host 'Installing OCR language pack: {tag}...' -ForegroundColor Cyan; \
-             Write-Host ''; \
-             $cap = Get-WindowsCapability -Online | Where-Object {{ $_.Name -Like 'Language.OCR*{tag}*' -and $_.State -ne 'Installed' }}; \
-             if ($cap) {{ \
-                 $cap | Add-WindowsCapability -Online; \
-                 Write-Host ''; \
-                 Write-Host 'Done! OCR language pack installed successfully.' -ForegroundColor Green \
-             }} else {{ \
-                 Write-Host 'Language pack is already installed or not available.' -ForegroundColor Yellow \
-             }}; \
-             Start-Sleep -Seconds 5",
-            tag = capability_tag
-        );
-
-        // Outer PowerShell spawns an elevated inner shell via Start-Process -Verb RunAs
-        let mut cmd = crate::windowless_command::std_command("powershell");
-        cmd.args([
-            "-NoProfile",
-            "-Command",
-            &format!(
-                "Start-Process powershell -Verb RunAs -Wait -ArgumentList '-NoProfile -Command {}'",
-                // Escape single quotes for the nested argument
-                inner_script.replace('\'', "''")
-            ),
-        ]);
-
-        match cmd.status() {
-            Ok(status) if status.success() => {
-                info!("OCR language pack install completed for: {}", language_tag);
-                Ok(())
-            }
-            Ok(status) => {
-                let msg = format!(
-                    "OCR language pack install exited with code: {:?}",
-                    status.code()
-                );
-                warn!("{}", msg);
-                // Still return Ok — the user may have cancelled the UAC prompt,
-                // and we'll re-check available languages on the frontend
-                Ok(())
-            }
-            Err(e) => Err(format!("Failed to launch installer: {}", e)),
-        }
-    })
-    .await
-    .map_err(|e| e.to_string())?
+    crate::ocr_language_packs::install(language_tag).await
 }
 
 // =============================================================================
@@ -763,10 +553,7 @@ fn build_foundry_local_status_no_probe(
 /// Called from JavaScript: `const settings = await invoke('get_settings');`
 #[tauri::command]
 pub async fn get_settings(state: State<'_, AppState>) -> Result<AppConfig, String> {
-    state.startup_gate.wait_until_ready().await?;
-    info!("Getting settings...");
-    let config = lock_or_recover(&state.config);
-    Ok(config.clone())
+    crate::settings_service::current(&state).await
 }
 
 /// Save new app settings
@@ -778,53 +565,7 @@ pub async fn save_settings(
     state: State<'_, AppState>,
     app: AppHandle,
 ) -> Result<(), String> {
-    info!("Saving settings...");
-
-    let mut updated = settings.clone();
-
-    // Persist the last capture region into the config
-    let last_region = *lock_or_recover(&state.capture_region);
-    updated.last_capture_region = last_region;
-
-    // Persist the DPI scale factor so restored regions capture the correct physical pixels.
-    let last_scale_factor = *lock_or_recover(&state.capture_scale_factor);
-    updated.last_capture_scale_factor = Some(last_scale_factor);
-
-    // Through the same path the window events use, rather than reading the
-    // window here: that copy lacked the minimised and offscreen guards, so
-    // saving any setting while minimised stored the minimised geometry.
-    if let Some(window) = app.get_webview_window("main") {
-        crate::window_lifecycle::remember_main_geometry(&window.as_ref().window());
-        updated.window_preferences = lock_or_recover(&state.config).window_preferences.clone();
-    }
-
-    // Update the in-memory config
-    {
-        let mut config = lock_or_recover(&state.config);
-        updated
-            .translation
-            .foundry_local
-            .preserve_managed_runtime_from(&config.translation.foundry_local);
-        *config = updated.clone();
-    }
-
-    // Persist to disk without blocking the UI thread
-    let app_handle = app.clone();
-    let updated_clone = updated.clone();
-    async_runtime::spawn_blocking(move || save_config(&app_handle, &updated_clone))
-        .await
-        .map_err(|err| {
-            let message = format!("Failed to spawn save_config task: {}", err);
-            warn!("{}", message);
-            message
-        })?
-        .map_err(|err| {
-            let message = format!("Failed to save settings: {}", err);
-            warn!("{}", message);
-            message
-        })?;
-
-    Ok(())
+    crate::settings_service::save(app, &state, settings).await
 }
 
 // =============================================================================
@@ -849,27 +590,17 @@ pub fn set_capture_region(
         x, y, width, height
     );
 
-    // Validate the region
-    if width <= 0 || height <= 0 {
-        return Err("Width and height must be positive".to_string());
-    }
-    if scale_factor <= 0.0 {
-        return Err("Scale factor must be positive".to_string());
-    }
+    crate::app_state::validate_capture_region(width, height, scale_factor)?;
 
-    let region = CaptureRegion {
-        x,
-        y,
-        width,
-        height,
-    };
-
-    let mut capture_region = lock_or_recover(&state.capture_region);
-    *capture_region = Some(region);
-
-    let mut capture_scale_factor = lock_or_recover(&state.capture_scale_factor);
-    *capture_scale_factor = scale_factor;
-    state.pipeline_clock.invalidate_capture();
+    state.set_capture_region(
+        CaptureRegion {
+            x,
+            y,
+            width,
+            height,
+        },
+        scale_factor,
+    );
 
     Ok(())
 }
@@ -879,38 +610,7 @@ pub fn set_capture_region(
 /// Called from JavaScript: `const region = await invoke('get_capture_region');`
 #[tauri::command]
 pub fn get_capture_region(state: State<'_, AppState>) -> Option<CaptureRegion> {
-    let region = lock_or_recover(&state.capture_region);
-    *region
-}
-
-/// A full-screen "desktop snapshot" for the area selector background.
-///
-/// This is a workaround for transparency regressions: instead of relying on the webview
-/// to be truly transparent, we render a screenshot behind the selection UI.
-#[derive(Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct SelectorSnapshot {
-    /// `data:image/png;base64,...`
-    pub data_url: String,
-    /// Snapshot width in physical pixels.
-    pub width: i32,
-    /// Snapshot height in physical pixels.
-    pub height: i32,
-}
-
-/// Result from `open_area_selector` so the UI can show whether we used WinUI OverlayHost
-/// or fell back to the legacy webview selector.
-#[derive(Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub enum AreaSelectorMode {
-    Winui,
-    Legacy,
-}
-
-#[derive(Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct OpenAreaSelectorResult {
-    pub mode: AreaSelectorMode,
+    state.current_capture_region()
 }
 
 /// Open the area selector overlay window
@@ -921,141 +621,7 @@ pub async fn open_area_selector(
     app: AppHandle,
     state: State<'_, AppState>,
 ) -> Result<OpenAreaSelectorResult, String> {
-    // We currently prefer the "legacy" webview-based selector because it has a stable
-    // desktop-snapshot background and correct DPI mapping.
-    //
-    // WinUI selector is kept as an opt-in experiment for future work.
-    let prefer_winui = env_truthy("MEOWCAL_USE_WINUI_SELECTOR");
-
-    if prefer_winui {
-        info!("🎯 Opening area selector via OverlayHost (opt-in)");
-
-        if let Some(ipc_server) = app.try_state::<Arc<IpcServer>>() {
-            // On startup, the WinUI OverlayHost can take a moment to launch and connect.
-            // Wait briefly so the first click is more likely to use WinUI instead of the legacy UI.
-            const WAIT_MS: u64 = 2500;
-            const STEP_MS: u64 = 50;
-            let message = IpcMessage::new("Region.RequestOpenSelector");
-
-            let mut waited = 0u64;
-            while waited <= WAIT_MS {
-                if ipc_server.is_connected() && ipc_server.send(message.clone()).await {
-                    return Ok(OpenAreaSelectorResult {
-                        mode: AreaSelectorMode::Winui,
-                    });
-                }
-
-                tokio::time::sleep(Duration::from_millis(STEP_MS)).await;
-                waited = waited.saturating_add(STEP_MS);
-            }
-
-            warn!("⚠️ OverlayHost not connected; falling back to legacy selector");
-        } else {
-            warn!("⚠️ IPC server not initialized; falling back to legacy selector");
-        }
-    }
-
-    open_area_selector_legacy(app, state).await?;
-    Ok(OpenAreaSelectorResult {
-        mode: AreaSelectorMode::Legacy,
-    })
-}
-
-/// Legacy area selector (kept for fallback if WinUI3 is not available)
-#[allow(dead_code)]
-async fn open_area_selector_legacy(
-    app: AppHandle,
-    state: State<'_, AppState>,
-) -> Result<(), String> {
-    info!("Opening area selector...");
-
-    if let Some(window) = app.get_webview_window("selector") {
-        // Capture a background snapshot BEFORE showing the selector window.
-        // If we capture after showing, the screenshot will include the selector UI itself.
-        //
-        // This is best-effort: if capture fails, we still show the selector (it will just be grey).
-        match async_runtime::spawn_blocking(|| -> Result<(SelectorSnapshot, bool), String> {
-            use base64::Engine;
-
-            // 1) Capture the primary screen in physical pixels.
-            let (width, height) = capture::get_screen_dimensions();
-            if width <= 0 || height <= 0 {
-                return Err(format!("Invalid screen dimensions: {}x{}", width, height));
-            }
-
-            let region = CaptureRegion::new(0, 0, width, height);
-            let (capture, used_fallback) =
-                capture::smart_capture(&region).map_err(|e| format!("{}", e))?;
-
-            // 2) Convert BGRA -> RGBA (swap red/blue channels).
-            // Our capture backends return BGRA to match Windows APIs.
-            let mut rgba = capture.data;
-            for px in rgba.chunks_exact_mut(4) {
-                px.swap(0, 2);
-            }
-
-            // 3) Encode to PNG.
-            let mut png_bytes = Vec::new();
-            {
-                let mut encoder = png::Encoder::new(&mut png_bytes, capture.width, capture.height);
-                encoder.set_color(png::ColorType::Rgba);
-                encoder.set_depth(png::BitDepth::Eight);
-
-                let mut writer = encoder
-                    .write_header()
-                    .map_err(|e| format!("PNG header write failed: {}", e))?;
-
-                writer
-                    .write_image_data(&rgba)
-                    .map_err(|e| format!("PNG encoding failed: {}", e))?;
-            }
-
-            // 4) Base64 encode for the webview (<img src="data:...">).
-            let b64 = base64::engine::general_purpose::STANDARD.encode(&png_bytes);
-            let data_url = format!("data:image/png;base64,{}", b64);
-
-            Ok((
-                SelectorSnapshot {
-                    data_url,
-                    width,
-                    height,
-                },
-                used_fallback,
-            ))
-        })
-        .await
-        {
-            Ok(Ok((snapshot, used_fallback))) => {
-                if used_fallback {
-                    warn!("Area selector snapshot: Graphics Capture failed, used GDI fallback");
-                } else {
-                    info!("Area selector snapshot: captured via Graphics Capture");
-                }
-
-                // Store for the selector window to pull on load (and for subsequent opens).
-                *lock_or_recover(&state.selector_snapshot) = Some(snapshot.clone());
-
-                // Also push it as an event (helps if the selector window is already loaded).
-                let _ = window.emit("selector-background-snapshot", snapshot);
-            }
-            Ok(Err(e)) => {
-                warn!("Area selector snapshot capture failed: {}", e);
-                *lock_or_recover(&state.selector_snapshot) = None;
-            }
-            Err(join_err) => {
-                warn!("Area selector snapshot task failed: {}", join_err);
-                *lock_or_recover(&state.selector_snapshot) = None;
-            }
-        }
-
-        window.show().map_err(|e| e.to_string())?;
-        window.set_focus().map_err(|e| e.to_string())?;
-        info!("✅ Area selector opened!");
-    } else {
-        return Err("Selector window not found".to_string());
-    }
-
-    Ok(())
+    selector_window::open(app, &state.selector_snapshot).await
 }
 
 /// Get the most recent selector background snapshot (if available).
@@ -1063,7 +629,7 @@ async fn open_area_selector_legacy(
 /// Called from JavaScript (selector window): `const snap = await invoke('get_selector_snapshot');`
 #[tauri::command]
 pub fn get_selector_snapshot(state: State<'_, AppState>) -> Option<SelectorSnapshot> {
-    lock_or_recover(&state.selector_snapshot).clone()
+    selector_window::snapshot(&state.selector_snapshot)
 }
 
 /// Close the area selector overlay window
@@ -1071,18 +637,7 @@ pub fn get_selector_snapshot(state: State<'_, AppState>) -> Option<SelectorSnaps
 /// Called from JavaScript: `await invoke('close_area_selector');`
 #[tauri::command]
 pub async fn close_area_selector(app: AppHandle, state: State<'_, AppState>) -> Result<(), String> {
-    info!("Closing area selector...");
-
-    if let Some(window) = app.get_webview_window("selector") {
-        window.hide().map_err(|e| e.to_string())?;
-        // Drop the snapshot to avoid holding a huge base64 string in memory.
-        *lock_or_recover(&state.selector_snapshot) = None;
-        info!("✅ Area selector closed!");
-    } else {
-        return Err("Selector window not found".to_string());
-    }
-
-    Ok(())
+    selector_window::close(&app, &state.selector_snapshot)
 }
 
 // =============================================================================
@@ -1915,18 +1470,7 @@ pub async fn stop_translation(state: State<'_, AppState>, app: AppHandle) -> Res
 /// Show the foundry-wizard window, resetting state for a fresh run
 #[tauri::command]
 pub fn open_foundry_wizard(app: AppHandle) -> Result<(), String> {
-    use tauri::Emitter;
-    info!("Opening Foundry setup wizard");
-    if let Some(window) = app.get_webview_window("foundry-wizard") {
-        // Emit reset event so the wizard JS resets to step 1 and clears timers
-        let _ = window.emit("wizard-reset", ());
-        window.show().map_err(|e| e.to_string())?;
-        window.set_focus().map_err(|e| e.to_string())?;
-        window.center().map_err(|e| e.to_string())?;
-    } else {
-        return Err("Wizard window not found".to_string());
-    }
-    Ok(())
+    crate::wizard_window::open(&app)
 }
 
 /// Hide the foundry-wizard window and notify the main window
@@ -1936,19 +1480,7 @@ pub fn close_foundry_wizard(
     model_downloaded: bool,
     selected_model: Option<String>,
 ) -> Result<(), String> {
-    info!("Closing Foundry setup wizard");
-    if let Some(window) = app.get_webview_window("foundry-wizard") {
-        window.hide().map_err(|e| e.to_string())?;
-    }
-    // Notify main window so it can refresh status and auto-configure
-    let _ = app.emit(
-        "foundry-wizard-closed",
-        serde_json::json!({
-            "modelDownloaded": model_downloaded,
-            "selectedModel": selected_model,
-        }),
-    );
-    Ok(())
+    crate::wizard_window::close(&app, model_downloaded, selected_model)
 }
 
 #[tauri::command]

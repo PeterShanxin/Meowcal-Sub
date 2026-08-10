@@ -26,7 +26,9 @@ use tracing::{info, warn};
 use tracing_subscriber::{EnvFilter, FmtSubscriber};
 
 // Import our custom modules
-use meowcal_sub::commands::{self, AppState};
+use meowcal_sub::app_state::AppState;
+use meowcal_sub::commands;
+use meowcal_sub::env_flags::env_truthy;
 use meowcal_sub::ipc::{IpcMessage, IpcServer};
 use meowcal_sub::sync_utils::lock_or_recover;
 use meowcal_sub::{http_server, legacy_translate_locally};
@@ -50,17 +52,6 @@ fn get_runtime_id() -> &'static str {
     } else {
         "win-x64"
     }
-}
-
-fn env_truthy(name: &str) -> bool {
-    std::env::var(name)
-        .map(|v| {
-            matches!(
-                v.trim().to_ascii_lowercase().as_str(),
-                "1" | "true" | "yes" | "on"
-            )
-        })
-        .unwrap_or(false)
 }
 
 fn resolve_log_filter() -> EnvFilter {
