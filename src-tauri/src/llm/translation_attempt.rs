@@ -177,10 +177,7 @@ impl TranslationAttemptRunner {
                         ));
                     }
 
-                    self.diagnostics
-                        .lock()
-                        .unwrap()
-                        .record_success(id, latency_ms);
+                    lock_or_recover(&self.diagnostics).record_success(id, latency_ms);
                     return AttemptOutcome::Succeeded {
                         translated,
                         latency_ms,

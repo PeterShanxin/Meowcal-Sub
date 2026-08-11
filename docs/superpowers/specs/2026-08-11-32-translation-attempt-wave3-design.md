@@ -158,7 +158,7 @@ iteration. Constants `FOUNDRY_TRANSIENT_MAX_RETRIES`,
 `MAX_TRANSLATION_INPUT_CHARS` stay in `manager.rs` (referenced by manager code
 and `manager_tests.rs`); knobs reach the runner through `AttemptPolicy`.
 
-## Before/after behavior matrix (byte-identical; verified by tests)
+## Before/after behavior matrix (verified by tests)
 
 | Dimension | BEFORE (main 58303b47) | AFTER (this wave) |
 | --- | --- | --- |
@@ -182,7 +182,7 @@ and `manager_tests.rs`); knobs reach the runner through `AttemptPolicy`.
 | Cancellation | dropping the translate future drops the in-flight request; no cancellation checks inside manager | same |
 | Stale results | pipeline-level (`pipeline_translation.rs`); unchanged | same |
 | Error strings / result codes | `TranslationOutcome`, warnings, `display_state` | same |
-| Logging | same `tracing` targets/levels/strings, same `lock().unwrap()` vs `lock_or_recover` split per path | identical copy |
+| Logging | same `tracing` targets/levels/strings | same (all runner diagnostics writes now use `lock_or_recover`; the success path previously used `lock().unwrap()` and now recovers a poisoned mutex instead of panicking — see Diagnostics ownership) |
 
 ## Retry semantics (traced from control flow, not comments)
 
@@ -257,10 +257,13 @@ retried unchanged (same as today).
 `TranslationDiagnosticsState` (in `llm/mod.rs`) remains the single owner of
 the diagnostics state machine. The runner is a **writer** at exactly the same
 points as today (per-attempt `record_error`/`record_success`); tier-loop and
-outer-loop writes stay in manager. The existing
-`lock().unwrap()` vs `lock_or_recover` split per path is copied verbatim so
-poisoned-mutex behavior is unchanged. `record_abandoned` (deadline-drop path,
-`pipeline_translation.rs`) is untouched.
+outer-loop writes stay in manager. All runner diagnostics writes use the
+repository-standard `lock_or_recover` helper (the pre-extraction success path
+used `lock().unwrap()`; the new production owner follows CODING_STANDARDS and
+recovers a poisoned diagnostics mutex instead of panicking — a deliberate
+repository-standard hardening, not a translation behavior change).
+`record_abandoned` (deadline-drop path, `pipeline_translation.rs`) is
+untouched.
 
 ## Rejected alternatives
 
