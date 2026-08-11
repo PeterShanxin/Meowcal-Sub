@@ -6,12 +6,12 @@ ratchets. Machine-readable values live in
 
 ## Enforced baseline
 
-Measured on 2026-08-10 after the #31 command-boundary extractions
-(wave 1: command boundaries; wave 2: application lifecycle services):
+Measured on 2026-08-10 after the #32 engine-status orchestration extraction
+(following the #31 command-boundary and lifecycle waves):
 
-- 169 production files under `src/` and `src-tauri/src/`;
+- production files under `src/` and `src-tauri/src/`;
 - 400 lines maximum for a new `.rs`, `.js`, `.html`, or `.css` production file;
-- 16 explicit legacy files above that ceiling;
+- 15 explicit legacy files above that ceiling;
 - 10 existing ESLint warnings, with zero allowed errors;
 - frontend coverage floors of 89% statements, 78% branches, 92% functions, and
   88% lines.
@@ -41,17 +41,16 @@ decomposition-owned hotspots are:
 | ------------------------------------ | ------: | -------------------- |
 | `src/scripts/main.js`                |   1,987 | #33                  |
 | `src-tauri/src/llm/foundry_local.rs` |   1,700 | #32                  |
-| `src-tauri/src/commands.rs`          |   1,574 | #31                  |
+| `src-tauri/src/commands.rs`          |   1,209 | #31 / #32 surface    |
 | `src/scripts/overlay.js`             |   1,129 | #34                  |
 | `src-tauri/src/llm/manager.rs`       |   1,021 | #32                  |
 | `src/scripts/selector.js`            |     820 | #34                  |
 | `src-tauri/src/llm/context.rs`       |     732 | #32                  |
-| `src-tauri/src/http_server.rs`       |     669 | #31 adapter boundary |
 | `src-tauri/src/config.rs`            |     595 | #31                  |
 
-`main.rs` was the last lifecycle hotspot and left the legacy list with this
-wave: at 246 lines it sits below the 400-line new-file ceiling, so it is now a
-regular production file.
+`main.rs` left the legacy list in the #31 lifecycle wave. `http_server.rs`
+left it in the #32 engine-status wave (now under the 400-line new-file
+ceiling after status orchestration moved to `engine_status`).
 
 The remaining explicit exceptions are styles, HTML, and focused platform
 modules recorded in the JSON manifest. They have the same no-growth rule even

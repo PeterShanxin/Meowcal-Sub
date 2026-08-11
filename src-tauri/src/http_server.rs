@@ -1,13 +1,5 @@
-// =============================================================================
-// HTTP_SERVER.RS - HTTP API for Browser Dev Mode
-// =============================================================================
-// This module provides an HTTP server that exposes the same functionality
-// as the Tauri IPC commands, allowing the frontend to run in a browser
-// and still communicate with the real Rust backend.
-//
-// Used for development and testing by AI agents (Claude) who can access
-// the app through a browser but not through Tauri's WebView.
-// =============================================================================
+// HTTP API for browser dev mode. Engine status/refresh/prepare/make-ready
+// orchestration lives in engine_status; this file is the thin adapter.
 
 use axum::{
     extract::State,
@@ -20,26 +12,20 @@ use serde::{Deserialize, Serialize};
 use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
-use std::time::{Duration, Instant};
 use tower_http::cors::{Any, CorsLayer};
 use tracing::info;
 
 use crate::config::{AppConfig, CaptureRegion};
+use crate::engine_status::{self, EngineStatusSnapshot};
 use crate::http_config::{
     get_settings, load_standalone_config, save_settings, standalone_config_path,
 };
 use crate::llm::{
     BackendId, BackendInfo, FoundryLocalBackend, FoundryLocalPhase, ReadyState,
-    TranslationDiagnostics, TranslationDiagnosticsState, TranslatorBackend, FAST_PROBE_TIMEOUT_MS,
-    SLOW_PROBE_TIMEOUT_MS,
+    TranslationDiagnostics, TranslationDiagnosticsState, TranslatorBackend,
 };
 use crate::sync_utils::lock_or_recover;
 
-// =============================================================================
-// HTTP SERVER STATE
-// =============================================================================
-
-/// Shared state for the HTTP server (similar to Tauri's AppState)
 #[derive(Clone)]
 pub struct HttpAppState {
     pub config: Arc<Mutex<AppConfig>>,
@@ -100,6 +86,20 @@ pub struct FoundryLocalStatus {
     pub probe: Option<crate::llm::FoundryProbeSnapshot>,
 }
 
+fn foundry_status_from_snapshot(s: EngineStatusSnapshot) -> FoundryLocalStatus {
+    FoundryLocalStatus {
+        cli_available: s.cli_available,
+        service_running: s.service_running,
+        service_url: s.service_url,
+        models: s.models,
+        configured_model: s.configured_model,
+        selected_model: s.selected_model,
+        notes: s.notes,
+        phase: s.phase,
+        probe: s.probe,
+    }
+}
+
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 struct BrowserModeInfo {
@@ -107,11 +107,6 @@ struct BrowserModeInfo {
     message: String,
 }
 
-// =============================================================================
-// API HANDLERS
-// =============================================================================
-
-/// GET /api/health - Health check
 async fn health() -> impl IntoResponse {
     Json(serde_json::json!({
         "status": "ok",
@@ -208,305 +203,30 @@ async fn list_foundry_local_models(State(state): State<HttpAppState>) -> impl In
 /// GET /api/foundry-local/status - Get Foundry Local status
 async fn get_foundry_local_status(State(state): State<HttpAppState>) -> impl IntoResponse {
     let config = lock_or_recover(&state.config).clone();
-    let foundry_config = config.translation.foundry_local.clone();
-    let configured_model = foundry_config.model.clone();
-    let backend = FoundryLocalBackend::new(foundry_config);
-    backend.refresh_service_status();
-
-    let cli_available = FoundryLocalBackend::is_cli_available();
-    let service_url = FoundryLocalBackend::get_service_url_from_cli();
-    let service_running = service_url.is_some();
-    let models = if service_running {
-        FoundryLocalBackend::get_cached_models_from_cli()
-    } else {
-        Vec::new()
-    };
-
-    // No network probe here; this is a fast snapshot.
-    let phase = backend.phase();
-
-    Json(FoundryLocalStatus {
-        cli_available,
-        service_running,
-        service_url,
-        models,
-        configured_model,
-        selected_model: backend.selected_model(),
-        notes: backend.notes(),
-        phase,
-        probe: backend.probe_snapshot(),
-    })
+    let snapshot = engine_status::get_status_http(config.translation.foundry_local.clone()).await;
+    Json(foundry_status_from_snapshot(snapshot))
 }
 
 /// POST /api/foundry-local/refresh - Refresh Foundry Local status (fast, read-only probe)
 async fn refresh_foundry_local_status(State(state): State<HttpAppState>) -> impl IntoResponse {
     let config = lock_or_recover(&state.config).clone();
-    let foundry_config = config.translation.foundry_local.clone();
-    let configured_model = foundry_config.model.clone();
-
-    let (backend, cli_available, service_url, service_running, models, notes) =
-        tokio::task::spawn_blocking({
-            let config = foundry_config.clone();
-            move || {
-                let backend = FoundryLocalBackend::new(config);
-                backend.refresh_service_status();
-                let cli_available = FoundryLocalBackend::is_cli_available();
-                let service_url = FoundryLocalBackend::get_service_url_from_cli();
-                let service_running = service_url.is_some();
-                let models = if service_running {
-                    FoundryLocalBackend::get_cached_models_from_cli()
-                } else {
-                    Vec::new()
-                };
-                let notes = backend.notes();
-                (
-                    backend,
-                    cli_available,
-                    service_url,
-                    service_running,
-                    models,
-                    notes,
-                )
-            }
-        })
-        .await
-        .unwrap_or_else(|_| {
-            let backend = FoundryLocalBackend::new(foundry_config.clone());
-            (
-                backend,
-                false,
-                None,
-                false,
-                Vec::new(),
-                "Foundry Local refresh task failed".to_string(),
-            )
-        });
-
-    let phase = if service_running && !models.is_empty() {
-        if backend.is_probe_cache_valid() {
-            FoundryLocalPhase::Ready
-        } else {
-            match backend.probe_chat_completions(FAST_PROBE_TIMEOUT_MS).await {
-                Ok(true) => FoundryLocalPhase::Ready,
-                Ok(false) => FoundryLocalPhase::Preparing,
-                Err(_) => FoundryLocalPhase::Error,
-            }
-        }
-    } else {
-        backend.phase()
-    };
-
-    Json(FoundryLocalStatus {
-        cli_available,
-        service_running,
-        service_url,
-        models,
-        configured_model,
-        selected_model: backend.selected_model(),
-        notes,
-        phase,
-        probe: backend.probe_snapshot(),
-    })
+    let snapshot =
+        engine_status::refresh_status_http(config.translation.foundry_local.clone()).await;
+    Json(foundry_status_from_snapshot(snapshot))
 }
 
 /// POST /api/foundry-local/prepare - Attempt to start Foundry Local service
 async fn prepare_foundry_local(State(state): State<HttpAppState>) -> impl IntoResponse {
     let config = lock_or_recover(&state.config).clone();
-    let foundry_config = config.translation.foundry_local.clone();
-    let configured_model = foundry_config.model.clone();
-    let (backend, cli_available, service_url, service_running, models, mut notes) =
-        tokio::task::spawn_blocking({
-            let config = foundry_config.clone();
-            move || {
-                let backend = FoundryLocalBackend::new(config);
-                backend.ensure_service_running();
-                let cli_available = FoundryLocalBackend::is_cli_available();
-                let service_url = FoundryLocalBackend::get_service_url_from_cli();
-                let service_running = service_url.is_some();
-                let models = if service_running {
-                    FoundryLocalBackend::get_cached_models_from_cli()
-                } else {
-                    Vec::new()
-                };
-                let notes = backend.notes();
-                (
-                    backend,
-                    cli_available,
-                    service_url,
-                    service_running,
-                    models,
-                    notes,
-                )
-            }
-        })
-        .await
-        .unwrap_or_else(|_| {
-            let backend = FoundryLocalBackend::new(foundry_config.clone());
-            (
-                backend,
-                false,
-                None,
-                false,
-                Vec::new(),
-                "Foundry Local prepare task failed".to_string(),
-            )
-        });
-
-    let phase = if service_running && !models.is_empty() {
-        match backend.probe_chat_completions(SLOW_PROBE_TIMEOUT_MS).await {
-            Ok(true) => FoundryLocalPhase::Ready,
-            Ok(false) => FoundryLocalPhase::Preparing,
-            Err(e) => {
-                notes = format!("{} Probe error: {}", notes, e);
-                FoundryLocalPhase::Error
-            }
-        }
-    } else {
-        backend.phase()
-    };
-
-    Json(FoundryLocalStatus {
-        cli_available,
-        service_running,
-        service_url,
-        models,
-        configured_model,
-        selected_model: backend.selected_model(),
-        notes,
-        phase,
-        probe: backend.probe_snapshot(),
-    })
+    let snapshot = engine_status::prepare_http(config.translation.foundry_local.clone()).await;
+    Json(foundry_status_from_snapshot(snapshot))
 }
 
 /// POST /api/foundry-local/make-ready - Start service if needed + keep probing until Ready (or timeout)
 async fn make_foundry_ready(State(state): State<HttpAppState>) -> impl IntoResponse {
     let config = lock_or_recover(&state.config).clone();
-    let foundry_config = config.translation.foundry_local.clone();
-    let configured_model = foundry_config.model.clone();
-    let configured_timeout_ms = foundry_config.timeout_ms as u64;
-    let steady_probe_timeout_ms = configured_timeout_ms.clamp(5_000, SLOW_PROBE_TIMEOUT_MS);
-
-    let (backend, cli_available, mut service_url, mut service_running, mut models, mut notes) =
-        tokio::task::spawn_blocking({
-            let config = foundry_config.clone();
-            move || {
-                let backend = FoundryLocalBackend::new(config);
-                let cli_available = FoundryLocalBackend::is_cli_available();
-                if cli_available {
-                    backend.ensure_service_running();
-                }
-                backend.refresh_service_status();
-                let service_url = FoundryLocalBackend::get_service_url_from_cli();
-                let service_running = service_url.is_some();
-                let models = if service_running {
-                    FoundryLocalBackend::get_cached_models_from_cli()
-                } else {
-                    Vec::new()
-                };
-                let notes = backend.notes();
-                (
-                    backend,
-                    cli_available,
-                    service_url,
-                    service_running,
-                    models,
-                    notes,
-                )
-            }
-        })
-        .await
-        .unwrap_or_else(|_| {
-            let backend = FoundryLocalBackend::new(foundry_config.clone());
-            (
-                backend,
-                false,
-                None,
-                false,
-                Vec::new(),
-                "Foundry Local make-ready task failed".to_string(),
-            )
-        });
-
-    if !cli_available || !service_running || models.is_empty() {
-        let phase = backend.phase();
-        return Json(FoundryLocalStatus {
-            cli_available,
-            service_running,
-            service_url,
-            models,
-            configured_model,
-            selected_model: backend.selected_model(),
-            notes,
-            phase,
-            probe: backend.probe_snapshot(),
-        });
-    }
-
-    let started = Instant::now();
-    let max_total = Duration::from_secs(90);
-    let mut attempt = 0usize;
-    let mut phase = FoundryLocalPhase::Preparing;
-    let mut last_error: Option<String> = None;
-
-    while started.elapsed() < max_total {
-        attempt += 1;
-        let timeout_ms = if attempt == 1 {
-            SLOW_PROBE_TIMEOUT_MS
-        } else {
-            steady_probe_timeout_ms.max(FAST_PROBE_TIMEOUT_MS)
-        };
-
-        match backend.probe_chat_completions(timeout_ms).await {
-            Ok(true) => {
-                phase = FoundryLocalPhase::Ready;
-                last_error = None;
-                break;
-            }
-            Ok(false) => {
-                phase = FoundryLocalPhase::Preparing;
-            }
-            Err(e) => {
-                phase = FoundryLocalPhase::Error;
-                last_error = Some(e.to_string());
-            }
-        }
-
-        backend.refresh_service_status();
-        service_url = FoundryLocalBackend::get_service_url_from_cli();
-        service_running = service_url.is_some();
-        models = if service_running {
-            FoundryLocalBackend::get_cached_models_from_cli()
-        } else {
-            Vec::new()
-        };
-
-        if !service_running {
-            phase = FoundryLocalPhase::NotRunning;
-            break;
-        }
-
-        tokio::time::sleep(Duration::from_millis(1500)).await;
-    }
-
-    if phase != FoundryLocalPhase::Ready {
-        if let Some(err) = last_error {
-            notes = format!("{} Last error: {}", notes, err);
-        } else {
-            notes = format!("{} Still warming up. Try again shortly.", notes);
-        }
-    }
-
-    Json(FoundryLocalStatus {
-        cli_available,
-        service_running,
-        service_url,
-        models,
-        configured_model,
-        selected_model: backend.selected_model(),
-        notes,
-        phase,
-        probe: backend.probe_snapshot(),
-    })
+    let snapshot = engine_status::make_ready_http(config.translation.foundry_local.clone()).await;
+    Json(foundry_status_from_snapshot(snapshot))
 }
 
 /// POST /api/area-selector - Not available in browser mode
