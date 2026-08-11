@@ -17,6 +17,7 @@ mod prompt_router;
 mod subtitle_output;
 pub(crate) mod text_utils;
 mod transport_errors;
+mod transport_http;
 
 pub use context::*;
 pub use foundry_local::*;

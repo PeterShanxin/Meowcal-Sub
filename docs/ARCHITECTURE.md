@@ -38,8 +38,9 @@ capture -> preprocess -> Windows OCR -> normalize/dedupe
 `commands.rs` currently coordinates much of this path. `TranslationManager`
 owns translation selection, retry, context, output validation, fallback, and
 diagnostics. `FoundryLocalBackend` combines CLI discovery, service lifecycle,
-transport, and prompt requests. These are recorded legacy boundaries, not the
-target design.
+and the compatibility façade; its HTTP request execution and API-namespace
+discovery live in `llm/transport_http.rs` (`HttpTransport`). These are
+recorded legacy boundaries, not the target design.
 
 The target path keeps the stages explicit. Every result carries a typed state:
 translated, source-only, rejected, transient failure, cancelled, or stale.
@@ -56,7 +57,8 @@ Source OCR is never represented as successful translation.
 | Persisted configuration | `src-tauri/src/config.rs`, `settings_service.rs`  | One versioned config service owns defaults, validation, migration, and writes          |
 | Capture and OCR         | `capture/`, `ocr/`, `ocr_language_packs.rs`, session code in `commands.rs` | Separate capture/OCR services; pipeline orchestrator owns sequencing  |
 | Translation             | `llm/manager.rs`                                  | Pipeline service owns attempts and typed outcomes; validators do not own transport     |
-| Engine runtime          | `engine_status` (readiness orchestration), `hy_mt_runtime` / `engine_*` (managed install/process), `llm/foundry_local.rs` (legacy CLI/transport) | Curated engine service owns manifest, install, process, health, repair, rollback; adapters stay thin |
+| Translation transport   | `llm/transport_http.rs` (`HttpTransport`)        | Namespace discovery, endpoint URL assembly, and GET/POST dispatch with 404 fallback; no retry/context/validation policy |
+| Engine runtime          | `engine_status` (readiness orchestration), `hy_mt_runtime` / `engine_*` (managed install/process), `llm/foundry_local.rs` (legacy CLI/compatibility façade) | Curated engine service owns manifest, install, process, health, repair, rollback; adapters stay thin |
 | Compatibility downloads | `legacy_translate_locally.rs`                    | Kept outside normal-mode adapters; legacy/developer compatibility only                  |
 | Native overlay IPC      | `ipc/` (protocol, server, handler), `overlay/`, `commands.rs` | `ipc/protocol.rs` owns payload schema; adapters do not redefine it |
 | In-app update           | `update_handoff.rs`, `ui/update-controller.ts`    | Handoff owns what must stop before the installer runs; the manifest is generated, never hand-written |

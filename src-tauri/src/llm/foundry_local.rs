@@ -17,6 +17,8 @@ use std::sync::{OnceLock, RwLock};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tracing::{debug, info, warn};
 
+use super::transport_http::{HttpTransport, ModelsProbeOutcome, TransportError};
+
 /// Every `foundry` spawn goes through here: these run on a timer while the
 /// viewer is watching, and four of the five once drew a console window (#67).
 fn foundry_command() -> std::process::Command {
@@ -41,10 +43,6 @@ const PROBE_CACHE_DURATION_MS: u64 = 300_000;
 pub const FAST_PROBE_TIMEOUT_MS: u64 = 2_000;
 /// Slow warmup probe timeout for "Prepare Foundry" button (milliseconds)
 pub const SLOW_PROBE_TIMEOUT_MS: u64 = 25_000;
-
-const API_NAMESPACE_UNKNOWN: u8 = 0;
-const API_NAMESPACE_OPENAI: u8 = 1;
-const API_NAMESPACE_V1: u8 = 2;
 
 const AUTO_MODEL_GROUP_WEIGHT: u32 = 120;
 
@@ -157,30 +155,25 @@ pub struct ModelData {
 /// Foundry Local backend using OpenAI-compatible API
 pub struct FoundryLocalBackend {
     config: FoundryLocalConfig,
-    http_client: Client,
+    transport: HttpTransport,
     service_url: RwLock<Option<String>>,
     service_available: AtomicBool,
     cached_models: RwLock<Vec<String>>,
-    api_namespace: AtomicU8,
 }
 
 impl FoundryLocalBackend {
     pub fn new(config: FoundryLocalConfig) -> Self {
-        let http_client = Client::builder()
-            .timeout(Duration::from_millis(config.timeout_ms as u64))
-            .build()
-            .unwrap_or_default();
+        let transport = HttpTransport::new(config.timeout_ms as u64);
         let configured_url = config.effective_endpoint_url();
         let has_configured_url = configured_url.is_some();
         let configured_model = config.model.clone();
 
         Self {
             config,
-            http_client,
+            transport,
             service_url: RwLock::new(configured_url),
             service_available: AtomicBool::new(has_configured_url),
             cached_models: RwLock::new(configured_model.into_iter().collect()),
-            api_namespace: AtomicU8::new(API_NAMESPACE_UNKNOWN),
         }
         // Note: Service detection happens lazily on first is_available() call
     }
@@ -188,33 +181,8 @@ impl FoundryLocalBackend {
     fn mark_service_unavailable(&self) {
         *write_or_recover(&self.service_url) = None;
         self.service_available.store(false, Ordering::SeqCst);
-        self.api_namespace
-            .store(API_NAMESPACE_UNKNOWN, Ordering::SeqCst);
+        self.transport.reset_namespace();
         self.invalidate_probe_cache();
-    }
-
-    fn preferred_api_namespace(&self) -> u8 {
-        match self.api_namespace.load(Ordering::SeqCst) {
-            API_NAMESPACE_V1 => API_NAMESPACE_V1,
-            API_NAMESPACE_OPENAI => API_NAMESPACE_OPENAI,
-            _ => API_NAMESPACE_OPENAI, // Default to the Foundry Local /openai namespace when unknown.
-        }
-    }
-
-    fn api_url_for(&self, base_url: &str, api_namespace: u8, endpoint: &str) -> String {
-        match api_namespace {
-            API_NAMESPACE_V1 => format!("{}/v1/{}", base_url, endpoint),
-            _ => format!("{}/openai/v1/{}", base_url, endpoint),
-        }
-    }
-
-    /// Get the alternate namespace to try on 404 errors
-    fn fallback_namespace(preferred: u8) -> u8 {
-        if preferred == API_NAMESPACE_OPENAI {
-            API_NAMESPACE_V1
-        } else {
-            API_NAMESPACE_OPENAI
-        }
     }
 
     /// Execute a GET request with automatic namespace fallback on 404.
@@ -222,46 +190,13 @@ impl FoundryLocalBackend {
     /// On success, stores the working namespace for future requests.
     async fn get_with_namespace_fallback(
         &self,
-        client: &Client,
         base_url: &str,
         endpoint: &str,
     ) -> Result<reqwest::Response, LlmError> {
-        let preferred = self.preferred_api_namespace();
-        let url = self.api_url_for(base_url, preferred, endpoint);
-
-        match client.get(&url).send().await {
-            Ok(resp) if resp.status().is_success() => {
-                self.api_namespace.store(preferred, Ordering::SeqCst);
-                Ok(resp)
-            }
-            Ok(resp) if resp.status().as_u16() == 404 => {
-                let fallback = Self::fallback_namespace(preferred);
-                let fallback_url = self.api_url_for(base_url, fallback, endpoint);
-                debug!(
-                    "Endpoint {} returned 404, trying fallback {}",
-                    url, fallback_url
-                );
-
-                let resp = client
-                    .get(&fallback_url)
-                    .send()
-                    .await
-                    .map_err(|e| LlmError::ApiError(describe_request_failure(&e)))?;
-
-                if resp.status().is_success() {
-                    self.api_namespace.store(fallback, Ordering::SeqCst);
-                    Ok(resp)
-                } else {
-                    let status = resp.status();
-                    Err(LlmError::ApiError(format!("API error {status}")))
-                }
-            }
-            Ok(resp) => {
-                let status = resp.status();
-                Err(LlmError::ApiError(format!("API error {status}")))
-            }
-            Err(e) => Err(LlmError::ApiError(describe_request_failure(&e))),
-        }
+        self.transport
+            .get_with_namespace_fallback(base_url, endpoint)
+            .await
+            .map_err(map_get_error)
     }
 
     /// Execute a POST request with automatic namespace fallback on 404.
@@ -269,53 +204,14 @@ impl FoundryLocalBackend {
     /// On success, stores the working namespace for future requests.
     async fn post_with_namespace_fallback<T: Serialize>(
         &self,
-        client: &Client,
         base_url: &str,
         endpoint: &str,
         body: &T,
     ) -> Result<reqwest::Response, LlmError> {
-        let preferred = self.preferred_api_namespace();
-        let url = self.api_url_for(base_url, preferred, endpoint);
-
-        match client.post(&url).json(body).send().await {
-            Ok(resp) if resp.status().is_success() => {
-                self.api_namespace.store(preferred, Ordering::SeqCst);
-                Ok(resp)
-            }
-            Ok(resp) if resp.status().as_u16() == 404 => {
-                let fallback = Self::fallback_namespace(preferred);
-                let fallback_url = self.api_url_for(base_url, fallback, endpoint);
-                debug!(
-                    "Endpoint {} returned 404, trying fallback {}",
-                    url, fallback_url
-                );
-
-                let resp = client
-                    .post(&fallback_url)
-                    .json(body)
-                    .send()
-                    .await
-                    .map_err(|e| LlmError::ApiError(describe_request_failure(&e)))?;
-
-                if resp.status().is_success() {
-                    self.api_namespace.store(fallback, Ordering::SeqCst);
-                    Ok(resp)
-                } else {
-                    let status = resp.status();
-                    warn!("Local translation endpoint returned HTTP {}", status);
-                    Err(LlmError::ApiError(format!("API error {status}")))
-                }
-            }
-            Ok(resp) => {
-                let status = resp.status();
-                warn!("Local translation endpoint returned HTTP {}", status);
-                Err(LlmError::ApiError(format!("API error {status}")))
-            }
-            Err(e) => {
-                warn!("Foundry Local request failed: {}", e);
-                Err(LlmError::ApiError(describe_request_failure(&e)))
-            }
-        }
+        self.transport
+            .post_with_namespace_fallback(base_url, endpoint, body)
+            .await
+            .map_err(map_post_error)
     }
 
     /// Get the service URL by parsing `foundry service status` output.
@@ -853,7 +749,7 @@ impl FoundryLocalBackend {
         request: &ChatCompletionRequest,
     ) -> Result<reqwest::Response, LlmError> {
         let resp = self
-            .post_with_namespace_fallback(&self.http_client, base_url, "chat/completions", request)
+            .post_with_namespace_fallback(base_url, "chat/completions", request)
             .await?;
         // Any successful chat completion implies the model is "ready to talk".
         self.record_probe_success();
@@ -873,7 +769,7 @@ impl FoundryLocalBackend {
         };
 
         let response = self
-            .get_with_namespace_fallback(&self.http_client, &base_url, "models")
+            .get_with_namespace_fallback(&base_url, "models")
             .await?;
 
         let models_response: ModelsResponse = response
@@ -972,28 +868,10 @@ impl FoundryLocalBackend {
     /// Check if service is healthy by probing the models endpoint
     pub async fn check_health(&self) -> bool {
         if let Some(url) = self.get_service_url() {
-            let preferred_namespace = self.preferred_api_namespace();
-            let models_url = self.api_url_for(&url, preferred_namespace, "models");
-
-            if let Ok(resp) = self.http_client.get(&models_url).send().await {
-                if resp.status().is_success() {
-                    self.api_namespace
-                        .store(preferred_namespace, Ordering::SeqCst);
-                    return true;
-                }
-
-                if resp.status().as_u16() == 404 {
-                    let fallback_namespace = if preferred_namespace == API_NAMESPACE_OPENAI {
-                        API_NAMESPACE_V1
-                    } else {
-                        API_NAMESPACE_OPENAI
-                    };
-                    self.api_namespace
-                        .store(fallback_namespace, Ordering::SeqCst);
-                }
-            }
+            self.transport.check_health(&url).await
+        } else {
+            false
         }
-        false
     }
 
     // =========================================================================
@@ -1223,70 +1101,29 @@ impl FoundryLocalBackend {
             .unwrap_or_default();
 
         // Try probe with namespace fallback
-        self.probe_with_namespace_fallback(&probe_client, &base_url)
-            .await
+        let outcome = self.transport.probe_models(&probe_client, &base_url).await;
+        self.probe_outcome_to_result(outcome)
     }
 
-    /// Probe helper with 404-fallback logic for namespace discovery.
-    /// Returns Ok(true) on success, Ok(false) on timeout, Err on other errors.
-    async fn probe_with_namespace_fallback(
-        &self,
-        client: &Client,
-        base_url: &str,
-    ) -> Result<bool, LlmError> {
-        let preferred = self.preferred_api_namespace();
-        let url = self.api_url_for(base_url, preferred, "models");
-        debug!("Probing Foundry Local models endpoint: {}", url);
-
-        match client.get(&url).send().await {
-            Ok(resp) if resp.status().is_success() => {
-                self.api_namespace.store(preferred, Ordering::SeqCst);
+    /// Convert a transport probe outcome into the backend's probe-cache write
+    /// and the historical `Ok(true)` / `Ok(false)` / `Err` result shape.
+    fn probe_outcome_to_result(&self, outcome: ModelsProbeOutcome) -> Result<bool, LlmError> {
+        match outcome {
+            ModelsProbeOutcome::Ready => {
                 self.record_probe_success();
-                debug!("Foundry Local probe succeeded");
                 Ok(true)
             }
-            Ok(resp) if resp.status().as_u16() == 404 => {
-                // Try fallback namespace
-                let fallback = Self::fallback_namespace(preferred);
-                let fallback_url = self.api_url_for(base_url, fallback, "models");
-                debug!("Probing fallback endpoint: {}", fallback_url);
-
-                match client.get(&fallback_url).send().await {
-                    Ok(resp) if resp.status().is_success() => {
-                        self.api_namespace.store(fallback, Ordering::SeqCst);
-                        self.record_probe_success();
-                        debug!("Foundry Local probe succeeded (fallback)");
-                        Ok(true)
-                    }
-                    Ok(resp) => {
-                        let msg = format!("Models endpoint returned status {}", resp.status());
-                        self.record_probe_error(msg.clone());
-                        Err(LlmError::ApiError(msg))
-                    }
-                    Err(e) if e.is_timeout() => {
-                        debug!("Foundry Local probe timed out");
-                        self.record_probe_timeout();
-                        Ok(false)
-                    }
-                    Err(e) => {
-                        let msg = format!("Probe failed: {}", e);
-                        self.record_probe_error(msg.clone());
-                        Err(LlmError::ApiError(msg))
-                    }
-                }
-            }
-            Ok(resp) => {
-                let msg = format!("Models endpoint returned status {}", resp.status());
-                self.record_probe_error(msg.clone());
-                Err(LlmError::ApiError(msg))
-            }
-            Err(e) if e.is_timeout() => {
-                debug!("Foundry Local probe timed out");
+            ModelsProbeOutcome::TimedOut => {
                 self.record_probe_timeout();
                 Ok(false)
             }
-            Err(e) => {
-                let msg = format!("Probe failed: {}", e);
+            ModelsProbeOutcome::RequestFailed(error) => {
+                let msg = format!("Probe failed: {}", error);
+                self.record_probe_error(msg.clone());
+                Err(LlmError::ApiError(msg))
+            }
+            ModelsProbeOutcome::BadStatus(status) => {
+                let msg = format!("Models endpoint returned status {}", status);
                 self.record_probe_error(msg.clone());
                 Err(LlmError::ApiError(msg))
             }
@@ -1418,12 +1255,7 @@ impl FoundryLocalBackend {
         debug!("Sending summarization request to Foundry Local");
 
         let response = self
-            .post_with_namespace_fallback(
-                &self.http_client,
-                &base_url,
-                "chat/completions",
-                &request,
-            )
+            .post_with_namespace_fallback(&base_url, "chat/completions", &request)
             .await?;
 
         let completion: ChatCompletionResponse = response
@@ -1605,8 +1437,9 @@ impl TranslatorBackend for FoundryLocalBackend {
             max_tokens: 120,
         };
 
-        let current_namespace = self.preferred_api_namespace();
-        let url = self.api_url_for(&base_url, current_namespace, "chat/completions");
+        let url = self
+            .transport
+            .endpoint_url_for(&base_url, "chat/completions");
         let request_started = std::time::Instant::now();
         debug!("Sending translation request to Foundry Local: {}", url);
         info!(
@@ -1628,9 +1461,9 @@ impl TranslatorBackend for FoundryLocalBackend {
 
                 if let Some(refreshed_url) = self.get_service_url() {
                     if refreshed_url != base_url {
-                        let retry_namespace = self.preferred_api_namespace();
-                        let retry_url =
-                            self.api_url_for(&refreshed_url, retry_namespace, "chat/completions");
+                        let retry_url = self
+                            .transport
+                            .endpoint_url_for(&refreshed_url, "chat/completions");
                         debug!(
                             "Retrying Foundry Local request after refreshing service URL: {}",
                             retry_url
@@ -1683,6 +1516,34 @@ impl TranslatorBackend for FoundryLocalBackend {
         );
 
         Ok(translated)
+    }
+}
+
+/// Map a GET transport failure to the app-level error with the historical
+/// message and (absent) logging behavior: no warn, `API error {status}` for a
+/// non-success status, full failure description otherwise.
+fn map_get_error(error: TransportError) -> LlmError {
+    match error {
+        TransportError::Timeout(error) | TransportError::Failed(error) => {
+            LlmError::ApiError(describe_request_failure(&error))
+        }
+        TransportError::ApiStatus(status) => LlmError::ApiError(format!("API error {status}")),
+    }
+}
+
+/// Map a POST transport failure to the app-level error with the historical
+/// message and logging behavior: warns before returning `API error {status}` /
+/// the full failure description.
+fn map_post_error(error: TransportError) -> LlmError {
+    match error {
+        TransportError::Timeout(error) | TransportError::Failed(error) => {
+            warn!("Foundry Local request failed: {}", error);
+            LlmError::ApiError(describe_request_failure(&error))
+        }
+        TransportError::ApiStatus(status) => {
+            warn!("Local translation endpoint returned HTTP {}", status);
+            LlmError::ApiError(format!("API error {status}"))
+        }
     }
 }
 
