@@ -5,28 +5,29 @@ use std::fs;
 use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-fn unique_root(label: &str) -> PathBuf {
-    let nanos = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .expect("clock")
-        .as_nanos();
+fn unique_root(label: &str) -> Result<PathBuf, Box<dyn std::error::Error>> {
+    let nanos = SystemTime::now().duration_since(UNIX_EPOCH)?.as_nanos();
     let root = std::env::temp_dir().join(format!("meowcal-engine-status-{label}-{nanos}"));
     let _ = fs::remove_dir_all(&root);
-    fs::create_dir_all(&root).expect("temp root");
-    root
+    fs::create_dir_all(&root)?;
+    Ok(root)
 }
 
-fn managed_config(root: &std::path::Path, with_exe: bool, with_model: bool) -> FoundryLocalConfig {
+fn managed_config(
+    root: &std::path::Path,
+    with_exe: bool,
+    with_model: bool,
+) -> Result<FoundryLocalConfig, Box<dyn std::error::Error>> {
     let exe = root.join("llama-server.exe");
     let model = root.join("model.gguf");
     if with_exe {
-        fs::write(&exe, b"fake-exe").expect("exe");
+        fs::write(&exe, b"fake-exe")?;
     }
     if with_model {
         // Size must match shipped manifest model size for model_ready; when
         // mismatch, managed path reports NoModels. Empty/wrong size is fine
         // for NotInstalled / NoModels tests.
-        fs::write(&model, b"x").expect("model");
+        fs::write(&model, b"x")?;
     }
     let mut config = FoundryLocalConfig::default();
     config.model = Some("hy-mt-test".to_string());
@@ -36,13 +37,13 @@ fn managed_config(root: &std::path::Path, with_exe: bool, with_model: bool) -> F
         model_path: model.to_string_lossy().into_owned(),
         port: 11436,
     });
-    config
+    Ok(config)
 }
 
 #[tokio::test]
-async fn managed_missing_executable_is_not_installed() {
-    let root = unique_root("no-exe");
-    let config = managed_config(&root, false, false);
+async fn managed_missing_executable_is_not_installed() -> Result<(), Box<dyn std::error::Error>> {
+    let root = unique_root("no-exe")?;
+    let config = managed_config(&root, false, false)?;
     let status = managed_status(&config, false)
         .await
         .expect("managed branch");
@@ -53,12 +54,14 @@ async fn managed_missing_executable_is_not_installed() {
     assert_eq!(status.notes, "Translation runtime is missing.");
     assert!(status.models.is_empty());
     let _ = fs::remove_dir_all(root);
+    Ok(())
 }
 
 #[tokio::test]
-async fn managed_exe_without_matching_model_is_no_models() {
-    let root = unique_root("no-model");
-    let config = managed_config(&root, true, true);
+async fn managed_exe_without_matching_model_is_no_models() -> Result<(), Box<dyn std::error::Error>>
+{
+    let root = unique_root("no-model")?;
+    let config = managed_config(&root, true, true)?;
     let status = managed_status(&config, false)
         .await
         .expect("managed branch");
@@ -73,13 +76,15 @@ async fn managed_exe_without_matching_model_is_no_models() {
     assert_eq!(status.selected_model.as_deref(), Some("hy-mt-test"));
     assert!(status.service_url.is_some());
     let _ = fs::remove_dir_all(root);
+    Ok(())
 }
 
 #[tokio::test]
-async fn http_get_status_ignores_managed_runtime_config() {
+async fn http_get_status_ignores_managed_runtime_config() -> Result<(), Box<dyn std::error::Error>>
+{
     // HTTP must not take the managed branch even when managed_runtime is set.
-    let root = unique_root("http-ignores-managed");
-    let config = managed_config(&root, false, false);
+    let root = unique_root("http-ignores-managed")?;
+    let config = managed_config(&root, false, false)?;
     let status = get_status_http(config).await;
     // Without a real Foundry CLI this is legacy discovery, not managed notes.
     assert_ne!(status.notes, "Translation runtime is missing.");
@@ -87,6 +92,7 @@ async fn http_get_status_ignores_managed_runtime_config() {
     // Critical: phase/notes are not the managed fixed strings path exclusively
     // proven by notes inequality above.
     let _ = fs::remove_dir_all(root);
+    Ok(())
 }
 
 #[test]
