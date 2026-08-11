@@ -12,6 +12,7 @@
 
 use crate::config::FoundryLocalConfig;
 use crate::llm::foundry_local::FoundryLocalBackend;
+use crate::llm::LlmError;
 use crate::sync_utils::lock_or_recover;
 use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
@@ -203,10 +204,31 @@ pub(super) fn backend_for(url: &str, model: &str, timeout_ms: u32) -> FoundryLoc
 /// The probe cache is a process-global static keyed by service URL + model.
 /// Tests that drive `FoundryLocalBackend` serialize on this lock so one test's
 /// probe recording cannot race another test's snapshot read.
-static PROBE_CACHE_LOCK: Mutex<()> = Mutex::new(());
+///
+/// An async mutex on purpose: the lock is held across network awaits, and
+/// CODING_STANDARDS forbids holding a synchronous mutex guard across `.await`.
+static PROBE_CACHE_LOCK: std::sync::OnceLock<tokio::sync::Mutex<()>> = std::sync::OnceLock::new();
 
-pub(super) fn lock_probe_cache() -> std::sync::MutexGuard<'static, ()> {
-    lock_or_recover(&PROBE_CACHE_LOCK)
+pub(super) async fn lock_probe_cache() -> tokio::sync::MutexGuard<'static, ()> {
+    PROBE_CACHE_LOCK
+        .get_or_init(|| tokio::sync::Mutex::new(()))
+        .lock()
+        .await
+}
+
+/// Assert that a backend call must fail, and return the failure.
+///
+/// The call itself is a network outcome, so its `Result` is propagated rather
+/// than unwrapped: `?` returns a plain test error when the call unexpectedly
+/// succeeds, and the `LlmError` when it fails as the test requires.
+pub(super) fn must_fail<T>(
+    result: Result<T, LlmError>,
+    what: &str,
+) -> Result<LlmError, Box<dyn std::error::Error>> {
+    match result {
+        Err(error) => Ok(error),
+        Ok(_) => Err(format!("expected {what} to fail but it succeeded").into()),
+    }
 }
 
 pub(super) fn models_json(ids: &[&str]) -> String {

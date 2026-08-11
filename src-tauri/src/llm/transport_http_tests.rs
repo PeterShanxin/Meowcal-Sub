@@ -1,10 +1,9 @@
 use super::*;
-use crate::llm::foundry_local::FoundryLocalBackend;
 use crate::llm::TranslatorBackend;
 use serde_json::Value;
 
 use super::transport_http_mock::{
-    backend_for, chat_json, lock_probe_cache, models_json, MockResponse, MockServer,
+    backend_for, chat_json, lock_probe_cache, models_json, must_fail, MockResponse, MockServer,
 };
 
 // ---------------------------------------------------------------------------
@@ -12,27 +11,23 @@ use super::transport_http_mock::{
 // ---------------------------------------------------------------------------
 
 #[tokio::test]
-async fn default_namespace_is_openai_for_models() {
-    let server = MockServer::start(|_| MockResponse::ok(&models_json(&["m1:v1"])))
-        .await
-        .expect("mock server must bind");
-    let _guard = lock_probe_cache();
+async fn default_namespace_is_openai_for_models() -> Result<(), Box<dyn std::error::Error>> {
+    let server = MockServer::start(|_| MockResponse::ok(&models_json(&["m1:v1"]))).await?;
+    let _guard = lock_probe_cache().await;
     let backend = backend_for(&server.url(), "m1:v1", 30_000);
 
-    let models = backend
-        .list_models()
-        .await
-        .expect("models list should succeed");
+    let models = backend.list_models().await?;
 
     assert_eq!(models, vec!["m1:v1".to_string()]);
     assert_eq!(
         server.request_paths(),
         vec!["/openai/v1/models".to_string()]
     );
+    Ok(())
 }
 
 #[tokio::test]
-async fn namespace_fallback_on_404_is_remembered() {
+async fn namespace_fallback_on_404_is_remembered() -> Result<(), Box<dyn std::error::Error>> {
     let server = MockServer::start(|path| {
         if path == "/openai/v1/models" {
             MockResponse::status_only(404)
@@ -40,19 +35,12 @@ async fn namespace_fallback_on_404_is_remembered() {
             MockResponse::ok(&models_json(&["m1:v1"]))
         }
     })
-    .await
-    .expect("mock server must bind");
-    let _guard = lock_probe_cache();
+    .await?;
+    let _guard = lock_probe_cache().await;
     let backend = backend_for(&server.url(), "m1:v1", 30_000);
 
-    let first = backend
-        .list_models()
-        .await
-        .expect("first list should succeed");
-    let second = backend
-        .list_models()
-        .await
-        .expect("second list should succeed");
+    let first = backend.list_models().await?;
+    let second = backend.list_models().await?;
 
     assert_eq!(first, vec!["m1:v1".to_string()]);
     assert_eq!(second, vec!["m1:v1".to_string()]);
@@ -64,10 +52,12 @@ async fn namespace_fallback_on_404_is_remembered() {
             "/v1/models".to_string(),
         ]
     );
+    Ok(())
 }
 
 #[tokio::test]
-async fn probe_teaches_translation_the_working_namespace() {
+async fn probe_teaches_translation_the_working_namespace() -> Result<(), Box<dyn std::error::Error>>
+{
     let server = MockServer::start(|path| {
         if path == "/openai/v1/models" {
             MockResponse::status_only(404)
@@ -75,21 +65,14 @@ async fn probe_teaches_translation_the_working_namespace() {
             MockResponse::ok(&chat_json("Probe"))
         }
     })
-    .await
-    .expect("mock server must bind");
-    let _guard = lock_probe_cache();
+    .await?;
+    let _guard = lock_probe_cache().await;
     let backend = backend_for(&server.url(), "m1:v1", 30_000);
 
-    let probe = backend
-        .probe_chat_completions(2_000)
-        .await
-        .expect("probe should succeed after fallback");
+    let probe = backend.probe_chat_completions(2_000).await?;
     assert!(probe);
 
-    let translated = backend
-        .translate("你好", "zh-CN", "en-US")
-        .await
-        .expect("translation should succeed");
+    let translated = backend.translate("你好", "zh-CN", "en-US").await?;
     assert_eq!(translated, "Probe");
 
     // The probe learned /v1/, so the translation request goes straight there.
@@ -101,10 +84,11 @@ async fn probe_teaches_translation_the_working_namespace() {
             "/v1/chat/completions".to_string(),
         ]
     );
+    Ok(())
 }
 
 #[tokio::test]
-async fn namespace_fallback_is_remembered_for_post() {
+async fn namespace_fallback_is_remembered_for_post() -> Result<(), Box<dyn std::error::Error>> {
     let server = MockServer::start(|path| {
         if path == "/openai/v1/chat/completions" {
             MockResponse::status_only(404)
@@ -112,19 +96,12 @@ async fn namespace_fallback_is_remembered_for_post() {
             MockResponse::ok(&chat_json("Hi"))
         }
     })
-    .await
-    .expect("mock server must bind");
-    let _guard = lock_probe_cache();
+    .await?;
+    let _guard = lock_probe_cache().await;
     let backend = backend_for(&server.url(), "m1:v1", 30_000);
 
-    backend
-        .translate("你好", "zh-CN", "en-US")
-        .await
-        .expect("first translation should succeed via fallback");
-    backend
-        .translate("再见", "zh-CN", "en-US")
-        .await
-        .expect("second translation should hit the learned namespace");
+    backend.translate("你好", "zh-CN", "en-US").await?;
+    backend.translate("再见", "zh-CN", "en-US").await?;
 
     assert_eq!(
         server.request_paths(),
@@ -134,10 +111,12 @@ async fn namespace_fallback_is_remembered_for_post() {
             "/v1/chat/completions".to_string(),
         ]
     );
+    Ok(())
 }
 
 #[tokio::test]
-async fn endpoint_url_for_reflects_the_current_namespace() {
+async fn endpoint_url_for_reflects_the_current_namespace() -> Result<(), Box<dyn std::error::Error>>
+{
     let transport = HttpTransport::new(1_000);
     let base = "http://127.0.0.1:9";
     assert_eq!(
@@ -152,8 +131,7 @@ async fn endpoint_url_for_reflects_the_current_namespace() {
             MockResponse::ok(&models_json(&["m1:v1"]))
         }
     })
-    .await
-    .expect("mock server must bind");
+    .await?;
     let client = reqwest::Client::new();
     let learned = transport.probe_models(&client, &server.url()).await;
     assert!(matches!(learned, ModelsProbeOutcome::Ready));
@@ -161,6 +139,7 @@ async fn endpoint_url_for_reflects_the_current_namespace() {
         transport.endpoint_url_for(&server.url(), "chat/completions"),
         format!("{}/v1/chat/completions", server.url())
     );
+    Ok(())
 }
 
 // ---------------------------------------------------------------------------
@@ -168,33 +147,31 @@ async fn endpoint_url_for_reflects_the_current_namespace() {
 // ---------------------------------------------------------------------------
 
 #[tokio::test]
-async fn non_success_status_is_reported_for_get() {
-    let server = MockServer::start(|_| MockResponse::status_only(500))
-        .await
-        .expect("mock server must bind");
-    let _guard = lock_probe_cache();
+async fn non_success_status_is_reported_for_get() -> Result<(), Box<dyn std::error::Error>> {
+    let server = MockServer::start(|_| MockResponse::status_only(500)).await?;
+    let _guard = lock_probe_cache().await;
     let backend = backend_for(&server.url(), "m1:v1", 30_000);
 
-    let error = backend.list_models().await.expect_err("500 must fail");
+    let error = must_fail(backend.list_models().await, "models list")?;
 
     assert_eq!(
         error.to_string(),
         "API error: API error 500 Internal Server Error"
     );
+    Ok(())
 }
 
 #[tokio::test]
-async fn non_success_status_is_reported_for_post_and_retried_once() {
-    let server = MockServer::start(|_| MockResponse::status_only(500))
-        .await
-        .expect("mock server must bind");
-    let _guard = lock_probe_cache();
+async fn non_success_status_is_reported_for_post_and_retried_once(
+) -> Result<(), Box<dyn std::error::Error>> {
+    let server = MockServer::start(|_| MockResponse::status_only(500)).await?;
+    let _guard = lock_probe_cache().await;
     let backend = backend_for(&server.url(), "m1:v1", 30_000);
 
-    let error = backend
-        .translate("你好", "zh-CN", "en-US")
-        .await
-        .expect_err("500 must fail");
+    let error = must_fail(
+        backend.translate("你好", "zh-CN", "en-US").await,
+        "translation",
+    )?;
 
     assert_eq!(
         error.to_string(),
@@ -208,6 +185,7 @@ async fn non_success_status_is_reported_for_post_and_retried_once() {
             "/openai/v1/chat/completions".to_string(),
         ]
     );
+    Ok(())
 }
 
 // ---------------------------------------------------------------------------
@@ -215,53 +193,46 @@ async fn non_success_status_is_reported_for_post_and_retried_once() {
 // ---------------------------------------------------------------------------
 
 #[tokio::test]
-async fn malformed_json_is_a_parse_error() {
-    let server = MockServer::start(|_| MockResponse::ok("this is not json"))
-        .await
-        .expect("mock server must bind");
-    let _guard = lock_probe_cache();
+async fn malformed_json_is_a_parse_error() -> Result<(), Box<dyn std::error::Error>> {
+    let server = MockServer::start(|_| MockResponse::ok("this is not json")).await?;
+    let _guard = lock_probe_cache().await;
     let backend = backend_for(&server.url(), "m1:v1", 30_000);
 
-    let error = backend
-        .translate("你好", "zh-CN", "en-US")
-        .await
-        .expect_err("malformed body must fail");
+    let error = must_fail(
+        backend.translate("你好", "zh-CN", "en-US").await,
+        "translation",
+    )?;
 
     assert!(error.to_string().contains("Failed to parse response"));
     // A parse failure is not a transport failure, so there is no retry.
     assert_eq!(server.request_paths().len(), 1);
+    Ok(())
 }
 
 #[tokio::test]
-async fn empty_completion_content_returns_an_empty_string() {
-    let server = MockServer::start(|_| MockResponse::ok(&chat_json("")))
-        .await
-        .expect("mock server must bind");
-    let _guard = lock_probe_cache();
+async fn empty_completion_content_returns_an_empty_string() -> Result<(), Box<dyn std::error::Error>>
+{
+    let server = MockServer::start(|_| MockResponse::ok(&chat_json(""))).await?;
+    let _guard = lock_probe_cache().await;
     let backend = backend_for(&server.url(), "m1:v1", 30_000);
 
-    let translated = backend
-        .translate("你好", "zh-CN", "en-US")
-        .await
-        .expect("an empty answer is still a successful call");
+    let translated = backend.translate("你好", "zh-CN", "en-US").await?;
 
     assert_eq!(translated, "");
+    Ok(())
 }
 
 #[tokio::test]
-async fn successful_translation_returns_trimmed_content() {
-    let server = MockServer::start(|_| MockResponse::ok(&chat_json("  \\\"Hello\\\"  ")))
-        .await
-        .expect("mock server must bind");
-    let _guard = lock_probe_cache();
+async fn successful_translation_returns_trimmed_content() -> Result<(), Box<dyn std::error::Error>>
+{
+    let server = MockServer::start(|_| MockResponse::ok(&chat_json("  \\\"Hello\\\"  "))).await?;
+    let _guard = lock_probe_cache().await;
     let backend = backend_for(&server.url(), "m1:v1", 30_000);
 
-    let translated = backend
-        .translate("你好", "zh-CN", "en-US")
-        .await
-        .expect("translation should succeed");
+    let translated = backend.translate("你好", "zh-CN", "en-US").await?;
 
     assert_eq!(translated, "Hello");
+    Ok(())
 }
 
 // ---------------------------------------------------------------------------
@@ -269,21 +240,17 @@ async fn successful_translation_returns_trimmed_content() {
 // ---------------------------------------------------------------------------
 
 #[tokio::test]
-async fn wire_request_carries_model_and_built_prompt_unchanged() {
-    let server = MockServer::start(|_| MockResponse::ok(&chat_json("OK")))
-        .await
-        .expect("mock server must bind");
-    let _guard = lock_probe_cache();
+async fn wire_request_carries_model_and_built_prompt_unchanged(
+) -> Result<(), Box<dyn std::error::Error>> {
+    let server = MockServer::start(|_| MockResponse::ok(&chat_json("OK"))).await?;
+    let _guard = lock_probe_cache().await;
     let backend = backend_for(&server.url(), "my-model", 30_000);
 
-    backend
-        .translate("你好世界", "zh-CN", "en-US")
-        .await
-        .expect("translation should succeed");
+    backend.translate("你好世界", "zh-CN", "en-US").await?;
 
     let bodies = server.request_bodies();
     assert_eq!(bodies.len(), 1);
-    let body: Value = serde_json::from_str(&bodies[0]).expect("request body must be JSON");
+    let body: Value = serde_json::from_str(&bodies[0])?;
     assert_eq!(body["model"], "my-model");
     assert_eq!(body["temperature"], 0.7);
     assert_eq!(body["top_k"], 20);
@@ -292,11 +259,12 @@ async fn wire_request_carries_model_and_built_prompt_unchanged() {
     assert_eq!(body["max_tokens"], 120);
     let messages = body["messages"]
         .as_array()
-        .expect("messages must be an array");
+        .ok_or("messages must be an array")?;
     assert_eq!(messages.len(), 1);
     assert_eq!(messages[0]["role"], "user");
     assert_eq!(
         messages[0]["content"],
         "将以下文本翻译为英语，注意只需要输出翻译后的结果，不要额外解释：\n\n你好世界"
     );
+    Ok(())
 }
