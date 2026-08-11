@@ -88,6 +88,8 @@ pub mod engine_preflight;
 
 /// Finding an engine that is installed but no longer registered
 pub mod engine_recovery;
+/// Engine readiness orchestration (status / refresh / prepare / make-ready)
+pub mod engine_status;
 pub mod hy_mt_paths;
 
 /// Tauri commands - functions that JavaScript can call

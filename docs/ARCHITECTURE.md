@@ -56,7 +56,7 @@ Source OCR is never represented as successful translation.
 | Persisted configuration | `src-tauri/src/config.rs`, `settings_service.rs`  | One versioned config service owns defaults, validation, migration, and writes          |
 | Capture and OCR         | `capture/`, `ocr/`, `ocr_language_packs.rs`, session code in `commands.rs` | Separate capture/OCR services; pipeline orchestrator owns sequencing  |
 | Translation             | `llm/manager.rs`                                  | Pipeline service owns attempts and typed outcomes; validators do not own transport     |
-| Engine runtime          | `llm/foundry_local.rs`, command helpers           | Curated engine service owns manifest, install, process, health, repair, rollback       |
+| Engine runtime          | `engine_status` (readiness orchestration), `hy_mt_runtime` / `engine_*` (managed install/process), `llm/foundry_local.rs` (legacy CLI/transport) | Curated engine service owns manifest, install, process, health, repair, rollback; adapters stay thin |
 | Compatibility downloads | `legacy_translate_locally.rs`                    | Kept outside normal-mode adapters; legacy/developer compatibility only                  |
 | Native overlay IPC      | `ipc/` (protocol, server, handler), `overlay/`, `commands.rs` | `ipc/protocol.rs` owns payload schema; adapters do not redefine it |
 | In-app update           | `update_handoff.rs`, `ui/update-controller.ts`    | Handoff owns what must stop before the installer runs; the manifest is generated, never hand-written |
