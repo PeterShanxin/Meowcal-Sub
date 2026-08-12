@@ -2,11 +2,13 @@
 // MANAGER.RS - Translation Backend Selection + Fallback
 // =============================================================================
 
-use super::output_validation::{quality_issue_message, validate_translation_output};
+use super::translation_attempt::{
+    AttemptBudget, AttemptOutcome, AttemptPolicy, AttemptRequest, TranslationAttemptRunner,
+};
 use crate::config::{ContextLevel, TranslationConfig};
 use crate::llm::{
-    BackendId, BackendInfo, FoundryLocalBackend, LlmError, MockBackend, PromptRouterOptions,
-    ReadyState, TranslationContext, TranslationDiagnostics, TranslationDiagnosticsState,
+    BackendId, BackendInfo, FoundryLocalBackend, LlmError, MockBackend, ReadyState,
+    TranslationContext, TranslationDiagnostics, TranslationDiagnosticsState,
     TranslationDisplayState, TranslationOutcome, TranslatorBackend,
 };
 use crate::sync_utils::{lock_or_recover, read_or_recover, write_or_recover};
@@ -399,6 +401,14 @@ impl TranslationManager {
             } else {
                 1
             };
+            let attempt_policy = AttemptPolicy {
+                max_attempts,
+                retry_delay_ms: FOUNDRY_TRANSIENT_RETRY_DELAY_MS,
+                contexted_attempt_cap_ms: DEFAULT_BACKEND_TIMEOUT_MS,
+                uncontexted_attempt_cap_ms: UNCONTEXTED_ATTEMPT_TIMEOUT_MS,
+                prompt_max_context_chars: self.config.prompt_max_context_chars,
+                prompt_max_source_chars: self.config.prompt_max_source_chars,
+            };
 
             // Foundry Local supports context and can degrade it on slow/timeout paths
             // to keep subtitle output responsive.
@@ -412,7 +422,7 @@ impl TranslationManager {
                         context_prompt,
                         ready_state,
                         total_timeout,
-                        max_attempts,
+                        attempt_policy,
                         &mut warnings,
                     )
                     .await
@@ -707,11 +717,16 @@ impl TranslationManager {
         full_context_prompt: Option<&str>,
         ready_state: ReadyState,
         total_timeout: Duration,
-        max_attempts: usize,
+        attempt_policy: AttemptPolicy,
         warnings: &mut Vec<String>,
     ) -> Option<TranslationOutcome> {
         let id = backend.id();
         let started = Instant::now();
+        let budget = AttemptBudget {
+            started,
+            total_timeout,
+        };
+        let runner = TranslationAttemptRunner::new(attempt_policy, Arc::clone(&self.diagnostics));
 
         // Load current tier from atomic storage
         let initial_tier = ContextTier::from_u8(self.context_tier.load(Ordering::SeqCst));
@@ -734,25 +749,29 @@ impl TranslationManager {
             let context_used = context_for_tier.is_some();
 
             // Retry loop for transient errors at current tier
-            let result = self
-                .try_translate_with_retries(
+            let result = runner
+                .run(
                     backend,
-                    text,
-                    source_language,
-                    target_language,
-                    context_for_tier,
-                    context_used,
+                    &AttemptRequest {
+                        text,
+                        source_language,
+                        target_language,
+                        context_prompt: context_for_tier,
+                        context_used,
+                    },
+                    &budget,
                     ready_state,
-                    &started,
-                    total_timeout,
-                    max_attempts,
                     warnings,
                 )
                 .await;
 
             match result {
-                TierAttemptResult::Success(translated, latency_ms, recovered) => {
-                    if recovered {
+                AttemptOutcome::Succeeded {
+                    translated,
+                    latency_ms,
+                    recovered_after_retry,
+                } => {
+                    if recovered_after_retry {
                         warnings.push(format!("{}: recovered_after_retry", id.as_str()));
                     }
 
@@ -784,7 +803,7 @@ impl TranslationManager {
                         display_state: TranslationDisplayState::Translated,
                     });
                 }
-                TierAttemptResult::Timeout { total_exhausted } => {
+                AttemptOutcome::TimedOut { total_exhausted } => {
                     // If overall timeout exhausted, stop trying lower tiers
                     if total_exhausted {
                         break;
@@ -802,7 +821,7 @@ impl TranslationManager {
                     }
                     break;
                 }
-                TierAttemptResult::Error(err) => {
+                AttemptOutcome::Failed(err) => {
                     last_error = Some(err);
                     break;
                 }
@@ -815,190 +834,6 @@ impl TranslationManager {
 
         None // Signal caller to try next backend
     }
-
-    /// Attempt translation with retries for transient errors.
-    #[allow(clippy::too_many_arguments)]
-    async fn try_translate_with_retries(
-        &self,
-        backend: &dyn TranslatorBackend,
-        text: &str,
-        source_language: &str,
-        target_language: &str,
-        context_prompt: Option<&str>,
-        context_used: bool,
-        ready_state: ReadyState,
-        started: &Instant,
-        total_timeout: Duration,
-        max_attempts: usize,
-        warnings: &mut Vec<String>,
-    ) -> TierAttemptResult {
-        let id = backend.id();
-
-        for attempt in 1..=max_attempts {
-            let remaining_total = total_timeout.saturating_sub(started.elapsed());
-            if remaining_total.is_zero() {
-                let latency_ms = started.elapsed().as_millis();
-                lock_or_recover(&self.diagnostics).record_error(id, "timeout", Some(latency_ms));
-                warn!(
-                    backend_id = id.as_str(),
-                    ready_state = ?ready_state,
-                    latency_ms,
-                    error_code = "timeout",
-                    "Translation backend timed out"
-                );
-                warnings.push(format!("{}: timeout", id.as_str()));
-                return TierAttemptResult::Timeout {
-                    total_exhausted: true,
-                };
-            }
-
-            // Every attempt is bounded. With context the cap is tight, since a
-            // slow answer has somewhere to go: drop a tier and ask again.
-            // Without context there was no cap at all, so an attempt ran to the
-            // full 30s total - and because the capture loop awaits translation
-            // inline, one 27.6s stall left the pipeline blind for its duration.
-            let attempt_cap = if context_used {
-                DEFAULT_BACKEND_TIMEOUT_MS
-            } else {
-                UNCONTEXTED_ATTEMPT_TIMEOUT_MS
-            };
-            let attempt_timeout = remaining_total.min(Duration::from_millis(attempt_cap));
-
-            let result = timeout(
-                attempt_timeout,
-                backend.translate_with_context_options(
-                    text,
-                    source_language,
-                    target_language,
-                    context_prompt,
-                    Some(PromptRouterOptions {
-                        enable_context: context_used,
-                        max_context_chars: self.config.prompt_max_context_chars,
-                        max_source_chars: self.config.prompt_max_source_chars,
-                    }),
-                ),
-            )
-            .await;
-            let latency_ms = started.elapsed().as_millis();
-
-            match result {
-                Ok(Ok(translated)) => {
-                    if let Err(reason) = validate_translation_output(
-                        text,
-                        &translated,
-                        source_language,
-                        target_language,
-                    ) {
-                        lock_or_recover(&self.diagnostics).record_error(
-                            id,
-                            "low_quality_output",
-                            Some(latency_ms),
-                        );
-                        warn!(
-                            backend_id = id.as_str(),
-                            ready_state = ?ready_state,
-                            latency_ms,
-                            error_code = "low_quality_output",
-                            quality_issue = reason.code(),
-                            attempt,
-                            max_attempts,
-                            "Translation output rejected"
-                        );
-
-                        return TierAttemptResult::Error(LlmError::TranslationError(
-                            quality_issue_message(reason),
-                        ));
-                    }
-
-                    self.diagnostics
-                        .lock()
-                        .unwrap()
-                        .record_success(id, latency_ms);
-                    return TierAttemptResult::Success(translated, latency_ms, attempt > 1);
-                }
-                Ok(Err(err)) => {
-                    let should_retry =
-                        attempt < max_attempts && crate::llm::transport_errors::is_transient(&err);
-                    lock_or_recover(&self.diagnostics).record_error(
-                        id,
-                        err.code(),
-                        Some(latency_ms),
-                    );
-                    warn!(
-                        backend_id = id.as_str(),
-                        ready_state = ?ready_state,
-                        latency_ms,
-                        error_code = err.code(),
-                        attempt,
-                        max_attempts,
-                        "Translation backend failed: {}",
-                        err
-                    );
-
-                    if should_retry {
-                        let delay = Duration::from_millis(
-                            FOUNDRY_TRANSIENT_RETRY_DELAY_MS.saturating_mul(attempt as u64),
-                        );
-                        let remaining = total_timeout.saturating_sub(started.elapsed());
-                        if remaining > delay {
-                            tokio::time::sleep(delay).await;
-                            continue;
-                        }
-                    }
-
-                    return TierAttemptResult::Error(err);
-                }
-                Err(_) => {
-                    lock_or_recover(&self.diagnostics).record_error(
-                        id,
-                        "timeout",
-                        Some(latency_ms),
-                    );
-                    warn!(
-                        backend_id = id.as_str(),
-                        ready_state = ?ready_state,
-                        latency_ms,
-                        error_code = "timeout",
-                        attempt,
-                        max_attempts,
-                        "Translation backend timed out"
-                    );
-
-                    // With context, a timeout is answered by degrading a tier.
-                    // Without context that door is shut, and abandoning the line
-                    // is what put raw Chinese and an unavailable notice on
-                    // screen. A stall clears on retry - the 27.6s one was
-                    // followed by a 476ms answer - so ask again if budget allows.
-                    if !context_used && attempt < max_attempts {
-                        let remaining = total_timeout.saturating_sub(started.elapsed());
-                        if remaining > Duration::from_millis(FOUNDRY_TRANSIENT_RETRY_DELAY_MS) {
-                            continue;
-                        }
-                    }
-
-                    warnings.push(format!("{}: timeout", id.as_str()));
-                    return TierAttemptResult::Timeout {
-                        total_exhausted: false,
-                    };
-                }
-            }
-        }
-
-        // Should not reach here, but fallback
-        TierAttemptResult::Timeout {
-            total_exhausted: true,
-        }
-    }
-}
-
-/// Result of attempting translation at a specific context tier
-enum TierAttemptResult {
-    /// Translation succeeded: (text, latency_ms, recovered_after_retry)
-    Success(String, u128, bool),
-    /// Timed out: total_exhausted indicates if overall timeout was hit
-    Timeout { total_exhausted: bool },
-    /// Non-retryable error occurred
-    Error(LlmError),
 }
 
 impl ContextTier {

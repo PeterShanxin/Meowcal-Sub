@@ -255,6 +255,92 @@ async fn test_disabled_foundry_reports_source_only() {
     assert_eq!(outcome.display_state, TranslationDisplayState::SourceOnly);
 }
 
+// Wave-3 characterization: the context tier degrades on timeout, in the
+// Full -> MemoryOnly -> None order, and the chain still reaches the fallback.
+#[tokio::test(start_paused = true)]
+async fn context_tier_degrades_on_timeout_and_still_falls_back() {
+    let mut config = base_config();
+    config.foundry_local.timeout_ms = 100;
+    let backends: Vec<Box<dyn TranslatorBackend>> = vec![
+        Box::new(TestBackend {
+            id: BackendId::FoundryLocal,
+            available: true,
+            ready_state: ReadyState::Ready,
+            response: Ok("slow".to_string()),
+            delay_ms: 60_000,
+        }),
+        Box::new(TestBackend {
+            id: BackendId::Mock,
+            available: true,
+            ready_state: ReadyState::Ready,
+            response: Ok("你好".to_string()),
+            delay_ms: 0,
+        }),
+    ];
+
+    let diagnostics = Arc::new(Mutex::new(TranslationDiagnosticsState::default()));
+    let manager = TranslationManager::with_backends(config, backends, diagnostics, 500);
+
+    let outcome = manager
+        .translate_with_context("你好", "zh-CN", "en-US", Some("session context"))
+        .await;
+
+    assert_eq!(outcome.backend_used, BackendId::Mock);
+    assert_eq!(
+        outcome.display_state,
+        TranslationDisplayState::TemporarilyUnavailable
+    );
+    assert!(
+        outcome
+            .warnings
+            .iter()
+            .any(|warning| warning == "foundry_local: context_degraded"),
+        "the Full tier must degrade once the attempt times out: {:?}",
+        outcome.warnings
+    );
+    assert!(
+        outcome
+            .warnings
+            .iter()
+            .any(|warning| warning == "foundry_local: timeout"),
+        "the timeout must reach the warnings: {:?}",
+        outcome.warnings
+    );
+}
+
+// Wave-3 characterization: a slow-but-successful answer degrades the stored
+// tier for future requests, and the line still displays as translated.
+#[tokio::test]
+async fn context_tier_degrades_on_slow_success() {
+    let mut config = base_config();
+    config.foundry_local.timeout_ms = 8_000;
+    let backends: Vec<Box<dyn TranslatorBackend>> = vec![Box::new(TestBackend {
+        id: BackendId::FoundryLocal,
+        available: true,
+        ready_state: ReadyState::Ready,
+        response: Ok("hello world".to_string()),
+        delay_ms: 1900,
+    })];
+
+    let diagnostics = Arc::new(Mutex::new(TranslationDiagnosticsState::default()));
+    let manager = TranslationManager::with_backends(config, backends, diagnostics, 500);
+
+    let outcome = manager
+        .translate_with_context("你好", "zh-CN", "en-US", Some("session context"))
+        .await;
+
+    assert_eq!(outcome.backend_used, BackendId::FoundryLocal);
+    assert_eq!(outcome.display_state, TranslationDisplayState::Translated);
+    assert!(
+        outcome
+            .warnings
+            .iter()
+            .any(|warning| warning == "foundry_local: context_degraded_slow"),
+        "a success slower than CONTEXT_SLOW_DEGRADE_MS must degrade the tier: {:?}",
+        outcome.warnings
+    );
+}
+
 // The two caps are set in different modules and neither compiles against
 // the other, so nothing but this test stops them drifting back apart. At
 // 6500 against a 5000 deadline the whole fallback chain below - retry,

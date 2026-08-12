@@ -16,6 +16,7 @@ pub(crate) mod output_validation;
 mod prompt_router;
 mod subtitle_output;
 pub(crate) mod text_utils;
+mod translation_attempt;
 mod transport_errors;
 mod transport_http;
 
