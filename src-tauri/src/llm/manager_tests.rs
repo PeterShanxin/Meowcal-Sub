@@ -4,17 +4,18 @@ use crate::llm::LlmError;
 use async_trait::async_trait;
 use std::sync::atomic::AtomicUsize;
 
-struct TestBackend {
-    id: BackendId,
-    available: bool,
-    ready_state: ReadyState,
-    response: Result<String, LlmError>,
-    delay_ms: u64,
+// Fixtures shared with `tier_tests` (same module tree, same cfg(test) build).
+pub(super) struct TestBackend {
+    pub(super) id: BackendId,
+    pub(super) available: bool,
+    pub(super) ready_state: ReadyState,
+    pub(super) response: Result<String, LlmError>,
+    pub(super) delay_ms: u64,
 }
 
-struct CountingBackend {
+pub(super) struct CountingBackend {
     calls: Arc<AtomicUsize>,
-    response: Result<String, LlmError>,
+    pub(super) response: Result<String, LlmError>,
 }
 
 #[async_trait]
@@ -85,7 +86,7 @@ impl TranslatorBackend for TestBackend {
     }
 }
 
-fn base_config() -> TranslationConfig {
+pub(super) fn base_config() -> TranslationConfig {
     TranslationConfig {
         enable_foundry_local: true,
         allow_mock_fallback: true,
@@ -341,11 +342,6 @@ async fn context_tier_degrades_on_slow_success() {
     );
 }
 
-// The two caps are set in different modules and neither compiles against
-// the other, so nothing but this test stops them drifting back apart. At
-// 6500 against a 5000 deadline the whole fallback chain below - retry,
-// context degradation, Mock source-passthrough - was unreachable for anyone
-// running without context-aware translation.
 #[test]
 fn the_whole_fallback_chain_fits_inside_the_pipeline_deadline() {
     // Walk the arithmetic the retry loop actually performs. Asserting only that

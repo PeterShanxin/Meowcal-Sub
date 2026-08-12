@@ -261,7 +261,7 @@ impl TranslationAttemptRunner {
 
 #[cfg(test)]
 #[path = "translation_attempt_test_fixtures.rs"]
-pub(super) mod test_fixtures;
+pub(crate) mod test_fixtures;
 
 #[cfg(test)]
 #[path = "translation_attempt_tests.rs"]

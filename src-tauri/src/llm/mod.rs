@@ -17,6 +17,7 @@ mod prompt_router;
 mod subtitle_output;
 pub(crate) mod text_utils;
 mod translation_attempt;
+mod translation_planner;
 mod transport_errors;
 mod transport_http;
 
@@ -25,6 +26,7 @@ pub use foundry_local::*;
 pub use manager::*;
 pub use mock::*;
 pub use prompt_router::*;
+pub use translation_planner::ContextTier;
 
 use async_trait::async_trait;
 use serde::Serialize;

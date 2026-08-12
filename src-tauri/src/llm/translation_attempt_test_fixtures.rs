@@ -11,23 +11,24 @@ use tokio::time::Instant as VirtualInstant;
 
 /// One scripted answer a fake backend gives, in order; the last step repeats.
 #[derive(Clone)]
-pub(super) enum ScriptedStep {
+pub(crate) enum ScriptedStep {
     Ok(String),
     Err(LlmError),
     /// Sleeps far beyond any attempt cap, so the runner's timeout fires.
     Hang,
 }
 
-pub(super) struct ScriptedBackend {
+#[derive(Clone)]
+pub(crate) struct ScriptedBackend {
     id: BackendId,
     script: Vec<ScriptedStep>,
-    pub(super) calls: Arc<AtomicUsize>,
-    pub(super) virtual_call_times: Arc<Mutex<Vec<VirtualInstant>>>,
-    pub(super) options_seen: Arc<Mutex<Vec<Option<PromptRouterOptions>>>>,
+    pub(crate) calls: Arc<AtomicUsize>,
+    pub(crate) virtual_call_times: Arc<Mutex<Vec<VirtualInstant>>>,
+    pub(crate) options_seen: Arc<Mutex<Vec<Option<PromptRouterOptions>>>>,
 }
 
 impl ScriptedBackend {
-    pub(super) fn new(id: BackendId, script: Vec<ScriptedStep>) -> Self {
+    pub(crate) fn new(id: BackendId, script: Vec<ScriptedStep>) -> Self {
         Self {
             id,
             script,
@@ -109,7 +110,7 @@ impl TranslatorBackend for ScriptedBackend {
     }
 }
 
-pub(super) fn default_policy(max_attempts: usize) -> AttemptPolicy {
+pub(crate) fn default_policy(max_attempts: usize) -> AttemptPolicy {
     AttemptPolicy {
         max_attempts,
         retry_delay_ms: 600,
@@ -120,14 +121,14 @@ pub(super) fn default_policy(max_attempts: usize) -> AttemptPolicy {
     }
 }
 
-pub(super) fn budget(total_timeout_ms: u64) -> AttemptBudget {
+pub(crate) fn budget(total_timeout_ms: u64) -> AttemptBudget {
     AttemptBudget {
         started: Instant::now(),
         total_timeout: Duration::from_millis(total_timeout_ms),
     }
 }
 
-pub(super) fn zh_request<'a>(
+pub(crate) fn zh_request<'a>(
     text: &'a str,
     context: Option<&'a str>,
     context_used: bool,
@@ -141,7 +142,7 @@ pub(super) fn zh_request<'a>(
     }
 }
 
-pub(super) fn expect_succeeded(outcome: AttemptOutcome) -> (String, bool) {
+pub(crate) fn expect_succeeded(outcome: AttemptOutcome) -> (String, bool) {
     match outcome {
         AttemptOutcome::Succeeded {
             translated,
@@ -152,21 +153,21 @@ pub(super) fn expect_succeeded(outcome: AttemptOutcome) -> (String, bool) {
     }
 }
 
-pub(super) fn expect_failed(outcome: AttemptOutcome) -> LlmError {
+pub(crate) fn expect_failed(outcome: AttemptOutcome) -> LlmError {
     match outcome {
         AttemptOutcome::Failed(err) => err,
         other => panic!("expected Failed, got {other:?}"),
     }
 }
 
-pub(super) fn expect_timed_out(outcome: AttemptOutcome) -> bool {
+pub(crate) fn expect_timed_out(outcome: AttemptOutcome) -> bool {
     match outcome {
         AttemptOutcome::TimedOut { total_exhausted } => total_exhausted,
         other => panic!("expected TimedOut, got {other:?}"),
     }
 }
 
-pub(super) fn harness(
+pub(crate) fn harness(
     script: Vec<ScriptedStep>,
 ) -> (
     TranslationAttemptRunner,
