@@ -36,8 +36,10 @@ capture -> preprocess -> Windows OCR -> normalize/dedupe
 ```
 
 `commands.rs` currently coordinates much of this path. `TranslationManager`
-owns backend selection, fallback, context tiers, and diagnostics;
-`llm/translation_attempt.rs` owns the single-backend attempt/transient-retry
+owns backend selection, fallback, context storage, and diagnostics;
+`llm/translation_planner.rs` owns the context-tier progression state machine
+(degradation on timeout/slow success, persisted effective tier) above one
+attempt; `llm/translation_attempt.rs` owns the single-backend attempt/transient-retry
 state machine (request, validation invocation, typed outcome, attempt-level
 diagnostics). `FoundryLocalBackend` combines CLI discovery, service lifecycle,
 and the compatibility façade; its HTTP request execution and API-namespace
@@ -58,7 +60,7 @@ Source OCR is never represented as successful translation.
 | App/window lifecycle    | `src-tauri/src/main.rs` (composition root), `window_lifecycle.rs`, `tray.rs`, `app_logging.rs`, `selector_window.rs`, `wizard_window.rs` | One lifecycle service owns restore/show ordering, tray, and shutdown |
 | Persisted configuration | `src-tauri/src/config.rs`, `settings_service.rs`  | One versioned config service owns defaults, validation, migration, and writes          |
 | Capture and OCR         | `capture/`, `ocr/`, `ocr_language_packs.rs`, session code in `commands.rs` | Separate capture/OCR services; pipeline orchestrator owns sequencing  |
-| Translation             | `llm/manager.rs` (selection/fallback/tiers), `llm/translation_attempt.rs` (attempt/retry state machine) | Pipeline service owns attempts and typed outcomes; validators do not own transport |
+| Translation             | `llm/manager.rs` (selection/fallback/context storage), `llm/translation_planner.rs` (context-tier progression), `llm/translation_attempt.rs` (attempt/retry state machine) | Pipeline service owns attempts and typed outcomes; validators do not own transport |
 | Translation transport   | `llm/transport_http.rs` (`HttpTransport`)        | Namespace discovery, endpoint URL assembly, and GET/POST dispatch with 404 fallback; no retry/context/validation policy |
 | Engine runtime          | `engine_status` (readiness orchestration), `hy_mt_runtime` / `engine_*` (managed install/process), `llm/foundry_local.rs` (legacy CLI/compatibility façade) | Curated engine service owns manifest, install, process, health, repair, rollback; adapters stay thin |
 | Compatibility downloads | `legacy_translate_locally.rs`                    | Kept outside normal-mode adapters; legacy/developer compatibility only                  |

@@ -2,14 +2,13 @@
 // MANAGER.RS - Translation Backend Selection + Fallback
 // =============================================================================
 
-use super::translation_attempt::{
-    AttemptBudget, AttemptOutcome, AttemptPolicy, AttemptRequest, TranslationAttemptRunner,
-};
+use super::translation_attempt::{AttemptBudget, AttemptPolicy};
+use super::translation_planner::{ContextTier, TieredOutcome, TieredPlan, TranslationPlanner};
 use crate::config::{ContextLevel, TranslationConfig};
 use crate::llm::{
-    BackendId, BackendInfo, FoundryLocalBackend, LlmError, MockBackend, ReadyState,
-    TranslationContext, TranslationDiagnostics, TranslationDiagnosticsState,
-    TranslationDisplayState, TranslationOutcome, TranslatorBackend,
+    BackendId, BackendInfo, FoundryLocalBackend, MockBackend, ReadyState, TranslationContext,
+    TranslationDiagnostics, TranslationDiagnosticsState, TranslationDisplayState,
+    TranslationOutcome, TranslatorBackend,
 };
 use crate::sync_utils::{lock_or_recover, read_or_recover, write_or_recover};
 use std::sync::atomic::{AtomicU8, Ordering};
@@ -42,61 +41,14 @@ use crate::pipeline_deadline::backend_budget;
 const MAX_TRANSLATION_INPUT_CHARS: usize = 2000;
 const FOUNDRY_TRANSIENT_MAX_RETRIES: usize = 2;
 const FOUNDRY_TRANSIENT_RETRY_DELAY_MS: u64 = 600;
-const CONTEXT_SLOW_DEGRADE_MS: u128 = 1800;
 
 // =============================================================================
-// CONTEXT TIER - State machine for context degradation
+// TRANSLATION MANAGER - Backend selection + fallback, context storage
 // =============================================================================
-
-/// Context tier for Foundry Local requests.
-/// Degrades automatically on slow responses or timeouts to keep subtitles responsive.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-#[repr(u8)]
-pub enum ContextTier {
-    /// No context included in translation requests
-    None = 0,
-    /// Only memory summary included (lighter weight)
-    MemoryOnly = 1,
-    /// Full context: memory + recent subtitle lines
-    Full = 2,
-}
-
-impl ContextTier {
-    /// Convert from raw u8 value (for atomic storage compatibility)
-    fn from_u8(value: u8) -> Self {
-        match value {
-            0 => Self::None,
-            1 => Self::MemoryOnly,
-            _ => Self::Full,
-        }
-    }
-
-    /// Convert from ContextLevel config setting
-    fn from_config(level: ContextLevel, enabled: bool) -> Self {
-        if !enabled {
-            return Self::None;
-        }
-        match level {
-            ContextLevel::Off => Self::None,
-            ContextLevel::MemoryOnly => Self::MemoryOnly,
-            ContextLevel::MemoryAndRecent => Self::Full,
-        }
-    }
-
-    /// Degrade to a lower tier (returns self if already at None)
-    fn degraded(self) -> Self {
-        match self {
-            Self::Full => Self::MemoryOnly,
-            Self::MemoryOnly => Self::None,
-            Self::None => Self::None,
-        }
-    }
-
-    /// Check if this tier includes any context
-    fn has_context(self) -> bool {
-        self != Self::None
-    }
-}
+// Context-tier progression (degradation on timeout/slow success, effective
+// tier persistence) lives in `llm/translation_planner.rs`; this module owns
+// the tier store, context storage, backend fallback, and display mapping.
+// =============================================================================
 
 /// Manages available translation backends and fallback selection
 pub struct TranslationManager {
@@ -720,18 +672,16 @@ impl TranslationManager {
         attempt_policy: AttemptPolicy,
         warnings: &mut Vec<String>,
     ) -> Option<TranslationOutcome> {
-        let id = backend.id();
         let started = Instant::now();
         let budget = AttemptBudget {
             started,
             total_timeout,
         };
-        let runner = TranslationAttemptRunner::new(attempt_policy, Arc::clone(&self.diagnostics));
+        let planner = TranslationPlanner::new(attempt_policy, Arc::clone(&self.diagnostics));
 
-        // Load current tier from atomic storage
+        // Load current tier from atomic storage, and pre-build the memory-only
+        // prompt here (the planner operates on prebuilt prompts only).
         let initial_tier = ContextTier::from_u8(self.context_tier.load(Ordering::SeqCst));
-
-        // Pre-build memory-only prompt if we might need it
         let memory_only_prompt = if initial_tier >= ContextTier::MemoryOnly {
             self.context_read()
                 .build_memory_prompt(self.config.prompt_max_context_chars)
@@ -739,118 +689,38 @@ impl TranslationManager {
             None
         };
 
-        let mut tier = initial_tier;
-        let mut last_error: Option<LlmError> = None;
+        let outcome = planner
+            .run_tiered_sequence(
+                backend,
+                &TieredPlan {
+                    text,
+                    source_language,
+                    target_language,
+                    full_context_prompt,
+                    memory_only_prompt: memory_only_prompt.as_deref(),
+                    initial_tier,
+                    tier_store: &self.context_tier,
+                },
+                ready_state,
+                &budget,
+                warnings,
+            )
+            .await?;
 
-        // Context degradation loop: try current tier, degrade on timeout, repeat
-        loop {
-            let context_for_tier =
-                tier.select_context(full_context_prompt, memory_only_prompt.as_deref());
-            let context_used = context_for_tier.is_some();
-
-            // Retry loop for transient errors at current tier
-            let result = runner
-                .run(
-                    backend,
-                    &AttemptRequest {
-                        text,
-                        source_language,
-                        target_language,
-                        context_prompt: context_for_tier,
-                        context_used,
-                    },
-                    &budget,
-                    ready_state,
-                    warnings,
-                )
-                .await;
-
-            match result {
-                AttemptOutcome::Succeeded {
-                    translated,
-                    latency_ms,
-                    recovered_after_retry,
-                } => {
-                    if recovered_after_retry {
-                        warnings.push(format!("{}: recovered_after_retry", id.as_str()));
-                    }
-
-                    // If response was slow, degrade tier for future requests.
-                    // Only update stored tier when context was actually used - otherwise we
-                    // haven't verified that the tier works with context.
-                    if context_used && tier.has_context() && latency_ms > CONTEXT_SLOW_DEGRADE_MS {
-                        let degraded = tier.degraded();
-                        if degraded != tier {
-                            self.context_tier.store(degraded as u8, Ordering::SeqCst);
-                            warnings.push(format!("{}: context_degraded_slow", id.as_str()));
-                        }
-                    } else if context_used {
-                        self.context_tier.store(tier as u8, Ordering::SeqCst);
-                    }
-
-                    info!(
-                        backend_id = id.as_str(),
-                        ready_state = ?ready_state,
-                        latency_ms,
-                        error_code = "",
-                        "Translation backend used"
-                    );
-
-                    return Some(TranslationOutcome {
-                        translated,
-                        backend_used: id,
-                        warnings: std::mem::take(warnings),
-                        display_state: TranslationDisplayState::Translated,
-                    });
-                }
-                AttemptOutcome::TimedOut { total_exhausted } => {
-                    // If overall timeout exhausted, stop trying lower tiers
-                    if total_exhausted {
-                        break;
-                    }
-
-                    // Only degrade on timeouts when context was actually used
-                    if context_used && tier.has_context() {
-                        let degraded = tier.degraded();
-                        if degraded != tier {
-                            tier = degraded;
-                            self.context_tier.store(tier as u8, Ordering::SeqCst);
-                            warnings.push(format!("{}: context_degraded", id.as_str()));
-                            continue; // Try again with lower tier
-                        }
-                    }
-                    break;
-                }
-                AttemptOutcome::Failed(err) => {
-                    last_error = Some(err);
-                    break;
-                }
-            }
-        }
-
-        if let Some(err) = last_error {
-            warnings.push(format!("{}: {}", id.as_str(), err));
-        }
-
-        None // Signal caller to try next backend
-    }
-}
-
-impl ContextTier {
-    /// Select the appropriate context prompt for this tier
-    fn select_context<'a>(
-        self,
-        full_context: Option<&'a str>,
-        memory_only: Option<&'a str>,
-    ) -> Option<&'a str> {
-        match self {
-            Self::Full => full_context,
-            Self::MemoryOnly => memory_only,
-            Self::None => None,
-        }
+        let TieredOutcome { translated, .. } = outcome;
+        Some(TranslationOutcome {
+            translated,
+            backend_used: backend.id(),
+            warnings: std::mem::take(warnings),
+            display_state: TranslationDisplayState::Translated,
+        })
     }
 }
 
 #[cfg(test)]
 #[path = "manager_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "manager_tier_tests.rs"]
+mod tier_tests;
