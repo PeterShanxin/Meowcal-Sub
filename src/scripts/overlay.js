@@ -336,7 +336,6 @@ async function initOverlay() {
     }
 
     if (debugStatus) debugStatus.textContent = 'Status: ready';
-    window.OverlayLiveness.signalReady();
 }
 
 // =============================================================================
@@ -808,7 +807,8 @@ async function setupEventListeners(elements) {
             }
         });
 
-        console.log('✅ Event listeners set up');
+        // Liveness: ready only after every required listener above registered (#112).
+        window.OverlayLiveness.signalReady();
     } catch (error) {
         console.error('❌ Failed to set up event listeners:', error);
     }
