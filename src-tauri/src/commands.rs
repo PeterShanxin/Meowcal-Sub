@@ -550,7 +550,7 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
         interval_ms, target_language
     );
 
-    if let Err(e) = overlay::show_overlay(&app) {
+    if let Err(e) = overlay::show_overlay(&app).await {
         warn!("⚠️ Failed to show overlay: {}", e);
     }
     if let Err(e) = overlay::update_overlay_region(&app, &region) {

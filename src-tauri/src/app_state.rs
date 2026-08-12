@@ -30,6 +30,10 @@ pub struct AppState {
     /// Monotonic session/capture identities used to suppress stale async results.
     pub pipeline_clock: Arc<PipelineClock>,
 
+    /// Overlay renderer liveness: ready/heartbeat timestamps and recovery
+    /// state, owned by `overlay::liveness`.
+    pub overlay_liveness: Mutex<crate::overlay::liveness::LivenessState>,
+
     /// Latest "desktop snapshot" for the area selector window.
     ///
     /// Why we need this:
@@ -50,6 +54,7 @@ impl Default for AppState {
             stop_signal: Mutex::new(None),
             translation_diagnostics: Arc::new(Mutex::new(TranslationDiagnosticsState::default())),
             pipeline_clock: Arc::new(PipelineClock::default()),
+            overlay_liveness: Mutex::new(crate::overlay::liveness::LivenessState::default()),
             selector_snapshot: Mutex::new(None),
         }
     }

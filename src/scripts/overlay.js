@@ -336,7 +336,7 @@ async function initOverlay() {
     }
 
     if (debugStatus) debugStatus.textContent = 'Status: ready';
-    console.log('✅ Overlay initialized');
+    window.OverlayLiveness.signalReady();
 }
 
 // =============================================================================
