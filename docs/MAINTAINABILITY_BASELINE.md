@@ -6,27 +6,30 @@ ratchets. Machine-readable values live in
 
 ## Enforced baseline
 
-Measured on 2026-08-10 after the #32 engine-status orchestration extraction
-(following the #31 command-boundary and lifecycle waves):
+Measured on 2026-08-13 after the #33 Lit main/setup entry-boundary wave
+(following the #31 lifecycle and #32 engine/pipeline waves):
 
 - production files under `src/` and `src-tauri/src/`;
-- 400 lines maximum for a new `.rs`, `.js`, `.html`, or `.css` production file;
-- 15 explicit legacy files above that ceiling;
+- 400 lines maximum for a new `.rs`, `.js`, `.ts`, `.html`, or `.css` production file;
+- 14 explicit legacy files above that ceiling;
 - 10 existing ESLint warnings, with zero allowed errors;
 - frontend coverage floors of 89% statements, 78% branches, 92% functions, and
   88% lines.
 
 Frontend coverage currently includes only:
 
-- `src/scripts/backend-status.js`;
 - `src/scripts/ocr-language-tags.js`;
 - `src/scripts/pipeline-update.js`;
 - `src/scripts/translation-display.js`;
-- `src/scripts/wizard-state.js`;
+- `src/ui/home-state.ts`;
+- `src/ui/languages.ts`;
+- `src/ui/sample-translations.ts`;
+- `src/ui/setup-progress.ts`;
+- `src/ui/update-state.ts`;
 - `scripts/serve-frontend.mjs`.
 
-The measured result is 90.85% statements, 82.68% branches, 93.33% functions,
-and 90.41% lines, all above the recorded floors. This is not a repository-wide
+The measured result is 90.17% statements, 83.51% branches, 93.93% functions,
+and 90.24% lines, all above the recorded floors. This is not a repository-wide
 coverage claim. Issue #35 owns risk-based expansion after the decomposition
 lanes land, and owns raising these floors to the measured values: doing it from
 an unrelated lane would tighten the gate under every other in-flight branch.
@@ -39,7 +42,6 @@ decomposition-owned hotspots are:
 
 | File                                 | Ceiling | Reduction owner      |
 | ------------------------------------ | ------: | -------------------- |
-| `src/scripts/main.js`                |   1,987 | #33                  |
 | `src-tauri/src/llm/foundry_local.rs` |   1,700 | #32                  |
 | `src-tauri/src/commands.rs`          |   1,209 | #31 / #32 surface    |
 | `src/scripts/overlay.js`             |   1,129 | #34                  |

@@ -7,7 +7,7 @@
 
 use meowcal_sub::commands::get_system_info;
 
-/// `main.js` reads `info.is_copilot_plus` and `info.windows_ocr_available`
+/// The frontend reads `info.is_copilot_plus` and `info.windows_ocr_available`
 /// directly, so this payload is snake_case even though most Tauri payloads in
 /// this crate are camelCase.
 #[test]
