@@ -25,7 +25,7 @@ describe("managed translation start", () => {
 
     const status = await helper.prepareManagedEngineForStart({ phase: "notRunning" }, startButton);
 
-    expect(invoke).toHaveBeenCalledWith("make_foundry_ready");
+    expect(invoke).toHaveBeenCalledWith("make_engine_ready");
     expect(startButton.disabled).toBe(true);
     expect(window.renderFoundryStatusChecking).toHaveBeenCalledWith(
       "Starting the private translation engine...",

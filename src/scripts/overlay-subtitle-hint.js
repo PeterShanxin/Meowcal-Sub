@@ -13,8 +13,8 @@
 
   function backendDisplayName(id) {
     switch ((id || "").toLowerCase()) {
-      case "foundry_local":
-        return "Foundry Local";
+      case "local_engine":
+        return "Local Translation Engine";
       case "mock":
         return "Passthrough";
       default:
@@ -41,7 +41,7 @@
       return { text: "Request failed", severity: "error" };
     }
 
-    let cleaned = raw.replace(/^foundry_local:\s*/i, "");
+    let cleaned = raw.replace(/^local_engine:\s*/i, "");
     cleaned = cleaned.replace(/^api error:\s*/i, "");
     cleaned = cleaned.replace(/https?:\/\/\S+/gi, "").trim();
     cleaned = cleaned.replace(/\s+/g, " ");
@@ -97,7 +97,7 @@
       ? warnings.filter((warning) => typeof warning === "string")
       : [];
     const foundryWarnings = list.filter((warning) =>
-      warning.toLowerCase().startsWith("foundry_local:"),
+      warning.toLowerCase().startsWith("local_engine:"),
     );
     const hadFoundryProblem = foundryWarnings.some((warning) => {
       const lower = warning.toLowerCase();
@@ -106,7 +106,7 @@
     const primaryFoundry = foundryWarnings[0];
     const primaryNonMock = list.find((warning) => !warning.toLowerCase().startsWith("mock:"));
 
-    if (backendId === "foundry_local") {
+    if (backendId === "local_engine") {
       if (list.length === 0) {
         clearSubtitleHint(hintEl, hintTextEl);
         return;
@@ -131,7 +131,7 @@
     if (primaryFoundry) {
       const summary = summarizeFoundryWarning(primaryFoundry);
       severity = summary.severity;
-      cause = `Foundry ${summary.text}`.trim();
+      cause = `Engine ${summary.text}`.trim();
     } else if (primaryNonMock) {
       cause = summarizeGenericWarning(primaryNonMock);
     }

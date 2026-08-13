@@ -165,7 +165,7 @@ export class MeowcalSetup extends LitElement {
     try {
       this.setStage(3, "active");
       await window.TauriBridge.invoke("wizard_start_service");
-      const engine = await window.TauriBridge.invoke<EngineStatus>("refresh_foundry_local_status");
+      const engine = await window.TauriBridge.invoke<EngineStatus>("refresh_engine_status");
       if (engine.phase !== "ready" || !engine.serviceRunning) throw new Error("ENGINE_NOT_READY");
       this.setStage(3, "complete");
       this.setStage(4, "active");
@@ -212,7 +212,7 @@ export class MeowcalSetup extends LitElement {
 
   private async close(): Promise<void> {
     try {
-      await window.TauriBridge.invoke("close_foundry_wizard", {
+      await window.TauriBridge.invoke("close_engine_wizard", {
         modelDownloaded: Boolean(this.sample),
         selectedModel: null,
       });

@@ -85,7 +85,7 @@
   async function verifyReady() {
     try {
       await TauriBridge.invoke("wizard_start_service");
-      const status = await TauriBridge.invoke("refresh_foundry_local_status");
+      const status = await TauriBridge.invoke("refresh_engine_status");
       if (!WizardState.isReady(status)) {
         throw new Error("ENGINE_NOT_READY");
       }
@@ -106,7 +106,7 @@
   }
 
   async function closeWizard() {
-    await TauriBridge.invoke("close_foundry_wizard", {
+    await TauriBridge.invoke("close_engine_wizard", {
       modelDownloaded: state.installedThisRun,
       selectedModel: null,
     });

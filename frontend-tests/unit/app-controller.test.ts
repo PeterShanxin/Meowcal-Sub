@@ -107,7 +107,7 @@ describe("AppController settings persistence", () => {
 
     await controller.initialize();
 
-    expect(invoke).toHaveBeenCalledWith("open_foundry_wizard");
+    expect(invoke).toHaveBeenCalledWith("open_engine_wizard");
   });
 
   it("does not auto-open onboarding in browser mode", async () => {
@@ -116,7 +116,7 @@ describe("AppController settings persistence", () => {
 
     await controller.initialize();
 
-    expect(invoke).not.toHaveBeenCalledWith("open_foundry_wizard");
+    expect(invoke).not.toHaveBeenCalledWith("open_engine_wizard");
   });
 
   it("marks onboarding complete only after a successful wizard close", async () => {
@@ -124,10 +124,10 @@ describe("AppController settings persistence", () => {
     const { controller, listeners, storage } = createController(invoke, undefined, false);
 
     await controller.initialize();
-    listeners.get("foundry-wizard-closed")?.({ payload: { modelDownloaded: false } });
+    listeners.get("engine-wizard-closed")?.({ payload: { modelDownloaded: false } });
     expect(storage.setItem).not.toHaveBeenCalled();
 
-    listeners.get("foundry-wizard-closed")?.({ payload: { modelDownloaded: true } });
+    listeners.get("engine-wizard-closed")?.({ payload: { modelDownloaded: true } });
     expect(storage.setItem).toHaveBeenCalledWith("meowcal.onboardingComplete", "true");
   });
 

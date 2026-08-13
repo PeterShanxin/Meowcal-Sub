@@ -105,6 +105,6 @@ describe("translation display states", () => {
   });
 
   it("keeps translated as the compatibility default for real backends", () => {
-    expect(normalizeTranslationDisplayState(undefined, "foundry_local")).toBe("translated");
+    expect(normalizeTranslationDisplayState(undefined, "local_engine")).toBe("translated");
   });
 });

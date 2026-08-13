@@ -50,7 +50,7 @@ pub(super) async fn make_ready_legacy_tauri(
                 }
             })
             .await
-            .map_err(|err| format!("Foundry Local make-ready snapshot failed: {err}"))?;
+            .map_err(|err| format!("Engine make-ready snapshot failed: {err}"))?;
 
         cli_available = snap_cli;
         service_url = snap_url;
@@ -176,7 +176,7 @@ pub(super) async fn make_ready_legacy_http(config: FoundryLocalConfig) -> Engine
                     None,
                     false,
                     Vec::new(),
-                    "Foundry Local make-ready task failed".to_string(),
+                    "Engine make-ready task failed".to_string(),
                 )
             }
         };

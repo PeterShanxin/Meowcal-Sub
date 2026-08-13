@@ -333,7 +333,7 @@ function applyTranslationSettings(translation) {
     syncContextControls();
 
     // Load Foundry Local model selector
-    const foundryModel = config.foundryLocal?.model || '';
+    const foundryModel = config.localEngine?.model || '';
     const modelSelect = document.getElementById('foundry-local-model');
     if (modelSelect) {
         if (foundryModel) {
@@ -536,7 +536,7 @@ async function notifyOverlaySettingsChanged() {
 
 function normalizeTranslationConfig(translation) {
     const defaultConfig = {
-        enableFoundryLocal: true,
+        enableLocalEngine: true,
         allowMockFallback: false,
         enableContextAware: true,
         contextLevel: 'memoryAndRecent',
@@ -547,7 +547,7 @@ function normalizeTranslationConfig(translation) {
         promptMaxContextChars: 600,
         contextBufferSize: 12,
         contextResetGapMs: 6000,
-        foundryLocal: {
+        localEngine: {
             model: null,
             timeoutMs: 30000,
         },
@@ -566,7 +566,7 @@ function normalizeTranslationConfig(translation) {
     }
 
     return {
-        enableFoundryLocal: translation.enableFoundryLocal ?? defaultConfig.enableFoundryLocal,
+        enableLocalEngine: translation.enableLocalEngine ?? defaultConfig.enableLocalEngine,
         allowMockFallback: translation.allowMockFallback ?? defaultConfig.allowMockFallback,
         enableContextAware,
         contextLevel,
@@ -577,9 +577,9 @@ function normalizeTranslationConfig(translation) {
         promptMaxContextChars: translation.promptMaxContextChars ?? defaultConfig.promptMaxContextChars,
         contextBufferSize: translation.contextBufferSize ?? defaultConfig.contextBufferSize,
         contextResetGapMs: translation.contextResetGapMs ?? defaultConfig.contextResetGapMs,
-        foundryLocal: {
-            model: translation.foundryLocal?.model ?? defaultConfig.foundryLocal.model,
-            timeoutMs: translation.foundryLocal?.timeoutMs ?? defaultConfig.foundryLocal.timeoutMs,
+        localEngine: {
+            model: translation.localEngine?.model ?? defaultConfig.localEngine.model,
+            timeoutMs: translation.localEngine?.timeoutMs ?? defaultConfig.localEngine.timeoutMs,
         },
     };
 }
@@ -633,7 +633,7 @@ async function saveSettings(opts) {
     const translationConfig = normalizeTranslationConfig(appState.settings?.translation);
     const foundryModel = document.getElementById('foundry-local-model').value.trim();
 
-    translationConfig.enableFoundryLocal = true;
+    translationConfig.enableLocalEngine = true;
     translationConfig.allowMockFallback = false;
 
     const contextLevel = document.getElementById('context-level').value;
@@ -682,7 +682,7 @@ async function saveSettings(opts) {
         6000,
     );
     syncContextControls();
-    translationConfig.foundryLocal.model = foundryModel.length > 0 ? foundryModel : null;
+    translationConfig.localEngine.model = foundryModel.length > 0 ? foundryModel : null;
 
     // Collect OCR settings
     const ocrConfig = collectOcrSettings();
@@ -750,7 +750,7 @@ async function loadFoundryLocalModels(selectedModel = null) {
 
     try {
         const desiredModel = selectedModel ?? select.value;
-        const models = await TauriBridge.invoke('list_foundry_local_models');
+        const models = await TauriBridge.invoke('list_engine_models');
 
         // Clear existing options except the first (Auto)
         while (select.options.length > 1) {
@@ -867,10 +867,10 @@ function setupEventListeners() {
     document.getElementById('btn-foundry-make-ready')
         .addEventListener('click', handleFoundryMakeReady);
     document.getElementById('btn-foundry-wizard')
-        .addEventListener('click', () => TauriBridge.invoke('open_foundry_wizard'));
+        .addEventListener('click', () => TauriBridge.invoke('open_engine_wizard'));
 
     // Listen for wizard completion to auto-configure
-    TauriBridge.event.listen('foundry-wizard-closed', async (event) => {
+    TauriBridge.event.listen('engine-wizard-closed', async (event) => {
         const result = event.payload;
         if (result?.modelDownloaded) {
             // Auto-enable Foundry and set the downloaded model
@@ -1388,8 +1388,8 @@ async function refreshFoundryStatus(opts) {
         }
 
         const status = probe
-            ? await TauriBridge.invoke('refresh_foundry_local_status')
-            : await TauriBridge.invoke('get_foundry_local_status');
+            ? await TauriBridge.invoke('refresh_engine_status')
+            : await TauriBridge.invoke('get_engine_status');
 
         appState.foundryStatus.lastCheckedMs = Date.now();
         renderFoundryStatus(status);
@@ -1444,16 +1444,16 @@ async function handleFoundryMakeReady() {
     try {
         // Quick status check: if CLI not installed, open the wizard instead
         await saveSettings({ silent: true, refreshDiagnostics: false });
-        const quickStatus = await TauriBridge.invoke('get_foundry_local_status');
+        const quickStatus = await TauriBridge.invoke('get_engine_status');
         if (!quickStatus.cliAvailable) {
             button.disabled = false;
             button.textContent = originalLabel;
-            await TauriBridge.invoke('open_foundry_wizard');
+            await TauriBridge.invoke('open_engine_wizard');
             return;
         }
     } catch (e) {
         // If quick check fails, fall through to normal flow
-        console.warn('Quick status check failed, continuing with make_foundry_ready:', e);
+        console.warn('Quick status check failed, continuing with make_engine_ready:', e);
     }
 
     button.textContent = 'Preparing...';
@@ -1462,7 +1462,7 @@ async function handleFoundryMakeReady() {
     try {
         // Ensure the backend uses the currently selected model before warmup.
         await saveSettings({ silent: true, refreshDiagnostics: false });
-        const status = await TauriBridge.invoke('make_foundry_ready');
+        const status = await TauriBridge.invoke('make_engine_ready');
         renderFoundryStatus(status);
         void refreshTranslationDiagnostics();
 
@@ -1561,8 +1561,8 @@ function maybeAutoProbeFoundry(status) {
 
 function backendIdKey(id) {
     switch (id) {
-        case 'foundryLocal':
-            return 'foundry_local';
+        case 'localEngine':
+            return 'local_engine';
         case 'mock':
             return 'mock';
         default:
@@ -1639,7 +1639,7 @@ function updateFoundryStatusInline(diagnostics) {
     const statusEl = document.getElementById('foundry-status');
     if (!statusEl || !diagnostics.backends) return;
 
-    const foundry = diagnostics.backends.find(b => b.id === 'foundryLocal');
+    const foundry = diagnostics.backends.find(b => b.id === 'localEngine');
     if (!foundry) {
         statusEl.innerHTML = '<span class="status-text">Local Translation Engine not found</span>';
         return;
@@ -1740,7 +1740,7 @@ async function handleWarmupFoundryAndStart() {
 
     try {
         await saveSettings({ silent: true, refreshDiagnostics: false });
-        const status = await TauriBridge.invoke('make_foundry_ready');
+        const status = await TauriBridge.invoke('make_engine_ready');
         renderFoundryStatus(status);
 
         if (status?.phase === 'ready') {

@@ -10,7 +10,7 @@ describe("overlay diagnostics text", () => {
   it("reports total and model time separately", () => {
     const text = buildDiagnosticsText({
       state: "translated",
-      backendUsed: "foundry_local",
+      backendUsed: "local_engine",
       modelMs: 1650,
       totalMs: 1820,
     });

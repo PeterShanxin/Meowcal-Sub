@@ -184,8 +184,8 @@ async fn a_timeout_degrades_one_tier_and_the_next_tier_succeeds() {
     assert_eq!(
         warnings,
         vec![
-            "foundry_local: timeout".to_string(),
-            "foundry_local: context_degraded".to_string(),
+            "local_engine: timeout".to_string(),
+            "local_engine: context_degraded".to_string(),
         ]
     );
     assert_eq!(
@@ -266,8 +266,8 @@ async fn the_retry_warning_precedes_the_slow_degredation_warning() {
     assert_eq!(
         warnings,
         vec![
-            "foundry_local: recovered_after_retry".to_string(),
-            "foundry_local: context_degraded_slow".to_string(),
+            "local_engine: recovered_after_retry".to_string(),
+            "local_engine: context_degraded_slow".to_string(),
         ]
     );
     assert_eq!(

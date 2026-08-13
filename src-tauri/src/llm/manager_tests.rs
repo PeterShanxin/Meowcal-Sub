@@ -295,7 +295,7 @@ async fn context_tier_degrades_on_timeout_and_still_falls_back() {
         outcome
             .warnings
             .iter()
-            .any(|warning| warning == "foundry_local: context_degraded"),
+            .any(|warning| warning == "local_engine: context_degraded"),
         "the Full tier must degrade once the attempt times out: {:?}",
         outcome.warnings
     );
@@ -303,7 +303,7 @@ async fn context_tier_degrades_on_timeout_and_still_falls_back() {
         outcome
             .warnings
             .iter()
-            .any(|warning| warning == "foundry_local: timeout"),
+            .any(|warning| warning == "local_engine: timeout"),
         "the timeout must reach the warnings: {:?}",
         outcome.warnings
     );
@@ -336,7 +336,7 @@ async fn context_tier_degrades_on_slow_success() {
         outcome
             .warnings
             .iter()
-            .any(|warning| warning == "foundry_local: context_degraded_slow"),
+            .any(|warning| warning == "local_engine: context_degraded_slow"),
         "a success slower than CONTEXT_SLOW_DEGRADE_MS must degrade the tier: {:?}",
         outcome.warnings
     );

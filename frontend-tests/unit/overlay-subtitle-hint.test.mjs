@@ -24,7 +24,7 @@ describe("overlay subtitle hints", () => {
     elements.classes.add("visible");
     elements.text.textContent = "old warning";
 
-    updateSubtitleHint(elements.hint, elements.text, "foundry_local", []);
+    updateSubtitleHint(elements.hint, elements.text, "local_engine", []);
 
     expect(elements.text.textContent).toBe("");
     expect(elements.classes.has("visible")).toBe(false);
@@ -34,10 +34,10 @@ describe("overlay subtitle hints", () => {
     const elements = hintElements();
 
     updateSubtitleHint(elements.hint, elements.text, "mock", [
-      "foundry_local: timeout at http://127.0.0.1:11436",
+      "local_engine: timeout at http://127.0.0.1:11436",
     ]);
 
-    expect(elements.text.textContent).toBe("Fallback: OCR · Foundry Timeout");
+    expect(elements.text.textContent).toBe("Fallback: OCR · Engine Timeout");
     expect(elements.classes.has("visible")).toBe(true);
     expect(elements.classes.has("hint-warn")).toBe(true);
     expect(elements.text.textContent).not.toContain("127.0.0.1");

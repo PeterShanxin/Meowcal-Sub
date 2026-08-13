@@ -33,7 +33,7 @@ export interface OverlayConfig {
 }
 
 export interface TranslationConfig {
-  enableFoundryLocal: boolean;
+  enableLocalEngine: boolean;
   allowMockFallback: boolean;
   enableContextAware: boolean;
   contextLevel: "off" | "memoryOnly" | "memoryAndRecent";
@@ -44,7 +44,7 @@ export interface TranslationConfig {
   promptMaxContextChars: number;
   contextBufferSize: number;
   contextResetGapMs: number;
-  foundryLocal: { model: string | null; timeoutMs: number };
+  localEngine: { model: string | null; timeoutMs: number };
   ocr: OcrConfig;
 }
 

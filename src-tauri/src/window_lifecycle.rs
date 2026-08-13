@@ -49,7 +49,7 @@ pub fn handle_close_requested<R: Runtime>(window: &Window<R>, api: &CloseRequest
             api.prevent_close();
             let _ = window.emit("wizard-window-hidden", ());
             let _ = window.app_handle().emit(
-                "foundry-wizard-closed",
+                "engine-wizard-closed",
                 serde_json::json!({
                     "modelDownloaded": false,
                     "selectedModel": null,

@@ -515,20 +515,20 @@ impl TranslationManager {
     }
 
     fn fallback_display_state(warnings: &[String]) -> TranslationDisplayState {
-        let foundry_warnings: Vec<String> = warnings
+        let engine_warnings: Vec<String> = warnings
             .iter()
-            .filter(|warning| warning.starts_with("foundry_local:"))
+            .filter(|warning| warning.starts_with("local_engine:"))
             .map(|warning| warning.to_ascii_lowercase())
             .collect();
 
-        if foundry_warnings
+        if engine_warnings
             .iter()
             .any(|warning| warning.contains("not_ready"))
         {
             return TranslationDisplayState::Warming;
         }
 
-        if foundry_warnings.iter().any(|warning| {
+        if engine_warnings.iter().any(|warning| {
             !warning.contains("disabled")
                 && !warning.contains("not_available")
                 && !warning.contains("fallback used")

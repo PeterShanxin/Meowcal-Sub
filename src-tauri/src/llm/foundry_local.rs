@@ -1281,7 +1281,7 @@ impl TranslatorBackend for FoundryLocalBackend {
     }
 
     fn name(&self) -> &'static str {
-        "Foundry Local"
+        "Local Translation Engine"
     }
 
     fn is_available(&self) -> bool {
