@@ -1,7 +1,16 @@
 import { describe, expect, it } from "vitest";
-import { applyLanguageSelection, ensureDistinctLanguagePair } from "../../src/ui/languages";
+import {
+  applyLanguageSelection,
+  ensureDistinctLanguagePair,
+  languageLabel,
+} from "../../src/ui/languages";
 
 describe("language pair selection", () => {
+  it("labels supported languages and preserves unknown values", () => {
+    expect(languageLabel("ja-JP")).toBe("Japanese");
+    expect(languageLabel("xx-XX")).toBe("xx-XX");
+  });
+
   it("repairs an existing same-language pair", () => {
     expect(
       ensureDistinctLanguagePair({ sourceLanguage: "ja-JP", targetLanguage: "ja-JP" }),

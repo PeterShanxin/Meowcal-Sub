@@ -45,18 +45,6 @@ export default [
     },
   },
   {
-    files: ["src/scripts/backend-status.js"],
-    languageOptions: {
-      globals: {
-        ...globals.browser,
-        ...globals.commonjs,
-      },
-    },
-    rules: {
-      ...js.configs.recommended.rules,
-    },
-  },
-  {
     files: ["frontend-tests/**/*.{js,mjs}", "scripts/*.mjs", "*.config.mjs"],
     languageOptions: {
       ecmaVersion: "latest",

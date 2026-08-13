@@ -1,9 +1,8 @@
 //! What this machine can do, reported to the setup UI.
 //!
 //! The serialized field names are snake_case, unlike most payloads in this
-//! crate: `src/scripts/main.js` reads `is_copilot_plus` and
-//! `windows_ocr_available` off this object directly. `tests/command_contracts.rs`
-//! pins that shape.
+//! crate: the frontend reads `is_copilot_plus` and `windows_ocr_available` off
+//! this object directly. `tests/command_contracts.rs` pins that shape.
 
 use serde::Serialize;
 use tracing::info;

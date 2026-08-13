@@ -156,8 +156,8 @@ fn a_fallback_dev_session_does_not_overwrite_a_config_that_recovered() {
 }
 
 // The loss this fix exists to stop, in the shape the browser actually produces.
-// `main.js` POSTs languages, interval, overlay and translation - and nothing
-// else. Container-level `default` fills every absent key with a blank, so before
+// The browser frontend POSTs languages, interval, overlay and translation - and
+// nothing else. Container-level `default` fills every absent key with a blank, so before
 // the preserve step a single settings save from dev mode blanked the capture
 // region in the installed app's config, and `refresh_backup` then copied the
 // blanked version over the backup as well.
