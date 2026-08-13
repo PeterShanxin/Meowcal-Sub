@@ -172,6 +172,54 @@ pub fn apply_overlay_window_clip(
     }
 }
 
+/// Reset the native overlay region to an empty safe state.
+///
+/// An empty region paints nothing, keeps click-through and transparency
+/// untouched, and guarantees that a stale subtitle clip from an earlier
+/// session cannot hide a newly shown overlay (issue #112: `SetWindowRgn` was
+/// found stuck on an old subtitle rectangle). Fresh frontend geometry remains
+/// the normal long-term clip owner.
+pub fn reset_overlay_window_clip(window: &WebviewWindow) -> Result<(), String> {
+    #[cfg(windows)]
+    {
+        set_empty_region(window)
+    }
+
+    #[cfg(not(windows))]
+    {
+        let _ = window;
+        Ok(())
+    }
+}
+
+#[cfg(windows)]
+fn set_empty_region(window: &WebviewWindow) -> Result<(), String> {
+    use raw_window_handle::HasWindowHandle;
+    use windows::Win32::Foundation::HWND;
+    use windows::Win32::Graphics::Gdi::{CreateRectRgn, DeleteObject, SetWindowRgn};
+
+    let handle = window
+        .window_handle()
+        .map_err(|e| format!("Failed to get window handle: {}", e))?;
+    let hwnd = match handle.as_raw() {
+        raw_window_handle::RawWindowHandle::Win32(win32) => HWND(win32.hwnd.get() as *mut _),
+        _ => return Err("Overlay window is not a Win32 window".to_string()),
+    };
+
+    unsafe {
+        let region = CreateRectRgn(0, 0, 0, 0);
+        if region.is_invalid() {
+            return Err("CreateRectRgn (empty reset) failed".to_string());
+        }
+        if SetWindowRgn(hwnd, Some(region), true) == 0 {
+            let _ = DeleteObject(region.into());
+            return Err("SetWindowRgn (empty reset) failed".to_string());
+        }
+    }
+
+    Ok(())
+}
+
 #[cfg(windows)]
 fn apply_windows_clip(
     window: &WebviewWindow,

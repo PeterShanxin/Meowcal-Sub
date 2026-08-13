@@ -114,6 +114,12 @@ Shared contracts have one owner before parallel decomposition begins:
   `package.json` and `src-tauri/Cargo.toml` are synchronized mirrors.
 - Display state: the pipeline owns translated/source-only/failure semantics.
   The overlay renders the supplied state and cannot relabel OCR as translation.
+- Overlay liveness: `overlay-ready` and `overlay-heartbeat` are emitted by the
+  overlay frontend and owned by `overlay/liveness.rs`, which distinguishes a
+  live native window from a renderer still consuming events. A stale renderer
+  is recovered exactly once per show (stale-clip reset + one WebView reload,
+  bounded wait); a native clip reset to an empty safe region always precedes a
+  show so an old subtitle clip cannot hide a new session.
 - OCR language tags: `ocr::language` owns Windows alias normalization at the
   WinRT boundary; UI availability matching and migrated config values therefore
   share the same `zh-CN`/`zh-Hans-*` compatibility contract.

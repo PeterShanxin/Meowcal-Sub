@@ -10,11 +10,12 @@
 
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager, WebviewWindow};
-use tracing::{debug, info};
+use tracing::{debug, info, warn};
 
 use crate::config::CaptureRegion;
 
 pub mod commands;
+pub mod liveness;
 pub mod window_alpha;
 pub mod window_clip;
 
@@ -136,7 +137,12 @@ fn configure_overlay_as_chromeless_popup(window: &WebviewWindow) -> Result<(), S
 ///
 /// Note: Click-through is NOT enabled by default so the settings button can be clicked.
 /// The frontend will manage click-through state based on user interaction.
-pub fn show_overlay(app: &AppHandle) -> Result<(), String> {
+///
+/// Before showing, the native window region is reset to a safe empty state so
+/// a stale subtitle clip from an earlier session cannot survive into this one,
+/// and a stale/wedged overlay renderer is recovered exactly once (bounded
+/// WebView reload). See `liveness`.
+pub async fn show_overlay(app: &AppHandle) -> Result<(), String> {
     info!("🔍 Looking for overlay window...");
 
     let window = match get_overlay_window(app) {
@@ -150,6 +156,16 @@ pub fn show_overlay(app: &AppHandle) -> Result<(), String> {
             return Err(err.to_string());
         }
     };
+
+    // Clip fail-safe: never let an old subtitle clip hide the new session.
+    // Fresh frontend geometry re-owns the region as soon as it arrives.
+    if let Err(e) = window_clip::reset_overlay_window_clip(&window) {
+        warn!("⚠️ Failed to reset overlay clip before show: {}", e);
+    }
+
+    // Distinguish a live native window from a renderer that still consumes
+    // events; recover (one reload) when the renderer looks wedged.
+    liveness::recover_overlay(app).await;
 
     // Don't set click-through here - let the frontend manage it
     // This allows the settings button to be clickable

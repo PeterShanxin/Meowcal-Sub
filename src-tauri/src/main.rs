@@ -186,6 +186,11 @@ fn main() {
             // Create menu items and the tray icon
             meowcal_sub::tray::setup(app)?;
 
+            // Overlay liveness listeners: the frontend announces readiness and
+            // heartbeats; the timestamps drive bounded recovery in
+            // `overlay::liveness`.
+            meowcal_sub::overlay::liveness::register_listeners(app.handle());
+
             Ok(())
         })
         // Keep long-lived windows available from the tray.
