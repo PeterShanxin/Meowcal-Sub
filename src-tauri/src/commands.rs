@@ -7,8 +7,9 @@ use crate::ipc::{
     IpcMessage, OverlaySettingsData, RegionData, SetRegionPayload, SettingsSyncPayload,
 };
 use crate::llm::{
-    BackendInfo, FoundryLocalBackend, FoundryLocalPhase, TranslationDiagnostics,
-    TranslationManager, TranslationOutcome, TranslatorBackend,
+    BackendInfo, ContextCompressionScheduler, FoundryContextSummarizer, FoundryLocalBackend,
+    FoundryLocalPhase, TranslationDiagnostics, TranslationManager, TranslationOutcome,
+    TranslatorBackend,
 };
 use crate::ocr::WindowsOcr;
 use crate::overlay;
@@ -21,7 +22,7 @@ use crate::wizard_contracts::WizardTranslationTest;
 use crate::{hy_mt_installer, hy_mt_runtime};
 use scopeguard::defer;
 use serde::Serialize;
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use tauri::{async_runtime, AppHandle, Emitter, Manager, State};
@@ -64,12 +65,6 @@ pub async fn install_ocr_language(language_tag: String) -> Result<(), String> {
 // These control timing behavior in the translation loop. Grouped here for
 // visibility; tune together to balance responsiveness vs. stability.
 
-/// Maximum retries when summarizing context fails (transient errors)
-const CONTEXT_SUMMARY_MAX_RETRIES: usize = 3;
-/// Delay between context summarization retries
-const CONTEXT_SUMMARY_RETRY_DELAY_MS: u64 = 500;
-/// Wait time after Foundry becomes ready before summarizing (prevents race conditions)
-const CONTEXT_SUMMARY_STABILITY_DELAY_MS: u64 = 900;
 /// Overlay fade-out duration - MUST match `OVERLAY_VISIBILITY_FADE_MS` in overlay.js
 const OVERLAY_HIDE_FADE_MS: u64 = 220;
 
@@ -458,22 +453,6 @@ pub async fn get_translation_diagnostics(
     })
 }
 
-struct CompressionFlagGuard {
-    flag: Arc<AtomicBool>,
-}
-
-impl CompressionFlagGuard {
-    fn new(flag: Arc<AtomicBool>) -> Self {
-        Self { flag }
-    }
-}
-
-impl Drop for CompressionFlagGuard {
-    fn drop(&mut self) {
-        self.flag.store(false, Ordering::SeqCst);
-    }
-}
-
 #[tauri::command]
 pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Result<(), String> {
     info!(">>> START_TRANSLATION COMMAND CALLED <<<");
@@ -582,9 +561,14 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
         app.clone(),
         diagnostics,
     ));
-    let compression_in_flight = Arc::new(AtomicBool::new(false));
     let context_generation = Arc::new(AtomicU64::new(0));
-    let last_summary_scheduled_ms = Arc::new(AtomicU64::new(0));
+    let summarizer_config = translation_config_for_summary.clone();
+    let context_compression = Arc::new(ContextCompressionScheduler::new(
+        Arc::clone(&translation_manager),
+        move || Arc::new(FoundryContextSummarizer::new(summarizer_config.clone())),
+        Arc::clone(&context_generation),
+        translation_config_for_summary.context_summary_cooldown_ms as u64,
+    ));
 
     let app_for_region = app.clone();
 
@@ -891,112 +875,13 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
             translation_manager.record_ocr_line(&current_text);
 
             // Check if context needs compression (async, don't block).
-            //
-            // We throttle + delay the summarization so it runs during stable subtitle windows,
-            // reducing contention with the live translation loop.
-            if translation_manager.needs_context_compression() {
-                let now_ms = SystemTime::now()
-                    .duration_since(UNIX_EPOCH)
-                    .unwrap_or_default()
-                    .as_millis() as u64;
-                let cooldown_ms = translation_config_for_summary.context_summary_cooldown_ms as u64;
-                let last_scheduled = last_summary_scheduled_ms.load(Ordering::SeqCst);
-                let cooldown_ok =
-                    cooldown_ms == 0 || now_ms.saturating_sub(last_scheduled) >= cooldown_ms;
-
-                if cooldown_ok && !compression_in_flight.swap(true, Ordering::SeqCst) {
-                    last_summary_scheduled_ms.store(now_ms, Ordering::SeqCst);
-                    debug!("Context needs compression, scheduling summarization");
-
-                    let manager = Arc::clone(&translation_manager);
-                    let config = translation_config_for_summary.clone();
-                    let compression_flag = Arc::clone(&compression_in_flight);
-                    let stop_rx_for_summary = stop_rx.clone();
-                    let generation = Arc::clone(&context_generation);
-                    let scheduled_generation = generation.load(Ordering::SeqCst);
-
-                    tokio::spawn(async move {
-                        let _reset = CompressionFlagGuard::new(compression_flag);
-
-                        tokio::time::sleep(Duration::from_millis(
-                            CONTEXT_SUMMARY_STABILITY_DELAY_MS,
-                        ))
-                        .await;
-
-                        if *stop_rx_for_summary.borrow() {
-                            return;
-                        }
-
-                        // Abort if subtitles changed while we were waiting for an idle window.
-                        if generation.load(Ordering::SeqCst) != scheduled_generation {
-                            debug!("Skipping context summarization (text still changing)");
-                            return;
-                        }
-
-                        let history_entries = manager.get_history_for_summarization();
-                        if history_entries.is_empty() {
-                            return;
-                        }
-
-                        if !config.enable_foundry_local {
-                            manager.restore_history_entries(history_entries);
-                            manager.cap_history_to_budget();
-                            return;
-                        }
-
-                        let history_lines: Vec<String> = history_entries
-                            .iter()
-                            .map(|entry| entry.text.clone())
-                            .collect();
-
-                        // Use a fresh backend instance for each summarization run to ensure a clean prompt
-                        // (no shared chat/session state), but make sure we refresh service discovery before use.
-                        let backend = FoundryLocalBackend::new(config.foundry_local.clone());
-                        backend.refresh_service_status();
-
-                        if !backend.is_available() {
-                            manager.restore_history_entries(history_entries);
-                            manager.cap_history_to_budget();
-                            return;
-                        }
-
-                        for attempt in 1..=CONTEXT_SUMMARY_MAX_RETRIES {
-                            if *stop_rx_for_summary.borrow() {
-                                return;
-                            }
-                            match backend.summarize_context(&history_lines).await {
-                                Ok(summary) if !summary.trim().is_empty() => {
-                                    manager.update_context_memory(summary);
-                                    return;
-                                }
-                                Ok(_) => {
-                                    warn!(
-                                        "Context summarization attempt {} returned empty output",
-                                        attempt
-                                    );
-                                }
-                                Err(err) => {
-                                    warn!(
-                                        "Context summarization attempt {} failed: {}",
-                                        attempt, err
-                                    );
-                                }
-                            }
-
-                            if attempt == CONTEXT_SUMMARY_MAX_RETRIES {
-                                manager.restore_history_entries(history_entries);
-                                manager.cap_history_to_budget();
-                                return;
-                            }
-
-                            tokio::time::sleep(Duration::from_millis(
-                                CONTEXT_SUMMARY_RETRY_DELAY_MS,
-                            ))
-                            .await;
-                        }
-                    });
-                }
-            }
+            // Scheduling, cooldown, stability delay, retries, and
+            // restore/cap semantics live in `ContextCompressionScheduler`.
+            let now_ms = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_millis() as u64;
+            context_compression.schedule_if_needed(now_ms, stop_rx.clone());
 
             tokio::time::sleep(pacer.remaining_for(frame_started)).await;
         }

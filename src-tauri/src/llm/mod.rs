@@ -9,6 +9,7 @@
 
 mod chat_wire;
 mod context;
+mod context_summarization;
 mod foundry_local;
 mod manager;
 mod mock;
@@ -22,6 +23,7 @@ mod transport_errors;
 mod transport_http;
 
 pub use context::*;
+pub(crate) use context_summarization::{ContextCompressionScheduler, FoundryContextSummarizer};
 pub use foundry_local::*;
 pub use manager::*;
 pub use mock::*;
