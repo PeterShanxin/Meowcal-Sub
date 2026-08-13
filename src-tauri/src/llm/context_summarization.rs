@@ -13,8 +13,9 @@
 // through it, and never touches the storage directly.
 //
 // The summarizer dependency is one narrow trait. Production supplies
-// `FoundryContextSummarizer` (fresh backend per run, service refresh,
-// availability); tests supply a deterministic fake.
+// `FoundryContextSummarizer` through an injected factory, one fresh instance
+// per scheduled run (fresh backend, service refresh, availability); tests
+// supply a deterministic fake.
 // =============================================================================
 
 use super::TranslationManager;
@@ -52,8 +53,11 @@ pub(crate) trait ContextSummarizer: Send + Sync {
     async fn summarize(&self, history: &[String]) -> Result<String, SummarizerError>;
 }
 
-/// Production summarizer: one fresh `FoundryLocalBackend` per summarization
-/// run, service discovery refreshed before first use.
+/// Production summarizer: one fresh `FoundryLocalBackend` per summarizer
+/// instance, service discovery refreshed before first use. The scheduler
+/// creates a new instance per scheduled run (see the factory argument of
+/// `ContextCompressionScheduler::new`), so a service that restarted on a new
+/// port is re-detected instead of being served from a stale cached URL.
 pub(crate) struct FoundryContextSummarizer {
     enabled: bool,
     config: FoundryLocalConfig,
@@ -125,7 +129,7 @@ impl Drop for CompressionFlagGuard {
 /// sequence.
 pub(crate) struct ContextCompressionScheduler {
     manager: Arc<TranslationManager>,
-    summarizer: Arc<dyn ContextSummarizer>,
+    make_summarizer: Arc<dyn Fn() -> Arc<dyn ContextSummarizer> + Send + Sync>,
     generation: Arc<AtomicU64>,
     cooldown_ms: u64,
     in_flight: Arc<AtomicBool>,
@@ -135,13 +139,13 @@ pub(crate) struct ContextCompressionScheduler {
 impl ContextCompressionScheduler {
     pub(crate) fn new(
         manager: Arc<TranslationManager>,
-        summarizer: Arc<dyn ContextSummarizer>,
+        make_summarizer: impl Fn() -> Arc<dyn ContextSummarizer> + Send + Sync + 'static,
         generation: Arc<AtomicU64>,
         cooldown_ms: u64,
     ) -> Self {
         Self {
             manager,
-            summarizer,
+            make_summarizer: Arc::new(make_summarizer),
             generation,
             cooldown_ms,
             in_flight: Arc::new(AtomicBool::new(false)),
@@ -173,7 +177,7 @@ impl ContextCompressionScheduler {
         debug!("Context needs compression, scheduling summarization");
 
         let manager = Arc::clone(&self.manager);
-        let summarizer = Arc::clone(&self.summarizer);
+        let make_summarizer = Arc::clone(&self.make_summarizer);
         let generation = Arc::clone(&self.generation);
         let in_flight = Arc::clone(&self.in_flight);
         let scheduled_generation = generation.load(Ordering::SeqCst);
@@ -202,6 +206,11 @@ impl ContextCompressionScheduler {
                 .iter()
                 .map(|entry| entry.text.clone())
                 .collect();
+
+            // One fresh summarizer per scheduled run, so a backend that
+            // restarted (possibly on a new port) is re-discovered instead of
+            // reusing stale service state from an earlier run.
+            let summarizer = make_summarizer();
 
             for attempt in 1..=MAX_RETRIES {
                 if *stop_rx.borrow() {

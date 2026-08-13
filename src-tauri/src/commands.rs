@@ -562,11 +562,10 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
         diagnostics,
     ));
     let context_generation = Arc::new(AtomicU64::new(0));
+    let summarizer_config = translation_config_for_summary.clone();
     let context_compression = Arc::new(ContextCompressionScheduler::new(
         Arc::clone(&translation_manager),
-        Arc::new(FoundryContextSummarizer::new(
-            translation_config_for_summary.clone(),
-        )),
+        move || Arc::new(FoundryContextSummarizer::new(summarizer_config.clone())),
         Arc::clone(&context_generation),
         translation_config_for_summary.context_summary_cooldown_ms as u64,
     ));

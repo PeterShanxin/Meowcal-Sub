@@ -130,7 +130,10 @@ pub(super) fn harness(
     let generation = Arc::new(AtomicU64::new(0));
     let scheduler = ContextCompressionScheduler::new(
         Arc::clone(&manager),
-        summarizer,
+        {
+            let summarizer = Arc::clone(&summarizer);
+            move || Arc::clone(&summarizer)
+        },
         Arc::clone(&generation),
         cooldown_ms,
     );

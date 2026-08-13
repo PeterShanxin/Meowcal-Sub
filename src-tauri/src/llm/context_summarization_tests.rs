@@ -2,6 +2,7 @@ use super::fixtures::*;
 use super::*;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
+use tokio::sync::watch;
 
 #[tokio::test(start_paused = true)]
 async fn nothing_is_scheduled_when_compression_is_not_needed() {
@@ -333,13 +334,58 @@ async fn a_panicking_summarizer_releases_the_in_flight_flag() {
     assert_eq!(summarizer.calls.load(Ordering::SeqCst), 2);
 }
 
+// One fresh summarizer per scheduled run preserves the old per-run service
+// re-detection; this pins the injected factory is called once per run.
+#[tokio::test(start_paused = true)]
+async fn each_scheduled_run_gets_a_fresh_summarizer() {
+    let manager = manager(test_config());
+    let first = Arc::new(FakeSummarizer::with_responses(vec![ok("Genre: drama")]));
+    let second = Arc::new(FakeSummarizer::with_responses(vec![ok("Genre: comedy")]));
+    let creations = Arc::new(AtomicUsize::new(0));
+    let (tx, rx) = watch::channel(false);
+    let generation = Arc::new(AtomicU64::new(0));
+    let scheduler = ContextCompressionScheduler::new(
+        Arc::clone(&manager),
+        {
+            let creations = Arc::clone(&creations);
+            let first = Arc::clone(&first) as Arc<dyn ContextSummarizer>;
+            let second = Arc::clone(&second) as Arc<dyn ContextSummarizer>;
+            move || {
+                let made = creations.fetch_add(1, Ordering::SeqCst) + 1;
+                if made == 1 {
+                    Arc::clone(&first)
+                } else {
+                    Arc::clone(&second)
+                }
+            }
+        },
+        generation,
+        0,
+    );
+
+    fill(&manager, 5, FILLER);
+    scheduler.schedule_if_needed(0, rx.clone());
+    advance(901).await;
+    settle().await;
+
+    fill(&manager, 2, FILLER);
+    assert!(manager.needs_context_compression());
+    scheduler.schedule_if_needed(5_000, rx.clone());
+    advance(901).await;
+    settle().await;
+
+    assert_eq!(creations.load(Ordering::SeqCst), 2);
+    assert_eq!(first.calls(), 1);
+    assert_eq!(second.calls(), 1);
+    drop(tx);
+}
+
 #[test]
 fn the_guard_releases_the_flag_on_drop() {
     let flag = Arc::new(std::sync::atomic::AtomicBool::new(true));
     drop(CompressionFlagGuard::new(Arc::clone(&flag)));
     assert!(!flag.load(Ordering::SeqCst));
 }
-
 #[test]
 fn the_guard_releases_the_flag_when_the_task_panics() {
     let flag = Arc::new(std::sync::atomic::AtomicBool::new(true));

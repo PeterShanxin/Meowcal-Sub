@@ -91,7 +91,7 @@ Measured on starting main: `commands.rs` 1209 (ratchet 1209),
 | S5 | Generation snapshot / invalidation | inline (`context_generation` load) | scheduler task (reads shared `Arc<AtomicU64>`; loop keeps bumping it) | shared atomic (loop-owned, scheduler reads) | sync | generation change after schedule skips before drain | NEW | none |
 | S6 | Stop checks | inline `stop_rx` borrows | scheduler task (receives `stop_rx` clone per schedule) | watch channel (loop-owned) | sync | stop before work skips; stop during retry leaves drain as today | NEW | none |
 | S7 | History drain | `manager.get_history_for_summarization()` | scheduler task | context storage (manager-owned) | sync | same drain (keep last 3, clear flag) | NEW | none |
-| S8 | Backend construction / refresh / availability | `commands.rs` (`FoundryLocalBackend::new` + `refresh_service_status` + `is_available`) | `FoundryContextSummarizer` (llm-owned; lazy once per scheduler run) | `OnceLock` in summarizer | sync init | one fresh backend per summarization run; disabled/unavailable = silent restore+cap | NEW | none |
+| S8 | Backend construction / refresh / availability | `commands.rs` (`FoundryLocalBackend::new` + `refresh_service_status` + `is_available`) | `FoundryContextSummarizer` (llm-owned; a fresh instance per scheduled run via an injected factory, backend built lazily per instance) | `OnceLock` inside the per-run instance | sync init | one fresh backend per summarization run, so a service restarted on a new port is re-detected; disabled/unavailable = silent restore+cap | NEW | none |
 | S9 | Retry loop | inline `for attempt in 1..=3` | scheduler task | none | async await | 3 attempts, 500 ms delay, per-attempt stop check, warn strings unchanged | NEW | none |
 | S10 | Empty-summary / failure handling | inline | scheduler task | none | async | empty or error warns with attempt number, retries; terminal restores history + caps budget | NEW | none |
 | S11 | Success memory update | `manager.update_context_memory` | scheduler task | context storage (manager-owned) | sync | unchanged (set_memory already caps internally) | NEW | none |
@@ -115,18 +115,20 @@ ContextSummarizer        async_trait, Send+Sync:
 FoundryContextSummarizer TranslationConfig:
                          enabled check -> Unavailable
                          lazy backend (OnceLock): new + refresh_service_status
-                             once per scheduler run
+                             on first summarize of the instance
                          is_available -> Unavailable
                          backend.summarize_context -> Failed on Err
 
 CompressionFlagGuard     moved verbatim (Drop releases in_flight)
 
 ContextCompressionScheduler {
-    manager:     Arc<TranslationManager>
-    summarizer:  Arc<dyn ContextSummarizer>
-    generation:  Arc<AtomicU64>          // loop-owned, scheduler reads
-    cooldown_ms: u64
-    in_flight:   Arc<AtomicBool>
+    manager:         Arc<TranslationManager>
+    make_summarizer: Arc<dyn Fn() -> Arc<dyn ContextSummarizer> + Send + Sync>
+                     // injected factory: one fresh summarizer per scheduled run,
+                     // preserving the old per-run service re-detection
+    generation:      Arc<AtomicU64>          // loop-owned, scheduler reads
+    cooldown_ms:     u64
+    in_flight:       Arc<AtomicBool>
     last_scheduled_ms: AtomicU64
 }
     schedule_if_needed(&self, now_ms: u64, stop_rx: watch::Receiver<bool>)
@@ -140,7 +142,8 @@ ContextCompressionScheduler {
         3. stop check -> return
         4. generation != scheduled_generation -> skip log, return
         5. drain history; empty -> return
-        6. retry loop 1..=3:
+        6. summarizer = make_summarizer()  // fresh per run
+        7. retry loop 1..=3:
            - stop check -> return (no restore, as today)
            - summarize:
              Ok(non-empty) -> update_context_memory, return
@@ -200,6 +203,8 @@ summarizer, real `TranslationManager`/`TranslationContext` (no fake manager),
 15. in-flight flag released after: success, terminal failure, stop,
     panic-in-task path
 16. repeated schedule cycles do not duplicate mutable state
+17. each scheduled run gets a fresh summarizer instance from the factory
+    (per-run service re-detection, as before the extraction)
 
 ## Files changed (planned)
 
