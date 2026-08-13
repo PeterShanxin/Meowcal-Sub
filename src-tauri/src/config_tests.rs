@@ -72,6 +72,11 @@ fn test_translation_config_serialization() {
     let json = serde_json::to_string(&config).unwrap();
     assert!(json.contains("enableContextAware"));
     assert!(json.contains("contextLevel"));
+    // The product contract writes the generic engine keys, not the legacy
+    // Foundry spellings.
+    assert!(json.contains(r#""enableLocalEngine":true"#));
+    assert!(json.contains(r#""localEngine""#));
+    assert!(!json.contains("Foundry"));
 
     let deserialized: TranslationConfig = serde_json::from_str(&json).unwrap();
     assert_eq!(
@@ -79,17 +84,43 @@ fn test_translation_config_serialization() {
         config.enable_context_aware
     );
     assert_eq!(deserialized.context_level, config.context_level);
+    assert!(deserialized.enable_foundry_local);
 }
 
 #[test]
 fn test_translation_config_missing_field_uses_default() {
     let json = r#"{
-        "enableFoundryLocal": true,
+        "enableLocalEngine": true,
         "allowMockFallback": true,
-        "foundryLocal": {}
+        "localEngine": {}
     }"#;
     let config: TranslationConfig = serde_json::from_str(json).unwrap();
     assert!(config.enable_context_aware);
+}
+
+// Persisted settings from releases before the naming cleanup still parse: the
+// old Foundry-spelled keys are accepted on read as aliases and mapped onto the
+// same fields, so no user setting is lost and nothing lands in `unmodelled`.
+#[test]
+fn test_legacy_foundry_config_keys_deserialize_as_the_engine_contract() {
+    let json = r#"{
+        "enableFoundryLocal": true,
+        "allowMockFallback": false,
+        "foundryLocal": { "model": "HY-MT1.5-1.8B-Q4_K_M", "timeoutMs": 30000 }
+    }"#;
+    let config: TranslationConfig = serde_json::from_str(json).unwrap();
+    assert!(config.enable_foundry_local);
+    assert_eq!(
+        config.foundry_local.model.as_deref(),
+        Some("HY-MT1.5-1.8B-Q4_K_M")
+    );
+
+    // A round trip writes the new keys and drops the legacy spellings.
+    let rewritten = serde_json::to_string(&config).unwrap();
+    assert!(rewritten.contains(r#""enableLocalEngine":true"#));
+    assert!(rewritten.contains(r#""localEngine""#));
+    assert!(!rewritten.contains("enableFoundryLocal"));
+    assert!(!rewritten.contains("foundryLocal"));
 }
 
 #[test]

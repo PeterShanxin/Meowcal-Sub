@@ -106,7 +106,7 @@ pub struct WindowPreferences {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
 pub struct TranslationConfig {
-    /// Enable Foundry Local backend (primary, OpenAI-compatible)
+    #[serde(rename = "enableLocalEngine", alias = "enableFoundryLocal")]
     pub enable_foundry_local: bool,
 
     /// Allow passthrough/mock fallback if all backends fail
@@ -151,7 +151,7 @@ pub struct TranslationConfig {
     #[serde(default = "default_context_reset_gap_ms")]
     pub context_reset_gap_ms: u32,
 
-    /// Foundry Local backend configuration
+    #[serde(rename = "localEngine", alias = "foundryLocal")]
     pub foundry_local: FoundryLocalConfig,
 
     /// OCR-specific settings

@@ -25,7 +25,7 @@ fn test_ipc_message_creation_with_payload() {
         text: "Translated text".to_string(),
         source_text: "Original text".to_string(),
         timestamp: "2025-01-26T12:00:00Z".to_string(),
-        backend_used: Some("Foundry Local".to_string()),
+        backend_used: Some("Local Translation Engine".to_string()),
     };
 
     let message = IpcMessage::with_payload("Subtitle.Update", payload);
@@ -96,7 +96,7 @@ fn test_ipc_message_with_payload_deserialization() {
             "text": "Hello",
             "sourceText": "Hola",
             "timestamp": "2025-01-26T12:00:00Z",
-            "backendUsed": "Foundry Local"
+            "backendUsed": "Local Translation Engine"
         }
     }"#;
 
@@ -108,7 +108,7 @@ fn test_ipc_message_with_payload_deserialization() {
     let payload = message.payload.unwrap();
     assert_eq!(payload["text"], "Hello");
     assert_eq!(payload["sourceText"], "Hola");
-    assert_eq!(payload["backendUsed"], "Foundry Local");
+    assert_eq!(payload["backendUsed"], "Local Translation Engine");
 }
 
 #[test]
@@ -139,14 +139,14 @@ fn test_subtitle_update_payload_serialization() {
         text: "Translated".to_string(),
         source_text: "Original".to_string(),
         timestamp: "2025-01-26T12:00:00Z".to_string(),
-        backend_used: Some("Foundry Local".to_string()),
+        backend_used: Some("Local Translation Engine".to_string()),
     };
 
     let serialized = serde_json::to_string(&payload).unwrap();
     assert!(serialized.contains(r#""text":"Translated""#));
     assert!(serialized.contains(r#""sourceText":"Original""#));
     assert!(serialized.contains(r#""timestamp":"2025-01-26T12:00:00Z""#));
-    assert!(serialized.contains(r#""backendUsed":"Foundry Local""#));
+    assert!(serialized.contains(r#""backendUsed":"Local Translation Engine""#));
 }
 
 #[test]

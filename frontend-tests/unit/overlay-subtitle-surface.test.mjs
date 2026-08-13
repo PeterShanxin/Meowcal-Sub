@@ -11,14 +11,14 @@ function surfaceFor(displayState, backendUsed, translated) {
 
 describe("overlay subtitle surface", () => {
   it("shows the box for translated text", () => {
-    expect(surfaceFor("translated", "foundry_local", "先不提时钟塔")).toEqual({
+    expect(surfaceFor("translated", "local_engine", "先不提时钟塔")).toEqual({
       mode: "text",
       showContainer: true,
     });
   });
 
   it("hides the box when the translated text is blank", () => {
-    expect(surfaceFor("translated", "foundry_local", "   ")).toEqual({
+    expect(surfaceFor("translated", "local_engine", "   ")).toEqual({
       mode: "text",
       showContainer: false,
     });
@@ -27,7 +27,7 @@ describe("overlay subtitle surface", () => {
   it.each(["warming", "temporarilyUnavailable", "sourceOnly", "noSubtitleText"])(
     "keeps the box visible so the %s state is readable",
     (displayState) => {
-      expect(surfaceFor(displayState, "foundry_local", "")).toEqual({
+      expect(surfaceFor(displayState, "local_engine", "")).toEqual({
         mode: "hint",
         showContainer: true,
       });
@@ -40,7 +40,7 @@ describe("overlay subtitle surface", () => {
   // blank-screen symptom of issue #59 arriving through the notice meant to
   // explain it.
   it("keeps the previous line on screen while explaining a refused read", () => {
-    expect(surfaceFor("sourceUnreadable", "foundry_local", "")).toEqual({
+    expect(surfaceFor("sourceUnreadable", "local_engine", "")).toEqual({
       mode: "keep",
       showContainer: true,
     });
@@ -52,7 +52,7 @@ describe("overlay subtitle surface", () => {
   // calls are slow, so getting this wrong replaces the subtitles with a warning
   // for most of a session.
   it("keeps the previous line on screen while the engine is behind", () => {
-    expect(surfaceFor("engineSlow", "foundry_local", "")).toEqual({
+    expect(surfaceFor("engineSlow", "local_engine", "")).toEqual({
       mode: "keep",
       showContainer: true,
     });
@@ -66,7 +66,7 @@ describe("overlay subtitle surface", () => {
   });
 
   it("hides the box when translation stops", () => {
-    expect(surfaceFor("stopped", "foundry_local", "")).toEqual({
+    expect(surfaceFor("stopped", "local_engine", "")).toEqual({
       mode: "clear",
       showContainer: false,
     });

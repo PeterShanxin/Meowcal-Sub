@@ -43,7 +43,7 @@ const defaultSettings: AppSettings = {
     showDiagnostics: false,
   },
   translation: {
-    enableFoundryLocal: true,
+    enableLocalEngine: true,
     allowMockFallback: false,
     enableContextAware: false,
     contextLevel: "off",
@@ -54,7 +54,7 @@ const defaultSettings: AppSettings = {
     promptMaxContextChars: 600,
     contextBufferSize: 12,
     contextResetGapMs: 6000,
-    foundryLocal: { model: null, timeoutMs: 30000 },
+    localEngine: { model: null, timeoutMs: 30000 },
     ocr: defaultOcr,
   },
   minimizeToTray: true,
@@ -69,9 +69,9 @@ function mergeSettings(value: Partial<AppSettings> | null): AppSettings {
     translation: {
       ...defaultSettings.translation,
       ...(value.translation ?? {}),
-      foundryLocal: {
-        ...defaultSettings.translation.foundryLocal,
-        ...(value.translation?.foundryLocal ?? {}),
+      localEngine: {
+        ...defaultSettings.translation.localEngine,
+        ...(value.translation?.localEngine ?? {}),
       },
       ocr: { ...defaultOcr, ...(value.translation?.ocr ?? {}) },
     },
@@ -122,7 +122,7 @@ export class AppController {
     const [settings, languages, engine, region, running] = await Promise.all([
       this.safeInvoke<Partial<AppSettings> | null>("get_settings", null),
       this.safeInvoke<string[]>("get_ocr_languages", []),
-      this.safeInvoke<EngineStatus>("get_foundry_local_status", { phase: "unknown" }),
+      this.safeInvoke<EngineStatus>("get_engine_status", { phase: "unknown" }),
       this.safeInvoke<CaptureRegion | null>("get_capture_region", null),
       browserMode
         ? Promise.resolve(false)
@@ -163,7 +163,7 @@ export class AppController {
       if (payload.isError) this.publish({ error: payload.message ?? "Screen capture failed" });
     });
     const wizardUnlisten = await window.TauriBridge.event.listen(
-      "foundry-wizard-closed",
+      "engine-wizard-closed",
       (event) => {
         const payload = event.payload as { modelDownloaded?: boolean } | null;
         if (payload?.modelDownloaded === true) {
@@ -238,7 +238,7 @@ export class AppController {
 
   async openSetup(): Promise<void> {
     try {
-      await window.TauriBridge.invoke("open_foundry_wizard");
+      await window.TauriBridge.invoke("open_engine_wizard");
     } catch (error) {
       this.publish({ error: errorMessage(error) });
     }
@@ -246,7 +246,7 @@ export class AppController {
 
   async refresh(): Promise<void> {
     const [engine, region] = await Promise.all([
-      this.safeInvoke<EngineStatus>("refresh_foundry_local_status", this.snapshot.engine ?? {}),
+      this.safeInvoke<EngineStatus>("refresh_engine_status", this.snapshot.engine ?? {}),
       this.safeInvoke<CaptureRegion | null>("get_capture_region", this.snapshot.region),
     ]);
     this.publish({ engine, region, error: null });
@@ -256,9 +256,9 @@ export class AppController {
     this.publish({ busy: "warming", error: null, notice: null });
     try {
       await this.saveSettings(true);
-      let engine = await window.TauriBridge.invoke<EngineStatus>("refresh_foundry_local_status");
+      let engine = await window.TauriBridge.invoke<EngineStatus>("refresh_engine_status");
       if (["notRunning", "notrunning", "preparing"].includes(engine.phase ?? "")) {
-        engine = await window.TauriBridge.invoke<EngineStatus>("make_foundry_ready");
+        engine = await window.TauriBridge.invoke<EngineStatus>("make_engine_ready");
       }
       if (engine.phase !== "ready")
         throw new Error("The local translation engine is not ready yet.");

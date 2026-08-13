@@ -52,12 +52,12 @@
         'list_translation_backends': { method: 'GET', path: '/translation/diagnostics' },
         'translate_once': { method: 'POST', path: '/translation/translate' },
 
-        // Foundry Local
-        'list_foundry_local_models': { method: 'GET', path: '/foundry-local/models' },
-        'get_foundry_local_status': { method: 'GET', path: '/foundry-local/status' },
-        'refresh_foundry_local_status': { method: 'POST', path: '/foundry-local/refresh' },
-        'prepare_foundry_local': { method: 'POST', path: '/foundry-local/prepare' },
-        'make_foundry_ready': { method: 'POST', path: '/foundry-local/make-ready' },
+        // Local translation engine
+        'list_engine_models': { method: 'GET', path: '/engine/models' },
+        'get_engine_status': { method: 'GET', path: '/engine/status' },
+        'refresh_engine_status': { method: 'POST', path: '/engine/refresh' },
+        'prepare_engine': { method: 'POST', path: '/engine/prepare' },
+        'make_engine_ready': { method: 'POST', path: '/engine/make-ready' },
 
         // OCR language management
         'get_ocr_languages': { method: 'GET', path: '/ocr/languages' },
@@ -68,8 +68,8 @@
         'set_capture_region': { method: 'POST', path: '/capture-region' },
 
         // Curated engine setup wizard (Tauri-only, returns 501 in browser mode)
-        'open_foundry_wizard':           { method: 'POST', path: '/wizard/open' },
-        'close_foundry_wizard':          { method: 'POST', path: '/wizard/close' },
+        'open_engine_wizard':           { method: 'POST', path: '/wizard/open' },
+        'close_engine_wizard':          { method: 'POST', path: '/wizard/close' },
         'wizard_install_engine':         { method: 'POST', path: '/wizard/install-engine' },
         'wizard_start_service':          { method: 'POST', path: '/wizard/start-service' },
         'wizard_test_translation':       { method: 'POST', path: '/wizard/test-translation' },
@@ -135,7 +135,7 @@
         );
 
         // Transform responses to match Tauri format
-        if (command === 'list_foundry_local_models') {
+        if (command === 'list_engine_models') {
             // HTTP returns { models: [...] }, Tauri returns [...]
             return result.models || [];
         }

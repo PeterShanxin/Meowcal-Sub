@@ -90,18 +90,18 @@ fn main() {
             legacy_translate_locally::get_translate_locally_download_info,
             legacy_translate_locally::download_translate_locally,
             commands::translate_once,
-            // Foundry Local commands
-            commands::get_foundry_local_status,
-            commands::list_foundry_local_models,
-            commands::refresh_foundry_local_status,
-            commands::prepare_foundry_local,
-            commands::make_foundry_ready,
+            // Local translation engine commands
+            commands::get_engine_status,
+            commands::list_engine_models,
+            commands::refresh_engine_status,
+            commands::prepare_engine,
+            commands::make_engine_ready,
             // Overlay commands
             meowcal_sub::overlay::commands::set_overlay_click_through,
             meowcal_sub::overlay::commands::set_overlay_window_clip,
-            // Foundry setup wizard commands
-            commands::open_foundry_wizard,
-            commands::close_foundry_wizard,
+            // Engine setup wizard commands
+            commands::open_engine_wizard,
+            commands::close_engine_wizard,
             commands::wizard_install_engine,
             commands::wizard_start_service,
             commands::wizard_test_translation,

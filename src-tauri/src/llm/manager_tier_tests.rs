@@ -48,7 +48,7 @@ async fn all_context_tiers_time_out_and_the_chain_falls_back_to_mock() {
     let degraded = outcome
         .warnings
         .iter()
-        .filter(|warning| **warning == "foundry_local: context_degraded")
+        .filter(|warning| **warning == "local_engine: context_degraded")
         .count();
     assert_eq!(
         degraded, 2,
@@ -89,7 +89,7 @@ async fn a_degraded_tier_persists_across_translations() {
     let first_degraded = first
         .warnings
         .iter()
-        .filter(|warning| **warning == "foundry_local: context_degraded")
+        .filter(|warning| **warning == "local_engine: context_degraded")
         .count();
     assert_eq!(
         first_degraded, 1,
@@ -105,7 +105,7 @@ async fn a_degraded_tier_persists_across_translations() {
     let second_degraded = second
         .warnings
         .iter()
-        .filter(|warning| **warning == "foundry_local: context_degraded")
+        .filter(|warning| **warning == "local_engine: context_degraded")
         .count();
     assert_eq!(
         second_degraded, 1,

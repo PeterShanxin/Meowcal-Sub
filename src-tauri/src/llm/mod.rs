@@ -60,10 +60,17 @@ impl LlmError {
     }
 }
 
-/// Known translation backend identifiers
+/// Known translation backend identifiers.
+///
+/// The wire names are the product contract: `localEngine` in camelCase payloads
+/// and `local_engine` in diagnostics keys, warnings, and display strings. The
+/// Rust variant name keeps the legacy `FoundryLocal` spelling because it is an
+/// internal identifier; `from_str` still accepts the old Foundry spellings so
+/// persisted and developer-mode inputs keep parsing.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub enum BackendId {
+    #[serde(rename = "localEngine")]
     FoundryLocal,
     Mock,
 }
@@ -72,7 +79,7 @@ impl BackendId {
     /// Canonical string id for logs and config
     pub fn as_str(&self) -> &'static str {
         match self {
-            BackendId::FoundryLocal => "foundry_local",
+            BackendId::FoundryLocal => "local_engine",
             BackendId::Mock => "mock",
         }
     }
@@ -81,6 +88,10 @@ impl BackendId {
     #[allow(clippy::should_implement_trait)]
     pub fn from_str(value: &str) -> Option<Self> {
         match value.trim().to_lowercase().as_str() {
+            "local_engine" | "localengine" | "local-engine" | "engine" => {
+                Some(BackendId::FoundryLocal)
+            }
+            // Legacy Foundry spellings, retained as a compatibility parser.
             "foundry_local" | "foundrylocal" | "foundry-local" | "foundry" => {
                 Some(BackendId::FoundryLocal)
             }

@@ -29,8 +29,8 @@ async fn a_first_attempt_success_is_returned_with_success_diagnostics() {
     assert!(warnings.is_empty());
 
     let (errors, latencies) = lock_or_recover(&diagnostics).snapshot();
-    assert!(!errors.contains_key("foundry_local"));
-    assert!(latencies.contains_key("foundry_local"));
+    assert!(!errors.contains_key("local_engine"));
+    assert!(latencies.contains_key("local_engine"));
 }
 
 #[tokio::test(start_paused = true)]
@@ -65,7 +65,7 @@ async fn a_transient_error_is_retried_with_the_scaled_delay_and_then_succeeds() 
     assert_eq!(times[1] - times[0], Duration::from_millis(600));
 
     let (errors, _) = lock_or_recover(&diagnostics).snapshot();
-    assert!(!errors.contains_key("foundry_local"));
+    assert!(!errors.contains_key("local_engine"));
 }
 
 #[tokio::test(start_paused = true)]
@@ -100,10 +100,10 @@ async fn transient_errors_exhaust_the_retry_count_with_scaled_delays() {
 
     let (errors, latencies) = lock_or_recover(&diagnostics).snapshot();
     assert_eq!(
-        errors.get("foundry_local").map(String::as_str),
+        errors.get("local_engine").map(String::as_str),
         Some("api_error")
     );
-    assert!(latencies.contains_key("foundry_local"));
+    assert!(latencies.contains_key("local_engine"));
 }
 
 #[tokio::test]
@@ -129,7 +129,7 @@ async fn a_non_transient_error_is_not_retried() {
 
     let (errors, _) = lock_or_recover(&diagnostics).snapshot();
     assert_eq!(
-        errors.get("foundry_local").map(String::as_str),
+        errors.get("local_engine").map(String::as_str),
         Some("api_error")
     );
 }
@@ -168,7 +168,7 @@ async fn a_rejected_output_fails_without_retry_and_keeps_the_quality_code() {
 
     let (errors, _) = lock_or_recover(&diagnostics).snapshot();
     assert_eq!(
-        errors.get("foundry_local").map(String::as_str),
+        errors.get("local_engine").map(String::as_str),
         Some("low_quality_output")
     );
 }

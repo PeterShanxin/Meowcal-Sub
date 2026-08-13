@@ -24,7 +24,7 @@ async fn an_uncontexted_timeout_retries_without_sleep_and_warns_exactly_once() {
         "the total budget still has room"
     );
     assert_eq!(backend.calls.load(Ordering::SeqCst), 3);
-    assert_eq!(warnings, vec!["foundry_local: timeout".to_string()]);
+    assert_eq!(warnings, vec!["local_engine: timeout".to_string()]);
 
     let times = lock_or_recover(&backend.virtual_call_times);
     assert_eq!(times.len(), 3);
@@ -33,7 +33,7 @@ async fn an_uncontexted_timeout_retries_without_sleep_and_warns_exactly_once() {
 
     let (errors, _) = lock_or_recover(&diagnostics).snapshot();
     assert_eq!(
-        errors.get("foundry_local").map(String::as_str),
+        errors.get("local_engine").map(String::as_str),
         Some("timeout")
     );
 }
@@ -58,11 +58,11 @@ async fn a_contexted_timeout_is_not_retried() {
         "the total budget still has room"
     );
     assert_eq!(backend.calls.load(Ordering::SeqCst), 1);
-    assert_eq!(warnings, vec!["foundry_local: timeout".to_string()]);
+    assert_eq!(warnings, vec!["local_engine: timeout".to_string()]);
 
     let (errors, _) = lock_or_recover(&diagnostics).snapshot();
     assert_eq!(
-        errors.get("foundry_local").map(String::as_str),
+        errors.get("local_engine").map(String::as_str),
         Some("timeout")
     );
 }
@@ -87,11 +87,11 @@ async fn an_exhausted_budget_never_calls_the_backend() {
         "no budget at all is total exhaustion"
     );
     assert_eq!(backend.calls.load(Ordering::SeqCst), 0);
-    assert_eq!(warnings, vec!["foundry_local: timeout".to_string()]);
+    assert_eq!(warnings, vec!["local_engine: timeout".to_string()]);
 
     let (errors, _) = lock_or_recover(&diagnostics).snapshot();
     assert_eq!(
-        errors.get("foundry_local").map(String::as_str),
+        errors.get("local_engine").map(String::as_str),
         Some("timeout")
     );
 }
@@ -280,5 +280,5 @@ async fn latency_is_measured_from_the_shared_budget_clock() {
         "latency is measured from the shared budget clock, not from runner entry"
     );
     let (_, latencies) = lock_or_recover(&diagnostics).snapshot();
-    assert!(matches!(latencies.get("foundry_local").copied(), Some(v) if v >= 5_000));
+    assert!(matches!(latencies.get("local_engine").copied(), Some(v) if v >= 5_000));
 }

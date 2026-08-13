@@ -84,7 +84,7 @@ pub struct FoundryLocalStatus {
     /// Resolved model that will be used (if available).
     pub selected_model: Option<String>,
     pub notes: String,
-    /// Granular Foundry Local phase (e.g. notInstalled, notRunning, noModels, preparing, ready).
+    /// Granular engine phase (e.g. notInstalled, notRunning, noModels, preparing, ready).
     pub phase: FoundryLocalPhase,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub probe: Option<crate::llm::FoundryProbeSnapshot>,
@@ -104,11 +104,9 @@ fn foundry_status_from_snapshot(snapshot: EngineStatusSnapshot) -> FoundryLocalS
     }
 }
 
-/// Get the status of Foundry Local service (fast, no probe)
+/// Get the status of the local translation engine (fast, no probe)
 #[tauri::command]
-pub async fn get_foundry_local_status(
-    state: State<'_, AppState>,
-) -> Result<FoundryLocalStatus, String> {
+pub async fn get_engine_status(state: State<'_, AppState>) -> Result<FoundryLocalStatus, String> {
     state.startup_gate.wait_until_ready().await?;
     let config = {
         let guard = lock_or_recover(&state.config);
@@ -119,9 +117,9 @@ pub async fn get_foundry_local_status(
         .map(foundry_status_from_snapshot)
 }
 
-/// List available models from Foundry Local
+/// List available models from the local translation engine
 #[tauri::command]
-pub async fn list_foundry_local_models(state: State<'_, AppState>) -> Result<Vec<String>, String> {
+pub async fn list_engine_models(state: State<'_, AppState>) -> Result<Vec<String>, String> {
     let config = {
         let guard = lock_or_recover(&state.config);
         guard.translation.foundry_local.clone()
@@ -135,9 +133,9 @@ pub async fn list_foundry_local_models(state: State<'_, AppState>) -> Result<Vec
     backend.list_models().await.map_err(|e| e.to_string())
 }
 
-/// Refresh Foundry Local service status (re-detect service + fast probe)
+/// Refresh local engine status (re-detect service + fast probe)
 #[tauri::command]
-pub async fn refresh_foundry_local_status(
+pub async fn refresh_engine_status(
     state: State<'_, AppState>,
 ) -> Result<FoundryLocalStatus, String> {
     let config = {
@@ -149,11 +147,9 @@ pub async fn refresh_foundry_local_status(
         .map(foundry_status_from_snapshot)
 }
 
-/// Prepare Foundry Local (attempt to start service + slow warmup probe)
+/// Prepare the local engine (attempt to start service + slow warmup probe)
 #[tauri::command]
-pub async fn prepare_foundry_local(
-    state: State<'_, AppState>,
-) -> Result<FoundryLocalStatus, String> {
+pub async fn prepare_engine(state: State<'_, AppState>) -> Result<FoundryLocalStatus, String> {
     let config = {
         let guard = lock_or_recover(&state.config);
         guard.translation.foundry_local.clone()
@@ -163,9 +159,9 @@ pub async fn prepare_foundry_local(
         .map(foundry_status_from_snapshot)
 }
 
-/// Make Foundry Local ready (start service if needed + keep probing until ready or timeout).
+/// Make the local engine ready (start service if needed + keep probing until ready or timeout).
 #[tauri::command]
-pub async fn make_foundry_ready(state: State<'_, AppState>) -> Result<FoundryLocalStatus, String> {
+pub async fn make_engine_ready(state: State<'_, AppState>) -> Result<FoundryLocalStatus, String> {
     let config = {
         let guard = lock_or_recover(&state.config);
         guard.translation.foundry_local.clone()
@@ -989,13 +985,13 @@ pub async fn stop_translation(state: State<'_, AppState>, app: AppHandle) -> Res
 
 /// Show the foundry-wizard window, resetting state for a fresh run
 #[tauri::command]
-pub fn open_foundry_wizard(app: AppHandle) -> Result<(), String> {
+pub fn open_engine_wizard(app: AppHandle) -> Result<(), String> {
     crate::wizard_window::open(&app)
 }
 
 /// Hide the foundry-wizard window and notify the main window
 #[tauri::command]
-pub fn close_foundry_wizard(
+pub fn close_engine_wizard(
     app: AppHandle,
     model_downloaded: bool,
     selected_model: Option<String>,

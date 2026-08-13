@@ -39,11 +39,11 @@ async fn all_tiers_timeout_then_the_sequence_exhausts() {
     assert_eq!(
         warnings,
         vec![
-            "foundry_local: timeout".to_string(),
-            "foundry_local: context_degraded".to_string(),
-            "foundry_local: timeout".to_string(),
-            "foundry_local: context_degraded".to_string(),
-            "foundry_local: timeout".to_string(),
+            "local_engine: timeout".to_string(),
+            "local_engine: context_degraded".to_string(),
+            "local_engine: timeout".to_string(),
+            "local_engine: context_degraded".to_string(),
+            "local_engine: timeout".to_string(),
         ]
     );
     assert_eq!(
@@ -86,14 +86,14 @@ async fn a_validation_rejection_exhausts_the_sequence_without_retry() {
     assert_eq!(backend.calls.load(Ordering::SeqCst), 1);
     assert_eq!(warnings.len(), 1);
     assert!(
-        warnings[0].starts_with("foundry_local: Translation failed: ")
+        warnings[0].starts_with("local_engine: Translation failed: ")
             && warnings[0].contains("rejected as corrupted (overlong output)"),
         "the rejection reason reaches the warnings: {:?}",
         warnings
     );
     let (errors, _) = lock_or_recover(&diagnostics).snapshot();
     assert_eq!(
-        errors.get("foundry_local").map(String::as_str),
+        errors.get("local_engine").map(String::as_str),
         Some("low_quality_output")
     );
 }
@@ -122,7 +122,7 @@ async fn an_exhausted_budget_at_entry_never_calls_the_backend() {
 
     assert!(outcome.is_none(), "nothing can run: {outcome:?}");
     assert_eq!(backend.calls.load(Ordering::SeqCst), 0);
-    assert_eq!(warnings, vec!["foundry_local: timeout".to_string()]);
+    assert_eq!(warnings, vec!["local_engine: timeout".to_string()]);
 }
 
 // A success writes the diagnostics success key from the shared clock.
@@ -151,11 +151,11 @@ async fn a_success_records_diagnostics_from_the_shared_clock() {
     assert_eq!(outcome.translated, "hello world");
     let (errors, latencies) = lock_or_recover(&diagnostics).snapshot();
     assert!(
-        errors.get("foundry_local").is_none(),
+        errors.get("local_engine").is_none(),
         "a success clears the last error"
     );
     assert!(
-        latencies.get("foundry_local").is_some(),
+        latencies.get("local_engine").is_some(),
         "the success latency reaches the diagnostics"
     );
 }
@@ -189,7 +189,7 @@ async fn a_slow_success_degrades_the_stored_tier() {
     assert_eq!(outcome.translated, "hello world");
     assert_eq!(
         warnings,
-        vec!["foundry_local: context_degraded_slow".to_string()]
+        vec!["local_engine: context_degraded_slow".to_string()]
     );
     assert_eq!(
         ContextTier::from_u8(store.load(Ordering::SeqCst)),

@@ -34,7 +34,7 @@ pub fn close(
     }
     // Notify main window so it can refresh status and auto-configure
     let _ = app.emit(
-        "foundry-wizard-closed",
+        "engine-wizard-closed",
         serde_json::json!({
             "modelDownloaded": model_downloaded,
             "selectedModel": selected_model,

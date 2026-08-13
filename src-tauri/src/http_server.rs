@@ -148,7 +148,7 @@ async fn get_translation_diagnostics(State(state): State<HttpAppState>) -> impl 
     // Build backend list with real status checks
     let mut backends: Vec<BackendInfo> = Vec::new();
 
-    // Foundry Local
+    // Local translation engine
     if config.translation.enable_foundry_local {
         let foundry = FoundryLocalBackend::new(config.translation.foundry_local.clone());
         // Refresh to detect service URL and populate notes correctly
@@ -156,7 +156,7 @@ async fn get_translation_diagnostics(State(state): State<HttpAppState>) -> impl 
         let phase = foundry.phase();
         backends.push(BackendInfo {
             id: BackendId::FoundryLocal,
-            name: "Foundry Local".to_string(),
+            name: "Local Translation Engine".to_string(),
             available: foundry.is_available(),
             ready_state: foundry.ready_state(),
             notes: foundry.notes(),
@@ -186,8 +186,8 @@ async fn get_translation_diagnostics(State(state): State<HttpAppState>) -> impl 
     })
 }
 
-/// GET /api/foundry-local/models - List Foundry Local models
-async fn list_foundry_local_models(State(state): State<HttpAppState>) -> impl IntoResponse {
+/// GET /api/engine/models - List local engine models
+async fn list_engine_models(State(state): State<HttpAppState>) -> impl IntoResponse {
     let config = lock_or_recover(&state.config).clone();
     let backend = FoundryLocalBackend::new(config.translation.foundry_local);
 
@@ -200,30 +200,30 @@ async fn list_foundry_local_models(State(state): State<HttpAppState>) -> impl In
     }
 }
 
-/// GET /api/foundry-local/status - Get Foundry Local status
-async fn get_foundry_local_status(State(state): State<HttpAppState>) -> impl IntoResponse {
+/// GET /api/engine/status - Get local engine status
+async fn get_engine_status(State(state): State<HttpAppState>) -> impl IntoResponse {
     let config = lock_or_recover(&state.config).clone();
     let snapshot = engine_status::get_status_http(config.translation.foundry_local.clone()).await;
     Json(foundry_status_from_snapshot(snapshot))
 }
 
-/// POST /api/foundry-local/refresh - Refresh Foundry Local status (fast, read-only probe)
-async fn refresh_foundry_local_status(State(state): State<HttpAppState>) -> impl IntoResponse {
+/// POST /api/engine/refresh - Refresh engine status (fast, read-only probe)
+async fn refresh_engine_status(State(state): State<HttpAppState>) -> impl IntoResponse {
     let config = lock_or_recover(&state.config).clone();
     let snapshot =
         engine_status::refresh_status_http(config.translation.foundry_local.clone()).await;
     Json(foundry_status_from_snapshot(snapshot))
 }
 
-/// POST /api/foundry-local/prepare - Attempt to start Foundry Local service
-async fn prepare_foundry_local(State(state): State<HttpAppState>) -> impl IntoResponse {
+/// POST /api/engine/prepare - Attempt to start the engine service
+async fn prepare_engine(State(state): State<HttpAppState>) -> impl IntoResponse {
     let config = lock_or_recover(&state.config).clone();
     let snapshot = engine_status::prepare_http(config.translation.foundry_local.clone()).await;
     Json(foundry_status_from_snapshot(snapshot))
 }
 
-/// POST /api/foundry-local/make-ready - Start service if needed + keep probing until Ready (or timeout)
-async fn make_foundry_ready(State(state): State<HttpAppState>) -> impl IntoResponse {
+/// POST /api/engine/make-ready - Start service if needed + keep probing until Ready (or timeout)
+async fn make_engine_ready(State(state): State<HttpAppState>) -> impl IntoResponse {
     let config = lock_or_recover(&state.config).clone();
     let snapshot = engine_status::make_ready_http(config.translation.foundry_local.clone()).await;
     Json(foundry_status_from_snapshot(snapshot))
@@ -344,15 +344,12 @@ pub fn create_router(state: HttpAppState) -> Router {
             "/api/translation/diagnostics",
             get(get_translation_diagnostics),
         )
-        // Foundry Local
-        .route("/api/foundry-local/models", get(list_foundry_local_models))
-        .route("/api/foundry-local/status", get(get_foundry_local_status))
-        .route(
-            "/api/foundry-local/refresh",
-            post(refresh_foundry_local_status),
-        )
-        .route("/api/foundry-local/prepare", post(prepare_foundry_local))
-        .route("/api/foundry-local/make-ready", post(make_foundry_ready))
+        // Local translation engine
+        .route("/api/engine/models", get(list_engine_models))
+        .route("/api/engine/status", get(get_engine_status))
+        .route("/api/engine/refresh", post(refresh_engine_status))
+        .route("/api/engine/prepare", post(prepare_engine))
+        .route("/api/engine/make-ready", post(make_engine_ready))
         // Capture region
         .route("/api/capture-region", get(get_capture_region))
         .route("/api/capture-region", post(set_capture_region))

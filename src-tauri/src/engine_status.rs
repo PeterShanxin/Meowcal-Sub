@@ -48,7 +48,7 @@ pub async fn get_status_tauri(config: FoundryLocalConfig) -> Result<EngineStatus
     tokio::task::spawn_blocking(move || legacy_status_no_probe(config))
         .await
         .map_err(|err| {
-            let message = format!("Foundry Local status task failed: {err}");
+            let message = format!("Engine status task failed: {err}");
             warn!("{}", message);
             message
         })

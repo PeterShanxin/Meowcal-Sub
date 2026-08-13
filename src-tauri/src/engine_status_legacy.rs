@@ -63,7 +63,7 @@ pub(super) async fn legacy_refresh(
         Ok(parts) => parts,
         Err(err) => match join {
             JoinPolicy::Hard => {
-                return Err(format!("Foundry Local status task failed: {err}"));
+                return Err(format!("Engine status task failed: {err}"));
             }
             JoinPolicy::SoftRefresh | JoinPolicy::SoftPrepare => {
                 let backend = FoundryLocalBackend::new(config);
@@ -73,7 +73,7 @@ pub(super) async fn legacy_refresh(
                     None,
                     false,
                     Vec::new(),
-                    "Foundry Local refresh task failed".to_string(),
+                    "Engine refresh task failed".to_string(),
                 )
             }
         },
@@ -110,7 +110,7 @@ pub(super) async fn legacy_prepare(
         Ok(parts) => parts,
         Err(err) => match join {
             JoinPolicy::Hard => {
-                return Err(format!("Foundry Local prepare task failed: {err}"));
+                return Err(format!("Engine prepare task failed: {err}"));
             }
             JoinPolicy::SoftRefresh | JoinPolicy::SoftPrepare => {
                 let backend = FoundryLocalBackend::new(config);
@@ -120,7 +120,7 @@ pub(super) async fn legacy_prepare(
                     None,
                     false,
                     Vec::new(),
-                    "Foundry Local prepare task failed".to_string(),
+                    "Engine prepare task failed".to_string(),
                 )
             }
         },
