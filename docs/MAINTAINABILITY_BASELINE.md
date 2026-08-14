@@ -6,8 +6,8 @@ ratchets. Machine-readable values live in
 
 ## Enforced baseline
 
-Measured on 2026-08-13 after the #33 Lit main/setup entry-boundary wave
-(following the #31 lifecycle and #32 engine/pipeline waves):
+Measured on 2026-08-14 after the first #34 selector-geometry wave
+(following the #31 lifecycle, #32 engine/pipeline, and #33 main/setup waves):
 
 - production files under `src/` and `src-tauri/src/`;
 - 400 lines maximum for a new `.rs`, `.js`, `.ts`, `.html`, or `.css` production file;
@@ -46,7 +46,7 @@ decomposition-owned hotspots are:
 | `src-tauri/src/commands.rs`          |   1,209 | #31 / #32 surface    |
 | `src/scripts/overlay.js`             |   1,129 | #34                  |
 | `src-tauri/src/llm/manager.rs`       |   1,021 | #32                  |
-| `src/scripts/selector.js`            |     820 | #34                  |
+| `src/scripts/selector.js`            |     722 | #34                  |
 | `src-tauri/src/llm/context.rs`       |     732 | #32                  |
 | `src-tauri/src/config.rs`            |     595 | #31                  |
 
