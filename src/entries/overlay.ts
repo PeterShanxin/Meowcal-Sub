@@ -8,6 +8,8 @@ import "../scripts/overlay-clip-payload.js";
 import "../scripts/overlay-hit-bounds.js";
 import "../scripts/region-geometry.js";
 import "../scripts/overlay-geometry.js";
+import "../scripts/overlay-appearance.js";
+import "../scripts/overlay-timers.js";
 import "../scripts/overlay-settings-menu.js";
 import "../scripts/overlay-diagnostics.js";
 import "../scripts/overlay.js";

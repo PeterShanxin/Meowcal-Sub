@@ -6,14 +6,15 @@ ratchets. Machine-readable values live in
 
 ## Enforced baseline
 
-Measured on 2026-08-15 after the second #34 wave gave the shared capture-region
-and overlay geometry rules their own owners (following the #31 lifecycle, #32
-engine/pipeline, #33 main/setup, and first #34 selector-geometry waves):
+Measured on 2026-08-15 after the third #34 wave gave the overlay's timers and
+appearance state their own owners (following the #31 lifecycle, #32
+engine/pipeline, #33 main/setup, and the first two #34 selector/overlay geometry
+waves):
 
 - production files under `src/` and `src-tauri/src/`;
 - 400 lines maximum for a new `.rs`, `.js`, `.ts`, `.html`, or `.css` production file;
 - 14 explicit legacy files above that ceiling;
-- 10 existing ESLint warnings, with zero allowed errors;
+- 8 existing ESLint warnings, with zero allowed errors;
 - frontend coverage floors of 89% statements, 78% branches, 92% functions, and
   88% lines.
 
@@ -45,7 +46,7 @@ decomposition-owned hotspots are:
 | ------------------------------------ | ------: | -------------------- |
 | `src-tauri/src/llm/foundry_local.rs` |   1,561 | #32                  |
 | `src-tauri/src/commands.rs`          |   1,090 | #31 / #32 surface    |
-| `src/scripts/overlay.js`             |   1,073 | #34                  |
+| `src/scripts/overlay.js`             |   1,062 | #34                  |
 | `src-tauri/src/llm/context.rs`       |     732 | #32                  |
 | `src-tauri/src/llm/manager.rs`       |     726 | #32                  |
 | `src/scripts/selector.js`            |     721 | #34                  |
