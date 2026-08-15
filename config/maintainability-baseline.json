@@ -17,7 +17,7 @@
     "src-tauri/src/llm/manager.rs": 726,
     "src-tauri/src/llm/prompt_router.rs": 471,
     "src-tauri/src/ocr/windows_ocr.rs": 435,
-    "src/scripts/overlay.js": 1073,
+    "src/scripts/overlay.js": 1062,
     "src/scripts/selector.js": 721,
     "src/styles/main.css": 697,
     "src/styles/overlay.css": 508,

@@ -14,6 +14,8 @@ const { pointInBounds, rectToPhysicalBounds, regionToPhysicalBounds } = window.O
 const { buildDiagnosticsText } = window.OverlayDiagnostics;
 const { frameScaleTokens, resolveSubtitlePlacement, roundedRectBounds } = window.OverlayGeometry;
 const { moveRegion, resizeRegion } = window.RegionGeometry;
+const { DEFAULT_APPEARANCE, hydrateAppearance, patchAppearance } = window.OverlayAppearance;
+const { createTimerOwner } = window.OverlayTimers;
 
 // Smallest capture region a resize drag may leave behind. Larger than the
 // selector's minimum because the overlay frame also has to hold its handles.
@@ -21,6 +23,14 @@ const MIN_REGION_SIZE = 50;
 
 // Gap between the capture region and the subtitle plate.
 const SUBTITLE_GAP_PX = 10;
+
+// Timer slots and cadences. See overlay-timers.js for why these are owned.
+const CLICK_THROUGH_TIMER = 'clickThrough';
+const FRAME_FADE_TIMER = 'frameFade';
+const HIDE_CLEANUP_TIMER = 'hideCleanup';
+const CLICK_THROUGH_POLL_MS = 150;
+const CLICK_THROUGH_STALL_MS = 2000;
+const FRAME_FADE_DELAY_MS = 4000;
 
 // =============================================================================
 // GLOBAL STATE
@@ -32,12 +42,8 @@ const overlayState = {
     isOverlayActive: false, // Whether user is interacting with overlay
     currentText: '',
     debugMode: true,
-    // Overlay appearance settings
-    fontSize: 24,
-    fontFamily: 'Segoe UI',
-    textColor: '#FFFFFF',
-    lightBackground: false,
-    showDiagnostics: false, // Whether to show the diagnostics panel
+    // Overlay appearance settings, owned by overlay-appearance.js
+    ...DEFAULT_APPEARANCE,
     lastPipelinePosition: null,
     settingsOpen: false,
     isDragging: false,
@@ -52,11 +58,10 @@ const overlayState = {
     clickThroughEnabled: true,
 };
 
-// Timers
-let clickThroughMonitor = null;
+// Timers whose lifetime is overlay state, not page lifetime.
+const overlayTimers = createTimerOwner();
 let clickThroughBusy = false;
 let clickThroughBusyUntil = 0;
-let fadeTimer = null;
 
 // Fade duration for "start/stop translation" show/hide transitions.
 // Keep this short to avoid delaying stop/start responsiveness.
@@ -186,7 +191,7 @@ async function updateClickThroughState() {
     if (!window.__TAURI__?.window?.cursorPosition) return;
 
     clickThroughBusy = true;
-    clickThroughBusyUntil = Date.now() + 2000;
+    clickThroughBusyUntil = Date.now() + CLICK_THROUGH_STALL_MS;
     try {
         if (!overlayState.region) {
             await setOverlayClickThrough(true);
@@ -215,14 +220,12 @@ async function updateClickThroughState() {
 }
 
 function startClickThroughMonitor() {
-    if (clickThroughMonitor) return;
-    clickThroughMonitor = setInterval(updateClickThroughState, 150);
+    if (overlayTimers.isPending(CLICK_THROUGH_TIMER)) return;
+    overlayTimers.interval(CLICK_THROUGH_TIMER, updateClickThroughState, CLICK_THROUGH_POLL_MS);
 }
 
 function stopClickThroughMonitor() {
-    if (!clickThroughMonitor) return;
-    clearInterval(clickThroughMonitor);
-    clickThroughMonitor = null;
+    overlayTimers.cancel(CLICK_THROUGH_TIMER);
 }
 
 // =============================================================================
@@ -230,13 +233,13 @@ function stopClickThroughMonitor() {
 // =============================================================================
 
 function scheduleFadeOut() {
-    if (fadeTimer) clearTimeout(fadeTimer);
+    overlayTimers.cancel(FRAME_FADE_TIMER);
 
     const captureFrame = document.getElementById('capture-frame');
     if (!captureFrame) return;
 
-    // Fade out after 4 seconds of no interaction
-    fadeTimer = setTimeout(() => {
+    // Fade out after a few seconds of no interaction
+    overlayTimers.timeout(FRAME_FADE_TIMER, () => {
         // The settings popup is anchored to the gear inside the frame, so fading
         // the frame while it is open would strand the popup with no way to close it.
         if (overlayState.settingsOpen) return;
@@ -244,11 +247,11 @@ function scheduleFadeOut() {
             captureFrame.classList.add('faded');
             scheduleWindowClipUpdate();
         }
-    }, 4000);
+    }, FRAME_FADE_DELAY_MS);
 }
 
 function showCaptureFrame() {
-    if (fadeTimer) clearTimeout(fadeTimer);
+    overlayTimers.cancel(FRAME_FADE_TIMER);
 
     const captureFrame = document.getElementById('capture-frame');
     if (captureFrame) {
@@ -631,6 +634,10 @@ async function setupEventListeners(elements) {
             overlayState.isVisible = visible;
 
             if (visible) {
+                // A stop inside the fade window leaves its hide cleanup pending.
+                // Firing it now would hide the capture frame we are about to
+                // show, for the rest of the session.
+                overlayTimers.cancel(HIDE_CLEANUP_TIMER);
                 // The window is re-shown here, so the cached click-through and clip
                 // state can no longer be trusted to match what the OS window has.
                 overlayState.isClickThrough = null;
@@ -687,13 +694,12 @@ async function setupEventListeners(elements) {
                     subtitleText.textContent = '';
                 }
 
-                // Clear fade timer
-                if (fadeTimer) clearTimeout(fadeTimer);
+                overlayTimers.cancel(FRAME_FADE_TIMER);
                 stopClickThroughMonitor();
                 await setOverlayClickThrough(true);
 
                 // Final cleanup after the fade (best effort).
-                setTimeout(() => {
+                overlayTimers.timeout(HIDE_CLEANUP_TIMER, () => {
                     captureFrame.classList.add('hidden');
                     captureFrame.classList.remove('visible', 'exiting', 'faded');
 
@@ -708,25 +714,14 @@ async function setupEventListeners(elements) {
             const payload = event.payload || {};
             console.log('⚙️ Overlay settings updated from main UI:', payload);
 
-            // Update all overlay appearance settings
-            if (typeof payload.fontSize === 'number') {
-                overlayState.fontSize = payload.fontSize;
+            const { applied, next } = patchAppearance(overlayState, payload);
+            Object.assign(overlayState, next);
+
+            if (applied.includes('fontSize')) {
                 const fontSizeSlider = document.getElementById('font-size-slider');
                 const fontSizeDisplay = document.getElementById('font-size-display');
-                if (fontSizeSlider) fontSizeSlider.value = payload.fontSize;
-                if (fontSizeDisplay) fontSizeDisplay.textContent = `${payload.fontSize}px`;
-            }
-
-            if (typeof payload.fontFamily === 'string') {
-                overlayState.fontFamily = payload.fontFamily;
-            }
-
-            if (typeof payload.textColor === 'string') {
-                overlayState.textColor = payload.textColor;
-            }
-
-            if (typeof payload.lightBackground === 'boolean') {
-                overlayState.lightBackground = payload.lightBackground;
+                if (fontSizeSlider) fontSizeSlider.value = overlayState.fontSize;
+                if (fontSizeDisplay) fontSizeDisplay.textContent = `${overlayState.fontSize}px`;
             }
 
             // Apply all styles to subtitle elements
@@ -738,11 +733,10 @@ async function setupEventListeners(elements) {
             }
 
             // Update diagnostics visibility
-            if (typeof payload.showDiagnostics === 'boolean') {
-                overlayState.showDiagnostics = payload.showDiagnostics;
+            if (applied.includes('showDiagnostics')) {
                 updateDiagnosticsVisibility();
                 const diagnosticsToggle = document.getElementById('diagnostics-toggle');
-                if (diagnosticsToggle) diagnosticsToggle.checked = payload.showDiagnostics;
+                if (diagnosticsToggle) diagnosticsToggle.checked = overlayState.showDiagnostics;
             }
         });
 
@@ -951,12 +945,7 @@ async function loadOverlaySettings() {
     try {
         const settings = await window.__TAURI__.core.invoke('get_settings');
         if (settings?.overlay) {
-            // Load all overlay settings into state
-            overlayState.fontSize = settings.overlay.fontSize || 24;
-            overlayState.fontFamily = settings.overlay.fontFamily || 'Segoe UI';
-            overlayState.textColor = settings.overlay.textColor || '#FFFFFF';
-            overlayState.lightBackground = settings.overlay.lightBackground === true;
-            overlayState.showDiagnostics = settings.overlay.showDiagnostics === true;
+            Object.assign(overlayState, hydrateAppearance(settings.overlay));
 
             // Apply all styles to subtitle elements
             applyOverlayStyles();
