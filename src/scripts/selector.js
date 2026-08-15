@@ -11,6 +11,16 @@
 // 5. Cancel button or ESC closes without saving
 // =============================================================================
 
+const {
+    buildCaptureRegionPayload,
+    buildDimOverlaySegments,
+    meetsMinimumSelection,
+    moveRegion,
+    resizeRegion,
+    screenRectToClientRect,
+    selectionRectFromPoints,
+} = window.SelectorGeometry;
+
 // Selection state
 const state = {
     isSelecting: false,
@@ -166,38 +176,22 @@ function dimOverlayFull() {
 function dimOverlayWithHole(left, top, width, height) {
     if (!overlayTop || !overlayLeft || !overlayRight || !overlayBottom) return;
 
-    // Clamp to viewport bounds (defensive against negative coords).
-    const clampedLeft = Math.max(0, Math.min(left, window.innerWidth));
-    const clampedTop = Math.max(0, Math.min(top, window.innerHeight));
-    const clampedRight = Math.max(clampedLeft, Math.min(left + width, window.innerWidth));
-    const clampedBottom = Math.max(clampedTop, Math.min(top + height, window.innerHeight));
+    const segments = buildDimOverlaySegments(
+        { x: left, y: top, width, height },
+        { width: window.innerWidth, height: window.innerHeight },
+    );
 
-    const holeWidth = Math.max(0, clampedRight - clampedLeft);
-    const holeHeight = Math.max(0, clampedBottom - clampedTop);
+    applyDimSegmentStyle(overlayTop, segments.top, true);
+    applyDimSegmentStyle(overlayBottom, segments.bottom, true);
+    applyDimSegmentStyle(overlayLeft, segments.left);
+    applyDimSegmentStyle(overlayRight, segments.right);
+}
 
-    // Top segment
-    overlayTop.style.top = '0px';
-    overlayTop.style.left = '0px';
-    overlayTop.style.width = '100%';
-    overlayTop.style.height = `${clampedTop}px`;
-
-    // Bottom segment
-    overlayBottom.style.top = `${clampedTop + holeHeight}px`;
-    overlayBottom.style.left = '0px';
-    overlayBottom.style.width = '100%';
-    overlayBottom.style.height = `${Math.max(0, window.innerHeight - (clampedTop + holeHeight))}px`;
-
-    // Left segment
-    overlayLeft.style.top = `${clampedTop}px`;
-    overlayLeft.style.left = '0px';
-    overlayLeft.style.width = `${clampedLeft}px`;
-    overlayLeft.style.height = `${holeHeight}px`;
-
-    // Right segment
-    overlayRight.style.top = `${clampedTop}px`;
-    overlayRight.style.left = `${clampedLeft + holeWidth}px`;
-    overlayRight.style.width = `${Math.max(0, window.innerWidth - (clampedLeft + holeWidth))}px`;
-    overlayRight.style.height = `${holeHeight}px`;
+function applyDimSegmentStyle(element, segment, fullWidth = false) {
+    element.style.top = `${segment.top}px`;
+    element.style.left = `${segment.left}px`;
+    element.style.width = fullWidth ? '100%' : `${segment.width}px`;
+    element.style.height = `${segment.height}px`;
 }
 
 // =============================================================================
@@ -346,7 +340,7 @@ function handleMouseUp(e) {
     const region = calculateRegion();
 
     // Validate minimum size
-    if (region.width < 30 || region.height < 15) {
+    if (!meetsMinimumSelection(region)) {
         console.log('Selection too small, resetting');
         resetSelection();
         return;
@@ -399,14 +393,13 @@ function handleKeyDown(e) {
 function updateSelectionBox() {
     const region = calculateRegion();
 
-    // Use client coordinates for positioning the visual box
-    const clientStartX = state.startX - window.screenX;
-    const clientStartY = state.startY - window.screenY;
-    const clientCurrentX = state.currentX - window.screenX;
-    const clientCurrentY = state.currentY - window.screenY;
-
-    const left = Math.min(clientStartX, clientCurrentX);
-    const top = Math.min(clientStartY, clientCurrentY);
+    // Use client coordinates for positioning the visual box.
+    const clientRect = screenRectToClientRect(region, {
+        x: window.screenX,
+        y: window.screenY,
+    });
+    const left = clientRect.left;
+    const top = clientRect.top;
 
     // Position and size the selection box
     selectionBox.style.left = `${left}px`;
@@ -430,12 +423,12 @@ function updateSelectionBox() {
 
 function calculateRegion() {
     // Calculate region using screen coordinates
-    const x = Math.min(state.startX, state.currentX);
-    const y = Math.min(state.startY, state.currentY);
-    const width = Math.abs(state.currentX - state.startX);
-    const height = Math.abs(state.currentY - state.startY);
-
-    return { x, y, width, height };
+    return selectionRectFromPoints(
+        state.startX,
+        state.startY,
+        state.currentX,
+        state.currentY,
+    );
 }
 
 // =============================================================================
@@ -476,41 +469,11 @@ async function confirmSelection() {
     const winTop = Math.round(window.screenY || 0);
     const winRight = winLeft + Math.round(window.innerWidth || 0);
     const winBottom = winTop + Math.round(window.innerHeight || 0);
-
-    const rawX = Math.round(state.region.x);
-    const rawY = Math.round(state.region.y);
-    const rawW = Math.round(state.region.width);
-    const rawH = Math.round(state.region.height);
-
-    let x1 = rawX;
-    let y1 = rawY;
-    let x2 = rawX + Math.max(1, rawW);
-    let y2 = rawY + Math.max(1, rawH);
-
-    const padX = 8;
-    const padY = 10;
-    x1 -= padX;
-    y1 -= padY;
-    x2 += padX;
-    y2 += padY;
-
-    // Clamp to selector window bounds (screen coords).
-    x1 = Math.max(winLeft, x1);
-    y1 = Math.max(winTop, y1);
-    x2 = Math.min(winRight, x2);
-    y2 = Math.min(winBottom, y2);
-
-    // Clamp to non-negative for common single-monitor configs (Graphics Capture validation).
-    x1 = Math.max(0, x1);
-    y1 = Math.max(0, y1);
-
-    const regionData = {
-        x: x1,
-        y: y1,
-        width: Math.max(1, x2 - x1),
-        height: Math.max(1, y2 - y1),
-        scaleFactor: scaleFactor,
-    };
+    const regionData = buildCaptureRegionPayload(
+        state.region,
+        { left: winLeft, top: winTop, right: winRight, bottom: winBottom },
+        scaleFactor,
+    );
 
     console.log('Confirming region:', regionData);
 
@@ -724,8 +687,7 @@ function handleDrag(e) {
     const deltaY = e.screenY - dragStartY;
 
     // Update region position
-    state.region.x = dragRegionStart.x + deltaX;
-    state.region.y = dragRegionStart.y + deltaY;
+    state.region = moveRegion(dragRegionStart, deltaX, deltaY);
 
     // Update state for visual update
     state.startX = state.region.x;
@@ -745,76 +707,16 @@ function handleResize(e) {
     const deltaX = e.screenX - dragStartX;
     const deltaY = e.screenY - dragStartY;
 
-    const minSize = 30;
-    let newX = dragRegionStart.x;
-    let newY = dragRegionStart.y;
-    let newWidth = dragRegionStart.width;
-    let newHeight = dragRegionStart.height;
-
-    // Adjust based on which handle is being dragged
-    switch (resizeHandle) {
-        case 'nw':
-            newX = dragRegionStart.x + deltaX;
-            newY = dragRegionStart.y + deltaY;
-            newWidth = dragRegionStart.width - deltaX;
-            newHeight = dragRegionStart.height - deltaY;
-            break;
-        case 'n':
-            newY = dragRegionStart.y + deltaY;
-            newHeight = dragRegionStart.height - deltaY;
-            break;
-        case 'ne':
-            newY = dragRegionStart.y + deltaY;
-            newWidth = dragRegionStart.width + deltaX;
-            newHeight = dragRegionStart.height - deltaY;
-            break;
-        case 'w':
-            newX = dragRegionStart.x + deltaX;
-            newWidth = dragRegionStart.width - deltaX;
-            break;
-        case 'e':
-            newWidth = dragRegionStart.width + deltaX;
-            break;
-        case 'sw':
-            newX = dragRegionStart.x + deltaX;
-            newWidth = dragRegionStart.width - deltaX;
-            newHeight = dragRegionStart.height + deltaY;
-            break;
-        case 's':
-            newHeight = dragRegionStart.height + deltaY;
-            break;
-        case 'se':
-            newWidth = dragRegionStart.width + deltaX;
-            newHeight = dragRegionStart.height + deltaY;
-            break;
-    }
-
-    // Enforce minimum size
-    if (newWidth < minSize) {
-        if (resizeHandle.includes('w')) {
-            newX = dragRegionStart.x + dragRegionStart.width - minSize;
-        }
-        newWidth = minSize;
-    }
-    if (newHeight < minSize) {
-        if (resizeHandle.includes('n')) {
-            newY = dragRegionStart.y + dragRegionStart.height - minSize;
-        }
-        newHeight = minSize;
-    }
+    const nextRegion = resizeRegion(dragRegionStart, resizeHandle, deltaX, deltaY);
 
     // Update region
-    state.region.x = newX;
-    state.region.y = newY;
-    state.region.width = newWidth;
-    state.region.height = newHeight;
+    state.region = nextRegion;
 
     // Update state for visual update
-    state.startX = newX;
-    state.startY = newY;
-    state.currentX = newX + newWidth;
-    state.currentY = newY + newHeight;
+    state.startX = nextRegion.x;
+    state.startY = nextRegion.y;
+    state.currentX = nextRegion.x + nextRegion.width;
+    state.currentY = nextRegion.y + nextRegion.height;
 
     updateSelectionBox();
 }
-
