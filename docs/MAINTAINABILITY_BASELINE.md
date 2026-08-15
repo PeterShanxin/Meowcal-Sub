@@ -6,8 +6,9 @@ ratchets. Machine-readable values live in
 
 ## Enforced baseline
 
-Measured on 2026-08-14 after the first #34 selector-geometry wave
-(following the #31 lifecycle, #32 engine/pipeline, and #33 main/setup waves):
+Measured on 2026-08-15 after the second #34 wave gave the shared capture-region
+and overlay geometry rules their own owners (following the #31 lifecycle, #32
+engine/pipeline, #33 main/setup, and first #34 selector-geometry waves):
 
 - production files under `src/` and `src-tauri/src/`;
 - 400 lines maximum for a new `.rs`, `.js`, `.ts`, `.html`, or `.css` production file;
@@ -42,12 +43,12 @@ decomposition-owned hotspots are:
 
 | File                                 | Ceiling | Reduction owner      |
 | ------------------------------------ | ------: | -------------------- |
-| `src-tauri/src/llm/foundry_local.rs` |   1,700 | #32                  |
-| `src-tauri/src/commands.rs`          |   1,209 | #31 / #32 surface    |
-| `src/scripts/overlay.js`             |   1,129 | #34                  |
-| `src-tauri/src/llm/manager.rs`       |   1,021 | #32                  |
-| `src/scripts/selector.js`            |     722 | #34                  |
+| `src-tauri/src/llm/foundry_local.rs` |   1,561 | #32                  |
+| `src-tauri/src/commands.rs`          |   1,090 | #31 / #32 surface    |
+| `src/scripts/overlay.js`             |   1,073 | #34                  |
 | `src-tauri/src/llm/context.rs`       |     732 | #32                  |
+| `src-tauri/src/llm/manager.rs`       |     726 | #32                  |
+| `src/scripts/selector.js`            |     721 | #34                  |
 | `src-tauri/src/config.rs`            |     595 | #31                  |
 
 `main.rs` left the legacy list in the #31 lifecycle wave. `http_server.rs`

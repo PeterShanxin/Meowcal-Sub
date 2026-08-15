@@ -15,11 +15,12 @@ const {
     buildCaptureRegionPayload,
     buildDimOverlaySegments,
     meetsMinimumSelection,
-    moveRegion,
-    resizeRegion,
     screenRectToClientRect,
     selectionRectFromPoints,
 } = window.SelectorGeometry;
+// Shared with the overlay, which enforces a larger minimum rectangle.
+const { moveRegion, resizeRegion } = window.RegionGeometry;
+const MIN_RESIZE_SIZE = 30;
 
 // Selection state
 const state = {
@@ -318,7 +319,21 @@ function handleMouseDown(e) {
     console.log(`Selection started at (${state.startX}, ${state.startY})`);
 }
 
+// Single owner of the document mousemove. Once a selection exists the same
+// gesture means drag or resize instead of "draw a new rectangle", so the mode
+// is branched here rather than by rebinding this handler later in the file.
 function handleMouseMove(e) {
+    if (isDragging) {
+        e.preventDefault();
+        handleDrag(e);
+        return;
+    }
+    if (isResizing) {
+        e.preventDefault();
+        handleResize(e);
+        return;
+    }
+
     if (!state.isSelecting) return;
 
     e.preventDefault();
@@ -328,7 +343,24 @@ function handleMouseMove(e) {
     updateSelectionBox();
 }
 
+// Single owner of the document mouseup, branching on the same three modes.
 function handleMouseUp(e) {
+    if (isDragging) {
+        e.preventDefault();
+        isDragging = false;
+        dragRegionStart = null;
+        console.log('Drag ended');
+        return;
+    }
+    if (isResizing) {
+        e.preventDefault();
+        isResizing = false;
+        resizeHandle = null;
+        dragRegionStart = null;
+        console.log('Resize ended');
+        return;
+    }
+
     if (!state.isSelecting) return;
 
     e.preventDefault();
@@ -644,39 +676,6 @@ function handleDragStart(e) {
     console.log('Drag started');
 }
 
-// Override existing mousemove for drag/resize
-const originalMouseMove = handleMouseMove;
-handleMouseMove = function (e) {
-    if (isDragging) {
-        e.preventDefault();
-        handleDrag(e);
-    } else if (isResizing) {
-        e.preventDefault();
-        handleResize(e);
-    } else {
-        originalMouseMove(e);
-    }
-};
-
-// Override existing mouseup for drag/resize
-const originalMouseUp = handleMouseUp;
-handleMouseUp = function (e) {
-    if (isDragging) {
-        e.preventDefault();
-        isDragging = false;
-        dragRegionStart = null;
-        console.log('Drag ended');
-    } else if (isResizing) {
-        e.preventDefault();
-        isResizing = false;
-        resizeHandle = null;
-        dragRegionStart = null;
-        console.log('Resize ended');
-    } else {
-        originalMouseUp(e);
-    }
-};
-
 /**
  * Handle dragging the selection box
  */
@@ -707,7 +706,7 @@ function handleResize(e) {
     const deltaX = e.screenX - dragStartX;
     const deltaY = e.screenY - dragStartY;
 
-    const nextRegion = resizeRegion(dragRegionStart, resizeHandle, deltaX, deltaY);
+    const nextRegion = resizeRegion(dragRegionStart, resizeHandle, deltaX, deltaY, MIN_RESIZE_SIZE);
 
     // Update region
     state.region = nextRegion;

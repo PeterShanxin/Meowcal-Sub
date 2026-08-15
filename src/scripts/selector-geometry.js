@@ -5,6 +5,9 @@
 // The selector adapter owns DOM state, event handlers, Tauri calls, and
 // persistence. This module owns only the coordinate and rectangle decisions so
 // they can be characterized without a WebView or a native window.
+//
+// Move and resize are not here: the overlay applies the same rules to the same
+// capture region, so `region-geometry.js` owns them for both windows.
 (function exposeSelectorGeometry(root, factory) {
   const api = factory();
 
@@ -109,63 +112,8 @@
     };
   }
 
-  function moveRegion(region, deltaX, deltaY) {
-    return {
-      x: region.x + deltaX,
-      y: region.y + deltaY,
-      width: region.width,
-      height: region.height,
-    };
-  }
-
   function meetsMinimumSelection(region, minWidth = 30, minHeight = 15) {
     return region.width >= minWidth && region.height >= minHeight;
-  }
-
-  function resizeRegion(region, handle, deltaX, deltaY, minSize = 30) {
-    let x = region.x;
-    let y = region.y;
-    let width = region.width;
-    let height = region.height;
-
-    if (handle === "nw") {
-      x = region.x + deltaX;
-      y = region.y + deltaY;
-      width = region.width - deltaX;
-      height = region.height - deltaY;
-    } else if (handle === "n") {
-      y = region.y + deltaY;
-      height = region.height - deltaY;
-    } else if (handle === "ne") {
-      y = region.y + deltaY;
-      width = region.width + deltaX;
-      height = region.height - deltaY;
-    } else if (handle === "w") {
-      x = region.x + deltaX;
-      width = region.width - deltaX;
-    } else if (handle === "e") {
-      width = region.width + deltaX;
-    } else if (handle === "sw") {
-      x = region.x + deltaX;
-      width = region.width - deltaX;
-      height = region.height + deltaY;
-    } else if (handle === "s") {
-      height = region.height + deltaY;
-    } else if (handle === "se") {
-      width = region.width + deltaX;
-      height = region.height + deltaY;
-    }
-
-    if (width < minSize) {
-      if (handle.includes("w")) x = region.x + region.width - minSize;
-      width = minSize;
-    }
-    if (height < minSize) {
-      if (handle.includes("n")) y = region.y + region.height - minSize;
-      height = minSize;
-    }
-
-    return { x, y, width, height };
   }
 
   return {
@@ -173,8 +121,6 @@
     buildDimOverlaySegments,
     clampSelectionHole,
     meetsMinimumSelection,
-    moveRegion,
-    resizeRegion,
     screenRectToClientRect,
     selectionRectFromPoints,
   };

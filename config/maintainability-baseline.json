@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "newProductionFileMaxLines": 400,
-  "eslintMaxWarnings": 10,
+  "eslintMaxWarnings": 8,
   "frontendCoverageMinimum": {
     "branches": 78,
     "functions": 92,
@@ -17,8 +17,8 @@
     "src-tauri/src/llm/manager.rs": 726,
     "src-tauri/src/llm/prompt_router.rs": 471,
     "src-tauri/src/ocr/windows_ocr.rs": 435,
-    "src/scripts/overlay.js": 1129,
-    "src/scripts/selector.js": 722,
+    "src/scripts/overlay.js": 1073,
+    "src/scripts/selector.js": 721,
     "src/styles/main.css": 697,
     "src/styles/overlay.css": 508,
     "src/styles/selector.css": 414,
