@@ -12,6 +12,15 @@ const { setupSettingsMenu } = window.OverlaySettingsMenu;
 const { clipPayloadEquals } = window.OverlayClipPayload;
 const { pointInBounds, rectToPhysicalBounds, regionToPhysicalBounds } = window.OverlayHitBounds;
 const { buildDiagnosticsText } = window.OverlayDiagnostics;
+const { frameScaleTokens, resolveSubtitlePlacement, roundedRectBounds } = window.OverlayGeometry;
+const { moveRegion, resizeRegion } = window.RegionGeometry;
+
+// Smallest capture region a resize drag may leave behind. Larger than the
+// selector's minimum because the overlay frame also has to hold its handles.
+const MIN_REGION_SIZE = 50;
+
+// Gap between the capture region and the subtitle plate.
+const SUBTITLE_GAP_PX = 10;
 
 // =============================================================================
 // GLOBAL STATE
@@ -55,13 +64,7 @@ let fadeTimer = null;
 const OVERLAY_VISIBILITY_FADE_MS = 220;
 
 function syncFrameScaleTokens(scaleFactor) {
-    // Keep the frame border aligned to device pixels at fractional DPI (e.g. 125%),
-    // which reduces jaggy/blurred edges compared to a fixed CSS pixel border.
-    const sf = (typeof scaleFactor === 'number' && scaleFactor > 0) ? scaleFactor : 1;
-    const borderPx = Math.max(1, Math.round(2 * sf));   // physical px
-    const radiusPx = Math.max(0, Math.round(8 * sf));   // physical px
-    const borderCss = borderPx / sf;
-    const radiusCss = radiusPx / sf;
+    const { borderCss, radiusCss } = frameScaleTokens(scaleFactor);
 
     document.documentElement.style.setProperty('--frame-border', `${borderCss}px`);
     document.documentElement.style.setProperty('--frame-radius', `${radiusCss}px`);
@@ -315,7 +318,6 @@ async function initOverlay() {
         subtitleHint,
         subtitleHintText,
         subtitleText,
-        debugRegion,
         debugStatus,
     });
 
@@ -429,54 +431,16 @@ function handleResize(e) {
     if (!overlayState.isResizing || !overlayState.region) return;
 
     const { x: startX, y: startY, regionX, regionY, regionW, regionH } = overlayState.dragStart;
-    const dx = e.clientX - startX;
-    const dy = e.clientY - startY;
-    const handle = overlayState.resizeHandle;
 
-    let newX = regionX, newY = regionY, newW = regionW, newH = regionH;
+    overlayState.region = resizeRegion(
+        { x: regionX, y: regionY, width: regionW, height: regionH },
+        overlayState.resizeHandle,
+        e.clientX - startX,
+        e.clientY - startY,
+        MIN_REGION_SIZE,
+    );
 
-    // Calculate new dimensions based on which handle is being dragged
-    if (handle.includes('w')) {
-        newX = regionX + dx;
-        newW = regionW - dx;
-    }
-    if (handle.includes('e')) {
-        newW = regionW + dx;
-    }
-    if (handle.includes('n')) {
-        newY = regionY + dy;
-        newH = regionH - dy;
-    }
-    if (handle.includes('s')) {
-        newH = regionH + dy;
-    }
-
-    // Enforce minimum size
-    const minSize = 50;
-    if (newW < minSize) {
-        if (handle.includes('w')) newX = regionX + regionW - minSize;
-        newW = minSize;
-    }
-    if (newH < minSize) {
-        if (handle.includes('n')) newY = regionY + regionH - minSize;
-        newH = minSize;
-    }
-
-    // Update local state and UI immediately
-    overlayState.region = { x: newX, y: newY, width: newW, height: newH };
-
-    const captureFrame = document.getElementById('capture-frame');
-    const subtitleContainer = document.getElementById('subtitle-container');
-
-    updateCaptureFrame(captureFrame, overlayState.region);
-    updateSubtitlePosition(subtitleContainer, overlayState.region);
-    scheduleWindowClipUpdate();
-
-    // Update debug display
-    const debugRegion = document.getElementById('debug-region');
-    if (debugRegion) {
-        debugRegion.textContent = `Region: (${newX}, ${newY}) ${newW}x${newH}`;
-    }
+    applyRegionToOverlay(overlayState.region);
 }
 
 async function handleResizeEnd() {
@@ -531,27 +495,14 @@ function handleDrag(e) {
     if (!overlayState.isDragging || !overlayState.region) return;
 
     const { x: startX, y: startY, regionX, regionY, regionW, regionH } = overlayState.dragStart;
-    const dx = e.clientX - startX;
-    const dy = e.clientY - startY;
 
-    const newX = regionX + dx;
-    const newY = regionY + dy;
+    overlayState.region = moveRegion(
+        { x: regionX, y: regionY, width: regionW, height: regionH },
+        e.clientX - startX,
+        e.clientY - startY,
+    );
 
-    // Update local state and UI immediately
-    overlayState.region = { x: newX, y: newY, width: regionW, height: regionH };
-
-    const captureFrame = document.getElementById('capture-frame');
-    const subtitleContainer = document.getElementById('subtitle-container');
-
-    updateCaptureFrame(captureFrame, overlayState.region);
-    updateSubtitlePosition(subtitleContainer, overlayState.region);
-    scheduleWindowClipUpdate();
-
-    // Update debug display
-    const debugRegion = document.getElementById('debug-region');
-    if (debugRegion) {
-        debugRegion.textContent = `Region: (${newX}, ${newY}) ${regionW}x${regionH}`;
-    }
+    applyRegionToOverlay(overlayState.region);
 }
 
 async function handleDragEnd() {
@@ -597,7 +548,6 @@ async function setupEventListeners(elements) {
         subtitleHint,
         subtitleHintText,
         subtitleText,
-        debugRegion,
         debugStatus,
     } = elements;
 
@@ -610,13 +560,7 @@ async function setupEventListeners(elements) {
             // Only update if not currently dragging/resizing
             if (!overlayState.isDragging && !overlayState.isResizing) {
                 overlayState.region = region;
-                updateCaptureFrame(captureFrame, region);
-                updateSubtitlePosition(subtitleContainer, region);
-                scheduleWindowClipUpdate();
-
-                if (debugRegion) {
-                    debugRegion.textContent = `Region: (${region.x}, ${region.y}) ${region.width}x${region.height}`;
-                }
+                applyRegionToOverlay(region);
             }
         });
 
@@ -701,12 +645,7 @@ async function setupEventListeners(elements) {
                     const region = await window.__TAURI__.core.invoke('get_capture_region');
                     if (region) {
                         overlayState.region = region;
-                        updateCaptureFrame(captureFrame, region);
-                        updateSubtitlePosition(subtitleContainer, region);
-                        scheduleWindowClipUpdate();
-                        if (debugRegion) {
-                            debugRegion.textContent = `Region: (${region.x}, ${region.y}) ${region.width}x${region.height}`;
-                        }
+                        applyRegionToOverlay(region);
                     }
                 } catch (e) {
                     console.error('Failed to fetch region:', e);
@@ -830,33 +769,44 @@ function updateCaptureFrame(frame, region) {
 function updateSubtitlePosition(container, region) {
     if (!region || !container) return;
 
-    const padding = 10;
-    const screenHeight = window.innerHeight;
     // Prefer measured height when visible (includes hint row), fallback to a conservative estimate.
     const measured = container.classList.contains('visible')
         ? Math.round(container.getBoundingClientRect().height)
         : 0;
-    const estimatedSubtitleHeight = measured > 0
-        ? measured
-        : Math.round(overlayState.fontSize * 1.4 + 54);
 
-    const spaceBelow = screenHeight - (region.y + region.height + padding);
-    const spaceAbove = region.y - padding;
+    const placement = resolveSubtitlePlacement(
+        region,
+        window.innerHeight,
+        measured,
+        overlayState.fontSize,
+        SUBTITLE_GAP_PX,
+    );
 
-    let top;
-    if (spaceBelow >= estimatedSubtitleHeight) {
-        top = region.y + region.height + padding;
-    } else if (spaceAbove >= estimatedSubtitleHeight) {
-        top = region.y - padding - estimatedSubtitleHeight;
-    } else {
-        top = region.y + region.height + padding;
-    }
-
-    container.style.width = `${region.width}px`;
-    container.style.maxWidth = `${region.width}px`;
-    container.style.left = `${region.x}px`;
-    container.style.top = `${top}px`;
+    container.style.width = `${placement.width}px`;
+    container.style.maxWidth = `${placement.width}px`;
+    container.style.left = `${placement.left}px`;
+    container.style.top = `${placement.top}px`;
     container.style.transform = 'none';
+}
+
+// Single owner of "the capture region moved". The frame, the subtitle plate,
+// the Win32 clip, and the diagnostics readout are four views of one rectangle;
+// updating any of them alone leaves the overlay drawn in one place and clipped
+// in another. `initOverlay` deliberately does not call this - it paints before
+// the window is shown, and a clip issued against a hidden window is exactly the
+// stale-clip state #113 exists to detect.
+function applyRegionToOverlay(region) {
+    if (!region) return;
+
+    updateCaptureFrame(document.getElementById('capture-frame'), region);
+    updateSubtitlePosition(document.getElementById('subtitle-container'), region);
+    scheduleWindowClipUpdate();
+
+    const debugRegion = document.getElementById('debug-region');
+    if (debugRegion) {
+        debugRegion.textContent =
+            `Region: (${region.x}, ${region.y}) ${region.width}x${region.height}`;
+    }
 }
 
 // Single owner of the subtitle box visibility classes. The Win32 window region
@@ -924,13 +874,7 @@ async function updateOverlayWindowClip() {
 
     let subtitleBounds = null;
     if (subtitleContainer && subtitleContainer.classList.contains('visible') && !subtitleContainer.classList.contains('hidden')) {
-        const rect = subtitleContainer.getBoundingClientRect();
-        subtitleBounds = {
-            x: Math.round(rect.left),
-            y: Math.round(rect.top),
-            width: Math.round(rect.width),
-            height: Math.round(rect.height),
-        };
+        subtitleBounds = roundedRectBounds(subtitleContainer.getBoundingClientRect());
     }
 
     try {

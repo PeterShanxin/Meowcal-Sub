@@ -67,7 +67,8 @@ Source OCR is never represented as successful translation.
 | Native overlay IPC      | `ipc/` (protocol, server, handler), `overlay/`, `commands.rs` | `ipc/protocol.rs` owns payload schema; adapters do not redefine it |
 | In-app update           | `update_handoff.rs`, `ui/update-controller.ts`    | Handoff owns what must stop before the installer runs; the manifest is generated, never hand-written |
 | Main/setup UI           | Lit components and TypeScript controllers         | One reactive snapshot drives Home/setup/settings presentation; bridge adapters stay thin |
-| Overlay/selector UI     | `overlay.js`, `selector.js`                       | Separate geometry/state owners with thin bridge and DOM adapters                       |
+| Overlay/selector geometry | `region-geometry.js` (capture-region move/resize, shared), `overlay-geometry.js` (frame DPI tokens, subtitle placement, clip rounding), `selector-geometry.js` (selection rectangle, dim segments, persisted payload) | One owner per rule, pure and testable without a WebView; no window owns a private copy |
+| Overlay/selector UI     | `overlay.js`, `selector.js`                       | Adapters only: DOM, Tauri IPC, and interaction state on top of the geometry owners     |
 
 ## Shared contracts
 

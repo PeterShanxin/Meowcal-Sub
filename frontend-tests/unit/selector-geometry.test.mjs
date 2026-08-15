@@ -7,8 +7,6 @@ const {
   buildDimOverlaySegments,
   clampSelectionHole,
   meetsMinimumSelection,
-  moveRegion,
-  resizeRegion,
   screenRectToClientRect,
   selectionRectFromPoints,
 } = require("../../src/scripts/selector-geometry.js");
@@ -88,29 +86,5 @@ describe("selector geometry", () => {
         1.5,
       ),
     ).toEqual({ x: 0, y: 0, width: 1, height: 1, scaleFactor: 1.5 });
-  });
-
-  it("moves a region without clamping its screen coordinates", () => {
-    expect(moveRegion({ x: 100, y: 200, width: 80, height: 40 }, -120, 15)).toEqual({
-      x: -20,
-      y: 215,
-      width: 80,
-      height: 40,
-    });
-  });
-
-  it.each([
-    ["se", { x: 100, y: 200, width: 90, height: 45 }, 10, 5],
-    ["nw", { x: 120, y: 210, width: 60, height: 30 }, 20, 10],
-    ["e", { x: 100, y: 200, width: 30, height: 40 }, -100, 0],
-    ["w", { x: 150, y: 200, width: 30, height: 40 }, 100, 0],
-    ["n", { x: 100, y: 210, width: 80, height: 30 }, 0, 20],
-    ["s", { x: 100, y: 200, width: 80, height: 30 }, 0, -20],
-    ["ne", { x: 100, y: 210, width: 90, height: 30 }, 10, 20],
-    ["sw", { x: 120, y: 200, width: 60, height: 30 }, 20, -20],
-  ])("resizes from %s and enforces the 30-pixel minimum", (handle, expected, deltaX, deltaY) => {
-    expect(resizeRegion({ x: 100, y: 200, width: 80, height: 40 }, handle, deltaX, deltaY)).toEqual(
-      expected,
-    );
   });
 });
