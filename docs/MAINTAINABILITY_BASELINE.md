@@ -13,7 +13,7 @@ the measured coverage scope (#31 lifecycle, #32 engine/pipeline, #33 main/setup,
 - production files under `src/` and `src-tauri/src/`;
 - 400 lines maximum for a new `.rs`, `.js`, `.ts`, `.html`, or `.css` production file;
 - 14 explicit legacy files above that ceiling;
-- 8 existing ESLint warnings, with zero allowed errors;
+- 1 existing ESLint warning, with zero allowed errors;
 - frontend coverage floors of 80% statements, 74% branches, 81% functions, and
   83% lines, over a named 30-module scope.
 

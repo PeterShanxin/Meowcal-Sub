@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "newProductionFileMaxLines": 400,
-  "eslintMaxWarnings": 8,
+  "eslintMaxWarnings": 1,
   "frontendCoverageMinimum": {
     "branches": 74,
     "functions": 81,
