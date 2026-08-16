@@ -1,0 +1,31 @@
+# Who is asked to review what.
+#
+# One person owns everything here today, so most of this file is a single line.
+# The paths below it are not redundant: they are the surfaces where "everyone
+# with write access" would be the wrong default the moment a second maintainer
+# is added, and GitHub reads the *last* matching rule, so they must stay after
+# the catch-all.
+#
+# Required approvals are 0 while this repository is effectively solo-maintained.
+# CODEOWNERS still does useful work at 0: it names the reviewer GitHub requests,
+# and it makes the review requirement a one-setting change instead of a design
+# question. See docs/CHANGE_CONTRACT.md for the activation rule.
+
+*                           @PeterShanxin
+
+# CI, packaging, and the release path. A change here can spend money, publish to
+# every installed copy, or run arbitrary code on the owner's own machine.
+/.github/                   @PeterShanxin
+/scripts/                   @PeterShanxin
+
+# The engine trust boundary: the embedded manifest decides what the application
+# will download and execute.
+/config/                    @PeterShanxin
+/src-tauri/                 @PeterShanxin
+
+# Decisions and the contracts that govern changes to them.
+/docs/adr/                  @PeterShanxin
+/docs/AGENT_GUIDE.md        @PeterShanxin
+/docs/CHANGE_CONTRACT.md    @PeterShanxin
+/CONTRIBUTING.md            @PeterShanxin
+/.github/CODEOWNERS         @PeterShanxin

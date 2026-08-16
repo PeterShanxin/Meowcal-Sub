@@ -148,8 +148,16 @@ Do not close a `gate:manual-validation` issue from unit tests alone.
 ## Changes and pull requests
 
 [`docs/CHANGE_CONTRACT.md`](docs/CHANGE_CONTRACT.md) is the single contract for
-commit messages, product version ownership, and pull request titles and
-descriptions. CI enforces its mechanical parts in the **Change Contract** check.
+commit messages, product version ownership, pull request titles and
+descriptions, and how ownership and review work. CI enforces its mechanical
+parts in the **Change Contract** check.
+
+`main` takes changes only through a pull request, with `Lint & Format`, `Tests`,
+`Frontend & Browser`, and `Change Contract` green and every review conversation
+resolved. Required approvals are zero while this repository is effectively
+solo-maintained; the contract says when that changes and who may bypass a rule
+to recover.
+
 Read it before your first pull request. These are the rules it deliberately
 leaves to review rather than mechanizing:
 

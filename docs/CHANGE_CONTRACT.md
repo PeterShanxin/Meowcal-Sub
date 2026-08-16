@@ -145,3 +145,65 @@ A `[bot]` author is exempt from the title check. A human who adopts a bot's
 branch owns its title from that point on. Routine maintenance still uses the
 template; "Manual Windows validation" is answered with `Not applicable - no
 visible behavior change`, never left blank.
+
+## Ownership and review
+
+`.github/CODEOWNERS` names who is asked to review what. One person owns
+everything today, so it is mostly one line; the paths listed after the catch-all
+are the surfaces where "anyone with write access" would be the wrong default the
+moment a second maintainer exists - CI and packaging, the engine trust boundary,
+and the documents that govern changes to all of it.
+
+### What the `main` ruleset enforces
+
+| Rule | Setting | Why |
+|---|---|---|
+| Pull request required | yes | `main` is not pushed to directly |
+| Required approvals | **0** | see below |
+| CODEOWNER review required | no | see below |
+| Review conversations resolved | **yes** | an unanswered review comment blocks the merge |
+| Required checks | `Lint & Format`, `Tests`, `Frontend & Browser`, `Change Contract` | CI is authoritative |
+| Strict (checks must be against latest `main`) | **no** | one self-hosted runner; see below |
+| Bypass | repository admin role, always | the recovery path |
+
+### Why required approvals are zero
+
+This repository is effectively solo-maintained. Requiring one approval - with or
+without CODEOWNER review - would mean the only person who writes code approving
+their own pull request, which GitHub refuses. The rule would not raise the bar;
+it would make the admin bypass the *normal* path to merging, and a bypass used
+daily stops being a signal. A second account currently holds write access but
+has never opened, reviewed, or commented on anything here, so it is not an
+eligible reviewer.
+
+Resolved conversations carry the review weight instead. That rule is real for a
+solo maintainer: an automated reviewer's comment, or a comment left on a
+re-read, blocks the merge until it is answered.
+
+### Activating one approval
+
+Set `required_approving_review_count` to 1 and `require_code_owner_review` to
+true when **all** of these are true:
+
+1. a second person with write access is actually reviewing pull requests here;
+2. they are listed in `.github/CODEOWNERS` for the paths they review;
+3. the maintainer's own pull requests can be approved by them - no rule requires
+   anyone to approve their own work.
+
+Update this table in the same change that flips the setting.
+
+### Why checks are not strict
+
+Strict mode requires a branch to be up to date with `main` before merging. One
+self-hosted Windows runner executes jobs sequentially, so every merge would
+force a full re-run of every other open pull request, one after another - a
+queue that grows faster than it drains. Post-merge CI runs on `main` for every
+merge and is never cancelled, which is what actually proves the merged result.
+
+### Admin bypass and recovery
+
+The repository admin role can bypass these rules. It exists so a broken required
+check, an unreachable runner, or a bad merge cannot lock the repository. Using it
+is a deliberate, stated act: say in the pull request or commit message that a
+rule was bypassed and why. It is not a way around an inconvenient review
+conversation.
