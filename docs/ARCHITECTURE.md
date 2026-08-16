@@ -58,7 +58,7 @@ Source OCR is never represented as successful translation.
 | Boundary                | Current owner                                     | Target owner and rule                                                                  |
 | ----------------------- | ------------------------------------------------- | -------------------------------------------------------------------------------------- |
 | Tauri commands          | `src-tauri/src/commands.rs`                       | Thin adapters only; application services own behavior                                  |
-| Browser routes          | `src-tauri/src/http_server.rs`                    | Adapter parity with supported Tauri contracts; explicit `501` for native-only behavior |
+| Browser routes          | `src-tauri/src/http_server.rs`, `http_port.rs`    | Adapter parity with supported Tauri contracts; explicit `501` for native-only behavior. `http_port.rs` owns the listening port so verification can take a free one instead of requiring 3001 |
 | Application state       | `src-tauri/src/app_state.rs`                      | One owner for shared session state and the region/scale invariants                     |
 | App/window lifecycle    | `src-tauri/src/main.rs` (composition root), `window_lifecycle.rs`, `tray.rs`, `app_logging.rs`, `selector_window.rs`, `wizard_window.rs` | One lifecycle service owns restore/show ordering, tray, and shutdown |
 | Persisted configuration | `src-tauri/src/config.rs`, `settings_service.rs`  | One versioned config service owns defaults, validation, migration, and writes          |
