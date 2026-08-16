@@ -24,7 +24,9 @@ Do not silently choose the more convenient interpretation.
 - Generic endpoints and arbitrary models may exist only in disabled-by-default,
   unsupported developer mode.
 - Do not implement the archived Python/OpenSubtitles MeoCoSub2 direction.
-- Mine `feat/hymt-foundry` selectively; do not merge it wholesale.
+- The `feat/hymt-foundry` prototype branch no longer exists on the remote. Its
+  retained material landed through the reviewed engine and translation lanes;
+  the dated plans that discuss it are history, not work still to mine.
 
 ## Workspace safety
 

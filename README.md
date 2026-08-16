@@ -177,10 +177,11 @@ Session logs are written under:
 %APPDATA%\com.meowcal.sub\logs\
 ```
 
-When reporting a problem, include the app commit/version, Windows build,
-architecture, exact reproduction steps, and the relevant log. Review logs
-before sharing because they include configuration and environment metadata
-even though subtitle text is excluded.
+Report a problem from the
+[issue chooser](https://github.com/PeterShanxin/Meowcal-Sub/issues/new/choose)
+using the bug report form, which asks for the version, Windows build,
+architecture, and reproduction it needs. Review any log before sharing it:
+subtitle text is excluded, but configuration and environment metadata are not.
 
 Common build failures:
 
@@ -195,8 +196,13 @@ Common build failures:
 ## Contributing
 
 Start with [CONTRIBUTING.md](CONTRIBUTING.md) and
-[docs/AGENT_GUIDE.md](docs/AGENT_GUIDE.md). User-visible changes require fresh
-manual Windows validation. Performance claims require before/after evidence.
+[docs/AGENT_GUIDE.md](docs/AGENT_GUIDE.md), then
+[docs/CHANGE_CONTRACT.md](docs/CHANGE_CONTRACT.md) for commit, version, pull
+request, merge, and review rules. Issues start from the
+[issue chooser](https://github.com/PeterShanxin/Meowcal-Sub/issues/new/choose),
+which offers a form per kind of work and keeps a blank issue available for work
+that fits none of them. User-visible changes require fresh manual Windows
+validation. Performance claims require before/after evidence.
 
 ## License
 

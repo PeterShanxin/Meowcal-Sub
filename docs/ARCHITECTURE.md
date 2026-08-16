@@ -141,8 +141,10 @@ Shared contracts have one owner before parallel decomposition begins:
 - Frontend rendering: [ADR-0003](adr/0003-incremental-lit-frontend.md) owns
   Vite, TypeScript, and Lit for migrated main/setup surfaces.
   `app-controller.ts` owns their asynchronous UI snapshot;
-  components render it and dispatch intent. Overlay and selector retain their
-  existing owners until #34 migrates them deliberately.
+  components render it and dispatch intent. Overlay and selector keep their own
+  owners: #34 closed after establishing the geometry, appearance, and timer
+  owners listed above, and deliberately left `overlay.js` and `selector.js` as
+  adapters rather than migrating them to Lit.
 
 ## Dependency direction
 

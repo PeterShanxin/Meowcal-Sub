@@ -1,6 +1,15 @@
 # Curated Translation GitHub Draft Package
 
-These files contain exact proposed GitHub content. They are review artifacts, not authorization to write external state.
+**Status:** Executed and historical, as of 2026-08-16.
+
+> These files were the exact proposed GitHub content, and the proposals have
+> since been carried out: the epics and child issues exist, and the labels and
+> settings landed through #37-#42. Everything below - including the counts and
+> the posting rule - records the 2026-07-29 proposal, not current state. The
+> live contract is [`docs/CHANGE_CONTRACT.md`](../../CHANGE_CONTRACT.md) and the
+> label taxonomy is in [`CONTRIBUTING.md`](../../../CONTRIBUTING.md).
+
+These files contained exact proposed GitHub content. They were review artifacts, not authorization to write external state.
 
 ## Files
 
