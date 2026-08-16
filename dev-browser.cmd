@@ -36,21 +36,26 @@ if not defined MEOWCAL_RESOLVED_CARGO_TARGET_DIR (
 )
 set "CARGO_TARGET_DIR=%MEOWCAL_RESOLVED_CARGO_TARGET_DIR%"
 
+REM Both ports keep their historical defaults and can be moved without editing
+REM anything, so a machine already using them does not have to give them up.
+REM The automated smoke goes further and allocates free ports per run (#35).
+if not defined MEOWCAL_HTTP_PORT set "MEOWCAL_HTTP_PORT=3001"
+if not defined MEOWCAL_FRONTEND_PORT set "MEOWCAL_FRONTEND_PORT=3000"
+
 REM Start the HTTP backend in a new window
-echo [1/2] Starting HTTP backend server (port 3001)...
-start "Meowcal Sub Backend" cmd /k "cd /d %~dp0 && npm run dev:backend"
+echo [1/2] Starting HTTP backend server (port %MEOWCAL_HTTP_PORT%)...
+start "Meowcal Sub Backend" cmd /k "cd /d %~dp0 && set "MEOWCAL_HTTP_PORT=%MEOWCAL_HTTP_PORT%" && npm run dev:backend"
 
 REM Wait a few seconds for the backend to start
 echo Waiting for backend to initialize...
 timeout /t 5 /nobreak > nul
 
 REM Start the frontend server
-echo [2/2] Starting frontend server (port 3000)...
+echo [2/2] Starting frontend server (port %MEOWCAL_FRONTEND_PORT%)...
 echo.
 echo =====================================================================
-echo   Ready! Open http://localhost:3000 in your browser
+echo   Ready! Open http://localhost:%MEOWCAL_FRONTEND_PORT% in your browser
 echo =====================================================================
-echo.
 
 cd /d %~dp0
 call npm run dev:browser

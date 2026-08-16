@@ -14,8 +14,17 @@
     // Detect if we're running inside Tauri's WebView
     const isTauri = !!(window.__TAURI__ && window.__TAURI__.core);
 
-    // HTTP API base URL (used in browser mode)
-    const API_BASE = 'http://localhost:3001/api';
+    // HTTP API base URL (used in browser mode).
+    //
+    // The default matches the backend's own default port. The override exists
+    // because a fixed port makes browser verification a shared-machine hazard:
+    // the automated smoke picks a port it has confirmed is free and tells both
+    // sides about it, rather than requiring 3001 to be available (#35). It is
+    // read from a global set before page scripts run - deliberately not from the
+    // URL, so no link can repoint a running page at another origin.
+    const API_BASE = typeof window.__MEOWCAL_API_BASE__ === 'string' && window.__MEOWCAL_API_BASE__
+        ? window.__MEOWCAL_API_BASE__
+        : 'http://localhost:3001/api';
 
     // Commands that are not available in browser mode (require Tauri window APIs)
     const TAURI_ONLY_COMMANDS = [

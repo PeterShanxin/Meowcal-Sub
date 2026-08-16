@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { backendOrigin, expect, test } from "./fixtures.mjs";
 
 test("browser bridge reads backend health, settings, and readiness", async ({ page, request }) => {
   const pageErrors = [];
@@ -7,7 +7,7 @@ test("browser bridge reads backend health, settings, and readiness", async ({ pa
   await page.goto("/");
   await expect(page.locator("#browser-mode-indicator")).toBeVisible();
 
-  const healthResponse = await request.get("http://127.0.0.1:3001/api/health");
+  const healthResponse = await request.get(`${backendOrigin}/api/health`);
   expect(healthResponse.ok()).toBe(true);
   await expect(healthResponse.json()).resolves.toMatchObject({
     status: "ok",
@@ -41,7 +41,7 @@ test("browser bridge reads backend health, settings, and readiness", async ({ pa
 });
 
 test("browser mode reports Tauri-only capture as unavailable", async ({ request }) => {
-  const response = await request.post("http://127.0.0.1:3001/api/area-selector");
+  const response = await request.post(`${backendOrigin}/api/area-selector`);
 
   expect(response.status()).toBe(501);
   await expect(response.json()).resolves.toMatchObject({

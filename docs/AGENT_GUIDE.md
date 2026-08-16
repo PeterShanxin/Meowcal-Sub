@@ -147,6 +147,11 @@ A fresh worktree also needs `scripts\prepare-validation-resources.ps1` before
 its first build, or the Tauri build script stops on a missing
 `resources\OverlayHost.exe`.
 
+The browser smoke allocates a free frontend and backend port for each run, so it
+coexists with whatever else is on a shared machine. Never free a port by stopping
+another project's process; set `MEOWCAL_FRONTEND_PORT` and `MEOWCAL_HTTP_PORT` if
+you need fixed addresses.
+
 Browser mode does not prove Tauri-only capture, OCR, selector, overlay, tray,
 window, installer, or runtime-process behavior.
 
