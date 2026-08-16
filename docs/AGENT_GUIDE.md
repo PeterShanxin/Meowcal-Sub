@@ -57,6 +57,12 @@ repository is solo-maintained - a documented condition, not an oversight; the
 change contract states what activates one approval. The admin bypass exists for
 recovery. If you use it, say so in the pull request or commit message.
 
+Merging always produces a merge commit, and the merged branch is deleted on the
+remote automatically. Do not treat a remote branch as durable storage for
+evidence: cite the merge commit, the pull request, or a file on `main`. Your
+local branch and worktree survive; remove a finished worktree deliberately with
+`git worktree remove`.
+
 ## Release and update contract
 
 - The Tauri CLI is pinned in `package.json`. It is versioned independently of

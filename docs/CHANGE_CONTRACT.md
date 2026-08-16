@@ -146,6 +146,56 @@ branch owns its title from that point on. Routine maintenance still uses the
 template; "Manual Windows validation" is answered with `Not applicable - no
 visible behavior change`, never left blank.
 
+## Merge history and branch cleanup
+
+`main` has one history model: **merge commits only**. Squash and rebase merging
+are disabled at the repository level, and the `main` ruleset allows only the
+merge method, so `git log --first-parent main` is a readable list of landed
+changes and every individual commit keeps its own message.
+
+The merge commit GitHub generates looks like this:
+
+```text
+Merge pull request #120 from PeterShanxin/refactor/34-overlay-timer-ownership-wave3
+
+refactor: give the overlay timers and appearance state their own owners (#34)
+```
+
+The subject names the pull request; the **body is the pull request title**. That
+is why the title is held to the commit grammar - it is the sentence that ends up
+in `main`'s history. The generated form is deliberately unchanged from the
+repository's entire existing history: making the title the subject would read
+better in isolation, lose the pull request number, and split the history into two
+formats for no gain.
+
+- **Auto-merge stays disabled.** Merging is a decision made after looking at the
+  finished state of a branch, not a trigger armed in advance.
+- **No published history is rewritten.** Force-pushing your own unmerged branch
+  is fine and expected; `main` is never rewritten.
+
+### Branch cleanup
+
+A merged branch **in this repository** is deleted automatically. Its commits
+survive in the merge commit and the pull request keeps a permanent link to them,
+so the branch name is not evidence of anything - it is a stale pointer that
+makes the branch list unreadable.
+
+- A pull request from a fork is not affected: the setting cannot delete a ref in
+  someone else's repository, so a fork's branch stays until its owner removes it.
+- Never delete the default branch, a protected branch, or a branch another
+  worktree has checked out.
+- An unmerged branch is never deleted automatically, so a long-lived exploration
+  branch is safe. Deleting one is a deliberate act belonging to whoever owns the
+  work it holds.
+- Deleting a remote branch does not touch your local one. Prune with
+  `git fetch --prune`, and remove a finished worktree with `git worktree remove`.
+- To restore a deleted branch, recreate it from the merge commit's **second**
+  parent - not the merge commit itself, which is the merged result:
+
+  ```powershell
+  git branch <name> <merge-sha>^2
+  ```
+
 ## Ownership and review
 
 `.github/CODEOWNERS` names who is asked to review what. One person owns
@@ -164,6 +214,7 @@ and the documents that govern changes to all of it.
 | Review conversations resolved | **yes** | an unanswered review comment blocks the merge |
 | Required checks | `Lint & Format`, `Tests`, `Frontend & Browser`, `Change Contract` | CI is authoritative |
 | Strict (checks must be against latest `main`) | **no** | one self-hosted runner; see below |
+| Allowed merge method | merge commit only | one history model; see above |
 | Bypass | repository admin role, always | the recovery path |
 
 ### Why required approvals are zero

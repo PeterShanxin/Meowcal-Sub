@@ -200,14 +200,18 @@ dimension - not that one issue is unusual.
 
 [`docs/CHANGE_CONTRACT.md`](docs/CHANGE_CONTRACT.md) is the single contract for
 commit messages, product version ownership, pull request titles and
-descriptions, and how ownership and review work. CI enforces its mechanical
-parts in the **Change Contract** check.
+descriptions, merge history, and how ownership and review work. CI enforces its
+mechanical parts in the **Change Contract** check.
 
 `main` takes changes only through a pull request, with `Lint & Format`, `Tests`,
 `Frontend & Browser`, and `Change Contract` green and every review conversation
 resolved. Required approvals are zero while this repository is effectively
 solo-maintained; the contract says when that changes and who may bypass a rule
 to recover.
+
+Merging always produces a merge commit - squash and rebase are disabled - and
+the merged branch is deleted automatically. Your local branch and worktree are
+untouched; `git fetch --prune` clears the stale remote pointers.
 
 Read it before your first pull request. These are the rules it deliberately
 leaves to review rather than mechanizing:
