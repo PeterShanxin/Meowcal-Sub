@@ -12,6 +12,7 @@
     "dev:tauri-web": "vite --host 127.0.0.1 --port 1420 --strictPort",
     "build:web": "vite build",
     "version:check": "node scripts/check-version-sync.mjs",
+    "commits:check": "node scripts/check-commit-contract.mjs --base origin/main --head HEAD",
     "runners:check": "node scripts/check-workflow-runners.mjs",
     "typecheck": "tsc --noEmit",
     "prepare:validation": "pwsh -NoProfile -File scripts/prepare-validation-resources.ps1",

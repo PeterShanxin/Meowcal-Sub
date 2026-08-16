@@ -398,13 +398,14 @@ reviewed revert of the workflow change, never an automatic failover.
 
 ### The jobs that stay hosted, and why
 
-Three jobs remain on `ubuntu-latest`:
+Four jobs remain on `ubuntu-latest`:
 
 | Job | Reason |
 | --- | --- |
 | `release.yml` / `validate` | Linux, 1x billing, about a minute; holds `contents: write` to reserve the release tag |
 | `release.yml` / `draft-release` | Linux, 1x billing; holds release-write permission |
 | `publish-update.yml` / `publish` | Holds `RELEASE_MIRROR_TOKEN` |
+| `change-contract.yml` / `Change Contract` | Reads Git metadata only; reports a misnamed commit or pull request title in seconds without starting the single Windows runner, and never queues ahead of a real build |
 
 `RELEASE_MIRROR_TOKEN` can publish to the endpoint every installed copy checks
 for updates. Keeping the job that holds it on an ephemeral hosted runner keeps it
