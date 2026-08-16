@@ -147,10 +147,11 @@ Do not close a `gate:manual-validation` issue from unit tests alone.
 
 ## Reporting issues
 
-Three forms cover reported work: bug report, feature request, and
-maintenance/refactor. They ask only for what triage actually needs - version,
-Windows build and architecture, expected versus actual, reproduction, scope and
-non-goals, and whether visible behavior changes.
+Four forms cover reported work: bug report, feature request,
+maintenance/refactor, and documentation. Each applies its own `type:` label, so
+an issue starts correctly classified. They ask only for what triage actually
+needs - version, Windows build and architecture, expected versus actual,
+reproduction, scope and non-goals, and whether visible behavior changes.
 
 Blank issues stay available. Most issues here are opened by the maintainer as
 epics, waves, audits, and closeout records, and those fit no form; turning blank
@@ -166,11 +167,30 @@ Five dimensions, and nothing else:
 
 | Prefix | Answers | Count |
 |---|---|---|
-| `type:` | bug, feature, maintenance, docs | one per issue |
-| `area:` | which part of the system | one or two |
-| `priority:` | p0 blocks the primary outcome, p1 next wave, p2 follow-up | one |
+| `type:` | `bug`, `feature`, `maintenance`, `docs` | exactly one; the form applies it |
+| `area:` | which part of the system | one, or two when a change genuinely spans a boundary |
+| `priority:` | `p0` blocks the primary user outcome or a release gate, `p1` important next-wave work, `p2` valuable follow-up | exactly one |
 | `epic` | a parent issue coordinating bounded children | as needed |
 | `gate:manual-validation` | cannot close without fresh manual Windows evidence | as needed |
+
+The ten `area:` values, and where the boundary between neighbours falls:
+
+| Label | Covers |
+|---|---|
+| `area:engine` | HY-MT model, install, manifest, engine runtime and process lifecycle |
+| `area:ocr` | Windows OCR, language capability, preprocessing, recognition |
+| `area:translation` | prompt, model request, response parsing, validation, output quality |
+| `area:pipeline` | capture-to-overlay orchestration: retry, dedupe, queue, session state |
+| `area:lifecycle` | startup, shutdown, window, tray, sleep, resume, persistence |
+| `area:ui` | main, setup, selector, and overlay frontend behavior |
+| `area:architecture` | module boundaries and structural ownership |
+| `area:repository` | CI, tooling, testing, contributor workflow, maintainability |
+| `area:governance` | GitHub metadata, review, ownership, history, ADR policy |
+| `area:release` | packaging, upgrade, the manual release gate, release evidence |
+
+Capture *timing and sequencing* is `area:pipeline`; the capture surface a user
+drags is `area:ui`. Whether the engine starts is `area:engine`; whether its
+answer is usable is `area:translation`.
 
 Labels deliberately do not encode wave or status: milestones own sequencing and
 checklists own completion. A new label means the taxonomy is missing a
