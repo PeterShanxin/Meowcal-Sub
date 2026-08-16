@@ -145,6 +145,37 @@ Any user-visible behavior change resets the relevant manual gate. Record:
 
 Do not close a `gate:manual-validation` issue from unit tests alone.
 
+## Reporting issues
+
+Three forms cover reported work: bug report, feature request, and
+maintenance/refactor. They ask only for what triage actually needs - version,
+Windows build and architecture, expected versus actual, reproduction, scope and
+non-goals, and whether visible behavior changes.
+
+Blank issues stay available. Most issues here are opened by the maintainer as
+epics, waves, audits, and closeout records, and those fit no form; turning blank
+issues off would tax the common case to tidy the rare one.
+
+**Never paste captured subtitle text, screenshots of what you were watching, or
+raw logs containing them.** This application reads text off your screen. Timings,
+error codes, engine state, and file paths are the parts that help.
+
+### Labels
+
+Five dimensions, and nothing else:
+
+| Prefix | Answers | Count |
+|---|---|---|
+| `type:` | bug, feature, maintenance, docs | one per issue |
+| `area:` | which part of the system | one or two |
+| `priority:` | p0 blocks the primary outcome, p1 next wave, p2 follow-up | one |
+| `epic` | a parent issue coordinating bounded children | as needed |
+| `gate:manual-validation` | cannot close without fresh manual Windows evidence | as needed |
+
+Labels deliberately do not encode wave or status: milestones own sequencing and
+checklists own completion. A new label means the taxonomy is missing a
+dimension - not that one issue is unusual.
+
 ## Changes and pull requests
 
 [`docs/CHANGE_CONTRACT.md`](docs/CHANGE_CONTRACT.md) is the single contract for

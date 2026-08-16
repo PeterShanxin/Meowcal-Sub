@@ -1,0 +1,52 @@
+name: Maintenance or refactor
+description: Structural, tooling, test, dependency, or documentation work.
+labels: ["type:maintenance"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What is wrong with the current shape?
+      description: >-
+        Name the cost being paid: a boundary that has no owner, a gate that
+        cannot fail, a ceiling that keeps being worked around.
+    validations:
+      required: true
+
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope
+      description: What this work touches, and roughly how it is bounded.
+    validations:
+      required: true
+
+  - type: textarea
+    id: nongoals
+    attributes:
+      label: Non-goals
+      description: >-
+        What stays out. A refactor that quietly changes visible behavior is the
+        failure this field prevents.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: visible
+    attributes:
+      label: Behavior
+      options:
+        - "Behavior-preserving — no visible change intended"
+        - "Changes visible behavior — needs a manual Windows gate"
+    validations:
+      required: true
+
+  - type: textarea
+    id: verification
+    attributes:
+      label: How will it be verified?
+      description: >-
+        `.\scripts\verify.ps1` is the baseline. Say what else proves this
+        specific change: a new test, a ratchet lowered, a gate proven able to
+        fail.
+    validations:
+      required: true
