@@ -183,7 +183,8 @@ unreadable.
 - Never delete the default branch, a protected branch, or a branch another
   worktree has checked out.
 - An unmerged branch is never deleted automatically, so a long-lived exploration
-  branch such as `feat/hymt-foundry` is safe.
+  branch is safe. Deleting one is a deliberate act belonging to whoever owns the
+  work it holds.
 - Deleting a remote branch does not touch your local one. Prune with
   `git fetch --prune`, and remove a finished worktree with `git worktree remove`.
 - To restore a deleted branch, recreate it from the merge commit's second
