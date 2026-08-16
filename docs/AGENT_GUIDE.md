@@ -38,6 +38,9 @@ Do not silently choose the more convenient interpretation.
 ## Delivery
 
 - Use small, reviewable changes with a coherent checkpoint commit.
+- `docs/CHANGE_CONTRACT.md` owns commit subjects, product version ownership, and
+  pull request titles and descriptions. Run `npm run commits:check` before
+  opening a pull request; the **Change Contract** CI check is the gate.
 - Keep visible behavior separate from structural refactors.
 - Give shared config, event, and state-machine contracts one owner.
 - Keep Tauri commands and DOM event handlers thin.
@@ -160,6 +163,10 @@ DPI/window behavior.
 - Three release jobs stay on `ubuntu-latest` deliberately, because
   `RELEASE_MIRROR_TOKEN` and release-write permission belong on an ephemeral host
   rather than one that also runs contributor pull request code.
+- The `Change Contract` job also stays on `ubuntu-latest`: it reads Git metadata
+  and runs a dependency-free Node script, so putting it on Linux reports a
+  misnamed commit in seconds without starting the single Windows runner or
+  queuing ahead of a real build.
 - Superseded pull request runs cancel; `main` runs do not, because a cancelled
   post-merge run leaves `main` unverified.
 
@@ -223,6 +230,7 @@ other required manual gates remain outstanding.
 
 - `README.md`: current user/developer entry point.
 - `CONTRIBUTING.md`, this guide, and `docs/CODING_STANDARDS.md`: normative.
+- `docs/CHANGE_CONTRACT.md`: commit, version, and pull request contract.
 - `docs/ARCHITECTURE.md`: current and target module ownership.
 - `docs/MAINTAINABILITY_BASELINE.md`: enforced ceilings and ratchet procedure.
 - `docs/SELF_HOSTED_RUNNERS.md`: runner labels, host contract, and who may

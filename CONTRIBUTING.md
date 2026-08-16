@@ -12,9 +12,11 @@ Read these documents before changing the repository:
 3. [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) and
    [`docs/MAINTAINABILITY_BASELINE.md`](docs/MAINTAINABILITY_BASELINE.md) for
    current ownership and enforced ratchets;
-4. [`docs/adr/README.md`](docs/adr/README.md) for accepted cross-cutting
+4. [`docs/CHANGE_CONTRACT.md`](docs/CHANGE_CONTRACT.md) for commit, version, and
+   pull request rules;
+5. [`docs/adr/README.md`](docs/adr/README.md) for accepted cross-cutting
    decisions and the ADR template;
-5. current source, tests, and workflows for live behavior.
+6. current source, tests, and workflows for live behavior.
 
 Historical documents under `docs/plans/` and `docs/archive/` provide context.
 They are not normative and cannot override accepted ADRs or current guidance.
@@ -114,10 +116,15 @@ uses `--locked`. Frontend dependency resolution is locked by
 
 ## Continuous integration
 
-CI runs on the owner's self-hosted Windows runners. Do **not** register your
-personal computer as a runner: a runner executes repository code directly on the
-host, so attaching one is a decision the repository owner makes, not a way to
-speed up your own pull request. `scripts/verify.ps1` is your equivalent of CI.
+Every build, test, and packaging job runs on the owner's self-hosted Windows
+runners. Do **not** register your personal computer as a runner: a runner
+executes repository code directly on the host, so attaching one is a decision
+the repository owner makes, not a way to speed up your own pull request.
+`scripts/verify.ps1` is your equivalent of CI.
+
+The **Change Contract** check is the one exception. It only reads Git metadata,
+so it runs on a hosted Linux runner and reports in seconds whether or not a
+Windows runner is online.
 
 If no runner is online, your job queues rather than failing over to a
 GitHub-hosted runner. That is intentional. See
@@ -140,19 +147,23 @@ Do not close a `gate:manual-validation` issue from unit tests alone.
 
 ## Changes and pull requests
 
+[`docs/CHANGE_CONTRACT.md`](docs/CHANGE_CONTRACT.md) is the single contract for
+commit messages, product version ownership, and pull request titles and
+descriptions. CI enforces its mechanical parts in the **Change Contract** check.
+Read it before your first pull request. These are the rules it deliberately
+leaves to review rather than mechanizing:
+
 - Keep one bounded concern per pull request.
-- Use a Conventional Commit style subject such as `fix:`, `feat:`, `docs:`,
-  `test:`, `refactor:`, `perf:`, `build:`, or `ci:`.
-- Explain intent, scope, non-goals, validation, risk, rollback, manual evidence,
-  and linked issue.
-- Do not claim a performance improvement without before/after measurements.
 - Do not mix a visible product change with broad behavior-preserving extraction.
+- Do not claim a performance improvement without comparable before/after
+  measurements.
 - Do not push, merge, close issues, or change repository settings without the
   authority required by the current task.
 
-## Version ownership
+Check a branch before opening a pull request:
 
-`src-tauri/tauri.conf.json` is the product version record. The matching copies
-in `package.json` and `src-tauri/Cargo.toml` must change in the same pull
-request. Issue #37 owns automated drift prevention. Release automation is out
-of scope until separately approved.
+```powershell
+npm run commits:check
+```
+
+That run is local feedback. CI is the gate.
