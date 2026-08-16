@@ -171,7 +171,9 @@ formats for no gain.
 - **Auto-merge stays disabled.** Merging is a decision made after looking at the
   finished state of a branch, not a trigger armed in advance.
 - **No published history is rewritten.** Force-pushing your own unmerged branch
-  is fine and expected; `main` is never rewritten.
+  is fine and expected. `main` refuses a force push and refuses deletion, so
+  this is enforced rather than merely agreed - an administrator can still
+  override both to recover.
 
 ### Branch cleanup
 
@@ -215,6 +217,8 @@ and the documents that govern changes to all of it.
 | Required checks | `Lint & Format`, `Tests`, `Frontend & Browser`, `Change Contract` | CI is authoritative |
 | Strict (checks must be against latest `main`) | **no** | one self-hosted runner; see below |
 | Allowed merge method | merge commit only | one history model; see above |
+| Force push to `main` | **blocked** | "no published history is rewritten" is a rule, not a hope |
+| Deleting `main` | **blocked** | it is the branch every other branch is cut from |
 | Bypass | repository admin role, always | the recovery path |
 
 ### Why required approvals are zero

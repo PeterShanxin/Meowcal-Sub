@@ -22,6 +22,8 @@ Use an incremental frontend stack:
 - one frontend bridge for Tauri/HTTP command transport;
 - the existing selector and overlay scripts bundled as stable Vite entrypoints until #34 migrates their boundaries deliberately.
 
+**Outcome (2026-08-16):** #34 closed having extracted the geometry, appearance, and timer owners and having deliberately left `overlay.js` and `selector.js` as adapters. They are not scheduled for a Lit migration; `docs/ARCHITECTURE.md` records the resulting ownership. The decision above is unchanged.
+
 The Rust backend, Tauri command names, events, window labels, selector, and overlay behavior remain authoritative. Lit components own presentation and interaction dispatch; controllers own asynchronous UI state. Components do not infer engine readiness from ports, model IDs, or process names.
 
 ## Consequences

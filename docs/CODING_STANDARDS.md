@@ -32,10 +32,11 @@ subtitle behavior.
 
 ## Frontend
 
-- ADR-0003 owns the approved incremental frontend stack: Vite multi-page output,
-  TypeScript state/controllers, and Lit custom elements for migrated surfaces.
-  Keep selector/overlay legacy behavior behind dedicated Vite entries until #34
-  migrates them deliberately; do not create a second state owner.
+- [ADR-0003](adr/0003-incremental-lit-frontend.md) owns the approved incremental
+  frontend stack: Vite multi-page output, TypeScript state/controllers, and Lit
+  custom elements for migrated surfaces. Selector and overlay stay behind their
+  dedicated Vite entries as adapters over the geometry and state owners #34
+  established; do not create a second state owner.
 - Route backend calls through `src/scripts/tauri-bridge.js`.
 - Keep DOM lookup/event wiring separate from state transitions and presentation
   helpers.

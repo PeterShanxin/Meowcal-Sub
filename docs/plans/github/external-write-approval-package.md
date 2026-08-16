@@ -2,7 +2,14 @@
 
 **Prepared:** 2026-07-29
 **Repository:** `PeterShanxin/Meowcal-Sub`
-**Status:** Draft only. No item, comment, label, milestone, PR, push, merge, or setting has been changed.
+**Status:** Executed and historical, as of 2026-08-16.
+
+> This was a draft of proposed external writes, and it has since been carried
+> out through issues #37-#42. Both settings tables below record what was true or
+> proposed on 2026-07-29 and neither describes the repository now. The live
+> contract is [`docs/CHANGE_CONTRACT.md`](../../CHANGE_CONTRACT.md); the label
+> taxonomy is in [`CONTRIBUTING.md`](../../../CONTRIBUTING.md). Read this file
+> for the reasoning that led there, not for current state.
 
 ## 1. Exact creation order
 
