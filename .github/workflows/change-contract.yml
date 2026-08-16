@@ -18,6 +18,12 @@ name: Change Contract
 on:
   pull_request:
     branches: [main]
+    # `edited` is load-bearing: the default trigger set does not include it, so
+    # correcting a rejected title would leave the failed check standing with no
+    # way to re-run it except an empty push. `ready_for_review` re-checks a
+    # description that was still a placeholder while the pull request was a
+    # draft.
+    types: [opened, synchronize, reopened, edited, ready_for_review]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
