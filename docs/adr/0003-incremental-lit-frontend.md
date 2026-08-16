@@ -1,9 +1,9 @@
 # ADR-0003: Incremental Lit frontend architecture
 
-- Status: Accepted
-- Date: 2026-08-02
-- Decision owners: Meowcal Sub maintainers
-- Related: #33, #34, ADR-0001
+**Date:** 2026-08-02
+**Status:** Accepted
+**Decision owners:** Meowcal Sub maintainers
+**Related:** #33, #34, [ADR-0001](0001-curated-local-translation-stack.md)
 
 ## Context
 

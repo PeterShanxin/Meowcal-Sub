@@ -236,8 +236,11 @@ other required manual gates remain outstanding.
 - `docs/SELF_HOSTED_RUNNERS.md`: runner labels, host contract, and who may
   attach one.
 - `docs/adr/`: accepted or proposed cross-cutting decisions.
+  [`adr/README.md`](adr/README.md) owns when a decision needs an ADR at all, the
+  four status values, and how one ADR supersedes another.
 - `docs/plans/`: dated plans and evidence, not standing policy.
-- `docs/archive/`: superseded historical context.
+- `docs/archive/`: superseded historical context. Never convert a historical
+  plan into an ADR; supersede it and leave it where it is.
 
 `CLAUDE.md`, `AGENTS.md`, and `agent.md` are pointers to this guide. Keep them
 as pointers; put the actual contract here so every agent reads one source.

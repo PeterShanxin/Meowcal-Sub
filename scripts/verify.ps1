@@ -160,6 +160,10 @@ if ($Stage -in @("All", "Frontend")) {
         # Cheap and early: a workflow that reaches for a paid hosted runner
         # should fail before a vite build, not after one.
         Invoke-NpmStep "Workflow runner policy" @("run", "runners:check")
+        # Also cheap and early. This is what keeps the ADR index, the
+        # document-class list, and CONTRIBUTING's read order from quietly
+        # pointing at a file somebody renamed.
+        Invoke-NpmStep "Documentation links" @("run", "docs:check")
         Invoke-NpmStep "Frontend format" @("run", "format:check")
         Invoke-NpmStep "Frontend lint" @("run", "lint")
         Invoke-NpmStep "Frontend typecheck" @("run", "typecheck")

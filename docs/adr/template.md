@@ -2,7 +2,12 @@
 
 **Date:** YYYY-MM-DD  
 **Status:** Proposed  
-**Decision owners:** Meowcal Sub maintainers
+**Decision owners:** Meowcal Sub maintainers  
+**Related:** issues, pull requests, and earlier ADRs this builds on
+
+Status is one of Proposed, Accepted, Superseded by ADR-NNNN, or Rejected. See
+[the ADR policy](README.md) for when a decision needs a record at all, and add
+this file to the index in the same change.
 
 ## Context
 
