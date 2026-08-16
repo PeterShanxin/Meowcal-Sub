@@ -1,0 +1,12 @@
+# Blank issues stay enabled on purpose. The forms exist to make an unfamiliar
+# reporter's first issue actionable; most issues here are opened by the
+# maintainer as epics, waves, audits, and closeout records, which fit no form.
+# Turning blank issues off would tax the common case to tidy the rare one.
+blank_issues_enabled: true
+contact_links:
+  - name: Contributor guide
+    url: https://github.com/PeterShanxin/Meowcal-Sub/blob/main/CONTRIBUTING.md
+    about: Prerequisites, the one verification command, and what manual Windows validation means here.
+  - name: Change contract
+    url: https://github.com/PeterShanxin/Meowcal-Sub/blob/main/docs/CHANGE_CONTRACT.md
+    about: Commit, version, and pull request rules before you open a pull request.

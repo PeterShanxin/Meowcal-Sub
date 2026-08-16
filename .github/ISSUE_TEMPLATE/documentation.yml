@@ -1,0 +1,33 @@
+name: Documentation
+description: Guidance that is wrong, missing, or contradicted by live behavior.
+labels: ["type:docs"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        A document that contradicts live behavior is worse than a missing one.
+        If you found guidance that is no longer true, this is the right form -
+        say what you observed, not only what the document says.
+
+  - type: input
+    id: document
+    attributes:
+      label: Which document
+      placeholder: docs/AGENT_GUIDE.md, "Verification"
+    validations:
+      required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What is wrong, missing, or contradicted
+    validations:
+      required: true
+
+  - type: textarea
+    id: observed
+    attributes:
+      label: What actually happens
+      description: >-
+        Optional but decisive. The command you ran, the setting you found, the
+        behavior you saw.

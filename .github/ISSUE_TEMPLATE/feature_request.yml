@@ -1,0 +1,50 @@
+name: Feature request
+description: A capability the application should have.
+labels: ["type:feature"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Meowcal Sub is a curated product, not a general local-model frontend:
+        Tauri 2, Rust, Windows OCR, and one app-managed Tencent HY-MT engine.
+        [ADR-0001](https://github.com/PeterShanxin/Meowcal-Sub/blob/main/docs/adr/0001-curated-local-translation-stack.md)
+        owns that boundary. A request that widens it needs to argue against the
+        ADR, which is a fair thing to do — just do it explicitly.
+
+  - type: textarea
+    id: outcome
+    attributes:
+      label: What should a user be able to do?
+      description: The outcome, not the implementation.
+    validations:
+      required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What is hard or impossible today?
+    validations:
+      required: true
+
+  - type: textarea
+    id: nongoals
+    attributes:
+      label: Non-goals
+      description: >-
+        What this deliberately does not include. This is the field that keeps a
+        request bounded enough to finish.
+
+  - type: dropdown
+    id: visible
+    attributes:
+      label: Does this change visible behavior?
+      description: >-
+        Anything visible needs fresh manual Windows evidence before it can be
+        called done. Automated tests do not prove capture, OCR, overlay, DPI,
+        tray, or installer behavior.
+      options:
+        - "Yes — needs a manual Windows gate"
+        - "No — internal only"
+        - Not sure
+    validations:
+      required: true
