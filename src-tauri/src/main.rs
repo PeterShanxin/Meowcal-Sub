@@ -225,6 +225,16 @@ fn main() {
 /// Run only the HTTP server without Tauri windows.
 /// Used for browser-based testing by AI agents.
 fn run_http_only_mode() {
+    // Refused rather than defaulted: a harness that asked for a free port and
+    // silently got 3001 would collide with whatever it was avoiding (#35).
+    let port = match meowcal_sub::http_port::browser_port_from_environment() {
+        Ok(port) => port,
+        Err(error) => {
+            eprintln!("❌ {error}");
+            std::process::exit(2);
+        }
+    };
+
     // Create a tokio runtime for the HTTP server
     let runtime = tokio::runtime::Runtime::new().expect("Failed to create tokio runtime");
 
@@ -232,19 +242,13 @@ fn run_http_only_mode() {
         println!();
         println!("╔════════════════════════════════════════════════════════════════╗");
         println!("║         MEOWCAL SUB - BROWSER DEV MODE                         ║");
-        println!("╠════════════════════════════════════════════════════════════════╣");
-        println!("║  HTTP API server starting on http://localhost:3001             ║");
-        println!("║  Frontend served separately on http://localhost:3000           ║");
-        println!("║                                                                ║");
-        println!("║  To test in browser:                                           ║");
-        println!("║    1. Run: npx serve src -l 3000 -C                            ║");
-        println!("║    2. Open: http://localhost:3000                              ║");
-        println!("║                                                                ║");
-        println!("║  Press Ctrl+C to stop                                          ║");
         println!("╚════════════════════════════════════════════════════════════════╝");
+        println!("  HTTP API server on http://127.0.0.1:{port}");
+        println!("  Frontend served separately; set MEOWCAL_FRONTEND_PORT to move it.");
+        println!("  Set MEOWCAL_HTTP_PORT to move this one. Press Ctrl+C to stop.");
         println!();
 
-        if let Err(e) = http_server::start_server(3001).await {
+        if let Err(e) = http_server::start_server(port).await {
             eprintln!("❌ HTTP server error: {}", e);
         }
     });

@@ -376,10 +376,13 @@ pub async fn start_server(port: u16) -> Result<(), Box<dyn std::error::Error>> {
     let app = create_router(state);
 
     let addr = SocketAddr::from(([127, 0, 0, 1], port));
-    info!("🌐 HTTP API server starting on http://{}", addr);
-    info!("   Open http://localhost:3000 in your browser to test");
-
     let listener = tokio::net::TcpListener::bind(addr).await?;
+
+    // The bound address, not the requested one: with port 0 they differ, and a
+    // log naming the request would name a port nothing is listening on.
+    let bound = listener.local_addr()?;
+    info!("🌐 HTTP API server listening on http://{}", bound);
+
     axum::serve(listener, app).await?;
 
     Ok(())

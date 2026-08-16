@@ -114,6 +114,13 @@ Rust dependency resolution is locked by `src-tauri/Cargo.lock`; verification
 uses `--locked`. Frontend dependency resolution is locked by
 `package-lock.json`; verification uses `npm ci`.
 
+The browser smoke starts its own frontend and backend on ports the operating
+system has just confirmed are free, so it never needs 3000 or 3001 to be
+available and never asks you to stop something else that holds them. To pin it
+to a known address while debugging, set `MEOWCAL_FRONTEND_PORT` and
+`MEOWCAL_HTTP_PORT`; `.\dev-browser.cmd` reads the same two variables and
+defaults to 3000 and 3001.
+
 ## Continuous integration
 
 Every build, test, and packaging job runs on the owner's self-hosted Windows

@@ -2,6 +2,7 @@ import { defineConfig, devices } from "@playwright/test";
 import { mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { allocatePorts } from "./scripts/allocate-port.mjs";
 
 // The browser backend reads and writes the config profile `%APPDATA%` points at,
 // which is the *installed app's* profile (issue #68) - and since #71 gave dev
@@ -12,6 +13,42 @@ import { join } from "node:path";
 const smokeProfile = join(tmpdir(), "meowcal-browser-smoke");
 mkdirSync(smokeProfile, { recursive: true });
 
+// Ports the OS has just confirmed are free, rather than 3000 and 3001 by decree.
+// This machine is shared with unrelated work, and the old fixed pair could only
+// be honoured by finding and stopping whatever else held them (#35). An explicit
+// MEOWCAL_FRONTEND_PORT / MEOWCAL_HTTP_PORT still wins, so the smoke can be
+// pinned to a known address while it is being debugged.
+//
+// Written back into the environment, which is load-bearing: this file is
+// evaluated again in every worker process, and an unpinned allocation would give
+// each worker a different pair of ports from the one the servers were actually
+// started on - the tests would then navigate to a port nothing is listening on.
+async function resolvePorts() {
+  if (process.env.MEOWCAL_FRONTEND_PORT && process.env.MEOWCAL_HTTP_PORT) {
+    return {
+      frontendPort: Number(process.env.MEOWCAL_FRONTEND_PORT),
+      backendPort: Number(process.env.MEOWCAL_HTTP_PORT),
+    };
+  }
+
+  const [allocatedFrontend, allocatedBackend] = await allocatePorts(2);
+  const frontendPort = Number(process.env.MEOWCAL_FRONTEND_PORT || allocatedFrontend);
+  const backendPort = Number(process.env.MEOWCAL_HTTP_PORT || allocatedBackend);
+
+  process.env.MEOWCAL_FRONTEND_PORT = String(frontendPort);
+  process.env.MEOWCAL_HTTP_PORT = String(backendPort);
+
+  return { frontendPort, backendPort };
+}
+
+const { frontendPort, backendPort } = await resolvePorts();
+
+const frontendOrigin = `http://127.0.0.1:${frontendPort}`;
+const backendOrigin = `http://127.0.0.1:${backendPort}`;
+
+// Read by the smoke's fixture for its direct backend requests.
+process.env.MEOWCAL_SMOKE_BACKEND_ORIGIN = backendOrigin;
+
 export default defineConfig({
   testDir: "frontend-tests/browser",
   fullyParallel: false,
@@ -19,7 +56,7 @@ export default defineConfig({
   retries: 0,
   timeout: 30_000,
   use: {
-    baseURL: "http://127.0.0.1:3000",
+    baseURL: frontendOrigin,
     trace: "retain-on-failure",
   },
   projects: [
@@ -34,18 +71,27 @@ export default defineConfig({
   webServer: [
     {
       command: "npm run dev:backend",
-      url: "http://127.0.0.1:3001/api/health",
+      url: `${backendOrigin}/api/health`,
       name: "Rust browser backend",
       timeout: 900_000,
       reuseExistingServer: false,
-      env: { APPDATA: smokeProfile },
+      env: { APPDATA: smokeProfile, MEOWCAL_HTTP_PORT: String(backendPort) },
     },
     {
       command: "npm run dev:browser",
-      url: "http://127.0.0.1:3000",
+      url: frontendOrigin,
       name: "Static frontend",
       timeout: 30_000,
       reuseExistingServer: false,
+      // Both: the first decides where this server listens, the second is what
+      // the dev server injects into every page so the bridge calls this run's
+      // backend. If that injection ever breaks, the bridge falls back to the
+      // default port and the first smoke test fails on settings - which is the
+      // failure this arrangement is supposed to have.
+      env: {
+        MEOWCAL_FRONTEND_PORT: String(frontendPort),
+        MEOWCAL_HTTP_PORT: String(backendPort),
+      },
     },
   ],
 });
