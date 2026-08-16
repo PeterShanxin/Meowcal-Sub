@@ -175,11 +175,13 @@ formats for no gain.
 
 ### Branch cleanup
 
-A merged branch is deleted automatically. Its commits survive in the merge
-commit and the pull request keeps a permanent link to them, so the branch name
-is not evidence of anything - it is a stale pointer that makes the branch list
-unreadable.
+A merged branch **in this repository** is deleted automatically. Its commits
+survive in the merge commit and the pull request keeps a permanent link to them,
+so the branch name is not evidence of anything - it is a stale pointer that
+makes the branch list unreadable.
 
+- A pull request from a fork is not affected: the setting cannot delete a ref in
+  someone else's repository, so a fork's branch stays until its owner removes it.
 - Never delete the default branch, a protected branch, or a branch another
   worktree has checked out.
 - An unmerged branch is never deleted automatically, so a long-lived exploration
@@ -187,8 +189,12 @@ unreadable.
   work it holds.
 - Deleting a remote branch does not touch your local one. Prune with
   `git fetch --prune`, and remove a finished worktree with `git worktree remove`.
-- To restore a deleted branch, recreate it from the merge commit's second
-  parent: `git branch <name> <sha>`.
+- To restore a deleted branch, recreate it from the merge commit's **second**
+  parent - not the merge commit itself, which is the merged result:
+
+  ```powershell
+  git branch <name> <merge-sha>^2
+  ```
 
 ## Ownership and review
 
