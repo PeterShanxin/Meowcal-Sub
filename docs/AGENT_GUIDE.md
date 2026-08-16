@@ -51,6 +51,12 @@ External writes require explicit authority. This includes pushes, pull requests,
 issue changes, comments, releases, merges, branch deletion, and repository
 settings. Never infer merge permission from permission to open a PR.
 
+`main` accepts changes only through a pull request with its required checks green
+and every review conversation resolved. Required approvals are zero while this
+repository is solo-maintained - a documented condition, not an oversight; the
+change contract states what activates one approval. The admin bypass exists for
+recovery. If you use it, say so in the pull request or commit message.
+
 ## Release and update contract
 
 - The Tauri CLI is pinned in `package.json`. It is versioned independently of
