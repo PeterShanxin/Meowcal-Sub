@@ -24,21 +24,41 @@ mkdirSync(smokeProfile, { recursive: true });
 // each worker a different pair of ports from the one the servers were actually
 // started on - the tests would then navigate to a port nothing is listening on.
 async function resolvePorts() {
-  if (process.env.MEOWCAL_FRONTEND_PORT && process.env.MEOWCAL_HTTP_PORT) {
-    return {
-      frontendPort: Number(process.env.MEOWCAL_FRONTEND_PORT),
-      backendPort: Number(process.env.MEOWCAL_HTTP_PORT),
-    };
+  const explicitFrontend = process.env.MEOWCAL_FRONTEND_PORT
+    ? Number(process.env.MEOWCAL_FRONTEND_PORT)
+    : null;
+  const explicitBackend = process.env.MEOWCAL_HTTP_PORT
+    ? Number(process.env.MEOWCAL_HTTP_PORT)
+    : null;
+
+  if (explicitFrontend !== null && explicitFrontend === explicitBackend) {
+    throw new Error(
+      `MEOWCAL_FRONTEND_PORT and MEOWCAL_HTTP_PORT are both ${explicitFrontend}; ` +
+        "the frontend and backend cannot share a port.",
+    );
   }
 
-  const [allocatedFrontend, allocatedBackend] = await allocatePorts(2);
-  const frontendPort = Number(process.env.MEOWCAL_FRONTEND_PORT || allocatedFrontend);
-  const backendPort = Number(process.env.MEOWCAL_HTTP_PORT || allocatedBackend);
+  if (explicitFrontend === null || explicitBackend === null) {
+    // Allocate only what was not given, and never hand back a port the caller
+    // already pinned: allocating a fresh pair and using half of it can produce
+    // the explicit port twice, which fails as "the second server would not
+    // start" rather than as the collision it is. Over-allocating by the number
+    // of pinned ports guarantees enough distinct candidates, because
+    // allocatePorts holds them all at once.
+    const pinned = new Set([explicitFrontend, explicitBackend].filter((port) => port !== null));
+    const needed = (explicitFrontend === null ? 1 : 0) + (explicitBackend === null ? 1 : 0);
+    const candidates = (await allocatePorts(needed + pinned.size)).filter(
+      (port) => !pinned.has(port),
+    );
 
-  process.env.MEOWCAL_FRONTEND_PORT = String(frontendPort);
-  process.env.MEOWCAL_HTTP_PORT = String(backendPort);
+    process.env.MEOWCAL_FRONTEND_PORT = String(explicitFrontend ?? candidates.shift());
+    process.env.MEOWCAL_HTTP_PORT = String(explicitBackend ?? candidates.shift());
+  }
 
-  return { frontendPort, backendPort };
+  return {
+    frontendPort: Number(process.env.MEOWCAL_FRONTEND_PORT),
+    backendPort: Number(process.env.MEOWCAL_HTTP_PORT),
+  };
 }
 
 const { frontendPort, backendPort } = await resolvePorts();
