@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { findRatchetRegressions } from "../../scripts/maintainability-ratchet.mjs";
+import {
+  MAX_COVERAGE_FLOOR_DROP,
+  findRatchetRegressions,
+} from "../../scripts/maintainability-ratchet.mjs";
 
 const previous = {
   newProductionFileMaxLines: 400,
@@ -49,7 +52,7 @@ describe("coverage scope", () => {
     current.frontendCoverageScope = ["src/measured-a.js"];
 
     expect(findRatchetRegressions(current, previous)).toEqual([
-      "frontendCoverageScope no longer measures src/measured-b.js",
+      "frontendCoverageScope no longer measures src/measured-b.js, which still exists",
     ]);
   });
 
@@ -59,7 +62,7 @@ describe("coverage scope", () => {
     current.frontendCoverageMinimum.lines = 70;
 
     expect(findRatchetRegressions(current, previous)).toEqual([
-      "frontendCoverageScope no longer measures src/measured-b.js",
+      "frontendCoverageScope no longer measures src/measured-b.js, which still exists",
       "frontendCoverageMinimum.lines decreased from 80 to 70",
     ]);
   });
@@ -79,6 +82,49 @@ describe("coverage scope", () => {
 
     expect(findRatchetRegressions(current, previous)).toEqual([
       "frontendCoverageMinimum.statements decreased from 80 to 79",
+    ]);
+  });
+
+  it("caps how far a floor may fall in one widening", () => {
+    const current = structuredClone(previous);
+    current.frontendCoverageScope = [...previous.frontendCoverageScope, "src/measured-c.js"];
+    current.frontendCoverageMinimum.lines =
+      previous.frontendCoverageMinimum.lines - MAX_COVERAGE_FLOOR_DROP - 1;
+
+    expect(findRatchetRegressions(current, previous)).toEqual([
+      `frontendCoverageMinimum.lines fell ${MAX_COVERAGE_FLOOR_DROP + 1} points ` +
+        `(80 to ${current.frontendCoverageMinimum.lines}); a scope widening may lower a floor by at ` +
+        `most ${MAX_COVERAGE_FLOOR_DROP}`,
+    ]);
+  });
+
+  it("allows a deleted module to leave the scope", () => {
+    const current = structuredClone(previous);
+    current.frontendCoverageScope = ["src/measured-a.js"];
+    const fileExists = (module) => module !== "src/measured-b.js";
+
+    expect(findRatchetRegressions(current, previous, { fileExists })).toEqual([]);
+  });
+
+  it("still refuses to drop a module whose file is still there", () => {
+    const current = structuredClone(previous);
+    current.frontendCoverageScope = ["src/measured-a.js"];
+
+    expect(findRatchetRegressions(current, previous, { fileExists: () => true })).toEqual([
+      "frontendCoverageScope no longer measures src/measured-b.js, which still exists",
+    ]);
+  });
+
+  it("does not treat a deletion on its own as growth", () => {
+    const current = structuredClone(previous);
+    // The file is gone, so it may leave the scope - but nothing was added, so
+    // the measurement did not widen and no floor may fall on the strength of it.
+    current.frontendCoverageScope = ["src/measured-a.js"];
+    current.frontendCoverageMinimum.lines = 70;
+    const fileExists = (module) => module !== "src/measured-b.js";
+
+    expect(findRatchetRegressions(current, previous, { fileExists })).toEqual([
+      "frontendCoverageMinimum.lines decreased from 80 to 70",
     ]);
   });
 

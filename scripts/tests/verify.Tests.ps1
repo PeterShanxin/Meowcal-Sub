@@ -147,7 +147,11 @@ exit /b 0
         throw "No Rust integration targets found; the completeness check would pass vacuously."
     }
     foreach ($target in $integrationTargets) {
-        $invoked = $test.CargoCommands | Where-Object { $_ -like "*--test $target*" }
+        # Matched as a whole argument. A wildcard would report a new
+        # `integration.rs` as covered by the existing `--test integration_ipc`,
+        # which is exactly the unwired target this is meant to catch.
+        $pattern = "(^|\s)--test\s+$([regex]::Escape($target))(\s|$)"
+        $invoked = $test.CargoCommands | Where-Object { $_ -match $pattern }
         if (-not $invoked) {
             throw ("Rust integration target '$target' exists under src-tauri/tests but verify.ps1 " +
                 "never runs it. Add it to the Test stage and to this contract.")

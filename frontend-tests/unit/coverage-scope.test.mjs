@@ -60,19 +60,68 @@ function resolveModule(reference) {
   return candidates.find((candidate) => existsSync(new URL(candidate, repositoryRoot))) ?? null;
 }
 
+function unitTestFiles(directory = unitTestDirectory) {
+  // Recursive, because vitest's include is recursive: a test in a subdirectory
+  // runs, and a scanner that only reads the top level would let the module it
+  // exercises stay outside the measured scope unnoticed.
+  const files = [];
+  for (const entry of readdirSync(directory, { withFileTypes: true })) {
+    const child = new URL(entry.name + (entry.isDirectory() ? "/" : ""), directory);
+    if (entry.isDirectory()) {
+      files.push(...unitTestFiles(child));
+    } else if (/\.test\.(mjs|ts)$/.test(entry.name)) {
+      files.push(child);
+    }
+  }
+  return files;
+}
+
+function directReferences(source) {
+  const found = new Set();
+  for (const match of source.matchAll(MODULE_REFERENCE)) {
+    const resolved = resolveModule(match[1]);
+    if (resolved) {
+      found.add(resolved);
+    }
+  }
+  return found;
+}
+
+// Relative imports inside a production module. A module a test never names is
+// still exercised when a module under test imports it, and its uncovered lines
+// belong in the denominator just the same.
+const RELATIVE_IMPORT =
+  /(?:from|import|require)\s*\(?\s*["'`](\.[\w./-]+?)(?:\.(?:m?js|ts))?["'`]/g;
+
+function transitiveImports(module, seen) {
+  const source = readFileSync(new URL(module, repositoryRoot), "utf8");
+  const directory = module.slice(0, module.lastIndexOf("/") + 1);
+
+  for (const match of source.matchAll(RELATIVE_IMPORT)) {
+    const joined = new URL(match[1], new URL(directory, repositoryRoot));
+    const relative = decodeURIComponent(joined.href.slice(repositoryRoot.href.length));
+    const resolved = resolveModule(relative);
+    if (resolved && !seen.has(resolved)) {
+      seen.add(resolved);
+      transitiveImports(resolved, seen);
+    }
+  }
+}
+
 function referencedModules() {
   const referenced = new Set();
 
-  for (const entry of readdirSync(unitTestDirectory)) {
-    if (!/\.test\.(mjs|ts)$/.test(entry)) {
-      continue;
+  for (const file of unitTestFiles()) {
+    for (const module of directReferences(readFileSync(file, "utf8"))) {
+      referenced.add(module);
     }
-    const source = readFileSync(new URL(entry, unitTestDirectory), "utf8");
-    for (const match of source.matchAll(MODULE_REFERENCE)) {
-      const resolved = resolveModule(match[1]);
-      if (resolved) {
-        referenced.add(resolved);
-      }
+  }
+
+  // Follow what those modules import, so a module reached only through another
+  // is measured too.
+  for (const module of [...referenced]) {
+    if (!NOT_MEASURABLE.has(module)) {
+      transitiveImports(module, referenced);
     }
   }
 
@@ -141,6 +190,17 @@ describe("the scope check can see module references", () => {
       "src/scripts/overlay-geometry",
       "scripts/doc-links",
     ]);
+  });
+
+  it("follows imports through a module under test", () => {
+    // app-controller.ts imports these; no unit test names update-controller
+    // directly through a path, so a scan of test sources alone would leave it
+    // out of the denominator.
+    const seen = new Set(["src/ui/app-controller.ts"]);
+    transitiveImports("src/ui/app-controller.ts", seen);
+
+    expect(seen).toContain("src/ui/update-controller.ts");
+    expect(seen).toContain("src/ui/languages.ts");
   });
 
   it("reads the same repository the suite runs against", () => {

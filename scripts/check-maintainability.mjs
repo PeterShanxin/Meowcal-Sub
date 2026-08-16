@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import { readdir, readFile } from "node:fs/promises";
 import { execFile } from "node:child_process";
 import path from "node:path";
@@ -76,7 +77,19 @@ for (const [metric, minimum] of Object.entries(baseline.frontendCoverageMinimum)
 
 const productionFiles = (await Promise.all(productionRoots.map(listProductionFiles))).flat();
 const measuredFiles = new Map();
-const violations = previousBaseline ? findRatchetRegressions(baseline, previousBaseline) : [];
+// The ratchet stays pure; the filesystem question - does this scoped module
+// still exist? - is answered here, so a deleted module can leave the scope while
+// a live one still cannot.
+const fileExists = (relativePath) => existsSync(path.join(repositoryRoot, relativePath));
+const violations = previousBaseline
+  ? findRatchetRegressions(baseline, previousBaseline, { fileExists })
+  : [];
+
+for (const relativePath of baseline.frontendCoverageScope ?? []) {
+  if (!fileExists(relativePath)) {
+    violations.push(`frontendCoverageScope names ${relativePath}, which does not exist`);
+  }
+}
 
 for (const relativePath of productionFiles) {
   const contents = await readFile(path.join(repositoryRoot, relativePath), "utf8");

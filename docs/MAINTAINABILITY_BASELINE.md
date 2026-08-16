@@ -27,9 +27,11 @@ enforces two rules over it:
 - **the scope may grow but never shrink** — dropping a module raises the
   percentage without a line of new test code, which is the cheapest way there is
   to make a coverage claim mean less than it says;
-- **a floor may only fall in a change that widens the scope** — widening pulls in
-  code the old floors never described, so the number can legitimately drop while
-  the claim gets stronger. Any other decrease is still rejected.
+- **a floor may only fall in a change that widens the scope, and by at most 15
+  points** — widening pulls in code the old floors never described, so the number
+  can legitimately drop while the claim gets stronger. Without the cap, adding
+  one module would license dropping every floor to zero. Any other decrease is
+  still rejected.
 
 The 30 modules are the risk areas the decomposition lanes produced: the overlay
 and selector geometry, appearance, timer, and payload rules from #33/#34; the
@@ -53,8 +55,8 @@ other side: a module that a unit test exercises but the scope omits fails the
 suite, so coverage cannot be kept high by leaving risky code out of the
 measurement. Its exclusions are an explicit list with a reason per entry.
 
-The measured result over that scope is **80.58% statements, 74.65% branches,
-81.09% functions, and 83.47% lines** (826/1025, 592/793, 163/201, 783/938),
+The measured result over that scope is **80.69% statements, 74.87% branches,
+81.18% functions, and 83.58% lines** (832/1031, 599/800, 164/202, 789/944),
 and the floors are those numbers rounded down to whole percent.
 
 **This is not a repository-wide coverage claim.** It is a claim about 30 named
@@ -106,11 +108,13 @@ when no dedicated extraction issue is assigned.
   in the same pull request. Remove its exception once it reaches 400 lines.
 - ESLint maximum: never increases. Fixing a legacy warning lowers
   `eslintMaxWarnings` in the same pull request.
-- Coverage scope: may grow, never shrink. A module leaves the scope only when
-  the file itself is gone.
+- Coverage scope: may grow, never shrink. A module leaves the scope only when its
+  file is gone, which the verifier checks on disk rather than taking on trust. A
+  deletion on its own is not growth and licenses no floor change.
 - Coverage minimums: never decrease, except in a change that widens the scope -
-  the one case where the number describes something larger than it did. Improved
-  measured coverage should raise the relevant floor.
+  the one case where the number describes something larger than it did - and then
+  by no more than 15 points. Improved measured coverage should raise the relevant
+  floor.
 
 The verifier compares the edited baseline with the committed baseline (or the
 checked-out commit with its parent in CI). It rejects raised file/warning
