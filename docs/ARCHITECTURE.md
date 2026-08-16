@@ -1,8 +1,11 @@
 # Architecture
 
 This document describes the live Meowcal Sub architecture and the reviewed
-boundaries for its staged redesign. ADR-0001 owns the product decision: Tauri 2,
-Rust, Windows OCR, and one app-managed Tencent HY-MT engine in normal mode.
+boundaries for its staged redesign.
+[ADR-0001](adr/0001-curated-local-translation-stack.md) owns the product
+decision: Tauri 2, Rust, Windows OCR, and one app-managed Tencent HY-MT engine
+in normal mode. [`adr/README.md`](adr/README.md) says which decisions belong in
+an ADR and which belong here.
 
 ## Runtime shape
 
@@ -77,7 +80,8 @@ Shared contracts have one owner before parallel decomposition begins:
 
 - Engine package metadata: `config/engine-manifest.v1.json` is embedded into
   the application and interpreted only by `engine_manifest.rs`. Remote refresh
-  is disabled; ADR-0002 owns the authenticity and update policy.
+  is disabled; [ADR-0002](adr/0002-shipped-engine-manifest-authenticity.md) owns
+  the authenticity and update policy.
 - Configuration: Rust `config` is canonical. Frontend code may present or
   submit settings but cannot invent defaults, migrations, or readiness rules.
 - Commands and events: Rust payload types and `ipc/protocol.rs` are canonical.
@@ -134,8 +138,9 @@ Shared contracts have one owner before parallel decomposition begins:
   opt-in live engine gate. Reports exclude source and translated text while
   recording architecture, engine/model identity, output shape, decisions, and
   latency.
-- Frontend rendering: ADR-0003 owns Vite, TypeScript, and Lit for migrated
-  main/setup surfaces. `app-controller.ts` owns their asynchronous UI snapshot;
+- Frontend rendering: [ADR-0003](adr/0003-incremental-lit-frontend.md) owns
+  Vite, TypeScript, and Lit for migrated main/setup surfaces.
+  `app-controller.ts` owns their asynchronous UI snapshot;
   components render it and dispatch intent. Overlay and selector retain their
   existing owners until #34 migrates them deliberately.
 

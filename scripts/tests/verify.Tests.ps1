@@ -140,6 +140,7 @@ exit /b 0
         "ci --ignore-scripts",
         "run version:check",
         "run runners:check",
+        "run docs:check",
         "run format:check",
         "run lint",
         "run typecheck",
@@ -163,6 +164,7 @@ exit /b 0
         "ci --ignore-scripts",
         "run version:check",
         "run runners:check",
+        "run docs:check",
         "run format:check",
         "run lint",
         "run typecheck",
@@ -215,6 +217,7 @@ exit /b 0
         "ci --ignore-scripts",
         "run version:check",
         "run runners:check",
+        "run docs:check",
         "run format:check",
         "run lint"
     ) $npmFailure.NpmCommands "Npm failure short-circuit"

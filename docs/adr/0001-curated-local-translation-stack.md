@@ -1,7 +1,7 @@
 # ADR-0001: Curated Local Translation Stack
 
 **Date:** 2026-07-29
-**Status:** Accepted by approved product goal
+**Status:** Accepted
 **Decision owners:** Meowcal Sub maintainers
 
 ## Context

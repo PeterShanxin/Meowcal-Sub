@@ -36,7 +36,7 @@ This plan outlines improvements to reduce OCR noise in Meowcal-Sub, inspired by 
 **Goal**: Capture OCR results in logs to diagnose noise issues
 
 **Changes**:
-1. Add DEBUG logging for OCR text output in [`src-tauri/src/commands.rs`](src-tauri/src/commands.rs:1971)
+1. Add DEBUG logging for OCR text output in `src-tauri/src/commands.rs` (line 1971 when this plan was written)
 2. Log OCR confidence scores (once implemented)
 3. Log filtered reason when text is rejected
 
