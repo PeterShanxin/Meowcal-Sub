@@ -133,6 +133,27 @@ exit /b 0
     ) $test.CargoCommands "Test stage"
     Assert-Lines @() $test.NpmCommands "Test stage npm"
 
+    # Rust coverage here is "which targets run", not a line percentage: no
+    # coverage instrumentation is installed on the toolchain, and the gate names
+    # its cargo targets one by one. That makes a newly added integration test
+    # invisible until someone remembers to wire it in - exactly the silent gap
+    # #35 exists to close - so the contract asserts the list is complete rather
+    # than merely correct.
+    $integrationTargets = @(
+        Get-ChildItem -LiteralPath (Join-Path $repositoryRoot "src-tauri\tests") -Filter *.rs |
+            ForEach-Object { $_.BaseName }
+    )
+    if ($integrationTargets.Count -eq 0) {
+        throw "No Rust integration targets found; the completeness check would pass vacuously."
+    }
+    foreach ($target in $integrationTargets) {
+        $invoked = $test.CargoCommands | Where-Object { $_ -like "*--test $target*" }
+        if (-not $invoked) {
+            throw ("Rust integration target '$target' exists under src-tauri/tests but verify.ps1 " +
+                "never runs it. Add it to the Test stage and to this contract.")
+        }
+    }
+
     $frontend = Invoke-VerifyUnderTest -Stage Frontend
     Assert-Equal 0 $frontend.ExitCode "Frontend stage exit code."
     Assert-Lines @() $frontend.CargoCommands "Frontend stage cargo"
