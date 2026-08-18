@@ -203,6 +203,15 @@ holds the full procedure; these are the standing rules.
 - Discover the runner directory rather than hard-coding it:
   `(Get-Help .\scripts\setup-self-hosted-runner.ps1 -Parameter RunnerDirectory).defaultValue`.
   Read registration state from GitHub with `-Mode Status`.
+- `-Mode Start` also refreshes the **action archive cache**. The runner deletes
+  `_work\_actions` at the start of every job, so without that cache each job
+  re-downloads `actions/checkout` from codeload during *initialization*, where no
+  workflow retry can reach it and one refusal kills the job before a step exists
+  (#132). The refresh is best effort and never blocks a start. Do not judge it by
+  the job log: the runner prints `Download action repository ...` before it
+  consults the cache, so grep `_diag\Worker_*.log` for `Found action archive`
+  instead. `.env` is read once at listener start, so never restart a live runner
+  to apply it.
 
 Before relying on a self-hosted CI or packaging run:
 

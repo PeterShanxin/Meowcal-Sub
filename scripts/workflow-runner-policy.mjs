@@ -92,19 +92,36 @@ function collectRunsOnValue(lines, index, indentWidth) {
   return collected.join(" ");
 }
 
+/**
+ * The complete `runs-on:` value at `index`, folded onto one line, or null when
+ * that line is not a `runs-on:`.
+ *
+ * Exported because a second reader needs the same answer: action-cache-plan.mjs
+ * decides which jobs execute on the owner's own hosts, and two parsers
+ * disagreeing about that would surface as a job quietly missing the action
+ * archive cache rather than as a failure.
+ */
+export function foldRunsOnValue(lines, index) {
+  const match = /^(\s*)runs-on:\s*(.*)$/.exec(stripYamlComment(lines[index] ?? ""));
+  if (!match) {
+    return null;
+  }
+
+  const [, indent, inlineValue] = match;
+  const value = inlineValue.trim();
+  if (value === "" || value === ">-" || value === ">" || value === "|") {
+    return collectRunsOnValue(lines, index, indent.length);
+  }
+  return value;
+}
+
 function findRunsOnViolations(relativePath, lines) {
   const violations = [];
 
-  for (const [index, text] of lines.entries()) {
-    const match = /^(\s*)runs-on:\s*(.*)$/.exec(stripYamlComment(text));
-    if (!match) {
+  for (let index = 0; index < lines.length; index += 1) {
+    const value = foldRunsOnValue(lines, index);
+    if (value === null) {
       continue;
-    }
-
-    const [, indent, inlineValue] = match;
-    let value = inlineValue.trim();
-    if (value === "" || value === ">-" || value === ">" || value === "|") {
-      value = collectRunsOnValue(lines, index, indent.length);
     }
 
     const bare = value

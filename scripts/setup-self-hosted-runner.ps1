@@ -409,6 +409,22 @@ function Start-RunnerProcess {
         return
     }
 
+    # Fill the action archive cache before the listener starts, because the
+    # runner reads .env exactly once at that moment. Done here rather than when a
+    # listener is already running: refreshing then would change nothing for the
+    # live process and could delete an archive a dispatched job is reading.
+    #
+    # Best effort on purpose. Without the cache every job re-downloads
+    # actions/checkout from codeload during initialization, where no workflow
+    # retry can reach it (#132) - but an unreachable GitHub must cost a slower
+    # run, never a runner that refuses to start.
+    try {
+        & (Join-Path $PSScriptRoot "sync-action-cache.ps1") -RunnerDirectory $Directory
+    } catch {
+        Write-Warning "Action archive cache refresh failed: $($_.Exception.Message)"
+        Write-Warning "Starting anyway. Jobs will download actions from codeload, as before."
+    }
+
     $startInfo = [System.Diagnostics.ProcessStartInfo]::new()
     $startInfo.FileName = $runCmd
     $startInfo.WorkingDirectory = $Directory
