@@ -115,7 +115,9 @@ Registration status always comes from GitHub, never from a local guess:
    becomes the machine-then-user composition, so a shell-local toolchain cannot
    shadow the host's, and Node's preload hooks are dropped. Everything else you
    are carrying is left alone — rebuilding the environment instead was tried and
-   produced a runner that could not find Program Files or `LOCALAPPDATA`. It then
+   produced a runner that could not find Program Files or `LOCALAPPDATA`. It also
+   refreshes [the action archive cache](#the-action-archive-cache) first, because
+   the runner reads `.env` exactly once at listener start. It then
    refuses to start when the resolved Node/npm majors do not match
    `package.json` engines, and prints the toolchain it will use. Add
    `-VerifyEnvironmentOnly` to see all of that without starting anything.
@@ -159,6 +161,91 @@ drain rather than stopping after the first one finishes.
 
 A stopped runner does not fail anything. Later jobs queue until it is started
 again, and GitHub cancels a job that stays queued for 24 hours.
+
+## The action archive cache
+
+**The runner deletes `_work\_actions` at the start of every job.** That is not a
+setting; it is what `ActionManager.PrepareActionsAsync` does when a job begins:
+
+```csharp
+// We are running at the start of a job
+if (rootStepId == default(Guid))
+{
+    IOUtil.DeleteDirectory(HostContext.GetDirectory(WellKnownDirectory.Actions), …);
+}
+```
+
+The runner does keep a per-action watermark that short-circuits a repeat
+download — but it lives inside the directory being deleted, so it can never
+survive into the next job. Every job on this host therefore re-downloaded
+`actions/checkout` from `codeload.github.com`: 302 of 302 recorded jobs, zero
+cache hits (#132).
+
+That download happens during job **initialization**, before any step exists.
+Nothing in a workflow can retry it — not `timeout-minutes`, not a retry loop in a
+`run:` block. The runner tries three times and then fails the job with `Caught
+exception from JobExtension Initialization`, naming the action, which reads like
+a broken workflow rather than an infrastructure limit. `test.yml` runs three
+self-hosted jobs and each one checks out, so one CI run asked codeload for the
+same bytes three times.
+
+The runner's own escape hatch is a directory it consults before the network:
+
+```
+# C:\actions-runner\meowcal-sub\.env
+ACTIONS_RUNNER_ACTION_ARCHIVE_CACHE=C:\actions-runner\meowcal-sub\action-archive-cache
+```
+
+`ActionManager` then looks for `<cache>\<owner>_<repo>\<resolved-sha>.zip` and
+copies it instead of asking codeload. (The same code writes `.tar.gz` on Linux;
+only the `#if OS_WINDOWS` branch differs.)
+
+`scripts/sync-action-cache.ps1` keeps that directory current, and `-Mode Start`
+runs it, so the ordinary start path needs nothing extra. Run it by hand to
+inspect or repair:
+
+```powershell
+.\scripts\sync-action-cache.ps1 -WhatIfOnly   # show the plan, change nothing
+.\scripts\sync-action-cache.ps1              # download, verify, prune, write .env
+```
+
+What it does, and why each part is the way it is:
+
+- **The list comes from the workflows**, not from a list in a script. It reads
+  every job whose `runs-on` selects one of our hosts and collects the actions
+  those jobs use, so adding a step that uses a new action extends the cache with
+  no second edit. A hosted Linux job's actions are deliberately excluded: the
+  cache is a property of this machine and that job cannot read it.
+- **Archives are named by the resolved commit SHA**, never the ref. A moved tag
+  therefore misses the cache and re-downloads, rather than serving stale bytes
+  under a name that no longer means them.
+- **The repository name comes from the API**, not from the workflow text. A
+  renamed repository still answers under its old name, and the runner files the
+  archive under the name it *resolved*.
+- **The bytes are verified, including entries already present.** A rate-limit
+  page or a truncated response is a perfectly good file of plausible length, and
+  a corrupt archive in the cache fails *every* job — worse than the download it
+  replaces. A size check would make that damage permanent and invisible.
+- **It never restarts the runner.** `.env` is read once, in
+  `Program.LoadAndSetEnv`, when the listener starts; restarting a live listener
+  can sever a dispatched job and there is no drain API. This runner is started on
+  demand, so the next start picks the setting up — and until it does,
+  `C:\actions-runner\meowcal-sub\.env` existing is not proof the running listener
+  read it.
+
+Two things worth knowing before you judge whether it is working:
+
+- **The job log does not tell you.** The runner prints `Download action
+  repository 'actions/checkout@v4' (SHA:…)` *before* it consults the cache, so
+  that line appears either way. The real signal is `Found action archive '<file>'
+  in cache directory '<dir>'` in `<runner>\_diag\Worker_*.log`.
+- **The cache directory is written by the owner's tooling and read by every
+  job.** Every job on this runner executes pull request code as the account that
+  started the runner, so a job could write there. That is a property of the
+  on-demand foreground model, not something this cache introduces; it is one more
+  reason to start the runner only when work needs it. For the same reason, do not
+  point a second repository's runner at this directory — sharing it would widen
+  the set of unreviewed code that reads it, to save a few megabytes.
 
 ## Runner labels
 
@@ -427,6 +514,13 @@ yourself.
 
 **The browser smoke cannot find a browser.** Install Google Chrome, or set
 `MEOWCAL_BROWSER_CHANNEL` to an installed channel such as `msedge`.
+
+**A job fails during initialization naming `actions/checkout`.** codeload
+refused the download, and no workflow-level retry can reach that point. Check
+that [the action archive cache](#the-action-archive-cache) is populated and that
+the listener was started after `.env` gained the setting — `.env` is read once,
+at listener start. `.\scripts\sync-action-cache.ps1 -WhatIfOnly` shows what
+should be there.
 
 **A build fails on a missing `resources\OverlayHost.exe`.** Run
 `scripts\prepare-validation-resources.ps1`. A fresh workspace needs it before its

@@ -32,6 +32,7 @@
     "src/ui/setup-progress.ts",
     "src/ui/update-controller.ts",
     "src/ui/update-state.ts",
+    "scripts/action-cache-plan.mjs",
     "scripts/allocate-port.mjs",
     "scripts/build-updater-manifest.mjs",
     "scripts/commit-contract.mjs",
