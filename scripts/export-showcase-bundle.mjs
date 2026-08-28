@@ -2,10 +2,12 @@
 /**
  * Allowlist-first export of public-safe showcase files.
  * SECURITY: Only paths in showcase/EXPORT_ALLOWLIST.json may be copied.
+ * Output is validated against an explicit positive allowlist before publish.
  */
 import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { spawnSync } from 'node:child_process';
+import { validateShowcaseOutput } from './validate-showcase-output.mjs';
 
 function parseArgs(argv) {
   const args = { version: null, outDir: 'showcase-out' };
@@ -16,22 +18,28 @@ function parseArgs(argv) {
   return args;
 }
 
-function readJson(path) { return JSON.parse(readFileSync(path, 'utf8')); }
-
-function ensureIconFallback() {
-  const iconDest = 'showcase/assets/icon.png';
-  if (existsSync(iconDest)) return;
-  const source = 'src-tauri/icons/icon.png';
-  if (!existsSync(source)) throw new Error(`Missing ${iconDest} and fallback ${source}`);
-  mkdirSync(dirname(iconDest), { recursive: true });
-  copyFileSync(source, iconDest);
+function readJson(path) {
+  return JSON.parse(readFileSync(path, 'utf8'));
 }
 
-function ensureHeroFallback() {
-  const hero = 'showcase/assets/hero.png';
-  if (existsSync(hero)) return;
-  ensureIconFallback();
-  copyFileSync('showcase/assets/icon.png', hero);
+function ensureAsset(dest, ...sources) {
+  if (existsSync(dest)) return;
+  for (const src of sources) {
+    if (existsSync(src)) {
+      mkdirSync(dirname(dest), { recursive: true });
+      copyFileSync(src, dest);
+      return;
+    }
+  }
+  throw new Error(`Missing ${dest} (tried: ${sources.join(', ')})`);
+}
+
+function prepareAssets() {
+  ensureAsset('showcase/assets/logo.png', 'showcase/assets/icon.png', 'src-tauri/icons/icon.png');
+  ensureAsset('showcase/assets/icon.png', 'src-tauri/icons/icon.png');
+  if (!existsSync('showcase/assets/hero.png')) {
+    copyFileSync('showcase/assets/logo.png', 'showcase/assets/hero.png');
+  }
 }
 
 function copyAllowlisted(outDir, allowlist) {
@@ -48,16 +56,18 @@ function copyAllowlisted(outDir, allowlist) {
 function main() {
   const args = parseArgs(process.argv);
   const allowlist = readJson('showcase/EXPORT_ALLOWLIST.json');
-  ensureHeroFallback();
+  prepareAssets();
+
   if (existsSync(args.outDir)) rmSync(args.outDir, { recursive: true, force: true });
   mkdirSync(args.outDir, { recursive: true });
+
   const renderArgs = ['scripts/render-showcase-readme.mjs', '--output', join(args.outDir, 'README.md')];
   if (args.version) renderArgs.push('--version', args.version);
   const render = spawnSync(process.execPath, renderArgs, { stdio: 'inherit' });
   if (render.status !== 0) process.exit(render.status ?? 1);
+
   copyAllowlisted(args.outDir, allowlist);
-  copyFileSync('showcase/showcase.json', join(args.outDir, 'showcase.json'));
-  copyFileSync('showcase/benchmarks.json', join(args.outDir, 'benchmarks.json'));
+  validateShowcaseOutput(args.outDir, allowlist.output);
   console.log(`Showcase bundle ready in ${args.outDir}`);
 }
 
