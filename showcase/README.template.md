@@ -8,7 +8,7 @@
 {{BADGES_ROW}}
 </p>
 
-<p align="center">
+{{HERO_BLOCK}}<p align="center">
   <a href="{{DOWNLOAD_URL}}"><strong>Download</strong></a>
   &nbsp;·&nbsp;
   <a href="{{RELEASES_URL}}">All releases</a>
@@ -16,7 +16,7 @@
   <a href="{{RELEASE_NOTES_URL}}">Release notes</a>
 </p>
 
-{{HERO_BLOCK}}---
+---
 
 ## ✨ What it does
 

@@ -118,7 +118,7 @@ function main() {
     '{{DOWNLOAD_URL}}': links.download,
     '{{RELEASES_URL}}': links.releases,
     '{{RELEASE_NOTES_URL}}': links.releaseNotes,
-    '{{LOGO_BLOCK}}': optionalImageBlock(args.assetsDir, 'logo.png', 120, 'Meowcal Sub icon'),
+    '{{LOGO_BLOCK}}': optionalImageBlock(args.assetsDir, 'logo.png', 96, 'Meowcal Sub icon'),
     '{{HERO_BLOCK}}': optionalImageBlock(
       args.assetsDir,
       'hero.png',
