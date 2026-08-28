@@ -5,6 +5,7 @@
     "showcase/assets/icon.png",
     "showcase/assets/hero.png",
     "showcase/assets/architecture.svg",
+    "showcase/assets/social-preview.svg",
     "showcase/README.template.md"
   ],
   "generated": ["README.md"],
