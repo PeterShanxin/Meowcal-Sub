@@ -1,66 +1,54 @@
-<div align="center">
+<p align="center">
+  <img src="assets/logo.png" width="120" alt="Meowcal Sub icon">
+</p>
 
-# {{PRODUCT_NAME}}
+<h1 align="center">{{PRODUCT_NAME}}</h1>
 
-**{{TAGLINE}}**
+<p align="center">
+  <strong>{{TAGLINE}}</strong>
+</p>
 
-![{{PRODUCT_NAME}}](assets/hero.png)
+<p align="center">
+{{BADGES_ROW}}
+</p>
 
-[![Latest release](https://img.shields.io/github/v/release/PeterShanxin/Meowcal-Sub-releases?label=latest)](https://github.com/PeterShanxin/Meowcal-Sub-releases/releases/latest)
-![Windows](https://img.shields.io/badge/platform-Windows%2011-0078D6?logo=windows)
-![Architectures](https://img.shields.io/badge/arch-x64%20%7C%20ARM64-blue)
+<p align="center">
+  <a href="{{DOWNLOAD_URL}}"><strong>Download</strong></a>
+  &nbsp;·&nbsp;
+  <a href="{{RELEASES_URL}}">All releases</a>
+  &nbsp;·&nbsp;
+  <a href="{{RELEASE_NOTES_URL}}">Release notes</a>
+</p>
 
-[**Download latest**]({{DOWNLOAD_URL}}) · [**All releases**]({{RELEASES_URL}}) · [**Release notes**]({{RELEASE_NOTES_URL}})
-
-</div>
+<p align="center">
+  <img src="assets/hero.png" width="900" alt="Meowcal Sub translating subtitles over a video">
+</p>
 
 ---
 
-## Why Meowcal Sub
+## ✨ What it does
 
-Watching foreign-language video usually means choosing between cloud subtitle services
-(that send your screen content elsewhere) and manual copy-paste. Meowcal Sub targets the
-gap: **read subtitles from your screen and translate them on your PC**, with a floating
-overlay you can place over the player.
+Select the on-screen subtitle region once. Meowcal Sub captures that band, runs Windows OCR, translates locally, and draws translated lines in a floating overlay while you watch.
 
-## What it does
+```text
+subtitle region → capture → OCR → local translation → overlay
+```
 
-1. You select the on-screen subtitle region.
-2. The app captures that band, runs Windows OCR, and translates locally.
-3. Translated lines appear in a floating overlay while you watch.
+No account. Subtitle text is not uploaded. A one-time download (~1.1 GB) sets up the local translation runtime.
 
-No account. No upload of subtitle text. A one-time download sets up the local translation
-runtime and model (~1.1 GB).
-
-## Key features
+## 🎯 Key features
 
 {{FEATURES_TABLE}}
 
-## How it works
-
-```text
-subtitle region on screen
-    → screen capture
-    → image preprocessing
-    → Windows OCR
-    → normalize / dedupe
-    → local HY-MT translation
-    → validate
-    → floating overlay
-```
-
-High-level only — implementation details and source code are not published in this
-repository.
-
-## Engineering highlights
+## ⚡ Engineering
 
 {{ENGINEERING_LIST}}
 
-## Performance
+## 📊 Performance
 
 {{BENCHMARKS_SECTION}}
 
-## Architecture
+## 🧠 Architecture
 
 ![Pipeline overview](assets/architecture.svg)
 
@@ -72,7 +60,7 @@ repository.
 | Presentation | Selector, setup wizard, and always-on-top overlay webviews |
 | Distribution | Dual-arch installers, signature-verified in-app updates |
 
-## Privacy & local processing
+## 🔒 Privacy
 
 **On your machine:** {{PRIVACY_LOCAL}}
 
@@ -80,10 +68,9 @@ repository.
 
 **Never sent:** {{PRIVACY_NOT_SENT}}
 
-Production logs record support codes, timings, and counts — not captured or translated
-subtitle text.
+Production logs record support codes, timings, and counts — not captured or translated subtitle text.
 
-## Compatibility
+## 📦 Installation
 
 | | |
 | --- | --- |
@@ -94,32 +81,20 @@ subtitle text.
 
 {{REQUIREMENTS_NOTES}}
 
-Each release includes NSIS (`.exe`) and MSI installers for both architectures, plus
-`SHA256SUMS.txt` and `latest.json` for the in-app updater.
+Each release includes NSIS (`.exe`) and MSI installers for both architectures, plus `SHA256SUMS.txt` and `latest.json` for the in-app updater.
 
-## Project status
+Installed copies can update from **Settings → Updates → Check for updates** (manual check only).
 
-{{STATUS}} — actively developed in a private repository. This public repo is the
-download and showcase surface; issues and feature discussion are not accepted here.
+## Status
 
-Latest shipped version: **v{{VERSION}}**.
+**{{STATUS}}** — actively developed in a private repository. This public repo distributes installers and showcase material only; issues are not accepted here.
 
-## Releases
+Current release: **v{{VERSION}}**
 
-Installers are published as [GitHub Releases]({{RELEASES_URL}}). After v0.6.6, installed
-copies can update from **Settings → Updates → Check for updates** (manual check only).
-
-## About the engineering
-
-This project is a from-scratch Windows desktop product: real-time capture, on-device
-inference, ARM64 performance work, installer packaging, and update infrastructure — not a
-thin wrapper around a cloud API. The release pipeline mirrors signed artifacts from a
-private build repository into this public distribution repo after a manual quality gate.
-
-## License & usage
+## License
 
 {{LICENSE_SUMMARY}}
 
 ---
 
-<p align="center"><sub>Meowcal Sub · v{{VERSION}} · {{STATUS}}</sub></p>
+<p align="center"><sub>{{PRODUCT_NAME}} · v{{VERSION}} · {{STATUS}}</sub></p>
