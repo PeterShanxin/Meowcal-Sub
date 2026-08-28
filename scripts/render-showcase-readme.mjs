@@ -1,14 +1,15 @@
 #!/usr/bin/env node
-import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
-import { dirname } from 'node:path';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
 
 const MIRROR = 'PeterShanxin/Meowcal-Sub-releases';
 
 function parseArgs(argv) {
-  const args = { version: null, output: 'showcase-out/README.md' };
+  const args = { version: null, output: 'showcase-out/README.md', assetsDir: 'showcase-out' };
   for (let i = 2; i < argv.length; i++) {
     if (argv[i] === '--version' && argv[i + 1]) args.version = argv[++i];
     else if (argv[i] === '--output' && argv[i + 1]) args.output = argv[++i];
+    else if (argv[i] === '--assets-dir' && argv[i + 1]) args.assetsDir = argv[++i];
   }
   return args;
 }
@@ -54,12 +55,17 @@ function renderFeaturesTable(features) {
 
 function renderBadges(links) {
   return [
-    `[![Release](${links.versionBadge})](${links.releases})`,
-    '![Windows 11](https://img.shields.io/badge/platform-Windows%2011-0078D6?logo=windows)',
-    '![Architectures](https://img.shields.io/badge/arch-x64%20%7C%20ARM64-blue)',
-    '![Local AI](https://img.shields.io/badge/AI-on--device-22c55e)',
-    '![Tauri](https://img.shields.io/badge/stack-Tauri%20%2B%20Rust-ffc131)',
+    `  <a href="${links.releases}"><img alt="Latest release" src="${links.versionBadge}"></a>`,
+    '  <img alt="Windows 11" src="https://img.shields.io/badge/platform-Windows%2011-0078D6?logo=windows">',
+    '  <img alt="x64 and ARM64" src="https://img.shields.io/badge/arch-x64%20%7C%20ARM64-blue">',
+    '  <img alt="On-device AI" src="https://img.shields.io/badge/AI-on--device-22c55e">',
+    '  <img alt="Tauri and Rust" src="https://img.shields.io/badge/stack-Tauri%20%2B%20Rust-ffc131">',
   ].join('\n');
+}
+
+function optionalImageBlock(assetsDir, filename, width, alt) {
+  if (!existsSync(join(assetsDir, 'assets', filename))) return '';
+  return `<p align="center">\n  <img src="assets/${filename}" width="${width}" alt="${alt}">\n</p>\n\n`;
 }
 
 function renderBenchmarks(benchmarks) {
@@ -112,6 +118,13 @@ function main() {
     '{{DOWNLOAD_URL}}': links.download,
     '{{RELEASES_URL}}': links.releases,
     '{{RELEASE_NOTES_URL}}': links.releaseNotes,
+    '{{LOGO_BLOCK}}': optionalImageBlock(args.assetsDir, 'logo.png', 120, 'Meowcal Sub icon'),
+    '{{HERO_BLOCK}}': optionalImageBlock(
+      args.assetsDir,
+      'hero.png',
+      900,
+      'Meowcal Sub translating subtitles over a video',
+    ),
     '{{FEATURES_TABLE}}': renderFeaturesTable(showcase.features),
     '{{ENGINEERING_LIST}}': bulletList(showcase.engineering),
     '{{BENCHMARKS_SECTION}}': renderBenchmarks(benchmarks),
