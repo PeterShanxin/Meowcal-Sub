@@ -1,7 +1,3 @@
-<p align="center">
-  <img src="assets/logo.png" width="120" alt="Meowcal Sub icon">
-</p>
-
 <h1 align="center">{{PRODUCT_NAME}}</h1>
 
 <p align="center">
@@ -20,10 +16,7 @@
   <a href="{{RELEASE_NOTES_URL}}">Release notes</a>
 </p>
 
-<p align="center">
-  <img src="assets/hero.png" width="900" alt="Meowcal Sub translating subtitles over a video">
-</p>
-
+{{HERO_BLOCK}}
 ---
 
 ## ✨ What it does
