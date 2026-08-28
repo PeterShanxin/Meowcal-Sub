@@ -1,9 +1,10 @@
 #!/usr/bin/env node
 /**
- * Validates a generated showcase bundle against an explicit output allowlist.
- * SECURITY: Reject unexpected files, symlinks, and path traversal.
+ * Validates a generated showcase bundle against an explicit output allowlist
+ * and confirms every local README image exists in that bundle.
+ * SECURITY: Reject unexpected files, symlinks, path traversal, and broken images.
  */
-import { lstatSync, readdirSync, readFileSync } from 'node:fs';
+import { existsSync, lstatSync, readdirSync, readFileSync } from 'node:fs';
 import { join, posix, relative, resolve } from 'node:path';
 
 function normalizeRel(p) {
@@ -51,6 +52,55 @@ function isAllowed(rel, allowed) {
   return false;
 }
 
+function collectReadmeAssetRefs(readme) {
+  const refs = [];
+  for (const match of readme.matchAll(/<img\b[^>]*\bsrc=["']([^"']+)["']/gi)) {
+    refs.push(match[1]);
+  }
+  for (const match of readme.matchAll(/!\[[^\]]*\]\(([^)\s]+)(?:\s+"[^"]*")?\)/g)) {
+    refs.push(match[1]);
+  }
+  return refs;
+}
+
+export function validateReadmeAssets(outDir) {
+  const readmePath = join(outDir, 'README.md');
+  if (!existsSync(readmePath)) {
+    throw new Error('README.md missing from showcase output');
+  }
+  const absRoot = resolve(outDir);
+  const readme = readFileSync(readmePath, 'utf8');
+  const errors = [];
+
+  for (const raw of collectReadmeAssetRefs(readme)) {
+    if (/^(https?:|data:|mailto:)/i.test(raw)) continue;
+    const rel = normalizeRel(raw.split('#')[0].split('?')[0]);
+    if (!rel || rel.includes('..') || posix.isAbsolute(rel) || /^[a-zA-Z]:/.test(rel)) {
+      errors.push(`Rejected README asset path: ${raw}`);
+      continue;
+    }
+    const abs = resolve(outDir, rel);
+    if (!abs.startsWith(absRoot)) {
+      errors.push(`README asset escaped output directory: ${raw}`);
+      continue;
+    }
+    if (!existsSync(abs)) {
+      errors.push(`README references missing asset: ${rel}`);
+      continue;
+    }
+    if (lstatSync(abs).isSymbolicLink()) {
+      errors.push(`README asset is a symlink: ${rel}`);
+    }
+  }
+
+  if (errors.length) {
+    throw new Error(
+      `README asset validation failed:\n${errors.map((e) => `  - ${e}`).join('\n')}`,
+    );
+  }
+  console.log('Validated README local asset references');
+}
+
 export function validateShowcaseOutput(outDir, outputConfig) {
   const allowed = new Set(outputConfig.outputPaths.map(normalizeRel));
   const found = listFilesRecursive(outDir);
@@ -69,6 +119,7 @@ export function validateShowcaseOutput(outDir, outputConfig) {
       `Showcase output validation failed:\n${errors.map((e) => `  - ${e}`).join('\n')}`,
     );
   }
+  validateReadmeAssets(outDir);
   console.log(`Validated ${found.length} output file(s) in ${outDir}`);
 }
 
