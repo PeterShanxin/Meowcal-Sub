@@ -2,7 +2,8 @@
 /**
  * Allowlist-first export of public-safe showcase files.
  * SECURITY: Only paths in showcase/EXPORT_ALLOWLIST.json may be copied.
- * Output is validated against an explicit positive allowlist before publish.
+ * README is rendered after assets are copied so image tags are never emitted
+ * for files that are not in the public bundle.
  */
 import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -31,15 +32,11 @@ function ensureAsset(dest, ...sources) {
       return;
     }
   }
-  throw new Error(`Missing ${dest} (tried: ${sources.join(', ')})`);
 }
 
 function prepareAssets() {
   ensureAsset('showcase/assets/logo.png', 'showcase/assets/icon.png', 'src-tauri/icons/icon.png');
   ensureAsset('showcase/assets/icon.png', 'src-tauri/icons/icon.png');
-  if (!existsSync('showcase/assets/hero.png')) {
-    copyFileSync('showcase/assets/logo.png', 'showcase/assets/hero.png');
-  }
 }
 
 function copyAllowlisted(outDir, allowlist) {
@@ -60,13 +57,19 @@ function main() {
 
   if (existsSync(args.outDir)) rmSync(args.outDir, { recursive: true, force: true });
   mkdirSync(args.outDir, { recursive: true });
+  copyAllowlisted(args.outDir, allowlist);
 
-  const renderArgs = ['scripts/render-showcase-readme.mjs', '--output', join(args.outDir, 'README.md')];
+  const renderArgs = [
+    'scripts/render-showcase-readme.mjs',
+    '--output',
+    join(args.outDir, 'README.md'),
+    '--assets-dir',
+    args.outDir,
+  ];
   if (args.version) renderArgs.push('--version', args.version);
   const render = spawnSync(process.execPath, renderArgs, { stdio: 'inherit' });
   if (render.status !== 0) process.exit(render.status ?? 1);
 
-  copyAllowlisted(args.outDir, allowlist);
   validateShowcaseOutput(args.outDir, allowlist.output);
   console.log(`Showcase bundle ready in ${args.outDir}`);
 }
