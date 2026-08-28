@@ -1,0 +1,29 @@
+{
+  "disclaimer": "Measured on specific hardware during development. Figures describe engineering evidence, not marketing guarantees.",
+  "entries": [
+    {
+      "id": "arm64-subtitle-eval-parallel1",
+      "title": "ARM64 translation latency (warm model)",
+      "environment": "Windows 11 ARM64, HY-MT1.5-1.8B-Q4_K_M, one server slot, fixed warm-up",
+      "metrics": [
+        { "name": "p50 latency", "value": "660 ms" },
+        { "name": "p95 latency", "value": "3,558 ms" }
+      ],
+      "context": "33-case privacy-safe subtitle evaluation; all translated attempts passed the quality grader.",
+      "comparison": "Prior auto-warmup run on same machine: p50 841 ms, p95 4,091 ms.",
+      "source": "docs/evidence/2026-08-01-arm64-subtitle-eval-parallel1-warmup.json"
+    },
+    {
+      "id": "arm64-gpu-v0.6.9",
+      "title": "ARM64 GPU path (v0.6.9)",
+      "environment": "Qualcomm Adreno X1-85, driver 31.0.148.0 — gated configuration only",
+      "metrics": [
+        { "name": "Tail latency", "value": "Shorter under sustained load vs CPU-only policy" },
+        { "name": "Median latency", "value": "Slightly higher than CPU-only" },
+        { "name": "GPU startup", "value": "A few seconds longer while the model loads" }
+      ],
+      "context": "Tuned for worst-case stalls rather than peak median speed. GPU startup failure falls back to CPU within the same bounded deadline.",
+      "source": "docs/releases/v0.6.9.md"
+    }
+  ]
+}
