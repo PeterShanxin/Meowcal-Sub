@@ -1,4 +1,4 @@
-<h1 align="center">{{PRODUCT_NAME}}</h1>
+{{LOGO_BLOCK}}<h1 align="center">{{PRODUCT_NAME}}</h1>
 
 <p align="center">
   <strong>{{TAGLINE}}</strong>
@@ -16,8 +16,7 @@
   <a href="{{RELEASE_NOTES_URL}}">Release notes</a>
 </p>
 
-{{HERO_BLOCK}}
----
+{{HERO_BLOCK}}---
 
 ## ✨ What it does
 
