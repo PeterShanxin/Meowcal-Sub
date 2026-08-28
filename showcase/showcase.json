@@ -2,7 +2,7 @@
   "$schema": "./showcase.schema.json",
   "product": {
     "name": "Meowcal Sub",
-    "tagline": "Local subtitle translation for Windows — capture, OCR, translate, overlay.",
+    "tagline": "Capture on-screen subtitles and translate them locally on Windows.",
     "status": "Windows 11 beta",
     "homepage": "https://github.com/PeterShanxin/Meowcal-Sub-releases"
   },
@@ -21,7 +21,7 @@
     }
   ],
   "features": [
-  {
+    {
       "title": "Screen-region capture",
       "description": "Select the subtitle band once; the app watches that region while you watch."
     },
@@ -51,7 +51,7 @@
     "End-to-end pipeline: capture → preprocess → OCR → normalize/dedupe → local translation → validate → overlay.",
     "App-managed engine lifecycle: download, integrity checks, transactional install, rollback, repair.",
     "Evidence-backed ARM64 acceleration policy with hardware/driver gating and CPU fallback.",
-    "Privacy-safe logging and evaluation — production logs exclude subtitle text.",
+    "Privacy-safe logging — production logs exclude subtitle text.",
     "Dual-architecture packaging (x64 + ARM64) with automated release mirroring to this public repository."
   ],
   "privacy": {

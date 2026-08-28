@@ -1,16 +1,17 @@
 {
   "description": "Explicit allowlist for files that may be copied from the private Meowcal-Sub repository into the public Meowcal-Sub-releases repository.",
   "paths": [
-    "showcase/showcase.json",
-    "showcase/benchmarks.json",
+    "showcase/assets/logo.png",
     "showcase/assets/icon.png",
     "showcase/assets/hero.png",
     "showcase/assets/architecture.svg",
     "showcase/README.template.md"
   ],
-  "generated": [
-    "README.md"
-  ],
+  "generated": ["README.md"],
+  "output": {
+    "outputPaths": ["README.md", "assets/**"],
+    "requiredPaths": ["README.md", "assets/architecture.svg", "assets/logo.png"]
+  },
   "neverExport": [
     "src/**",
     "src-tauri/**",
@@ -20,6 +21,8 @@
     "docs/**",
     ".github/**",
     "package.json",
-    "package-lock.json"
+    "package-lock.json",
+    "showcase/showcase.json",
+    "showcase/benchmarks.json"
   ]
 }
