@@ -109,7 +109,7 @@ jobs:
         run: |
           node scripts/export-showcase-bundle.mjs --version "${{ inputs.version }}"
 
-      - name: Create the public mirror release
+      - name: Create or update the public mirror release
         shell: pwsh
         env:
           GH_TOKEN: ${{ secrets.RELEASE_MIRROR_TOKEN }}
@@ -119,25 +119,28 @@ jobs:
             throw "RELEASE_MIRROR_TOKEN is not set; the mirror cannot be written to."
           }
           $tag = "${{ steps.release.outputs.tag }}"
-
-          gh release view $tag --repo $env:MIRROR_REPO *> $null
-          if ($LASTEXITCODE -eq 0) {
-            throw "Release $tag already exists in $env:MIRROR_REPO; refusing to overwrite it."
-          }
-
           $notesPath = "docs/releases/$tag.md"
           if (-not (Test-Path -LiteralPath $notesPath -PathType Leaf)) {
             throw "Missing release notes: $notesPath"
           }
 
           $assets = @(Get-ChildItem mirror-assets -File | ForEach-Object FullName)
-          gh release create $tag @assets `
-            --repo $env:MIRROR_REPO `
-            --title "Meowcal Sub $tag" `
-            --notes-file $notesPath `
-            --latest
-          if ($LASTEXITCODE -ne 0) {
-            throw "Failed to publish $tag to $env:MIRROR_REPO."
+          gh release view $tag --repo $env:MIRROR_REPO *> $null
+          if ($LASTEXITCODE -eq 0) {
+            Write-Host "Release $tag already exists on mirror; updating assets and notes."
+            gh release upload $tag @assets --repo $env:MIRROR_REPO --clobber
+            if ($LASTEXITCODE -ne 0) { throw "Failed to upload assets for $tag." }
+            gh release edit $tag --repo $env:MIRROR_REPO --notes-file $notesPath --latest
+            if ($LASTEXITCODE -ne 0) { throw "Failed to update release notes for $tag." }
+          } else {
+            gh release create $tag @assets `
+              --repo $env:MIRROR_REPO `
+              --title "Meowcal Sub $tag" `
+              --notes-file $notesPath `
+              --latest
+            if ($LASTEXITCODE -ne 0) {
+              throw "Failed to publish $tag to $env:MIRROR_REPO."
+            }
           }
 
       - name: Publish showcase files to mirror main branch
