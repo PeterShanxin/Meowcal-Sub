@@ -33,10 +33,10 @@ you want to mirror CI exactly, run the per-architecture form CI uses:
 
 On an x64 machine the `aarch64` lines will refuse to run, and that refusal is
 correct: Windows x64 emulation runs one way only, so an x64 host cannot execute
-ARM64 test binaries. A same-repo pull request from `PeterShanxin` that he also
-triggered still gets both architectures from CI. A fork pull request, a
-collaborator pull request, a collaborator push onto an owner PR, and Dependabot
-do not: those jobs never schedule on this host.
+ARM64 test binaries. A same-repo pull request from `PeterShanxin` or
+`ianmeowmeow` that they also triggered still gets both architectures from CI.
+A fork pull request, Dependabot, and any other login do not: those jobs never
+schedule on this host.
 
 When no runner is online, a trusted job **queues**. It is not lost and it is not
 failing. GitHub cancels a job that stays queued for 24 hours.
@@ -48,35 +48,34 @@ for this purpose**. Approval to contribute code is not approval to attach a
 runner.
 
 The reason is narrow and worth stating plainly: only a GitHub actor of
-`PeterShanxin` may run work on this host, including `push` to `main`,
-`workflow_dispatch`, `workflow_call`, and a same-repo pull request that is also
-authored by `PeterShanxin`. Write access is not host trust. PR author alone is
-not enough: a collaborator can push onto an already-open owner PR and
-`user.login` stays `PeterShanxin`. Approval to contribute code, including
-collaborator write access, is not approval to run code on this machine or to
-dispatch packaging that holds the updater signing key. A runner is privileged
-infrastructure, closer to a deploy key than to a build cache.
+`PeterShanxin` or `ianmeowmeow` may run work on this host, including `push` to
+`main`, `workflow_dispatch`, `workflow_call`, and a same-repo pull request
+that is also authored by one of those two. Host trust is those named logins,
+not write access in general. PR author alone is not enough: another login can
+push onto an already-open trusted PR and `user.login` stays the original
+author. Forks, Dependabot, and any other login are excluded. A runner is
+privileged infrastructure, closer to a deploy key than to a build cache.
 
 ### Public is allowed only because untrusted pull requests never land here
 
 These runners may stay attached after the repository is public **only because**
-every self-hosted job requires `github.actor == 'PeterShanxin'` (and excludes
-`dependabot[bot]`) before dispatch. That covers `push`, `pull_request`,
-`workflow_dispatch`, and `workflow_call`. A `pull_request` must also have
-`head.repo.full_name` equal to `github.repository` and `user.login` equal to
-`PeterShanxin`. GitHub evaluates that job-level `if:` before dispatch, so a
-fork PR, a collaborator PR, a collaborator push onto an owner PR, a
-collaborator `workflow_dispatch` of packaging, and Dependabot are never queued
-onto the owner machine. Workspace reuse (`clean: false`) is acceptable on that
-path because that untrusted code never runs.
+every self-hosted job requires `github.actor` to be `PeterShanxin` or
+`ianmeowmeow` (and excludes `dependabot[bot]`) before dispatch. That covers
+`push`, `pull_request`, `workflow_dispatch`, and `workflow_call`. A
+`pull_request` must also have `head.repo.full_name` equal to
+`github.repository` and `user.login` equal to `PeterShanxin` or `ianmeowmeow`.
+GitHub evaluates that job-level `if:` before dispatch, so a fork PR,
+Dependabot, and any other login are never queued onto the owner machine.
+Workspace reuse (`clean: false`) is acceptable on that path because that
+untrusted code never runs.
 
 That filter is local to **these** workflow files. A pull request can still add a
 **new** workflow that names these runner labels. Before the repository is made
 public, set Actions → **Require approval for all outside collaborators** so a
 fork's new workflow cannot run until a maintainer approves it. Do not treat
-that setting as covering write collaborators; they are still not host-trusted,
-and these job `if:` checks are what keep their PRs and dispatches off the
-runners and off `RELEASE_MIRROR_TOKEN`.
+that setting as covering anyone outside those two logins; they are still not
+host-trusted, and these job `if:` checks plus fail-closed steps are what keep
+forks and other logins off the runners and off `RELEASE_MIRROR_TOKEN`.
 
 **Never attach these runners to any other public repository.** Do not register
 them at organization or enterprise scope, where another repository could
@@ -372,9 +371,8 @@ Recommended, in rough order of value:
 - Be aware of what the on-demand foreground model costs here: the runner inherits
   the interactive account that started it, so anything that account can reach, an
   owner pull request's build scripts can reach too, for as long as the runner is
-  running. Fork PRs, collaborator PRs, collaborator pushes onto an owner PR,
-  and Dependabot never reach this host; see [public is allowed only because
-  untrusted pull requests never land
+  running. Fork PRs, Dependabot, and any other login never reach this host; see
+  [public is allowed only because untrusted pull requests never land
   here](#public-is-allowed-only-because-untrusted-pull-requests-never-land-here).
   Starting it only when work needs it and stopping it afterwards is what bounds
   that window, which is a reason to follow [the operating
@@ -403,8 +401,7 @@ CI checks out with `clean: false`. The runner workspace persists between runs, a
 a clean checkout would run `git clean -ffdx` and delete `src-tauri/target` and
 `node_modules`, forcing a cold Rust rebuild every run. Tracked files are still
 force-checked-out; only ignored build output survives. That reuse is acceptable
-because fork PRs, collaborator PRs, collaborator pushes onto an owner PR, and
-Dependabot never run on this host.
+because fork PRs, Dependabot, and any other login never run on this host.
 
 Packaging keeps the default clean checkout. A release build must not reuse
 incremental artifacts, and the extra minutes are local compute.
@@ -523,10 +520,11 @@ Four jobs remain on `ubuntu-latest`:
 `RELEASE_MIRROR_TOKEN` can publish to the endpoint every installed copy checks
 for updates. Keeping the job that holds it on an ephemeral hosted runner keeps it
 off a long-lived machine that also executes contributor pull request code.
-Write access is still not enough to run it: `publish`, `validate`, and
-`draft-release` require `github.actor == 'PeterShanxin'`, the same gate as the
-self-hosted packager. The Change Contract job is the exception: it must run on
-every pull request so a misnamed commit is reported without owner dispatch.
+Write access is still not enough for any other login: `publish`, `validate`, and
+`draft-release` require `github.actor` to be `PeterShanxin` or `ianmeowmeow`,
+the same gate as the self-hosted packager. The Change Contract job is the
+exception: it must run on every pull request so a misnamed commit is reported
+without a trusted-actor dispatch.
 Moving the token-holding jobs to the self-hosted host would save about a minute
 per release and would put the most dangerous credential in the system on the
 least ephemeral host in it.

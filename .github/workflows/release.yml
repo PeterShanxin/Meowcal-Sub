@@ -1,9 +1,9 @@
 name: Prepare Draft Release
 
-# Write access is not host trust. workflow_dispatch from a collaborator must
-# not reserve tags, call the self-hosted packager, or create a draft release.
-# Every job requires github.actor == 'PeterShanxin'. The package jobs call
-# package.yml, which repeats that check on the self-hosted host.
+# Host trust is PeterShanxin and ianmeowmeow. workflow_dispatch from any other
+# login must not reserve tags, call the self-hosted packager, or create a draft
+# release. Every job requires that actor allowlist. The package jobs call
+# package.yml, which repeats the check on the self-hosted host.
 
 on:
   workflow_dispatch:
@@ -27,7 +27,7 @@ jobs:
   validate:
     name: Validate release contract
     if: >-
-      github.actor == 'PeterShanxin' &&
+      (github.actor == 'PeterShanxin' || github.actor == 'ianmeowmeow') &&
       github.actor != 'dependabot[bot]'
     # Stays GitHub-hosted on purpose. This job is Linux, bills at 1x, runs in
     # about a minute, and holds `contents: write` to reserve the release tag.
@@ -40,6 +40,13 @@ jobs:
     outputs:
       version: ${{ steps.version.outputs.version }}
     steps:
+      - name: Require a trusted actor
+        shell: pwsh
+        run: |
+          $trusted = @('PeterShanxin', 'ianmeowmeow')
+          if ($trusted -notcontains $env:GITHUB_ACTOR) {
+            throw "Privileged job refused actor '$($env:GITHUB_ACTOR)'."
+          }
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
@@ -113,7 +120,7 @@ jobs:
   package-x64:
     name: Package x64
     if: >-
-      github.actor == 'PeterShanxin' &&
+      (github.actor == 'PeterShanxin' || github.actor == 'ianmeowmeow') &&
       github.actor != 'dependabot[bot]'
     needs: validate
     uses: ./.github/workflows/package.yml
@@ -128,7 +135,7 @@ jobs:
   package-arm64:
     name: Package ARM64
     if: >-
-      github.actor == 'PeterShanxin' &&
+      (github.actor == 'PeterShanxin' || github.actor == 'ianmeowmeow') &&
       github.actor != 'dependabot[bot]'
     needs: validate
     uses: ./.github/workflows/package.yml
@@ -141,7 +148,7 @@ jobs:
   draft-release:
     name: Create draft release
     if: >-
-      github.actor == 'PeterShanxin' &&
+      (github.actor == 'PeterShanxin' || github.actor == 'ianmeowmeow') &&
       github.actor != 'dependabot[bot]'
     needs:
       - validate
@@ -158,6 +165,13 @@ jobs:
       # points at the public mirror, which `publish-update.yml` fills.
       UPDATE_MIRROR_REPO: PeterShanxin/Meowcal-Sub-releases
     steps:
+      - name: Require a trusted actor
+        shell: pwsh
+        run: |
+          $trusted = @('PeterShanxin', 'ianmeowmeow')
+          if ($trusted -notcontains $env:GITHUB_ACTOR) {
+            throw "Privileged job refused actor '$($env:GITHUB_ACTOR)'."
+          }
       - uses: actions/checkout@v4
 
       - uses: actions/setup-node@v4

@@ -14,9 +14,10 @@ name: Publish Update
 # for every installed copy - it is deliberately separate from packaging, and
 # deliberately manual, so it happens only after the release's manual gate.
 #
-# Write access is not host trust. This job holds RELEASE_MIRROR_TOKEN. A
-# collaborator who can click workflow_dispatch must not run it. GitHub
-# evaluates `if:` before the job starts.
+# Host trust is PeterShanxin and ianmeowmeow. This job holds
+# RELEASE_MIRROR_TOKEN. Forks, Dependabot, and any other login who can click
+# workflow_dispatch must not run it. GitHub evaluates `if:` before the job
+# starts. A fail-closed step repeats the allowlist before checkout.
 
 on:
   workflow_dispatch:
@@ -36,10 +37,17 @@ jobs:
   publish:
     name: Publish to the public mirror
     if: >-
-      github.actor == 'PeterShanxin' &&
+      (github.actor == 'PeterShanxin' || github.actor == 'ianmeowmeow') &&
       github.actor != 'dependabot[bot]'
     runs-on: ubuntu-latest
     steps:
+      - name: Require a trusted actor
+        shell: pwsh
+        run: |
+          $trusted = @('PeterShanxin', 'ianmeowmeow')
+          if ($trusted -notcontains $env:GITHUB_ACTOR) {
+            throw "Privileged job refused actor '$($env:GITHUB_ACTOR)'."
+          }
       - uses: actions/checkout@v4
 
       - uses: actions/setup-node@v4

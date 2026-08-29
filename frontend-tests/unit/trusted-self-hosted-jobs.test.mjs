@@ -7,8 +7,11 @@ import { foldRunsOnValue } from "../../scripts/workflow-runner-policy.mjs";
 
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 
-const OWNER_ACTOR = "github.actor == 'PeterShanxin'";
+const TRUSTED_ACTOR_IF = "(github.actor == 'PeterShanxin' || github.actor == 'ianmeowmeow')";
+const TRUSTED_PR_AUTHOR_IF =
+  "(github.event.pull_request.user.login == 'PeterShanxin' || github.event.pull_request.user.login == 'ianmeowmeow')";
 const NOT_DEPENDABOT = "github.actor != 'dependabot[bot]'";
+const SAME_REPO = "github.event.pull_request.head.repo.full_name == github.repository";
 
 function readWorkflow(name) {
   return readFileSync(path.join(repositoryRoot, ".github/workflows", name), "utf8");
@@ -28,14 +31,28 @@ function jobRunsOn(job) {
   return null;
 }
 
-function expectOwnerActorGate(job, label) {
-  const text = jobText(job);
-  expect(text, `${label} missing owner actor`).toContain(OWNER_ACTOR);
+function isReusableCaller(job) {
+  return job.lines.some((line) => /^\s*uses:\s*\.\//.test(line));
+}
+
+function expectTrustedActorIf(job, label) {
+  const text = jobText(job).replace(/\s+/g, " ");
+  expect(text, `${label} missing trusted-actor if`).toContain(TRUSTED_ACTOR_IF);
   expect(text, `${label} missing Dependabot exclusion`).toContain(NOT_DEPENDABOT);
 }
 
+function expectFailClosedStep(job, label) {
+  const text = jobText(job);
+  expect(text, `${label} missing fail-closed step`).toContain("Require a trusted actor");
+  expect(text, `${label} fail-closed missing PeterShanxin`).toContain("PeterShanxin");
+  expect(text, `${label} fail-closed missing ianmeowmeow`).toContain("ianmeowmeow");
+  expect(text, `${label} fail-closed missing actor refusal`).toContain(
+    "Privileged job refused actor",
+  );
+}
+
 describe("self-hosted CI jobs stay off untrusted pull requests", () => {
-  it("gives every test.yml job the owner-only if and a credential-free checkout", () => {
+  it("gives every test.yml job the trusted-actor if, fork check, and a credential-free checkout", () => {
     const contents = readWorkflow("test.yml");
     expect(contents).toMatch(/^permissions:\n {2}contents: read$/m);
     expect(contents).toMatch(/^ {2}pull_request:$/m);
@@ -45,24 +62,24 @@ describe("self-hosted CI jobs stay off untrusted pull requests", () => {
     expect(jobs.map((job) => job.name)).toEqual(["lint", "test", "frontend"]);
 
     for (const job of jobs) {
-      const text = jobText(job);
-      expectOwnerActorGate(job, job.name);
+      const text = jobText(job).replace(/\s+/g, " ");
+      expectTrustedActorIf(job, job.name);
+      expectFailClosedStep(job, job.name);
       expect(text, job.name).toContain("github.event_name == 'push'");
-      expect(text, job.name).toContain(
-        "github.event.pull_request.head.repo.full_name == github.repository",
-      );
-      expect(text, job.name).toContain("github.event.pull_request.user.login == 'PeterShanxin'");
-      expect(text, job.name).toContain("persist-credentials: false");
-      expect(text, job.name).toContain("clean: false");
+      expect(text, job.name).toContain(SAME_REPO);
+      expect(text, job.name).toContain(TRUSTED_PR_AUTHOR_IF);
+      expect(text, job.name).toContain("Privileged job refused fork head");
+      expect(jobText(job), job.name).toContain("persist-credentials: false");
+      expect(jobText(job), job.name).toContain("clean: false");
     }
   });
 
-  it("requires the owner actor on push, not only on pull_request", () => {
+  it("requires the trusted actor on push, not only on pull_request", () => {
     const contents = readWorkflow("test.yml");
     for (const job of splitWorkflowJobs(contents)) {
       const text = jobText(job).replace(/\s+/g, " ");
       expect(text, job.name).toMatch(
-        /github\.actor == 'PeterShanxin' && github\.actor != 'dependabot\[bot\]' && \(github\.event_name == 'push'/,
+        /\(github\.actor == 'PeterShanxin' \|\| github\.actor == 'ianmeowmeow'\) && github\.actor != 'dependabot\[bot\]' && \(github\.event_name == 'push'/,
       );
     }
   });
@@ -75,15 +92,16 @@ describe("self-hosted CI jobs stay off untrusted pull requests", () => {
   });
 });
 
-describe("write access is not enough to run privileged jobs", () => {
-  it("gates every self-hosted job on the owner actor", () => {
+describe("host trust is PeterShanxin and ianmeowmeow only", () => {
+  it("gates every self-hosted job on both trusted actors", () => {
     const selfHosted = [];
     for (const name of ["test.yml", "package.yml", "release.yml", "publish-update.yml"]) {
       for (const job of splitWorkflowJobs(readWorkflow(name))) {
         const runsOn = jobRunsOn(job);
         if (isSelfHostedRunsOn(runsOn)) {
           selfHosted.push(`${name}:${job.name}`);
-          expectOwnerActorGate(job, `${name}:${job.name}`);
+          expectTrustedActorIf(job, `${name}:${job.name}`);
+          expectFailClosedStep(job, `${name}:${job.name}`);
         }
       }
     }
@@ -95,7 +113,7 @@ describe("write access is not enough to run privileged jobs", () => {
     ]);
   });
 
-  it("gates packaging, release, and publish-update jobs on the owner actor", () => {
+  it("gates packaging, release, and publish-update jobs on both trusted actors", () => {
     const expected = {
       "package.yml": ["package"],
       "release.yml": ["validate", "package-x64", "package-arm64", "draft-release"],
@@ -108,7 +126,10 @@ describe("write access is not enough to run privileged jobs", () => {
         name,
       ).toEqual(jobNames);
       for (const job of jobs) {
-        expectOwnerActorGate(job, `${name}:${job.name}`);
+        expectTrustedActorIf(job, `${name}:${job.name}`);
+        if (!isReusableCaller(job)) {
+          expectFailClosedStep(job, `${name}:${job.name}`);
+        }
       }
     }
   });

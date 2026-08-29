@@ -173,14 +173,13 @@ DPI/window behavior.
   selected by the custom labels `meowcal-ci`, `meowcal-package-x64`, and
   `meowcal-package-arm64`. `docs/SELF_HOSTED_RUNNERS.md` is the contract.
 - Self-hosted CI and packaging jobs, and the hosted publish-update job that
-  holds `RELEASE_MIRROR_TOKEN`, run only when `github.actor` is `PeterShanxin`.
-  That includes `push`, `pull_request`, `workflow_dispatch`, and
-  `workflow_call`. Write access is not host trust. A `pull_request` must also
-  be same-repo and authored by `PeterShanxin`. Fork PRs, collaborator PRs,
-  collaborator pushes onto an owner PR, collaborator workflow dispatches, and
-  Dependabot must not schedule those jobs. Do not drop the `pull_request`
-  trigger: that would deadlock required Windows checks on the owner's own pull
-  requests.
+  holds `RELEASE_MIRROR_TOKEN`, run only when `github.actor` is `PeterShanxin`
+  or `ianmeowmeow`. That includes `push`, `pull_request`, `workflow_dispatch`,
+  and `workflow_call`. Host trust is those two logins, not write access in
+  general. A `pull_request` must also be same-repo and authored by one of those
+  two. Forks, Dependabot, and any other login must not schedule those jobs. Do
+  not drop the `pull_request` trigger: that would deadlock required Windows
+  checks on trusted same-repo pull requests.
 - No workflow may name a GitHub-hosted **Windows** runner, directly or through a
   conditional, a matrix value, or a default. When no runner is online, jobs queue.
   That is the designed behavior; returning to hosted runners is a reviewed

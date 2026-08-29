@@ -154,14 +154,13 @@ treat this repository going public as completing that gate.
 ## Continuous integration
 
 Windows lint, test, frontend, and packaging jobs run on the owner's
-self-hosted runners only when the GitHub actor is `PeterShanxin`. That includes
-pushes to `main` and pull requests whose head repository is this one and whose
-author is also `PeterShanxin`. Write access is not host trust. A fork PR, a
-collaborator PR, a collaborator push onto an owner PR, a collaborator
-`workflow_dispatch` of packaging or publish-update, or Dependabot does **not**
-schedule those jobs. Those pull requests still get the hosted Linux **Change
-Contract** check. Windows CI for them is not provided until a later
-hosted-runner stage.
+self-hosted runners only when the GitHub actor is `PeterShanxin` or
+`ianmeowmeow`. That includes pushes to `main` and pull requests whose head
+repository is this one and whose author is also one of those two. Host trust is
+those named logins, not write access in general. A fork PR, Dependabot, or any
+other login does **not** schedule those jobs. Those pull requests still get the
+hosted Linux **Change Contract** check. Windows CI for them is not provided
+until a later hosted-runner stage.
 
 Do **not** register your personal computer as a runner. A runner executes
 repository code directly on the host, so attaching one is a decision the
@@ -247,9 +246,9 @@ mechanical parts in the **Change Contract** check.
 
 `main` takes changes only through a pull request, with `Lint & Format`, `Tests`,
 `Frontend & Browser`, and `Change Contract` green and every review conversation
-resolved. Fork PRs, collaborator PRs, collaborator pushes onto an owner PR,
-and Dependabot skip the three Windows jobs by design; those required checks are
-for the owner's own same-repo runs and for pushes to `main`. Required approvals are zero
+resolved. Fork PRs, Dependabot, and any other login skip the three Windows
+jobs by design; those required checks are for same-repo runs by `PeterShanxin`
+or `ianmeowmeow` and for their pushes to `main`. Required approvals are zero
 while this repository is effectively solo-maintained; the contract says when
 that changes and who may bypass a rule to recover.
 
