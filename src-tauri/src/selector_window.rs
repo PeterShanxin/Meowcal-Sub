@@ -170,7 +170,7 @@ fn encode_snapshot(
     // Convert BGRA -> RGBA (swap red/blue channels).
     // Our capture backends return BGRA to match Windows APIs.
     let mut rgba = capture.data;
-    for px in rgba.chunks_exact_mut(4) {
+    for px in rgba.as_chunks_mut::<4>().0 {
         px.swap(0, 2);
     }
 
