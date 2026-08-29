@@ -33,9 +33,10 @@ you want to mirror CI exactly, run the per-architecture form CI uses:
 
 On an x64 machine the `aarch64` lines will refuse to run, and that refusal is
 correct: Windows x64 emulation runs one way only, so an x64 host cannot execute
-ARM64 test binaries. Your pull request still gets both architectures from CI.
+ARM64 test binaries. A same-repo pull request still gets both architectures
+from CI. A fork pull request does not: those jobs never schedule on this host.
 
-When no runner is online, your job **queues**. It is not lost and it is not
+When no runner is online, a trusted job **queues**. It is not lost and it is not
 failing. GitHub cancels a job that stays queued for 24 hours.
 
 ## Who may attach a runner
@@ -44,24 +45,24 @@ Only the repository owner, or a maintainer the owner has **explicitly approved
 for this purpose**. Approval to contribute code is not approval to attach a
 runner.
 
-The reason is narrow and worth stating plainly: anyone who can open a pull
-request against this repository can cause arbitrary code to execute on every
-attached runner. Collaborator trust and host trust are the same trust. A runner
-is privileged infrastructure, closer to a deploy key than to a build cache.
+The reason is narrow and worth stating plainly: a same-repo pull request or a
+push to `main` still executes on this host. Collaborator write access and host
+trust remain the same trust. A runner is privileged infrastructure, closer to a
+deploy key than to a build cache.
 
-### Never attach these runners to a public repository
+### Public is allowed only because fork pull requests never land here
 
-This design depends on the repository being **private**, so that only invited
-collaborators can open pull requests. There is no anonymous fork-pull-request
-path onto the host today, and that is the precondition for the whole
-arrangement.
+These runners may stay attached after the repository is public **only because**
+`.github/workflows/test.yml` skips every self-hosted job unless the event is a
+`push` or a pull request whose `head.repo.full_name` equals `github.repository`.
+GitHub evaluates that job-level `if:` before dispatch, so a fork / untrusted
+pull request is never queued onto the owner machine. Workspace reuse
+(`clean: false`) is acceptable on that path because untrusted code never runs.
 
-If this repository is ever made public, **remove the runners first**. A public
-repository accepts pull requests from anyone, GitHub will happily run them on a
-self-hosted runner, and the result is a stranger executing code on a maintainer's
-machine. The same applies to attaching these runners to any other repository, or
-registering them at organization scope where another repository could schedule
-work on them. Register at **repository scope only**.
+That filter is local to this repository's workflows. **Never attach these
+runners to any other public repository.** Do not register them at organization
+or enterprise scope, where another repository could schedule work on them.
+Register at **repository scope only**.
 
 ## Operating model: on-demand foreground
 
@@ -240,12 +241,13 @@ Two things worth knowing before you judge whether it is working:
   that line appears either way. The real signal is `Found action archive '<file>'
   in cache directory '<dir>'` in `<runner>\_diag\Worker_*.log`.
 - **The cache directory is written by the owner's tooling and read by every
-  job.** Every job on this runner executes pull request code as the account that
-  started the runner, so a job could write there. That is a property of the
-  on-demand foreground model, not something this cache introduces; it is one more
-  reason to start the runner only when work needs it. For the same reason, do not
-  point a second repository's runner at this directory — sharing it would widen
-  the set of unreviewed code that reads it, to save a few megabytes.
+  job.** Every job on this runner executes trusted same-repo or `main` code as
+  the account that started the runner, so a job could write there. That is a
+  property of the on-demand foreground model, not something this cache
+  introduces; it is one more reason to start the runner only when work needs it.
+  For the same reason, do not point a second repository's runner at this
+  directory — sharing it would widen the set of code that reads it, to save a
+  few megabytes.
 
 ## Runner labels
 
@@ -351,9 +353,12 @@ Recommended, in rough order of value:
 
 - Be aware of what the on-demand foreground model costs here: the runner inherits
   the interactive account that started it, so anything that account can reach, a
-  pull request's build scripts can reach too, for as long as the runner is
-  running. Starting it only when work needs it and stopping it afterwards is what
-  bounds that window, which is a reason to follow [the operating
+  trusted pull request's build scripts can reach too, for as long as the runner
+  is running. Fork pull requests never reach this host; see
+  [public is allowed only because fork pull requests never land
+  here](#public-is-allowed-only-because-fork-pull-requests-never-land-here).
+  Starting it only when work needs it and stopping it afterwards is what bounds
+  that window, which is a reason to follow [the operating
   model](#operating-model-on-demand-foreground) rather than leave it running.
 - A **dedicated local account** narrows that reach further, and is the stronger
   isolation if the host holds anything sensitive. It requires a service, so it is
@@ -378,7 +383,8 @@ Secret scoping is enforced in the workflows and should stay that way:
 CI checks out with `clean: false`. The runner workspace persists between runs, and
 a clean checkout would run `git clean -ffdx` and delete `src-tauri/target` and
 `node_modules`, forcing a cold Rust rebuild every run. Tracked files are still
-force-checked-out; only ignored build output survives.
+force-checked-out; only ignored build output survives. That reuse is acceptable
+because untrusted fork pull requests never run on this host.
 
 Packaging keeps the default clean checkout. A release build must not reuse
 incremental artifacts, and the extra minutes are local compute.

@@ -85,6 +85,8 @@ jobs:
       # never reuses incremental artifacts or inherits a stale bundle. The extra
       # cold-build minutes are local compute and cost nothing.
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       # Node, Rust, both Windows target triples, and the MSVC cross-linker are
       # host properties installed and checked by

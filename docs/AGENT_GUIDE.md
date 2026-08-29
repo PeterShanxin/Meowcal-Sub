@@ -172,6 +172,11 @@ DPI/window behavior.
 - CI and Windows packaging run on the owner's self-hosted Windows runners,
   selected by the custom labels `meowcal-ci`, `meowcal-package-x64`, and
   `meowcal-package-arm64`. `docs/SELF_HOSTED_RUNNERS.md` is the contract.
+- Self-hosted CI jobs run only for pushes to `main` and for pull requests whose
+  head repository is this one. Fork / untrusted pull requests must not schedule
+  those jobs; the job-level `if:` in `test.yml` is what keeps them off the
+  owner machine. External pull requests have no Windows CI until a later hosted
+  runner stage.
 - No workflow may name a GitHub-hosted **Windows** runner, directly or through a
   conditional, a matrix value, or a default. When no runner is online, jobs queue.
   That is the designed behavior; returning to hosted runners is a reviewed
@@ -257,6 +262,8 @@ other required manual gates remain outstanding.
 ## Document classes
 
 - `README.md`: current user/developer entry point.
+- `LICENSE`, `CLA.md`, `SECURITY.md`, and `TRADEMARKS.md`: community license
+  (AGPL-3.0-only), contributor grant, vulnerability reporting, and branding.
 - `CONTRIBUTING.md`, this guide, and `docs/CODING_STANDARDS.md`: normative.
 - `docs/CHANGE_CONTRACT.md`: commit, version, and pull request contract.
 - `docs/ARCHITECTURE.md`: current and target module ownership.

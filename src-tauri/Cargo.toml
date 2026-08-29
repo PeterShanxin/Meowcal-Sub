@@ -13,7 +13,7 @@ version = "0.6.9"           # Version number (semantic versioning: major.minor.p
 edition = "2021"            # Rust edition (like ES6 vs ES2020 in JavaScript)
 description = "NPU-accelerated subtitle translation for Copilot+ PCs"
 authors = ["PeterShanxin"]
-license = "MIT"
+license = "AGPL-3.0-only"
 
 # =============================================================================
 # FEATURES

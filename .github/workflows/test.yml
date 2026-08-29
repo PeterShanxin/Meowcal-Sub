@@ -1,10 +1,14 @@
 # CI pipeline for Meowcal-Sub.
 # Runs on every pull request to main and on pushes to main.
 #
-# Every job runs on the owner's self-hosted Windows runners. `meowcal-ci` is a
-# custom label, so these jobs can never match a GitHub-hosted runner: when no
-# runner is online the work queues instead of quietly spending hosted minutes.
-# That queuing is the designed behavior, not an outage.
+# Self-hosted Windows jobs run only for pushes to main and for pull requests
+# whose head repository is this one. GitHub evaluates that `if:` before
+# dispatch, so a fork / untrusted pull request is never queued onto the owner
+# machine. External pull requests have no Windows CI until a later hosted-runner
+# stage; that is intentional. `meowcal-ci` is a custom label, so these jobs can
+# never match a GitHub-hosted runner: when no runner is online the work queues
+# instead of quietly spending hosted minutes. That queuing is the designed
+# behavior, not an outage.
 #
 # See docs/SELF_HOSTED_RUNNERS.md for the host contract and the security model.
 
@@ -24,12 +28,22 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
+permissions:
+  contents: read
+
 env:
   CARGO_TERM_COLOR: always
+
+# Shared by every self-hosted job. Keep this expression in each job's `if:`
+# rather than a reusable workflow: GitHub must see it at dispatch time.
+# github.event_name == 'push' covers post-merge verification on main.
+# github.event.pull_request.head.repo.full_name == github.repository covers
+# same-repo / trusted maintainer pull requests. A fork PR matches neither.
 
 jobs:
   lint:
     name: Lint & Format
+    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
     # ARM64 here is load-bearing rather than descriptive. Windows x64 emulation
     # runs one way only, so only an ARM64 host can build *and execute* both
     # shipped architectures. The crate compiles different code for each - see the
@@ -41,12 +55,14 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 2
+          persist-credentials: false
           # The runner workspace persists between runs. A clean checkout runs
           # `git clean -ffdx`, which would delete src-tauri/target and
           # node_modules and force a cold Rust rebuild every single run. Tracked
           # files are still force-checked-out, so only ignored build output
           # survives. Packaging keeps the default clean checkout, where
-          # reproducibility outranks speed.
+          # reproducibility outranks speed. `clean: false` is acceptable only
+          # because this job never runs untrusted fork code.
           clean: false
 
       # The toolchain is a property of the host, installed and verified by
@@ -63,11 +79,13 @@ jobs:
 
   test:
     name: Tests
+    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: [self-hosted, Windows, ARM64, meowcal-ci]
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 2
+          persist-credentials: false
           clean: false
 
       - name: Test the native ARM64 target
@@ -82,11 +100,13 @@ jobs:
 
   frontend:
     name: Frontend & Browser
+    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: [self-hosted, Windows, ARM64, meowcal-ci]
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 2
+          persist-credentials: false
           clean: false
 
       # Architecture-independent by nature: this stage checks the frontend and
