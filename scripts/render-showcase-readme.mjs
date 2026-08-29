@@ -1,25 +1,25 @@
 #!/usr/bin/env node
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 
-const MIRROR = 'PeterShanxin/Meowcal-Sub-releases';
+const MIRROR = "PeterShanxin/Meowcal-Sub-releases";
 
 function parseArgs(argv) {
-  const args = { version: null, output: 'showcase-out/README.md', assetsDir: 'showcase-out' };
+  const args = { version: null, output: "showcase-out/README.md", assetsDir: "showcase-out" };
   for (let i = 2; i < argv.length; i++) {
-    if (argv[i] === '--version' && argv[i + 1]) args.version = argv[++i];
-    else if (argv[i] === '--output' && argv[i + 1]) args.output = argv[++i];
-    else if (argv[i] === '--assets-dir' && argv[i + 1]) args.assetsDir = argv[++i];
+    if (argv[i] === "--version" && argv[i + 1]) args.version = argv[++i];
+    else if (argv[i] === "--output" && argv[i + 1]) args.output = argv[++i];
+    else if (argv[i] === "--assets-dir" && argv[i + 1]) args.assetsDir = argv[++i];
   }
   return args;
 }
 
 function readJson(path) {
-  return JSON.parse(readFileSync(path, 'utf8'));
+  return JSON.parse(readFileSync(path, "utf8"));
 }
 
 function readVersionFromTauri() {
-  return readJson('src-tauri/tauri.conf.json').version;
+  return readJson("src-tauri/tauri.conf.json").version;
 }
 
 function isPrerelease(version) {
@@ -27,7 +27,7 @@ function isPrerelease(version) {
 }
 
 function releaseLinks(version) {
-  const tag = version.startsWith('v') ? version : `v${version}`;
+  const tag = version.startsWith("v") ? version : `v${version}`;
   const base = `https://github.com/${MIRROR}`;
   const prerelease = isPrerelease(version);
   return {
@@ -41,16 +41,16 @@ function releaseLinks(version) {
 }
 
 function bulletList(items) {
-  return items.map((item) => `- ${item}`).join('\n');
+  return items.map((item) => `- ${item}`).join("\n");
 }
 
 function joinPhrases(items) {
-  return items.join('; ');
+  return items.join("; ");
 }
 
 function renderFeaturesTable(features) {
   const rows = features.map((f) => `| **${f.title}** | ${f.description} |`);
-  return ['| Feature | Description |', '| --- | --- |', ...rows].join('\n');
+  return ["| Feature | Description |", "| --- | --- |", ...rows].join("\n");
 }
 
 function renderBadges(links) {
@@ -60,81 +60,81 @@ function renderBadges(links) {
     '  <img alt="x64 and ARM64" src="https://img.shields.io/badge/arch-x64%20%7C%20ARM64-blue">',
     '  <img alt="On-device AI" src="https://img.shields.io/badge/AI-on--device-22c55e">',
     '  <img alt="Tauri and Rust" src="https://img.shields.io/badge/stack-Tauri%20%2B%20Rust-ffc131">',
-  ].join('\n');
+  ].join("\n");
 }
 
 function optionalImageBlock(assetsDir, filename, width, alt) {
-  if (!existsSync(join(assetsDir, 'assets', filename))) return '';
+  if (!existsSync(join(assetsDir, "assets", filename))) return "";
   return `<p align="center">\n  <img src="assets/${filename}" width="${width}" alt="${alt}">\n</p>\n\n`;
 }
 
 function renderBenchmarks(benchmarks) {
   if (!benchmarks.entries?.length) {
-    return '_No public benchmark summary published yet._';
+    return "_No public benchmark summary published yet._";
   }
 
   const summary =
-    'On Windows ARM64, local translation reached **~660 ms median latency** in our development evaluation, with a hardware-gated GPU path and automatic CPU fallback.';
+    "On Windows ARM64, local translation reached **~660 ms median latency** in our development evaluation, with a hardware-gated GPU path and automatic CPU fallback.";
 
   const lines = [
     summary,
-    '',
-    '<details>',
-    '<summary>Technical benchmark details</summary>',
-    '',
+    "",
+    "<details>",
+    "<summary>Technical benchmark details</summary>",
+    "",
     benchmarks.disclaimer,
-    '',
+    "",
   ];
 
   for (const entry of benchmarks.entries) {
-    lines.push(`### ${entry.title}`, '', `**Environment:** ${entry.environment}`, '');
+    lines.push(`### ${entry.title}`, "", `**Environment:** ${entry.environment}`, "");
     if (entry.metrics?.length) {
-      lines.push('| Metric | Value |', '| --- | --- |');
+      lines.push("| Metric | Value |", "| --- | --- |");
       for (const m of entry.metrics) lines.push(`| ${m.name} | ${m.value} |`);
-      lines.push('');
+      lines.push("");
     }
-    if (entry.context) lines.push(entry.context, '');
-    if (entry.comparison) lines.push(entry.comparison, '');
+    if (entry.context) lines.push(entry.context, "");
+    if (entry.comparison) lines.push(entry.comparison, "");
   }
 
-  lines.push('</details>');
-  return lines.join('\n').trim();
+  lines.push("</details>");
+  return lines.join("\n").trim();
 }
 
 function main() {
   const args = parseArgs(process.argv);
-  const showcase = readJson('showcase/showcase.json');
-  const benchmarks = readJson('showcase/benchmarks.json');
-  const template = readFileSync('showcase/README.template.md', 'utf8');
+  const showcase = readJson("showcase/showcase.json");
+  const benchmarks = readJson("showcase/benchmarks.json");
+  const template = readFileSync("showcase/README.template.md", "utf8");
   const version = args.version ?? readVersionFromTauri();
   const links = releaseLinks(version);
 
   const replacements = {
-    '{{PRODUCT_NAME}}': showcase.product.name,
-    '{{TAGLINE}}': showcase.product.tagline,
-    '{{VERSION}}': version,
-    '{{STATUS}}': showcase.product.status,
-    '{{BADGES_ROW}}': renderBadges(links),
-    '{{DOWNLOAD_URL}}': links.download,
-    '{{RELEASES_URL}}': links.releases,
-    '{{RELEASE_NOTES_URL}}': links.releaseNotes,
-    '{{LOGO_BLOCK}}': optionalImageBlock(args.assetsDir, 'logo.png', 96, 'Meowcal Sub icon'),
-    '{{HERO_BLOCK}}': optionalImageBlock(
+    "{{PRODUCT_NAME}}": showcase.product.name,
+    "{{TAGLINE}}": showcase.product.tagline,
+    "{{VERSION}}": version,
+    "{{STATUS}}": showcase.product.status,
+    "{{BADGES_ROW}}": renderBadges(links),
+    "{{DOWNLOAD_URL}}": links.download,
+    "{{RELEASES_URL}}": links.releases,
+    "{{RELEASE_NOTES_URL}}": links.releaseNotes,
+    "{{LOGO_BLOCK}}": optionalImageBlock(args.assetsDir, "logo.png", 96, "Meowcal Sub icon"),
+    "{{HERO_BLOCK}}": optionalImageBlock(
       args.assetsDir,
-      'hero.png',
+      "hero.png",
       900,
-      'Meowcal Sub translating subtitles over a video',
+      "Meowcal Sub translating subtitles over a video",
     ),
-    '{{FEATURES_TABLE}}': renderFeaturesTable(showcase.features),
-    '{{ENGINEERING_LIST}}': bulletList(showcase.engineering),
-    '{{BENCHMARKS_SECTION}}': renderBenchmarks(benchmarks),
-    '{{PRIVACY_LOCAL}}': joinPhrases(showcase.privacy.local),
-    '{{PRIVACY_NETWORK}}': joinPhrases(showcase.privacy.network),
-    '{{PRIVACY_NOT_SENT}}': joinPhrases(showcase.privacy.notSent),
-    '{{REQUIREMENTS_OS}}': showcase.requirements.os,
-    '{{REQUIREMENTS_DISK}}': showcase.requirements.disk,
-    '{{REQUIREMENTS_NOTES}}': showcase.requirements.notes.map((n) => `- ${n}`).join('\n'),
-    '{{LICENSE_SUMMARY}}': showcase.license.summary,
+    "{{FEATURES_TABLE}}": renderFeaturesTable(showcase.features),
+    "{{ENGINEERING_LIST}}": bulletList(showcase.engineering),
+    "{{BENCHMARKS_SECTION}}": renderBenchmarks(benchmarks),
+    "{{PRIVACY_LOCAL}}": joinPhrases(showcase.privacy.local),
+    "{{PRIVACY_NETWORK}}": joinPhrases(showcase.privacy.network),
+    "{{PRIVACY_NOT_SENT}}": joinPhrases(showcase.privacy.notSent),
+    "{{REQUIREMENTS_OS}}": showcase.requirements.os,
+    "{{REQUIREMENTS_DISK}}": showcase.requirements.disk,
+    "{{REQUIREMENTS_NOTES}}": showcase.requirements.notes.map((n) => `- ${n}`).join("\n"),
+    "{{LICENSE_SUMMARY}}": showcase.license.summary,
   };
 
   let output = template;
@@ -143,7 +143,7 @@ function main() {
   }
 
   mkdirSync(dirname(args.output), { recursive: true });
-  writeFileSync(args.output, output, 'utf8');
+  writeFileSync(args.output, output, "utf8");
   console.log(`Wrote ${args.output} for v${version}`);
 }
 
