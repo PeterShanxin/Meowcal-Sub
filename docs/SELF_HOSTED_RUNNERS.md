@@ -33,8 +33,9 @@ you want to mirror CI exactly, run the per-architecture form CI uses:
 
 On an x64 machine the `aarch64` lines will refuse to run, and that refusal is
 correct: Windows x64 emulation runs one way only, so an x64 host cannot execute
-ARM64 test binaries. A same-repo pull request still gets both architectures
-from CI. A fork pull request does not: those jobs never schedule on this host.
+ARM64 test binaries. A same-repo pull request from `PeterShanxin` still gets
+both architectures from CI. A fork pull request, a collaborator pull request,
+and Dependabot do not: those jobs never schedule on this host.
 
 When no runner is online, a trusted job **queues**. It is not lost and it is not
 failing. GitHub cancels a job that stays queued for 24 hours.
@@ -45,24 +46,34 @@ Only the repository owner, or a maintainer the owner has **explicitly approved
 for this purpose**. Approval to contribute code is not approval to attach a
 runner.
 
-The reason is narrow and worth stating plainly: a same-repo pull request or a
-push to `main` still executes on this host. Collaborator write access and host
-trust remain the same trust. A runner is privileged infrastructure, closer to a
-deploy key than to a build cache.
+The reason is narrow and worth stating plainly: a push to `main`, or a
+same-repo pull request authored by `PeterShanxin`, still executes on this host.
+Write access is not host trust. Approval to contribute code, including
+collaborator write access, is not approval to run code on this machine. A
+runner is privileged infrastructure, closer to a deploy key than to a build
+cache.
 
-### Public is allowed only because fork pull requests never land here
+### Public is allowed only because untrusted pull requests never land here
 
 These runners may stay attached after the repository is public **only because**
-`.github/workflows/test.yml` skips every self-hosted job unless the event is a
-`push` or a pull request whose `head.repo.full_name` equals `github.repository`.
-GitHub evaluates that job-level `if:` before dispatch, so a fork / untrusted
-pull request is never queued onto the owner machine. Workspace reuse
-(`clean: false`) is acceptable on that path because untrusted code never runs.
+`.github/workflows/test.yml` skips every self-hosted job unless the actor is
+not `dependabot[bot]` and the event is a `push`, or a pull request whose
+`head.repo.full_name` equals `github.repository` **and** whose
+`user.login` is `PeterShanxin`. GitHub evaluates that job-level `if:` before
+dispatch, so a fork PR, a collaborator PR, and Dependabot are never queued onto
+the owner machine. Workspace reuse (`clean: false`) is acceptable on that path
+because that untrusted code never runs.
 
-That filter is local to this repository's workflows. **Never attach these
-runners to any other public repository.** Do not register them at organization
-or enterprise scope, where another repository could schedule work on them.
-Register at **repository scope only**.
+That filter is local to **this** workflow file. A pull request can still add a
+**new** workflow that names these runner labels. Before the repository is made
+public, set Actions → **Require approval for all outside collaborators** so a
+fork's new workflow cannot run until a maintainer approves it. Do not treat
+that setting as covering write collaborators; they are still not host-trusted,
+and this job `if:` is what keeps their PRs off `test.yml`.
+
+**Never attach these runners to any other public repository.** Do not register
+them at organization or enterprise scope, where another repository could
+schedule work on them. Register at **repository scope only**.
 
 ## Operating model: on-demand foreground
 
@@ -241,9 +252,9 @@ Two things worth knowing before you judge whether it is working:
   that line appears either way. The real signal is `Found action archive '<file>'
   in cache directory '<dir>'` in `<runner>\_diag\Worker_*.log`.
 - **The cache directory is written by the owner's tooling and read by every
-  job.** Every job on this runner executes trusted same-repo or `main` code as
-  the account that started the runner, so a job could write there. That is a
-  property of the on-demand foreground model, not something this cache
+  job.** Every job on this runner executes owner-authored same-repo or `main`
+  code as the account that started the runner, so a job could write there. That
+  is a property of the on-demand foreground model, not something this cache
   introduces; it is one more reason to start the runner only when work needs it.
   For the same reason, do not point a second repository's runner at this
   directory — sharing it would widen the set of code that reads it, to save a
@@ -352,11 +363,11 @@ workspace inside one could be reached by `git clean -ffdx`.
 Recommended, in rough order of value:
 
 - Be aware of what the on-demand foreground model costs here: the runner inherits
-  the interactive account that started it, so anything that account can reach, a
-  trusted pull request's build scripts can reach too, for as long as the runner
-  is running. Fork pull requests never reach this host; see
-  [public is allowed only because fork pull requests never land
-  here](#public-is-allowed-only-because-fork-pull-requests-never-land-here).
+  the interactive account that started it, so anything that account can reach, an
+  owner pull request's build scripts can reach too, for as long as the runner is
+  running. Fork, collaborator, and Dependabot pull requests never reach this
+  host; see [public is allowed only because untrusted pull requests never land
+  here](#public-is-allowed-only-because-untrusted-pull-requests-never-land-here).
   Starting it only when work needs it and stopping it afterwards is what bounds
   that window, which is a reason to follow [the operating
   model](#operating-model-on-demand-foreground) rather than leave it running.
@@ -384,7 +395,7 @@ CI checks out with `clean: false`. The runner workspace persists between runs, a
 a clean checkout would run `git clean -ffdx` and delete `src-tauri/target` and
 `node_modules`, forcing a cold Rust rebuild every run. Tracked files are still
 force-checked-out; only ignored build output survives. That reuse is acceptable
-because untrusted fork pull requests never run on this host.
+because fork, collaborator, and Dependabot pull requests never run on this host.
 
 Packaging keeps the default clean checkout. A release build must not reuse
 incremental artifacts, and the extra minutes are local compute.

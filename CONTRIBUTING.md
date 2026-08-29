@@ -154,11 +154,12 @@ treat this repository going public as completing that gate.
 ## Continuous integration
 
 Windows lint, test, and frontend jobs run on the owner's self-hosted runners
-only for pushes to `main` and for pull requests whose head repository is this
-one. A pull request from a fork does **not** schedule those jobs: GitHub never
-dispatches that code onto the owner machine. Fork pull requests still get the
-hosted Linux **Change Contract** check. Windows CI for external pull requests
-is not provided until a later hosted-runner stage.
+only for pushes to `main` and for pull requests authored by `PeterShanxin`
+whose head repository is this one. Write access is not host trust. A pull
+request from a fork, from a collaborator, or from Dependabot does **not**
+schedule those jobs: GitHub never dispatches that code onto the owner machine.
+Those pull requests still get the hosted Linux **Change Contract** check.
+Windows CI for them is not provided until a later hosted-runner stage.
 
 Do **not** register your personal computer as a runner. A runner executes
 repository code directly on the host, so attaching one is a decision the
@@ -244,8 +245,9 @@ mechanical parts in the **Change Contract** check.
 
 `main` takes changes only through a pull request, with `Lint & Format`, `Tests`,
 `Frontend & Browser`, and `Change Contract` green and every review conversation
-resolved. Fork pull requests skip the three Windows jobs by design; those
-required checks are for trusted same-repo work. Required approvals are zero
+resolved. Fork, collaborator, and Dependabot pull requests skip the three
+Windows jobs by design; those required checks are for the owner's same-repo
+work and for pushes to `main`. Required approvals are zero
 while this repository is effectively solo-maintained; the contract says when
 that changes and who may bypass a rule to recover.
 
