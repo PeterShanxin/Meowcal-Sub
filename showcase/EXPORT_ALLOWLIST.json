@@ -6,12 +6,13 @@
     "showcase/assets/hero.png",
     "showcase/assets/architecture.svg",
     "showcase/assets/social-preview.svg",
+    "showcase/assets/social-preview.png",
     "showcase/README.template.md"
   ],
   "generated": ["README.md"],
   "output": {
     "outputPaths": ["README.md", "assets/**"],
-    "requiredPaths": ["README.md", "assets/architecture.svg", "assets/logo.png"]
+    "requiredPaths": ["README.md", "assets/architecture.svg", "assets/logo.png", "assets/social-preview.png"]
   },
   "neverExport": [
     "src/**",
