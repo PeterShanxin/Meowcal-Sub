@@ -1,5 +1,10 @@
 name: Prepare Draft Release
 
+# Write access is not host trust. workflow_dispatch from a collaborator must
+# not reserve tags, call the self-hosted packager, or create a draft release.
+# Every job requires github.actor == 'PeterShanxin'. The package jobs call
+# package.yml, which repeats that check on the self-hosted host.
+
 on:
   workflow_dispatch:
     inputs:
@@ -21,6 +26,9 @@ concurrency:
 jobs:
   validate:
     name: Validate release contract
+    if: >-
+      github.actor == 'PeterShanxin' &&
+      github.actor != 'dependabot[bot]'
     # Stays GitHub-hosted on purpose. This job is Linux, bills at 1x, runs in
     # about a minute, and holds `contents: write` to reserve the release tag.
     # Moving it to the self-hosted host would save nothing measurable and would
@@ -104,6 +112,9 @@ jobs:
 
   package-x64:
     name: Package x64
+    if: >-
+      github.actor == 'PeterShanxin' &&
+      github.actor != 'dependabot[bot]'
     needs: validate
     uses: ./.github/workflows/package.yml
     with:
@@ -116,6 +127,9 @@ jobs:
 
   package-arm64:
     name: Package ARM64
+    if: >-
+      github.actor == 'PeterShanxin' &&
+      github.actor != 'dependabot[bot]'
     needs: validate
     uses: ./.github/workflows/package.yml
     with:
@@ -126,6 +140,9 @@ jobs:
 
   draft-release:
     name: Create draft release
+    if: >-
+      github.actor == 'PeterShanxin' &&
+      github.actor != 'dependabot[bot]'
     needs:
       - validate
       - package-x64

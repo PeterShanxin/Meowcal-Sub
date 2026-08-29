@@ -153,14 +153,15 @@ treat this repository going public as completing that gate.
 
 ## Continuous integration
 
-Windows lint, test, and frontend jobs run on the owner's self-hosted runners
-only for pushes to `main` and for pull requests whose head repository is this
-one and whose author and GitHub actor are both `PeterShanxin`. Write access is
-not host trust. A fork PR, a collaborator PR, a collaborator push onto an
-owner PR, or Dependabot does **not** schedule those jobs: GitHub never
-dispatches that code onto the owner machine. Those pull requests still get the
-hosted Linux **Change Contract** check. Windows CI for them is not provided
-until a later hosted-runner stage.
+Windows lint, test, frontend, and packaging jobs run on the owner's
+self-hosted runners only when the GitHub actor is `PeterShanxin`. That includes
+pushes to `main` and pull requests whose head repository is this one and whose
+author is also `PeterShanxin`. Write access is not host trust. A fork PR, a
+collaborator PR, a collaborator push onto an owner PR, a collaborator
+`workflow_dispatch` of packaging or publish-update, or Dependabot does **not**
+schedule those jobs. Those pull requests still get the hosted Linux **Change
+Contract** check. Windows CI for them is not provided until a later
+hosted-runner stage.
 
 Do **not** register your personal computer as a runner. A runner executes
 repository code directly on the host, so attaching one is a decision the

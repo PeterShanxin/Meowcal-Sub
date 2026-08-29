@@ -1,15 +1,15 @@
 # CI pipeline for Meowcal-Sub.
 # Runs on every pull request to main and on pushes to main.
 #
-# Self-hosted Windows jobs run only for pushes to main and for pull requests
-# whose head repository is this one, whose author is PeterShanxin, and whose
-# GitHub actor is PeterShanxin. Write access is not host trust: a collaborator
-# PR, or a collaborator push onto an already-open owner PR, must not land on
-# meowcal-ci. `user.login` is the PR author and does not change when someone
-# else pushes; `github.actor` is who triggered this run. GitHub evaluates that
-# `if:` before dispatch, so fork, collaborator, and Dependabot work is never
-# queued onto the owner machine. Those PRs have no Windows CI until a later
-# hosted-runner stage; that is intentional.
+# Self-hosted Windows jobs run only when github.actor is PeterShanxin.
+# That covers push to main, pull_request, and any later tag trigger. Write
+# access is not host trust: a collaborator must not land on meowcal-ci, even
+# by pushing onto an already-open owner PR or by pushing to main.
+# A pull_request must also be same-repo and authored by PeterShanxin.
+# `user.login` is the PR author and does not change when someone else pushes;
+# `github.actor` is who triggered this run. GitHub evaluates that `if:` before
+# dispatch. Dependabot is excluded explicitly. Those other PRs have no Windows
+# CI until a later hosted-runner stage; that is intentional.
 # `meowcal-ci` is a custom label, so these jobs can never match a GitHub-hosted
 # runner: when no runner is online the work queues instead of quietly spending
 # hosted minutes. That queuing is the designed behavior, not an outage.
@@ -42,8 +42,8 @@ env:
 
 # Shared by every self-hosted job. Keep this expression in each job's `if:`
 # rather than a reusable workflow: GitHub must see it at dispatch time.
-# github.event_name == 'push' covers post-merge verification on main.
-# A pull_request must be same-repo, authored by PeterShanxin, AND triggered by
+# github.actor == 'PeterShanxin' applies to push, pull_request, and any later
+# tag trigger. A pull_request must also be same-repo and authored by
 # PeterShanxin. PR author alone is not enough: a write collaborator can push
 # onto an already-open owner PR and `user.login` stays PeterShanxin.
 # dependabot[bot] is excluded explicitly even though it cannot satisfy the
@@ -53,11 +53,11 @@ jobs:
   lint:
     name: Lint & Format
     if: >-
+      github.actor == 'PeterShanxin' &&
       github.actor != 'dependabot[bot]' &&
       (github.event_name == 'push' ||
       (github.event.pull_request.head.repo.full_name == github.repository &&
-      github.event.pull_request.user.login == 'PeterShanxin' &&
-      github.actor == 'PeterShanxin'))
+      github.event.pull_request.user.login == 'PeterShanxin'))
     # ARM64 here is load-bearing rather than descriptive. Windows x64 emulation
     # runs one way only, so only an ARM64 host can build *and execute* both
     # shipped architectures. The crate compiles different code for each - see the
@@ -95,11 +95,11 @@ jobs:
   test:
     name: Tests
     if: >-
+      github.actor == 'PeterShanxin' &&
       github.actor != 'dependabot[bot]' &&
       (github.event_name == 'push' ||
       (github.event.pull_request.head.repo.full_name == github.repository &&
-      github.event.pull_request.user.login == 'PeterShanxin' &&
-      github.actor == 'PeterShanxin'))
+      github.event.pull_request.user.login == 'PeterShanxin'))
     runs-on: [self-hosted, Windows, ARM64, meowcal-ci]
     steps:
       - uses: actions/checkout@v4
@@ -121,11 +121,11 @@ jobs:
   frontend:
     name: Frontend & Browser
     if: >-
+      github.actor == 'PeterShanxin' &&
       github.actor != 'dependabot[bot]' &&
       (github.event_name == 'push' ||
       (github.event.pull_request.head.repo.full_name == github.repository &&
-      github.event.pull_request.user.login == 'PeterShanxin' &&
-      github.actor == 'PeterShanxin'))
+      github.event.pull_request.user.login == 'PeterShanxin'))
     runs-on: [self-hosted, Windows, ARM64, meowcal-ci]
     steps:
       - uses: actions/checkout@v4

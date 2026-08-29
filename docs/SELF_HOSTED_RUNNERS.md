@@ -47,33 +47,36 @@ Only the repository owner, or a maintainer the owner has **explicitly approved
 for this purpose**. Approval to contribute code is not approval to attach a
 runner.
 
-The reason is narrow and worth stating plainly: a push to `main`, or a
-same-repo pull request whose author **and** GitHub actor are both
-`PeterShanxin`, still executes on this host. Write access is not host trust.
-PR author alone is not enough: a collaborator can push onto an already-open
-owner PR and `user.login` stays `PeterShanxin`. Approval to contribute code,
-including collaborator write access, is not approval to run code on this
-machine. A runner is privileged infrastructure, closer to a deploy key than to
-a build cache.
+The reason is narrow and worth stating plainly: only a GitHub actor of
+`PeterShanxin` may run work on this host, including `push` to `main`,
+`workflow_dispatch`, `workflow_call`, and a same-repo pull request that is also
+authored by `PeterShanxin`. Write access is not host trust. PR author alone is
+not enough: a collaborator can push onto an already-open owner PR and
+`user.login` stays `PeterShanxin`. Approval to contribute code, including
+collaborator write access, is not approval to run code on this machine or to
+dispatch packaging that holds the updater signing key. A runner is privileged
+infrastructure, closer to a deploy key than to a build cache.
 
 ### Public is allowed only because untrusted pull requests never land here
 
 These runners may stay attached after the repository is public **only because**
-`.github/workflows/test.yml` skips every self-hosted job unless the actor is
-not `dependabot[bot]` and the event is a `push`, or a pull request whose
-`head.repo.full_name` equals `github.repository`, whose `user.login` is
-`PeterShanxin`, **and** whose `github.actor` is `PeterShanxin`. GitHub
-evaluates that job-level `if:` before dispatch, so a fork PR, a collaborator
-PR, a collaborator push onto an owner PR, and Dependabot are never queued onto
-the owner machine. Workspace reuse (`clean: false`) is acceptable on that path
-because that untrusted code never runs.
+every self-hosted job requires `github.actor == 'PeterShanxin'` (and excludes
+`dependabot[bot]`) before dispatch. That covers `push`, `pull_request`,
+`workflow_dispatch`, and `workflow_call`. A `pull_request` must also have
+`head.repo.full_name` equal to `github.repository` and `user.login` equal to
+`PeterShanxin`. GitHub evaluates that job-level `if:` before dispatch, so a
+fork PR, a collaborator PR, a collaborator push onto an owner PR, a
+collaborator `workflow_dispatch` of packaging, and Dependabot are never queued
+onto the owner machine. Workspace reuse (`clean: false`) is acceptable on that
+path because that untrusted code never runs.
 
-That filter is local to **this** workflow file. A pull request can still add a
+That filter is local to **these** workflow files. A pull request can still add a
 **new** workflow that names these runner labels. Before the repository is made
 public, set Actions → **Require approval for all outside collaborators** so a
 fork's new workflow cannot run until a maintainer approves it. Do not treat
 that setting as covering write collaborators; they are still not host-trusted,
-and this job `if:` is what keeps their PRs off `test.yml`.
+and these job `if:` checks are what keep their PRs and dispatches off the
+runners and off `RELEASE_MIRROR_TOKEN`.
 
 **Never attach these runners to any other public repository.** Do not register
 them at organization or enterprise scope, where another repository could
@@ -520,8 +523,13 @@ Four jobs remain on `ubuntu-latest`:
 `RELEASE_MIRROR_TOKEN` can publish to the endpoint every installed copy checks
 for updates. Keeping the job that holds it on an ephemeral hosted runner keeps it
 off a long-lived machine that also executes contributor pull request code.
-Moving these would save about a minute per release and would put the most
-dangerous credential in the system on the least ephemeral host in it.
+Write access is still not enough to run it: `publish`, `validate`, and
+`draft-release` require `github.actor == 'PeterShanxin'`, the same gate as the
+self-hosted packager. The Change Contract job is the exception: it must run on
+every pull request so a misnamed commit is reported without owner dispatch.
+Moving the token-holding jobs to the self-hosted host would save about a minute
+per release and would put the most dangerous credential in the system on the
+least ephemeral host in it.
 
 ## Troubleshooting
 

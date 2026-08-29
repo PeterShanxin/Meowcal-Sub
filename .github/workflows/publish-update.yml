@@ -13,6 +13,10 @@ name: Publish Update
 # instead. Running this workflow is therefore the moment an update becomes live
 # for every installed copy - it is deliberately separate from packaging, and
 # deliberately manual, so it happens only after the release's manual gate.
+#
+# Write access is not host trust. This job holds RELEASE_MIRROR_TOKEN. A
+# collaborator who can click workflow_dispatch must not run it. GitHub
+# evaluates `if:` before the job starts.
 
 on:
   workflow_dispatch:
@@ -31,6 +35,9 @@ env:
 jobs:
   publish:
     name: Publish to the public mirror
+    if: >-
+      github.actor == 'PeterShanxin' &&
+      github.actor != 'dependabot[bot]'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

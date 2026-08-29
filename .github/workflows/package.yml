@@ -6,6 +6,12 @@ name: Windows Packages
 # runner is offline the job queues; that is deliberate. Returning to hosted
 # runners is a reviewed revert, not an automatic failover.
 #
+# Write access is not host trust. A collaborator who can open Issues or click
+# workflow_dispatch must not run this job: it executes on the owner machine and
+# holds TAURI_SIGNING_PRIVATE_KEY. GitHub evaluates `if:` before dispatch.
+# github.actor == 'PeterShanxin' covers workflow_dispatch and workflow_call
+# (the caller of a reusable workflow is the actor who triggered the parent).
+#
 # See docs/SELF_HOSTED_RUNNERS.md.
 
 on:
@@ -32,6 +38,9 @@ permissions:
 jobs:
   package:
     name: ${{ inputs.architecture || 'x64' }} MSI and NSIS bundles
+    if: >-
+      github.actor == 'PeterShanxin' &&
+      github.actor != 'dependabot[bot]'
     # One host may carry both package labels, or they may be split onto
     # architecture-native hosts later; that is a runner registration decision and
     # needs no change here. An unrecognized architecture lands on the x64 label
