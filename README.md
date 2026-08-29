@@ -1,110 +1,158 @@
-# Meowcal Sub
+<p align="center">
+  <img src="docs/assets/logo.png" width="96" alt="Meowcal Sub icon">
+</p>
 
-Meowcal Sub is a Windows desktop application that captures a subtitle region,
-recognizes text with Windows OCR, translates locally, and displays the result in
-a floating overlay.
+<h1 align="center">Meowcal Sub</h1>
 
-Tencent HY-MT is the only supported translation engine in normal mode. The
-current MVP provides app-managed download, integrity verification, startup,
-health checks, repair, transactional promotion, last-known-good rollback,
-shutdown, and a real sample translation. x64 runtime evidence and the full episode
-release gate remain open.
+<p align="center">
+  <strong>Capture on-screen subtitles and translate them locally on Windows.</strong>
+</p>
+
+<p align="center">
+  <a href="https://github.com/PeterShanxin/Meowcal-Sub/releases"><img alt="Latest release" src="https://img.shields.io/github/v/release/PeterShanxin/Meowcal-Sub?label=latest"></a>
+  <img alt="Windows 11" src="https://img.shields.io/badge/platform-Windows%2011-0078D6?logo=windows">
+  <img alt="x64 and ARM64" src="https://img.shields.io/badge/arch-x64%20%7C%20ARM64-blue">
+  <img alt="On-device AI" src="https://img.shields.io/badge/AI-on--device-22c55e">
+  <img alt="Tauri and Rust" src="https://img.shields.io/badge/stack-Tauri%20%2B%20Rust-ffc131">
+  <img alt="AGPL-3.0-only" src="https://img.shields.io/badge/license-AGPL--3.0--only-blue">
+</p>
+
+<p align="center">
+  <a href="https://github.com/PeterShanxin/Meowcal-Sub/releases/latest"><strong>Download</strong></a>
+  &nbsp;·&nbsp;
+  <a href="https://github.com/PeterShanxin/Meowcal-Sub/releases">All releases</a>
+  &nbsp;·&nbsp;
+  <a href="https://github.com/PeterShanxin/Meowcal-Sub/releases/tag/v0.6.9">Release notes</a>
+</p>
+
+---
+
+## ✨ What it does
+
+Select the on-screen subtitle region once. Meowcal Sub captures that band, runs Windows OCR, translates locally, and draws translated lines in a floating overlay while you watch.
+
+```text
+subtitle region → capture → OCR → local translation → overlay
+```
+
+No account. Subtitle text is not uploaded. A one-time download (~1.1 GB) sets up the local translation runtime.
+
+## 🎯 Key features
+
+| Feature | Description |
+| --- | --- |
+| **Screen-region capture** | Select the subtitle band once; the app watches that region while you watch. |
+| **Windows OCR** | Uses the built-in Windows OCR engine — no cloud vision API. |
+| **On-device translation** | HY-MT runs locally after a one-time model download (~1.1 GB). Subtitle text stays on your machine. |
+| **Floating overlay** | Translated lines render in an always-on-top overlay you can position over the video. |
+| **ARM64 GPU path** | Validated Adreno configurations can offload inference to the GPU with CPU fallback. |
+| **In-app updates** | Check for updates from Settings; downloads are signature-verified before install. |
+
+## ⚡ Engineering
+
+- Tauri 2 desktop shell with Rust backend and a multi-webview frontend (main, selector, overlay, setup wizard).
+- End-to-end pipeline: capture → preprocess → OCR → normalize/dedupe → local translation → validate → overlay.
+- App-managed engine lifecycle: download, integrity checks, transactional install, rollback, repair.
+- Evidence-backed ARM64 acceleration policy with hardware/driver gating and CPU fallback.
+- Privacy-safe logging — production logs exclude subtitle text.
+- Dual-architecture packaging (x64 + ARM64) published on this repository's GitHub Releases.
+
+## 📊 Performance
+
+On Windows ARM64, local translation reached **~660 ms median latency** in our development evaluation, with a hardware-gated GPU path and automatic CPU fallback.
+
+<details>
+<summary>Technical benchmark details</summary>
+
+Measured on specific hardware during development. Figures describe engineering evidence, not marketing guarantees.
+
+### ARM64 translation latency (warm model)
+
+**Environment:** Windows 11 ARM64, HY-MT1.5-1.8B-Q4_K_M, one server slot, fixed warm-up
+
+| Metric | Value |
+| --- | --- |
+| p50 latency | 660 ms |
+| p95 latency | 3,558 ms |
+
+33-case privacy-safe subtitle evaluation; all translated attempts passed the quality grader.
+
+Prior auto-warmup run on same machine: p50 841 ms, p95 4,091 ms.
+
+### ARM64 GPU path (v0.6.9)
+
+**Environment:** Qualcomm Adreno X1-85, driver 31.0.148.0 — gated configuration only
+
+| Metric | Value |
+| --- | --- |
+| Tail latency | Shorter under sustained load vs CPU-only policy |
+| Median latency | Slightly higher than CPU-only |
+| GPU startup | A few seconds longer while the model loads |
+
+Tuned for worst-case stalls rather than peak median speed. GPU startup failure falls back to CPU within the same bounded deadline.
+
+</details>
+
+## 🧠 Architecture
+
+![Pipeline overview](docs/assets/architecture.svg)
+
+| Layer | Role |
+| --- | --- |
+| Desktop shell | Tauri 2 — window lifecycle, tray, multi-webview UI |
+| Capture & OCR | Windows screen capture + WinRT OCR |
+| Translation | App-managed local HY-MT runtime with install/repair/rollback |
+| Presentation | Selector, setup wizard, and always-on-top overlay webviews |
+| Distribution | Dual-arch installers, signature-verified in-app updates |
+
+Module ownership is recorded in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+
+## 🔒 Privacy
+
+**On your machine:** Screen capture of the selected subtitle region; OCR and translation inference; overlay rendering
+
+**Uses the network for:** One-time download of the translation runtime and model during setup; optional manual update checks (nothing runs until you press the button)
+
+**Never sent:** Captured subtitle text; translated subtitle text
+
+Production logs record support codes, timings, and counts — not captured or translated subtitle text.
+
+## 📦 Installation
+
+| | |
+| --- | --- |
+| OS | Windows 11 |
+| x64 | Intel / AMD Windows PCs |
+| ARM64 | Snapdragon and other ARM Windows PCs |
+| Disk | ~1.1 GB for the local model (one-time) |
+
+- Installers are not Authenticode-signed; Windows SmartScreen may warn about an unknown publisher.
+- Verify downloads with `SHA256SUMS.txt` attached to each release.
+
+Download from [this repository's latest release](https://github.com/PeterShanxin/Meowcal-Sub/releases/latest). The current **v0.6.9** release includes:
+
+| File | Use |
+| --- | --- |
+| [Meowcal.Sub_0.6.9_x64-setup.exe](https://github.com/PeterShanxin/Meowcal-Sub/releases/download/v0.6.9/Meowcal.Sub_0.6.9_x64-setup.exe) | NSIS installer, Intel / AMD |
+| [Meowcal.Sub_0.6.9_arm64-setup.exe](https://github.com/PeterShanxin/Meowcal-Sub/releases/download/v0.6.9/Meowcal.Sub_0.6.9_arm64-setup.exe) | NSIS installer, ARM64 |
+| [Meowcal.Sub_0.6.9_x64_en-US.msi](https://github.com/PeterShanxin/Meowcal-Sub/releases/download/v0.6.9/Meowcal.Sub_0.6.9_x64_en-US.msi) | MSI installer, Intel / AMD |
+| [Meowcal.Sub_0.6.9_arm64_en-US.msi](https://github.com/PeterShanxin/Meowcal-Sub/releases/download/v0.6.9/Meowcal.Sub_0.6.9_arm64_en-US.msi) | MSI installer, ARM64 |
+| [SHA256SUMS.txt](https://github.com/PeterShanxin/Meowcal-Sub/releases/download/v0.6.9/SHA256SUMS.txt) | checksums for the installers |
+| [latest.json](https://github.com/PeterShanxin/Meowcal-Sub/releases/download/v0.6.9/latest.json) | release metadata |
+
+Installed copies can update from **Settings → Updates → Check for updates** (manual check only).
 
 ## Status
 
-- Windows-only beta.
-- Tauri 2, Rust, and vanilla HTML/CSS/JavaScript.
-- Windows OCR and local translation; capture text stays on the device.
-- Guided setup installs the supported HY-MT model and matching local runtime.
-- Offline MT and Phi Silica backends described by older documentation were
-  removed and are not supported.
-- Known correctness and lifecycle work is tracked by
-  [Product epic #26](https://github.com/PeterShanxin/Meowcal-Sub/issues/26).
+**Windows 11 public beta** — source is this repository.
 
-Production logs record support codes, stage timings, IDs, and character counts,
-not captured or translated subtitle text. Review any support bundle before
-sharing because configuration and environment metadata are still included.
+Current release: **v0.6.9**
 
-## Use the current beta
+## Development
 
-1. Launch Meowcal Sub.
-2. Select the OCR source language and English target language.
-3. Complete the current local translation setup.
-4. Select the subtitle region.
-5. Start translation and position the overlay.
-
-If setup reports a support code, use **Install / Repair** and retain the code
-when filing a problem.
-
-The normal setup stays inside the app. For unattended recovery or support:
-
-```powershell
-.\scripts\support-engine.ps1 -Action InstallRepair -Unattended
-.\scripts\support-engine.ps1 -Action Verify
-.\scripts\support-engine.ps1 -Action CollectLogs
-```
-
-The support script uses the same embedded manifest, sizes, SHA-256 hashes,
-architecture selection, preflight requirements, and rollback layout as the
-app. It is not an alternative model-selection interface.
-
-## Staying up to date
-
-**Settings → Updates → Check for updates** asks GitHub whether a newer release
-exists. Nothing is checked or downloaded until that button is pressed, and
-installing is a second, separate confirmation.
-
-Installing downloads the architecture-matched installer, verifies it against a
-signature the app was built with, closes Meowcal Sub, upgrades in place, and
-reopens it. Settings, onboarding state, and the downloaded engine and model are
-untouched.
-
-The installers are not code-signed, so applying an update can raise a Windows
-SmartScreen prompt in the same way the first install does. The signature the
-updater verifies proves the download is the one this project published; it is
-not the same thing as an Authenticode certificate.
-
-## Development prerequisites
-
-- Windows 11;
-- Rust stable with `rustfmt` and `clippy`;
-- Node.js 24 with npm 11;
-- Visual Studio with Desktop development with C++ and the Windows SDK;
-- .NET 9 SDK for the optional WinUI `OverlayHost`.
-
-See [CONTRIBUTING.md](CONTRIBUTING.md) for ARM64/x64 setup, worktree rules, and
-the complete validation contract.
-
-## Run in Tauri
-
-The helper builds architecture-matched overlay resources, initializes the
-discovered Visual Studio environment, and launches Tauri:
-
-```powershell
-.\dev-tauri.cmd
-```
-
-For another architecture, build the overlay explicitly from the matching
-Developer PowerShell and launch Tauri:
-
-```powershell
-.\scripts\build-overlayhost.ps1 -Architecture x64
-npx --no -- tauri dev
-```
-
-## Browser development mode
-
-Browser mode connects the static frontend to the real Rust HTTP backend:
-
-```powershell
-.\dev-browser.cmd
-```
-
-Open `http://localhost:3000`. Browser mode cannot validate screen capture,
-Windows OCR, the area selector, native overlay behavior, tray behavior, or
-window/DPI lifecycle.
-
-## Automated checks
+Start with [CONTRIBUTING.md](CONTRIBUTING.md) and
+[docs/AGENT_GUIDE.md](docs/AGENT_GUIDE.md). Contributions need a CLA before
+merge; see [CLA.md](CLA.md).
 
 From a clean checkout:
 
@@ -112,98 +160,15 @@ From a clean checkout:
 .\scripts\verify.ps1
 ```
 
-This is the command used by contributors and split across the current GitHub
-jobs. It verifies Rust formatting, lint, and tests; the engine support-script
-contract; frontend formatting, lint, and unit tests; the real browser-to-Rust
-health/settings bridge; and the locked frontend dependency graph.
-
-The browser smoke does not prove screen capture, Windows OCR, the native
-selector or overlay, tray behavior, installer behavior, or DPI/window
-lifecycle. Those remain manual Windows gates.
-
-Run the privacy-safe subtitle regression set without starting the model:
-
 ```powershell
-npm run eval:subtitles
-```
-
-An opt-in live run validates the installed app-managed engine and writes a
-report containing only case IDs, output shape, validator decisions, and
-latency. See [evals/README.md](evals/README.md) for the command and grading
-contract.
-
-## Build installers
-
-Build architecture-matched installers with the guarded release settings:
-
-```powershell
-.\scripts\build-package.ps1 -Architecture auto
-```
-
-Use `-Architecture x64` or `-Architecture arm64` to make the target explicit.
-The ARM64 path serializes release compilation and disables LTO/stripping because
-the current ARM64 Rust compiler can crash under the default parallel profile.
-Generated bundles are under the selected Cargo target directory. Packaging is
-not a release, and installer behavior still requires the manual Windows gate.
-The `Windows Packages` workflow produces both x64 and ARM64 bundles on the
-repository's labeled self-hosted Windows runners; package generation does not
-replace x64 runtime or performance testing.
-
-## Architecture
-
-Current product path:
-
-```text
-capture -> preprocess -> Windows OCR -> normalize/dedupe
-        -> local translation -> validate -> overlay
-```
-
-The target boundaries and rationale are recorded in:
-
-- [approved product specification](docs/plans/2026-07-29-curated-local-translation-app-spec.md);
-- [ADR-0001](docs/adr/0001-curated-local-translation-stack.md);
-- [current architecture](docs/ARCHITECTURE.md);
-- [maintainability baseline](docs/MAINTAINABILITY_BASELINE.md);
-- [Wave 0 baseline](docs/plans/2026-07-29-wave-0-baseline.md).
-
-The implementation is intentionally migrating through small reviewable changes,
-not a wholesale rewrite.
-
-## Logs and troubleshooting
-
-Session logs are written under:
-
-```text
-%APPDATA%\com.meowcal.sub\logs\
+.\dev-tauri.cmd      # architecture-matched Tauri development
+.\dev-browser.cmd    # browser-only UI against the Rust HTTP backend
 ```
 
 Report a problem from the
-[issue chooser](https://github.com/PeterShanxin/Meowcal-Sub/issues/new/choose)
-using the bug report form, which asks for the version, Windows build,
-architecture, and reproduction it needs. Review any log before sharing it:
-subtitle text is excluded, but configuration and environment metadata are not.
-
-Common build failures:
-
-- missing Tauri bundle resources: run
-  `.\scripts\prepare-validation-resources.ps1` for automated checks or build the
-  real `OverlayHost` for development/package work;
-- locked `meowcal-sub.exe`: close the exact repository-built app process and
-  retry;
-- missing C++/Windows SDK tools: use the matching Visual Studio Developer
-  PowerShell.
-
-## Contributing
-
-Start with [CONTRIBUTING.md](CONTRIBUTING.md) and
-[docs/AGENT_GUIDE.md](docs/AGENT_GUIDE.md), then
-[docs/CHANGE_CONTRACT.md](docs/CHANGE_CONTRACT.md) for commit, version, pull
-request, merge, and review rules. Contributions need a CLA before merge; see
-[CLA.md](CLA.md). Issues start from the
-[issue chooser](https://github.com/PeterShanxin/Meowcal-Sub/issues/new/choose),
-which offers a form per kind of work and keeps a blank issue available for work
-that fits none of them. User-visible changes require fresh manual Windows
-validation. Performance claims require before/after evidence.
+[issue chooser](https://github.com/PeterShanxin/Meowcal-Sub/issues/new/choose).
+See [SECURITY.md](SECURITY.md) to report a vulnerability privately and
+[TRADEMARKS.md](TRADEMARKS.md) for name and logo use.
 
 ## License
 
@@ -212,6 +177,15 @@ Meowcal Sub community source is licensed under the
 Commercial licensing is available for organizations that require terms outside
 AGPL-3.0.
 
+Using the public project under AGPL does not require a paid license.
+
+The Tencent HY-MT model the app can download is under Tencent's community
+license, not AGPL.
+
 See [CLA.md](CLA.md) for the contributor grant,
 [TRADEMARKS.md](TRADEMARKS.md) for name and logo use, and
 [SECURITY.md](SECURITY.md) to report a vulnerability privately.
+
+---
+
+<p align="center"><sub>Meowcal Sub · v0.6.9 · Windows 11 public beta</sub></p>
