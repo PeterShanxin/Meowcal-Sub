@@ -1,20 +1,23 @@
 # CI pipeline for Meowcal-Sub.
-# Runs on every pull request to main and on pushes to main.
 #
-# Self-hosted Windows jobs run only when github.actor is PeterShanxin or
-# ianmeowmeow. That covers push to main, pull_request, and any later tag
-# trigger. Host trust is those two logins, not write access in general. Forks,
-# Dependabot, and any other login must not land on meowcal-ci.
-# A pull_request must also be same-repo and authored by PeterShanxin or
-# ianmeowmeow. `user.login` is the PR author and does not change when someone
-# else pushes; `github.actor` is who triggered this run. GitHub evaluates that
-# `if:` before dispatch. Dependabot is excluded explicitly. Other PRs have no
-# Windows CI until a later hosted-runner stage; that is intentional.
-# `meowcal-ci` is a custom label, so these jobs can never match a GitHub-hosted
-# runner: when no runner is online the work queues instead of quietly spending
-# hosted minutes. That queuing is the designed behavior, not an outage.
-# Keep the pull_request trigger: dropping it would deadlock required Windows
-# checks on trusted same-repo PRs.
+# Stage 2 public PR gate: GitHub-hosted Windows runs verify.ps1 on every
+# pull_request and every push to main. windows-11-arm executes native ARM64;
+# windows-2025 executes native x64. One architecture is not evidence for the
+# other. These jobs install their own toolchain, use contents: read, leave
+# persist-credentials false, and never see TAURI_SIGNING_PRIVATE_KEY,
+# TAURI_SIGNING_PRIVATE_KEY_PASSWORD, or RELEASE_MIRROR_TOKEN.
+#
+# Self-hosted meowcal-ci is not a PR gate. It stays on the owner's Snapdragon /
+# Adreno host for real-hardware evidence that PeterShanxin or ianmeowmeow
+# dispatch. GitHub evaluates that job-level `if:` before dispatch, so a
+# pull_request never queues on meowcal-ci. Host trust is those two logins, not
+# write access in general. A fail-closed step repeats the allowlist before
+# checkout so a bypassed `if:` still refuses the job.
+#
+# Packaging and signing stay in package.yml / release.yml: self-hosted,
+# trusted-admin dispatch, holding the updater key. Hosted PR CI is not a
+# failover for those jobs. windows-latest remains forbidden; it is the silent
+# alias this policy exists to prevent.
 #
 # See docs/SELF_HOSTED_RUNNERS.md for the host contract and the security model.
 
@@ -25,13 +28,15 @@ on:
     branches: [main]
   push:
     branches: [main]
+  workflow_dispatch:
 
-# Superseded pull request runs are cancelled. On a single self-hosted machine an
-# obsolete run is worse than a wasted bill: it is a queue every later run waits
-# behind. `main` is deliberately excluded from cancellation, because cancelling a
-# post-merge run leaves the branch every other branch is cut from unverified.
+# Superseded pull request runs are cancelled. Hosted jobs from different
+# events do not share a group with a hardware dispatch on the same ref, so a
+# maintainer dispatch cannot queue behind — or cancel — public PR evidence.
+# `main` pushes are deliberately excluded from cancellation, because cancelling
+# a post-merge run leaves the branch every other branch is cut from unverified.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
@@ -40,26 +45,112 @@ permissions:
 env:
   CARGO_TERM_COLOR: always
 
-# Shared by every self-hosted job. Keep this expression in each job's `if:`
-# rather than a reusable workflow: GitHub must see it at dispatch time.
-# Actor must be PeterShanxin or ianmeowmeow on push, pull_request, and any
-# later tag trigger. A pull_request must also be same-repo and authored by
-# one of those two. Author alone is not enough: another login can push onto
-# an already-open trusted PR and `user.login` stays the original author.
-# dependabot[bot] is excluded explicitly even though it cannot satisfy the
-# trusted-actor check. A fail-closed step repeats the same allowlist before
-# checkout so a bypassed `if:` still refuses the job.
-
 jobs:
   lint:
     name: Lint & Format
+    if: github.event_name == 'pull_request' || github.event_name == 'push'
+    # ARM64 execute host for the public gate. The crate compiles different code
+    # per architecture — see the cfg(target_arch) split in
+    # src-tauri/src/engine_launch.rs — so this job is native aarch64 evidence,
+    # not x64 evidence.
+    runs-on: windows-11-arm
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+          targets: aarch64-pc-windows-msvc
+
+      - name: Lint the native ARM64 target
+        shell: pwsh
+        run: ./scripts/verify.ps1 -Stage Lint -Target aarch64-pc-windows-msvc
+
+  test:
+    name: Tests
+    if: github.event_name == 'pull_request' || github.event_name == 'push'
+    runs-on: windows-11-arm
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+          targets: aarch64-pc-windows-msvc
+
+      - name: Test the native ARM64 target
+        shell: pwsh
+        run: ./scripts/verify.ps1 -Stage Test -Target aarch64-pc-windows-msvc
+
+  frontend:
+    name: Frontend & Browser
+    if: github.event_name == 'pull_request' || github.event_name == 'push'
+    runs-on: windows-11-arm
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+          targets: aarch64-pc-windows-msvc
+
+      # Architecture-independent for the frontend graph; the browser smoke
+      # still drives host-native Rust, so this is ARM64 backend evidence.
+      - name: Run frontend and browser verification
+        shell: pwsh
+        run: ./scripts/verify.ps1 -Stage Frontend
+
+  verify-x64:
+    name: Windows x64
+    if: github.event_name == 'pull_request' || github.event_name == 'push'
+    # Native x64 execute host. Do not read the ARM64 jobs as covering this.
+    runs-on: windows-2025
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+          targets: x86_64-pc-windows-msvc
+
+      - name: Verify the native x64 target
+        shell: pwsh
+        run: ./scripts/verify.ps1 -Target x86_64-pc-windows-msvc
+
+  hardware-lint:
+    name: Hardware Lint & Format
     if: >-
+      github.event_name == 'workflow_dispatch' &&
       (github.actor == 'PeterShanxin' || github.actor == 'ianmeowmeow') &&
-      github.actor != 'dependabot[bot]' &&
-      (github.event_name == 'push' ||
-      (github.event.pull_request.head.repo.full_name == github.repository &&
-      (github.event.pull_request.user.login == 'PeterShanxin' ||
-      github.event.pull_request.user.login == 'ianmeowmeow')))
+      github.actor != 'dependabot[bot]'
     # ARM64 here is load-bearing rather than descriptive. Windows x64 emulation
     # runs one way only, so only an ARM64 host can build *and execute* both
     # shipped architectures. The crate compiles different code for each - see the
@@ -111,15 +202,12 @@ jobs:
         shell: pwsh
         run: ./scripts/verify.ps1 -Stage Lint -Target x86_64-pc-windows-msvc
 
-  test:
-    name: Tests
+  hardware-test:
+    name: Hardware Tests
     if: >-
+      github.event_name == 'workflow_dispatch' &&
       (github.actor == 'PeterShanxin' || github.actor == 'ianmeowmeow') &&
-      github.actor != 'dependabot[bot]' &&
-      (github.event_name == 'push' ||
-      (github.event.pull_request.head.repo.full_name == github.repository &&
-      (github.event.pull_request.user.login == 'PeterShanxin' ||
-      github.event.pull_request.user.login == 'ianmeowmeow')))
+      github.actor != 'dependabot[bot]'
     runs-on: [self-hosted, Windows, ARM64, meowcal-ci]
     steps:
       - name: Require a trusted actor
@@ -151,20 +239,17 @@ jobs:
         run: ./scripts/verify.ps1 -Stage Test -Target aarch64-pc-windows-msvc
 
       # Executed, not merely compiled: the ARM64 host runs x64 binaries under
-      # emulation, so this is the same evidence the hosted x64 runner produced.
+      # emulation, so this is native-hardware x64 evidence, not hosted x64.
       - name: Test the x64 target under emulation
         shell: pwsh
         run: ./scripts/verify.ps1 -Stage Test -Target x86_64-pc-windows-msvc
 
-  frontend:
-    name: Frontend & Browser
+  hardware-frontend:
+    name: Hardware Frontend & Browser
     if: >-
+      github.event_name == 'workflow_dispatch' &&
       (github.actor == 'PeterShanxin' || github.actor == 'ianmeowmeow') &&
-      github.actor != 'dependabot[bot]' &&
-      (github.event_name == 'push' ||
-      (github.event.pull_request.head.repo.full_name == github.repository &&
-      (github.event.pull_request.user.login == 'PeterShanxin' ||
-      github.event.pull_request.user.login == 'ianmeowmeow')))
+      github.actor != 'dependabot[bot]'
     runs-on: [self-hosted, Windows, ARM64, meowcal-ci]
     steps:
       - name: Require a trusted actor

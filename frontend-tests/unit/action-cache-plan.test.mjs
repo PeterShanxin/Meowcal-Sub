@@ -68,6 +68,8 @@ describe("isSelfHostedRunsOn", () => {
 
   it("rejects a hosted runner", () => {
     expect(isSelfHostedRunsOn("ubuntu-latest")).toBe(false);
+    expect(isSelfHostedRunsOn("windows-11-arm")).toBe(false);
+    expect(isSelfHostedRunsOn("windows-2025")).toBe(false);
   });
 });
 

@@ -113,11 +113,13 @@ For focused iteration only:
 .\scripts\verify.ps1 -Stage Frontend
 ```
 
-`-Target` names a Rust triple instead of the host's. CI uses it to cover both
-shipped architectures from one machine, because the crate compiles different code
-for each - see the `cfg(target_arch)` split in `engine_launch.rs`. Windows x64
-emulation runs one way only, so `-Target aarch64-pc-windows-msvc` is refused on
-an x64 host rather than silently building something it cannot execute.
+`-Target` names a Rust triple instead of the host's. Hardware CI on `meowcal-ci`
+uses it to cover both shipped architectures from one Snapdragon host, because the
+crate compiles different code for each - see the `cfg(target_arch)` split in
+`engine_launch.rs`. Hosted PR CI does not collapse that split: `windows-11-arm`
+executes ARM64 and `windows-2025` executes x64. Windows x64 emulation runs one
+way only, so `-Target aarch64-pc-windows-msvc` is refused on an x64 host rather
+than silently building something it cannot execute.
 
 ```powershell
 .\scripts\verify.ps1 -Stage Test -Target x86_64-pc-windows-msvc
@@ -169,31 +171,38 @@ DPI/window behavior.
 
 ## Continuous integration
 
-- CI and Windows packaging run on the owner's self-hosted Windows runners,
+- Public PR CI is GitHub-hosted Windows. `test.yml` runs `scripts/verify.ps1` on
+  `windows-11-arm` (native ARM64) and `windows-2025` (native x64) for every
+  `pull_request` and every push to `main`. Forks, collaborators, and Dependabot
+  get that evidence. One architecture is not evidence for the other. Hosted jobs
+  use `permissions: contents: read`, check out with `persist-credentials: false`,
+  install Rust and Node themselves, and never interpolate
+  `TAURI_SIGNING_PRIVATE_KEY`, `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`, or
+  `RELEASE_MIRROR_TOKEN`.
+- Self-hosted Windows packaging and hardware jobs run on the owner's runners,
   selected by the custom labels `meowcal-ci`, `meowcal-package-x64`, and
   `meowcal-package-arm64`. `docs/SELF_HOSTED_RUNNERS.md` is the contract.
-- Self-hosted CI and packaging jobs, and the hosted publish-update job that
-  holds `RELEASE_MIRROR_TOKEN`, run only when `github.actor` is `PeterShanxin`
-  or `ianmeowmeow`. That includes `push`, `pull_request`, `workflow_dispatch`,
-  and `workflow_call`. Host trust is those two logins, not write access in
-  general. A `pull_request` must also be same-repo and authored by one of those
-  two. Forks, Dependabot, and any other login must not schedule those jobs. Do
-  not drop the `pull_request` trigger: that would deadlock required Windows
-  checks on trusted same-repo pull requests.
-- No workflow may name a GitHub-hosted **Windows** runner, directly or through a
-  conditional, a matrix value, or a default. When no runner is online, jobs queue.
-  That is the designed behavior; returning to hosted runners is a reviewed
-  revert, never an automatic failover.
-- `meowcal-ci` requires an ARM64 host. It is the only host that can build and
-  execute both shipped architectures, which is what keeps the x64 evidence the
-  hosted runners used to provide.
+- Self-hosted CI leftover jobs in `test.yml` run only on `workflow_dispatch`
+  when `github.actor` is `PeterShanxin` or `ianmeowmeow`. They are real
+  Snapdragon/Adreno evidence, not a PR gate. A `pull_request` must not schedule
+  them. Packaging (`package.yml`, `release.yml`) and the hosted publish-update
+  job that holds `RELEASE_MIRROR_TOKEN` stay trusted-admin dispatch / call.
+  Host trust is those two logins, not write access in general. Forks,
+  Dependabot, and any other login must not schedule those jobs.
+- Do not drop the `pull_request` trigger on `test.yml`: the hosted Windows jobs
+  are required checks, and every public PR must get them.
+- Hosted Windows in `test.yml` is the named Stage 2 PR gate. Self-hosted
+  packaging and hardware jobs must not name a GitHub-hosted Windows runner as a
+  fallback. When no owner runner is online, those jobs queue. `windows-latest`
+  stays forbidden; it is the silent alias this policy exists to prevent.
+- `meowcal-ci` requires an ARM64 host. It is the host that can build and
+  execute both shipped architectures on real Snapdragon/Adreno hardware.
 - Three release jobs stay on `ubuntu-latest` deliberately, because
   `RELEASE_MIRROR_TOKEN` and release-write permission belong on an ephemeral host
-  rather than one that also runs contributor pull request code.
-- The `Change Contract` job also stays on `ubuntu-latest`: it reads Git metadata
+  rather than one that also runs owner-dispatched hardware jobs.
+- The `Change Contract` job stays on `ubuntu-24.04`: it reads Git metadata
   and runs a dependency-free Node script, so putting it on Linux reports a
-  misnamed commit in seconds without starting the single Windows runner or
-  queuing ahead of a real build.
+  misnamed commit in seconds without a hosted Windows minute.
 - Superseded pull request runs cancel; `main` runs do not, because a cancelled
   post-merge run leaves `main` unverified.
 
@@ -206,8 +215,9 @@ holds the full procedure; these are the standing rules.
 - Never re-register the runner as part of normal work. `-Mode Install` is for a
   new host, a replaced host, or a label change.
 - Never install it as a Windows service unless the owner explicitly asks.
-- Never resolve an offline runner by routing work to a GitHub-hosted Windows
-  runner. Starting the runner is the fix.
+- Never resolve an offline packaging or hardware runner by routing that work to a
+  GitHub-hosted Windows runner. Starting the runner is the fix. Hosted Windows
+  in `test.yml` is the public PR gate, not a substitute for those jobs.
 - Discover the runner directory rather than hard-coding it:
   `(Get-Help .\scripts\setup-self-hosted-runner.ps1 -Parameter RunnerDirectory).defaultValue`.
   Read registration state from GitHub with `-Mode Status`.
@@ -221,7 +231,7 @@ holds the full procedure; these are the standing rules.
   instead. `.env` is read once at listener start, so never restart a live runner
   to apply it.
 
-Before relying on a self-hosted CI or packaging run:
+Before relying on a self-hosted hardware or packaging run:
 
 1. check status, and do not start a second runner if one is already online;
 2. if offline, start it with `.\scripts\setup-self-hosted-runner.ps1 -Mode Start`,

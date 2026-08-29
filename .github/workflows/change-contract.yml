@@ -1,13 +1,11 @@
 # Enforces docs/CHANGE_CONTRACT.md on the metadata of a pull request: the
 # commits it adds and its title.
 #
-# This is the one job that deliberately does not run on the owner's self-hosted
-# Windows runners. It reads Git metadata and runs a dependency-free Node script,
-# so it needs neither Windows nor the toolchain - and putting it on Linux means
-# a misnamed commit is reported in seconds without anyone starting the single
-# self-hosted runner, and without queuing ahead of a real build. The runner
-# policy in docs/SELF_HOSTED_RUNNERS.md forbids hosted *Windows* runners; Linux
-# stays allowed for exactly this kind of work.
+# This job stays on hosted Linux on purpose. It reads Git metadata and runs a
+# dependency-free Node script, so it needs neither Windows nor the toolchain,
+# and a misnamed commit is reported in seconds without consuming a hosted
+# Windows minute or starting the self-hosted hardware runner. Hosted Windows in
+# test.yml is the Stage 2 PR gate; this job is not that gate.
 #
 # It runs only on pull requests, and it reads only the commits the branch adds
 # to the current base tip. Nothing already on `main` is validated, which is what
@@ -35,12 +33,13 @@ permissions:
 jobs:
   metadata:
     name: Change Contract
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
         with:
           # The whole range between the base tip and the head must be present.
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Check commit subjects and the pull request title
         env:

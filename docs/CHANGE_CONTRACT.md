@@ -214,8 +214,8 @@ and the documents that govern changes to all of it.
 | Required approvals | **0** | see below |
 | CODEOWNER review required | no | see below |
 | Review conversations resolved | **yes** | an unanswered review comment blocks the merge |
-| Required checks | `Lint & Format`, `Tests`, `Frontend & Browser`, `Change Contract` | CI is authoritative |
-| Strict (checks must be against latest `main`) | **no** | one self-hosted runner; see below |
+| Required checks | `Lint & Format`, `Tests`, `Frontend & Browser`, `Change Contract` | hosted ARM64 PR gate plus the commit-title job; native x64 is additional hosted evidence |
+| Strict (checks must be against latest `main`) | **no** | see below |
 | Allowed merge method | merge commit only | one history model; see above |
 | Force push to `main` | **blocked** | "no published history is rewritten" is a rule, not a hope |
 | Deleting `main` | **blocked** | it is the branch every other branch is cut from |
@@ -249,11 +249,11 @@ Update this table in the same change that flips the setting.
 
 ### Why checks are not strict
 
-Strict mode requires a branch to be up to date with `main` before merging. One
-self-hosted Windows runner executes jobs sequentially, so every merge would
-force a full re-run of every other open pull request, one after another - a
-queue that grows faster than it drains. Post-merge CI runs on `main` for every
-merge and is never cancelled, which is what actually proves the merged result.
+Strict mode requires a branch to be up to date with `main` before merging. Public
+PR CI now runs on GitHub-hosted Windows in parallel, so the old sequential
+self-hosted queue is no longer the reason. The setting stays off in this change:
+flipping it is a repository-ruleset edit, not a workflow edit, and post-merge CI
+on `main` is never cancelled, which is what actually proves the merged result.
 
 ### Admin bypass and recovery
 

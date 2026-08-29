@@ -8,10 +8,9 @@ import { foldRunsOnValue } from "../../scripts/workflow-runner-policy.mjs";
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 
 const TRUSTED_ACTOR_IF = "(github.actor == 'PeterShanxin' || github.actor == 'ianmeowmeow')";
-const TRUSTED_PR_AUTHOR_IF =
-  "(github.event.pull_request.user.login == 'PeterShanxin' || github.event.pull_request.user.login == 'ianmeowmeow')";
 const NOT_DEPENDABOT = "github.actor != 'dependabot[bot]'";
-const SAME_REPO = "github.event.pull_request.head.repo.full_name == github.repository";
+const SIGNING_OR_MIRROR_SECRET =
+  /\$\{\{\s*secrets\.(TAURI_SIGNING_PRIVATE_KEY|TAURI_SIGNING_PRIVATE_KEY_PASSWORD|RELEASE_MIRROR_TOKEN)/;
 
 function readWorkflow(name) {
   return readFileSync(path.join(repositoryRoot, ".github/workflows", name), "utf8");
@@ -51,36 +50,61 @@ function expectFailClosedStep(job, label) {
   );
 }
 
-describe("self-hosted CI jobs stay off untrusted pull requests", () => {
-  it("gives every test.yml job the trusted-actor if, fork check, and a credential-free checkout", () => {
+describe("public PR CI runs on hosted Windows, not meowcal-ci", () => {
+  it("keeps contents: read and a pull_request trigger on test.yml", () => {
     const contents = readWorkflow("test.yml");
     expect(contents).toMatch(/^permissions:\n {2}contents: read$/m);
     expect(contents).toMatch(/^ {2}pull_request:$/m);
-
-    const jobs = splitWorkflowJobs(contents);
-
-    expect(jobs.map((job) => job.name)).toEqual(["lint", "test", "frontend"]);
-
-    for (const job of jobs) {
-      const text = jobText(job).replace(/\s+/g, " ");
-      expectTrustedActorIf(job, job.name);
-      expectFailClosedStep(job, job.name);
-      expect(text, job.name).toContain("github.event_name == 'push'");
-      expect(text, job.name).toContain(SAME_REPO);
-      expect(text, job.name).toContain(TRUSTED_PR_AUTHOR_IF);
-      expect(text, job.name).toContain("Privileged job refused fork head");
-      expect(jobText(job), job.name).toContain("persist-credentials: false");
-      expect(jobText(job), job.name).toContain("clean: false");
-    }
+    expect(contents).toMatch(/^ {2}workflow_dispatch:$/m);
+    expect(contents).not.toMatch(SIGNING_OR_MIRROR_SECRET);
   });
 
-  it("requires the trusted actor on push, not only on pull_request", () => {
-    const contents = readWorkflow("test.yml");
-    for (const job of splitWorkflowJobs(contents)) {
-      const text = jobText(job).replace(/\s+/g, " ");
-      expect(text, job.name).toMatch(
-        /\(github\.actor == 'PeterShanxin' \|\| github\.actor == 'ianmeowmeow'\) && github\.actor != 'dependabot\[bot\]' && \(github\.event_name == 'push'/,
+  it("gives hosted PR jobs persist-credentials: false and no host trust gate", () => {
+    const hosted = splitWorkflowJobs(readWorkflow("test.yml")).filter(
+      (job) => !isSelfHostedRunsOn(jobRunsOn(job)),
+    );
+
+    expect(hosted.map((job) => job.name).sort()).toEqual([
+      "frontend",
+      "lint",
+      "test",
+      "verify-x64",
+    ]);
+
+    for (const job of hosted) {
+      const runsOn = jobRunsOn(job);
+      const text = jobText(job);
+      expect(text, job.name).toContain("persist-credentials: false");
+      expect(text, job.name).not.toContain("clean: false");
+      expect(text, job.name).not.toContain("Require a trusted actor");
+      expect(text.replace(/\s+/g, " "), job.name).toContain(
+        "github.event_name == 'pull_request' || github.event_name == 'push'",
       );
+      expect(["windows-11-arm", "windows-2025"], job.name).toContain(runsOn);
+    }
+
+    expect(
+      hosted.filter((job) => jobRunsOn(job) === "windows-11-arm").map((job) => job.name),
+    ).toEqual(["lint", "test", "frontend"]);
+    expect(
+      hosted.filter((job) => jobRunsOn(job) === "windows-2025").map((job) => job.name),
+    ).toEqual(["verify-x64"]);
+  });
+
+  it("checks out Change Contract without persisted credentials", () => {
+    expect(readWorkflow("change-contract.yml")).toContain("persist-credentials: false");
+    expect(readWorkflow("change-contract.yml")).toContain("runs-on: ubuntu-24.04");
+  });
+
+  it("installs a toolchain on hosted jobs instead of assuming a host image", () => {
+    for (const job of splitWorkflowJobs(readWorkflow("test.yml"))) {
+      if (isSelfHostedRunsOn(jobRunsOn(job))) {
+        continue;
+      }
+      const text = jobText(job);
+      expect(text, job.name).toContain("actions/setup-node@v4");
+      expect(text, job.name).toContain("dtolnay/rust-toolchain@stable");
+      expect(text, job.name).toContain("node-version-file: .node-version");
     }
   });
 
@@ -88,6 +112,32 @@ describe("self-hosted CI jobs stay off untrusted pull requests", () => {
     for (const name of ["package.yml", "release.yml", "publish-update.yml"]) {
       const contents = readWorkflow(name);
       expect(contents, name).not.toMatch(/^\s*pull_request:/m);
+    }
+  });
+});
+
+describe("self-hosted hardware jobs stay off pull requests", () => {
+  it("limits meowcal-ci jobs to trusted-admin workflow_dispatch", () => {
+    const hardware = splitWorkflowJobs(readWorkflow("test.yml")).filter((job) =>
+      isSelfHostedRunsOn(jobRunsOn(job)),
+    );
+
+    expect(hardware.map((job) => job.name)).toEqual([
+      "hardware-lint",
+      "hardware-test",
+      "hardware-frontend",
+    ]);
+
+    for (const job of hardware) {
+      const text = jobText(job).replace(/\s+/g, " ");
+      expectTrustedActorIf(job, job.name);
+      expectFailClosedStep(job, job.name);
+      expect(text, job.name).toContain("github.event_name == 'workflow_dispatch'");
+      expect(text, job.name).not.toContain("github.event_name == 'push'");
+      expect(text, job.name).not.toContain("github.event_name == 'pull_request'");
+      expect(jobText(job), job.name).toContain("persist-credentials: false");
+      expect(jobText(job), job.name).toContain("clean: false");
+      expect(jobText(job), job.name).toContain("Privileged job refused fork head");
     }
   });
 });
@@ -107,9 +157,9 @@ describe("host trust is PeterShanxin and ianmeowmeow only", () => {
     }
     expect(selfHosted.sort()).toEqual([
       "package.yml:package",
-      "test.yml:frontend",
-      "test.yml:lint",
-      "test.yml:test",
+      "test.yml:hardware-frontend",
+      "test.yml:hardware-lint",
+      "test.yml:hardware-test",
     ]);
   });
 

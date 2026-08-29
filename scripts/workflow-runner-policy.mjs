@@ -1,20 +1,33 @@
 // Runner policy rules for .github/workflows, kept separate from the CLI in
 // check-workflow-runners.mjs so they can be tested against crafted workflows.
 //
-// The failure this prevents is quiet: someone adds a job, reaches for
-// `windows-latest` out of habit or as a fallback for when the self-hosted host
-// is offline, and the repository resumes spending paid Windows minutes with
-// nothing visibly broken. Queuing is the designed behavior when no runner is
-// online, so there is no legitimate hosted-Windows fallback to allow.
+// Two distinct Windows lanes exist, and this check keeps them from collapsing
+// into each other:
+//
+// * Public PR CI may name `windows-11-arm` and `windows-2025` exactly. That is
+//   the Stage 2 hosted gate, documented in docs/SELF_HOSTED_RUNNERS.md.
+// * Self-hosted jobs may name only meowcal-* labels. They must not also name a
+//   hosted Windows image: that is the silent failover this policy exists to
+//   prevent (`windows-latest` when the owner runner is offline).
+//
+// `windows-latest` stays forbidden even though it currently aliases
+// `windows-2025`. The alias is the habit this check is for.
 
-// Hosted runners that bill above the Linux rate. macOS is included because it is
-// the same mistake at ten times the multiplier.
+// Hosted runners that bill above the Linux rate, except the two named Stage 2
+// Windows gates. macOS is included because it is the same mistake at ten times
+// the multiplier.
 const FORBIDDEN_RUNNER = /\b(windows-latest|windows-\d{4}|windows-11-arm|macos-[\w.-]+)\b/g;
 
-// Linux hosted runners stay allowed: three release jobs use them deliberately,
-// to keep RELEASE_MIRROR_TOKEN and release-write permission off a long-lived
-// host that also executes contributor pull request code.
-const ALLOWED_HOSTED = new Set(["ubuntu-latest", "ubuntu-24.04", "ubuntu-22.04"]);
+// Linux hosted runners stay allowed for Change Contract and for the three
+// release jobs that keep RELEASE_MIRROR_TOKEN and release-write permission off
+// a long-lived host. windows-11-arm and windows-2025 are the public PR gate.
+const ALLOWED_HOSTED = new Set([
+  "ubuntu-latest",
+  "ubuntu-24.04",
+  "ubuntu-22.04",
+  "windows-11-arm",
+  "windows-2025",
+]);
 
 /**
  * Removes a YAML end-of-line comment.
@@ -62,9 +75,13 @@ function findForbiddenRunners(relativePath, lines) {
 
   for (const [index, text] of lines.entries()) {
     for (const match of stripYamlComment(text).matchAll(FORBIDDEN_RUNNER)) {
+      if (ALLOWED_HOSTED.has(match[0])) {
+        continue;
+      }
       violations.push(
-        `${relativePath}:${index + 1}: '${match[0]}' is a paid hosted runner. ` +
-          `Use a meowcal-* self-hosted label; jobs queue when no runner is online.`,
+        `${relativePath}:${index + 1}: '${match[0]}' is not an allowed hosted runner. ` +
+          `Public PR CI may use windows-11-arm or windows-2025. Do not use ` +
+          `windows-latest or mix a hosted image into a self-hosted job.`,
       );
     }
   }
@@ -135,7 +152,7 @@ function findRunsOnViolations(relativePath, lines) {
     if (!isAllowedHosted && !isSelfHosted) {
       violations.push(
         `${relativePath}:${index + 1}: runs-on '${value}' is neither an allowed ` +
-          `Linux hosted runner nor a self-hosted label set. An indirect value such as ` +
+          `hosted runner nor a self-hosted label set. An indirect value such as ` +
           `a repository variable can resolve to a paid runner and is not allowed.`,
       );
     }
@@ -144,6 +161,17 @@ function findRunsOnViolations(relativePath, lines) {
       violations.push(
         `${relativePath}:${index + 1}: runs-on '${value}' uses the bare self-hosted ` +
           `label. Name a meowcal-* label so the job cannot land on an unintended runner.`,
+      );
+    }
+
+    if (
+      isSelfHosted &&
+      /\b(windows-latest|windows-\d{4}|windows-11-arm|macos-[\w.-]+)\b/.test(value)
+    ) {
+      violations.push(
+        `${relativePath}:${index + 1}: runs-on '${value}' mixes a hosted runner ` +
+          `into a self-hosted job. That is a silent failover; packaging and ` +
+          `hardware jobs queue when no owner runner is online.`,
       );
     }
   }

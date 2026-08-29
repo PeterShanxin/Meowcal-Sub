@@ -21,13 +21,27 @@ describe("runner policy", () => {
 
   it("accepts the Linux hosted runners the release jobs deliberately keep", () => {
     expect(check("    runs-on: ubuntu-latest")).toEqual([]);
+    expect(check("    runs-on: ubuntu-24.04")).toEqual([]);
   });
 
-  it("rejects hosted Windows and macOS runners", () => {
+  it("accepts the Stage 2 hosted Windows PR gates", () => {
+    expect(check("    runs-on: windows-11-arm")).toEqual([]);
+    expect(check("    runs-on: windows-2025")).toEqual([]);
+  });
+
+  it("rejects windows-latest, other Windows images, and macOS", () => {
     expect(check("    runs-on: windows-latest").length).toBeGreaterThan(0);
-    expect(check("    runs-on: windows-11-arm").length).toBeGreaterThan(0);
     expect(check("    runs-on: windows-2022").length).toBeGreaterThan(0);
     expect(check("    runs-on: macos-14").length).toBeGreaterThan(0);
+  });
+
+  it("rejects mixing a hosted Windows image into a self-hosted job", () => {
+    expect(
+      check("    runs-on: [self-hosted, Windows, ARM64, meowcal-ci, windows-11-arm]").length,
+    ).toBeGreaterThan(0);
+    expect(
+      check("    runs-on: [self-hosted, Windows, meowcal-package-x64, windows-2025]").length,
+    ).toBeGreaterThan(0);
   });
 
   it("rejects the bare self-hosted label", () => {

@@ -103,9 +103,10 @@ Run the authoritative repository gate from the root:
 
 Use `-Stage Lint`, `-Stage Test`, or `-Stage Frontend` only for focused local
 iteration. The default `All` stage is the contributor handoff gate. It runs
-against your host architecture; CI additionally repeats the Rust lint and test
-stages for the other shipped architecture, so a green local run is the handoff
-bar rather than a promise that CI will agree. The frontend stage installs
+against your host architecture. Hosted PR CI runs ARM64 on `windows-11-arm` and
+x64 on `windows-2025`, so a green local run on one architecture is the handoff
+bar rather than a promise that both hosted jobs will agree. The frontend stage
+installs
 the locked npm graph, checks formatting and lint, runs DOM-independent unit
 tests, exercises browser mode against the real Rust HTTP backend, and audits
 dependencies for high-severity vulnerabilities. It also enforces production
@@ -153,23 +154,24 @@ treat this repository going public as completing that gate.
 
 ## Continuous integration
 
-Windows lint, test, frontend, and packaging jobs run on the owner's
-self-hosted runners only when the GitHub actor is `PeterShanxin` or
-`ianmeowmeow`. That includes pushes to `main` and pull requests whose head
-repository is this one and whose author is also one of those two. Host trust is
-those named logins, not write access in general. A fork PR, Dependabot, or any
-other login does **not** schedule those jobs. Those pull requests still get the
-hosted Linux **Change Contract** check. Windows CI for them is not provided
-until a later hosted-runner stage.
+Public pull request CI runs on GitHub-hosted Windows: `windows-11-arm` for
+native ARM64 and `windows-2025` for native x64. Forks, collaborators, and
+Dependabot get that evidence. Those jobs install their own toolchain, use
+`contents: read`, and never see updater signing keys or `RELEASE_MIRROR_TOKEN`.
+
+Self-hosted `meowcal-ci` is real Snapdragon/Adreno hardware. It runs only when
+`PeterShanxin` or `ianmeowmeow` dispatch it. A pull request does **not** queue
+on that host. Packaging and signing stay on the owner's `meowcal-package-*`
+runners, trusted-admin only, because they hold `TAURI_SIGNING_PRIVATE_KEY`.
 
 Do **not** register your personal computer as a runner. A runner executes
 repository code directly on the host, so attaching one is a decision the
 repository owner makes, not a way to speed up your own pull request.
-`scripts/verify.ps1` is your equivalent of CI.
+`scripts/verify.ps1` is your local equivalent of the hosted gate.
 
-If no trusted-job runner is online, that job queues rather than failing over to
-a GitHub-hosted Windows runner. That is intentional. See
-[`docs/SELF_HOSTED_RUNNERS.md`](docs/SELF_HOSTED_RUNNERS.md).
+If no packaging or hardware runner is online, that job queues rather than
+failing over to hosted Windows. Hosted PR CI does not wait on the owner
+machine. See [`docs/SELF_HOSTED_RUNNERS.md`](docs/SELF_HOSTED_RUNNERS.md).
 
 ## Manual Windows validation
 
@@ -246,11 +248,11 @@ mechanical parts in the **Change Contract** check.
 
 `main` takes changes only through a pull request, with `Lint & Format`, `Tests`,
 `Frontend & Browser`, and `Change Contract` green and every review conversation
-resolved. Fork PRs, Dependabot, and any other login skip the three Windows
-jobs by design; those required checks are for same-repo runs by `PeterShanxin`
-or `ianmeowmeow` and for their pushes to `main`. Required approvals are zero
-while this repository is effectively solo-maintained; the contract says when
-that changes and who may bypass a rule to recover.
+resolved. Those three Windows names are the hosted ARM64 PR gate
+(`windows-11-arm`). Native x64 evidence is a separate hosted job and is not a
+substitute. Required approvals are zero while this repository is effectively
+solo-maintained; the contract says when that changes and who may bypass a rule
+to recover.
 
 Merging always produces a merge commit - squash and rebase are disabled - and
 the merged branch is deleted automatically. Your local branch and worktree are
