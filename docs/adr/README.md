@@ -22,8 +22,8 @@ No ADR is required for:
   record the owner in `docs/ARCHITECTURE.md`;
 - a bug fix, a test, a dependency bump, or a ratchet change;
 - a dated investigation, benchmark, or execution plan - that is `docs/plans/`;
-- repository process rules - `docs/CHANGE_CONTRACT.md`, `CONTRIBUTING.md`, and
-  `docs/AGENT_GUIDE.md` own those.
+- repository process rules - `docs/CHANGE_CONTRACT.md`, `CONTRIBUTING.md`,
+  `CLA.md`, and `docs/AGENT_GUIDE.md` own those.
 
 When unsure, ask whether a contributor a year from now would be confused by the
 *absence* of the reasoning. If yes, write the ADR; if no, the decision belongs
@@ -35,7 +35,7 @@ in one of the documents below.
 |---|---|---|
 | `docs/adr/` | why a durable cross-cutting decision was made | yes, while Accepted |
 | `docs/ARCHITECTURE.md` | current and target module ownership | yes |
-| `CONTRIBUTING.md`, `docs/AGENT_GUIDE.md`, `docs/CODING_STANDARDS.md`, `docs/CHANGE_CONTRACT.md` | how to work in this repository | yes |
+| `CONTRIBUTING.md`, `CLA.md`, `docs/AGENT_GUIDE.md`, `docs/CODING_STANDARDS.md`, `docs/CHANGE_CONTRACT.md` | how to work in this repository | yes |
 | `docs/plans/`, `docs/superpowers/` | dated plans, designs, and evidence | no - context only |
 | `docs/archive/` | superseded direction, preserved for reconstruction | no - historical |
 

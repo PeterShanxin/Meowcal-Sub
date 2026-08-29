@@ -1,22 +1,24 @@
 # Contributing to Meowcal Sub
 
 Meowcal Sub is a Windows desktop application for private, local subtitle
-translation. The approved product direction is a curated Tencent HY-MT engine,
-Windows OCR, and a Tauri 2/Rust application. It is not a general local-model
-frontend.
+translation. It is an AGPL-3.0-only community project. The approved product
+direction is a curated Tencent HY-MT engine, Windows OCR, and a Tauri 2/Rust
+application. It is not a general local-model frontend.
 
 Read these documents before changing the repository:
 
-1. [`docs/AGENT_GUIDE.md`](docs/AGENT_GUIDE.md) for the working contract;
-2. [`docs/CODING_STANDARDS.md`](docs/CODING_STANDARDS.md) for code and test rules;
-3. [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) and
+1. [`LICENSE`](LICENSE) and [`CLA.md`](CLA.md) for the community license and
+   the contributor grant;
+2. [`docs/AGENT_GUIDE.md`](docs/AGENT_GUIDE.md) for the working contract;
+3. [`docs/CODING_STANDARDS.md`](docs/CODING_STANDARDS.md) for code and test rules;
+4. [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) and
    [`docs/MAINTAINABILITY_BASELINE.md`](docs/MAINTAINABILITY_BASELINE.md) for
    current ownership and enforced ratchets;
-4. [`docs/CHANGE_CONTRACT.md`](docs/CHANGE_CONTRACT.md) for commit, version, and
+5. [`docs/CHANGE_CONTRACT.md`](docs/CHANGE_CONTRACT.md) for commit, version, and
    pull request rules;
-5. [`docs/adr/README.md`](docs/adr/README.md) for accepted cross-cutting
+6. [`docs/adr/README.md`](docs/adr/README.md) for accepted cross-cutting
    decisions and the ADR template;
-6. current source, tests, and workflows for live behavior.
+7. current source, tests, and workflows for live behavior.
 
 Historical documents under `docs/plans/` and `docs/archive/` provide context.
 They are not normative and cannot override accepted ADRs or current guidance.
@@ -121,20 +123,52 @@ to a known address while debugging, set `MEOWCAL_FRONTEND_PORT` and
 `MEOWCAL_HTTP_PORT`; `.\dev-browser.cmd` reads the same two variables and
 defaults to 3000 and 3001.
 
+## License and contributor agreement
+
+Community source is licensed under the GNU Affero General Public License
+version 3 only. See [`LICENSE`](LICENSE). Commercial licensing is available
+for organizations that require terms outside AGPL-3.0.
+
+Before a contribution is merged, you must agree to [`CLA.md`](CLA.md). You keep
+copyright in your work. The CLA grants the project owner a perpetual copyright
+and patent license, and enough relicensing rights for the owner to dual-license
+the project (community AGPL plus separate commercial terms). Individuals and
+entities use the same grant.
+
+Agree by ticking the CLA checkbox on the pull request template. That is your
+agreement for that pull request and later ones, until you write to the
+maintainer that you withdraw it for future work. There is no CLA bot.
+
+Name and logo use is separate from the code license. See
+[`TRADEMARKS.md`](TRADEMARKS.md). Report vulnerabilities privately; see
+[`SECURITY.md`](SECURITY.md).
+
+## Open distribution gates
+
+The Tencent HY-MT model the app can download is under Tencent's community
+license, not AGPL. Redistribution review of that upstream license remains
+open (`distributionReview: requiredBeforeRelease` in
+[`config/engine-manifest.v1.json`](config/engine-manifest.v1.json)). Do not
+treat this repository going public as completing that gate.
+
 ## Continuous integration
 
-Every build, test, and packaging job runs on the owner's self-hosted Windows
-runners. Do **not** register your personal computer as a runner: a runner
-executes repository code directly on the host, so attaching one is a decision
-the repository owner makes, not a way to speed up your own pull request.
+Windows lint, test, frontend, and packaging jobs run on the owner's
+self-hosted runners only when the GitHub actor is `PeterShanxin` or
+`ianmeowmeow`. That includes pushes to `main` and pull requests whose head
+repository is this one and whose author is also one of those two. Host trust is
+those named logins, not write access in general. A fork PR, Dependabot, or any
+other login does **not** schedule those jobs. Those pull requests still get the
+hosted Linux **Change Contract** check. Windows CI for them is not provided
+until a later hosted-runner stage.
+
+Do **not** register your personal computer as a runner. A runner executes
+repository code directly on the host, so attaching one is a decision the
+repository owner makes, not a way to speed up your own pull request.
 `scripts/verify.ps1` is your equivalent of CI.
 
-The **Change Contract** check is the one exception. It only reads Git metadata,
-so it runs on a hosted Linux runner and reports in seconds whether or not a
-Windows runner is online.
-
-If no runner is online, your job queues rather than failing over to a
-GitHub-hosted runner. That is intentional. See
+If no trusted-job runner is online, that job queues rather than failing over to
+a GitHub-hosted Windows runner. That is intentional. See
 [`docs/SELF_HOSTED_RUNNERS.md`](docs/SELF_HOSTED_RUNNERS.md).
 
 ## Manual Windows validation
@@ -212,9 +246,11 @@ mechanical parts in the **Change Contract** check.
 
 `main` takes changes only through a pull request, with `Lint & Format`, `Tests`,
 `Frontend & Browser`, and `Change Contract` green and every review conversation
-resolved. Required approvals are zero while this repository is effectively
-solo-maintained; the contract says when that changes and who may bypass a rule
-to recover.
+resolved. Fork PRs, Dependabot, and any other login skip the three Windows
+jobs by design; those required checks are for same-repo runs by `PeterShanxin`
+or `ianmeowmeow` and for their pushes to `main`. Required approvals are zero
+while this repository is effectively solo-maintained; the contract says when
+that changes and who may bypass a rule to recover.
 
 Merging always produces a merge commit - squash and rebase are disabled - and
 the merged branch is deleted automatically. Your local branch and worktree are

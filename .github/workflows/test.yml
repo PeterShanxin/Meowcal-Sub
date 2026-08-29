@@ -1,10 +1,20 @@
 # CI pipeline for Meowcal-Sub.
 # Runs on every pull request to main and on pushes to main.
 #
-# Every job runs on the owner's self-hosted Windows runners. `meowcal-ci` is a
-# custom label, so these jobs can never match a GitHub-hosted runner: when no
-# runner is online the work queues instead of quietly spending hosted minutes.
-# That queuing is the designed behavior, not an outage.
+# Self-hosted Windows jobs run only when github.actor is PeterShanxin or
+# ianmeowmeow. That covers push to main, pull_request, and any later tag
+# trigger. Host trust is those two logins, not write access in general. Forks,
+# Dependabot, and any other login must not land on meowcal-ci.
+# A pull_request must also be same-repo and authored by PeterShanxin or
+# ianmeowmeow. `user.login` is the PR author and does not change when someone
+# else pushes; `github.actor` is who triggered this run. GitHub evaluates that
+# `if:` before dispatch. Dependabot is excluded explicitly. Other PRs have no
+# Windows CI until a later hosted-runner stage; that is intentional.
+# `meowcal-ci` is a custom label, so these jobs can never match a GitHub-hosted
+# runner: when no runner is online the work queues instead of quietly spending
+# hosted minutes. That queuing is the designed behavior, not an outage.
+# Keep the pull_request trigger: dropping it would deadlock required Windows
+# checks on trusted same-repo PRs.
 #
 # See docs/SELF_HOSTED_RUNNERS.md for the host contract and the security model.
 
@@ -24,12 +34,32 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
+permissions:
+  contents: read
+
 env:
   CARGO_TERM_COLOR: always
+
+# Shared by every self-hosted job. Keep this expression in each job's `if:`
+# rather than a reusable workflow: GitHub must see it at dispatch time.
+# Actor must be PeterShanxin or ianmeowmeow on push, pull_request, and any
+# later tag trigger. A pull_request must also be same-repo and authored by
+# one of those two. Author alone is not enough: another login can push onto
+# an already-open trusted PR and `user.login` stays the original author.
+# dependabot[bot] is excluded explicitly even though it cannot satisfy the
+# trusted-actor check. A fail-closed step repeats the same allowlist before
+# checkout so a bypassed `if:` still refuses the job.
 
 jobs:
   lint:
     name: Lint & Format
+    if: >-
+      (github.actor == 'PeterShanxin' || github.actor == 'ianmeowmeow') &&
+      github.actor != 'dependabot[bot]' &&
+      (github.event_name == 'push' ||
+      (github.event.pull_request.head.repo.full_name == github.repository &&
+      (github.event.pull_request.user.login == 'PeterShanxin' ||
+      github.event.pull_request.user.login == 'ianmeowmeow')))
     # ARM64 here is load-bearing rather than descriptive. Windows x64 emulation
     # runs one way only, so only an ARM64 host can build *and execute* both
     # shipped architectures. The crate compiles different code for each - see the
@@ -38,15 +68,35 @@ jobs:
     # other's.
     runs-on: [self-hosted, Windows, ARM64, meowcal-ci]
     steps:
+      - name: Require a trusted actor
+        shell: pwsh
+        run: |
+          $trusted = @('PeterShanxin', 'ianmeowmeow')
+          if ($trusted -notcontains $env:GITHUB_ACTOR) {
+            throw "Privileged job refused actor '$($env:GITHUB_ACTOR)'."
+          }
+          if ($env:GITHUB_EVENT_NAME -eq 'pull_request') {
+            $event = Get-Content -LiteralPath $env:GITHUB_EVENT_PATH -Raw | ConvertFrom-Json
+            $author = [string]$event.pull_request.user.login
+            $head = [string]$event.pull_request.head.repo.full_name
+            if ($trusted -notcontains $author) {
+              throw "Privileged job refused PR author '$author'."
+            }
+            if ($head -ne $env:GITHUB_REPOSITORY) {
+              throw "Privileged job refused fork head '$head'."
+            }
+          }
       - uses: actions/checkout@v4
         with:
           fetch-depth: 2
+          persist-credentials: false
           # The runner workspace persists between runs. A clean checkout runs
           # `git clean -ffdx`, which would delete src-tauri/target and
           # node_modules and force a cold Rust rebuild every single run. Tracked
           # files are still force-checked-out, so only ignored build output
           # survives. Packaging keeps the default clean checkout, where
-          # reproducibility outranks speed.
+          # reproducibility outranks speed. `clean: false` is acceptable only
+          # because this job never runs fork, untrusted, or Dependabot code.
           clean: false
 
       # The toolchain is a property of the host, installed and verified by
@@ -63,11 +113,37 @@ jobs:
 
   test:
     name: Tests
+    if: >-
+      (github.actor == 'PeterShanxin' || github.actor == 'ianmeowmeow') &&
+      github.actor != 'dependabot[bot]' &&
+      (github.event_name == 'push' ||
+      (github.event.pull_request.head.repo.full_name == github.repository &&
+      (github.event.pull_request.user.login == 'PeterShanxin' ||
+      github.event.pull_request.user.login == 'ianmeowmeow')))
     runs-on: [self-hosted, Windows, ARM64, meowcal-ci]
     steps:
+      - name: Require a trusted actor
+        shell: pwsh
+        run: |
+          $trusted = @('PeterShanxin', 'ianmeowmeow')
+          if ($trusted -notcontains $env:GITHUB_ACTOR) {
+            throw "Privileged job refused actor '$($env:GITHUB_ACTOR)'."
+          }
+          if ($env:GITHUB_EVENT_NAME -eq 'pull_request') {
+            $event = Get-Content -LiteralPath $env:GITHUB_EVENT_PATH -Raw | ConvertFrom-Json
+            $author = [string]$event.pull_request.user.login
+            $head = [string]$event.pull_request.head.repo.full_name
+            if ($trusted -notcontains $author) {
+              throw "Privileged job refused PR author '$author'."
+            }
+            if ($head -ne $env:GITHUB_REPOSITORY) {
+              throw "Privileged job refused fork head '$head'."
+            }
+          }
       - uses: actions/checkout@v4
         with:
           fetch-depth: 2
+          persist-credentials: false
           clean: false
 
       - name: Test the native ARM64 target
@@ -82,11 +158,37 @@ jobs:
 
   frontend:
     name: Frontend & Browser
+    if: >-
+      (github.actor == 'PeterShanxin' || github.actor == 'ianmeowmeow') &&
+      github.actor != 'dependabot[bot]' &&
+      (github.event_name == 'push' ||
+      (github.event.pull_request.head.repo.full_name == github.repository &&
+      (github.event.pull_request.user.login == 'PeterShanxin' ||
+      github.event.pull_request.user.login == 'ianmeowmeow')))
     runs-on: [self-hosted, Windows, ARM64, meowcal-ci]
     steps:
+      - name: Require a trusted actor
+        shell: pwsh
+        run: |
+          $trusted = @('PeterShanxin', 'ianmeowmeow')
+          if ($trusted -notcontains $env:GITHUB_ACTOR) {
+            throw "Privileged job refused actor '$($env:GITHUB_ACTOR)'."
+          }
+          if ($env:GITHUB_EVENT_NAME -eq 'pull_request') {
+            $event = Get-Content -LiteralPath $env:GITHUB_EVENT_PATH -Raw | ConvertFrom-Json
+            $author = [string]$event.pull_request.user.login
+            $head = [string]$event.pull_request.head.repo.full_name
+            if ($trusted -notcontains $author) {
+              throw "Privileged job refused PR author '$author'."
+            }
+            if ($head -ne $env:GITHUB_REPOSITORY) {
+              throw "Privileged job refused fork head '$head'."
+            }
+          }
       - uses: actions/checkout@v4
         with:
           fetch-depth: 2
+          persist-credentials: false
           clean: false
 
       # Architecture-independent by nature: this stage checks the frontend and

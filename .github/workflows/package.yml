@@ -6,6 +6,13 @@ name: Windows Packages
 # runner is offline the job queues; that is deliberate. Returning to hosted
 # runners is a reviewed revert, not an automatic failover.
 #
+# Host trust is PeterShanxin and ianmeowmeow, not write access in general.
+# Forks, Dependabot, and any other login must not run this job: it executes on
+# the owner machine and holds TAURI_SIGNING_PRIVATE_KEY. GitHub evaluates `if:`
+# before dispatch. The actor allowlist covers workflow_dispatch and
+# workflow_call (the caller of a reusable workflow is the actor who triggered
+# the parent). A fail-closed step repeats the allowlist before checkout.
+#
 # See docs/SELF_HOSTED_RUNNERS.md.
 
 on:
@@ -32,6 +39,9 @@ permissions:
 jobs:
   package:
     name: ${{ inputs.architecture || 'x64' }} MSI and NSIS bundles
+    if: >-
+      (github.actor == 'PeterShanxin' || github.actor == 'ianmeowmeow') &&
+      github.actor != 'dependabot[bot]'
     # One host may carry both package labels, or they may be split onto
     # architecture-native hosts later; that is a runner registration decision and
     # needs no change here. An unrecognized architecture lands on the x64 label
@@ -44,6 +54,13 @@ jobs:
       && fromJSON('["self-hosted", "Windows", "meowcal-package-arm64"]')
       || fromJSON('["self-hosted", "Windows", "meowcal-package-x64"]') }}
     steps:
+      - name: Require a trusted actor
+        shell: pwsh
+        run: |
+          $trusted = @('PeterShanxin', 'ianmeowmeow')
+          if ($trusted -notcontains $env:GITHUB_ACTOR) {
+            throw "Privileged job refused actor '$($env:GITHUB_ACTOR)'."
+          }
       - name: Require the update signing key
         shell: pwsh
         env:
@@ -85,6 +102,8 @@ jobs:
       # never reuses incremental artifacts or inherits a stale bundle. The extra
       # cold-build minutes are local compute and cost nothing.
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       # Node, Rust, both Windows target triples, and the MSVC cross-linker are
       # host properties installed and checked by

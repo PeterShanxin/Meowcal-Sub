@@ -198,7 +198,8 @@ Common build failures:
 Start with [CONTRIBUTING.md](CONTRIBUTING.md) and
 [docs/AGENT_GUIDE.md](docs/AGENT_GUIDE.md), then
 [docs/CHANGE_CONTRACT.md](docs/CHANGE_CONTRACT.md) for commit, version, pull
-request, merge, and review rules. Issues start from the
+request, merge, and review rules. Contributions need a CLA before merge; see
+[CLA.md](CLA.md). Issues start from the
 [issue chooser](https://github.com/PeterShanxin/Meowcal-Sub/issues/new/choose),
 which offers a form per kind of work and keeps a blank issue available for work
 that fits none of them. User-visible changes require fresh manual Windows
@@ -206,4 +207,11 @@ validation. Performance claims require before/after evidence.
 
 ## License
 
-MIT.
+Meowcal Sub community source is licensed under the
+[GNU Affero General Public License version 3 only](LICENSE) (`AGPL-3.0-only`).
+Commercial licensing is available for organizations that require terms outside
+AGPL-3.0.
+
+See [CLA.md](CLA.md) for the contributor grant,
+[TRADEMARKS.md](TRADEMARKS.md) for name and logo use, and
+[SECURITY.md](SECURITY.md) to report a vulnerability privately.
