@@ -8,10 +8,12 @@ import { foldRunsOnValue } from "../../scripts/workflow-runner-policy.mjs";
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 
 const TRUSTED_ACTOR_IF = "(github.actor == 'PeterShanxin' || github.actor == 'ianmeowmeow')";
-const TRUSTED_PR_AUTHOR_IF =
-  "(github.event.pull_request.user.login == 'PeterShanxin' || github.event.pull_request.user.login == 'ianmeowmeow')";
 const NOT_DEPENDABOT = "github.actor != 'dependabot[bot]'";
-const SAME_REPO = "github.event.pull_request.head.repo.full_name == github.repository";
+const FORBIDDEN_SECRETS = [
+  "TAURI_SIGNING_PRIVATE_KEY",
+  "TAURI_SIGNING_PRIVATE_KEY_PASSWORD",
+  "RELEASE_MIRROR_TOKEN",
+];
 
 function readWorkflow(name) {
   return readFileSync(path.join(repositoryRoot, ".github/workflows", name), "utf8");
@@ -51,41 +53,91 @@ function expectFailClosedStep(job, label) {
   );
 }
 
-describe("self-hosted CI jobs stay off untrusted pull requests", () => {
-  it("gives every test.yml job the trusted-actor if, fork check, and a credential-free checkout", () => {
+function expectNoForbiddenSecrets(contents, label) {
+  for (const name of FORBIDDEN_SECRETS) {
+    expect(contents, `${label} must not interpolate ${name}`).not.toMatch(
+      new RegExp(`secrets\\.${name}`),
+    );
+  }
+}
+
+describe("hosted PR gate is the merge gate", () => {
+  it("keeps required check names, pull_request, and contents: read on windows-11-arm", () => {
     const contents = readWorkflow("test.yml");
     expect(contents).toMatch(/^permissions:\n {2}contents: read$/m);
     expect(contents).toMatch(/^ {2}pull_request:$/m);
+    expect(contents).toMatch(/^ {2}push:$/m);
 
     const jobs = splitWorkflowJobs(contents);
-
     expect(jobs.map((job) => job.name)).toEqual(["lint", "test", "frontend"]);
 
+    const displayNames = jobs.map((job) => {
+      const match = jobText(job).match(/^\s*name:\s*(.+)$/m);
+      return match ? match[1].trim() : job.name;
+    });
+    expect(displayNames).toEqual(["Lint & Format", "Tests", "Frontend & Browser"]);
+
     for (const job of jobs) {
-      const text = jobText(job).replace(/\s+/g, " ");
-      expectTrustedActorIf(job, job.name);
-      expectFailClosedStep(job, job.name);
-      expect(text, job.name).toContain("github.event_name == 'push'");
-      expect(text, job.name).toContain(SAME_REPO);
-      expect(text, job.name).toContain(TRUSTED_PR_AUTHOR_IF);
-      expect(text, job.name).toContain("Privileged job refused fork head");
+      expect(jobRunsOn(job), job.name).toBe("windows-11-arm");
       expect(jobText(job), job.name).toContain("persist-credentials: false");
-      expect(jobText(job), job.name).toContain("clean: false");
+      expect(jobText(job), job.name).toContain("./scripts/verify.ps1");
+      expect(jobText(job), job.name).not.toContain("self-hosted");
+      expect(jobText(job), job.name).not.toContain(TRUSTED_ACTOR_IF);
     }
   });
 
-  it("requires the trusted actor on push, not only on pull_request", () => {
-    const contents = readWorkflow("test.yml");
-    for (const job of splitWorkflowJobs(contents)) {
-      const text = jobText(job).replace(/\s+/g, " ");
-      expect(text, job.name).toMatch(
-        /\(github\.actor == 'PeterShanxin' \|\| github\.actor == 'ianmeowmeow'\) && github\.actor != 'dependabot\[bot\]' && \(github\.event_name == 'push'/,
-      );
+  it("never interpolates signing or mirror secrets on the hosted gate", () => {
+    expectNoForbiddenSecrets(readWorkflow("test.yml"), "test.yml");
+  });
+
+  it("keeps Change Contract on hosted Ubuntu", () => {
+    const jobs = splitWorkflowJobs(readWorkflow("change-contract.yml"));
+    expect(jobs).toHaveLength(1);
+    expect(jobRunsOn(jobs[0])).toBe("ubuntu-24.04");
+    expect(isSelfHostedRunsOn(jobRunsOn(jobs[0]))).toBe(false);
+  });
+
+  it("documents hosted Windows as the explicit Stage 2 PR gate", () => {
+    const runnerDoc = readFileSync(
+      path.join(repositoryRoot, "docs/SELF_HOSTED_RUNNERS.md"),
+      "utf8",
+    );
+    const contributing = readFileSync(path.join(repositoryRoot, "CONTRIBUTING.md"), "utf8");
+    expect(runnerDoc).toMatch(/windows-11-arm/);
+    expect(runnerDoc).toMatch(/Stage 2/);
+    expect(runnerDoc).toMatch(/merge gate/);
+    expect(runnerDoc).not.toMatch(/No workflow names a GitHub-hosted/);
+    expect(contributing).toMatch(/windows-11-arm/);
+    expect(contributing).not.toMatch(/Windows CI for them is not provided/);
+  });
+});
+
+describe("self-hosted hardware CI is maintainer dispatch only", () => {
+  it("does not trigger hardware.yml from pull_request", () => {
+    const contents = readWorkflow("hardware.yml");
+    expect(contents).toMatch(/^permissions:\n {2}contents: read$/m);
+    expect(contents).toMatch(/^ {2}workflow_dispatch:\s*$/m);
+    expect(contents).not.toMatch(/^\s*pull_request:/m);
+    expect(contents).not.toMatch(/^\s*push:/m);
+    expectNoForbiddenSecrets(contents, "hardware.yml");
+  });
+
+  it("gives every hardware.yml job the trusted-actor if and a credential-free checkout", () => {
+    const jobs = splitWorkflowJobs(readWorkflow("hardware.yml"));
+    expect(jobs.map((job) => job.name)).toEqual(["lint", "test", "frontend"]);
+
+    for (const job of jobs) {
+      expectTrustedActorIf(job, job.name);
+      expectFailClosedStep(job, job.name);
+      expect(jobText(job), job.name).toContain("Privileged job refused fork head");
+      expect(jobText(job), job.name).toContain("persist-credentials: false");
+      expect(jobText(job), job.name).toContain("clean: false");
+      expect(isSelfHostedRunsOn(jobRunsOn(job)), job.name).toBe(true);
     }
   });
 
   it("does not add pull_request to maintainer-only packaging and release workflows", () => {
-    for (const name of ["package.yml", "release.yml", "publish-update.yml"]) {
+    for (const name of ["hardware.yml", "package.yml", "release.yml", "publish-update.yml"]) {
       const contents = readWorkflow(name);
       expect(contents, name).not.toMatch(/^\s*pull_request:/m);
     }
@@ -95,7 +147,13 @@ describe("self-hosted CI jobs stay off untrusted pull requests", () => {
 describe("host trust is PeterShanxin and ianmeowmeow only", () => {
   it("gates every self-hosted job on both trusted actors", () => {
     const selfHosted = [];
-    for (const name of ["test.yml", "package.yml", "release.yml", "publish-update.yml"]) {
+    for (const name of [
+      "test.yml",
+      "hardware.yml",
+      "package.yml",
+      "release.yml",
+      "publish-update.yml",
+    ]) {
       for (const job of splitWorkflowJobs(readWorkflow(name))) {
         const runsOn = jobRunsOn(job);
         if (isSelfHostedRunsOn(runsOn)) {
@@ -106,10 +164,10 @@ describe("host trust is PeterShanxin and ianmeowmeow only", () => {
       }
     }
     expect(selfHosted.sort()).toEqual([
+      "hardware.yml:frontend",
+      "hardware.yml:lint",
+      "hardware.yml:test",
       "package.yml:package",
-      "test.yml:frontend",
-      "test.yml:lint",
-      "test.yml:test",
     ]);
   });
 

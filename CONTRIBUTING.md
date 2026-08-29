@@ -153,22 +153,27 @@ treat this repository going public as completing that gate.
 
 ## Continuous integration
 
-Windows lint, test, frontend, and packaging jobs run on the owner's
-self-hosted runners only when the GitHub actor is `PeterShanxin` or
-`ianmeowmeow`. That includes pushes to `main` and pull requests whose head
-repository is this one and whose author is also one of those two. Host trust is
-those named logins, not write access in general. A fork PR, Dependabot, or any
-other login does **not** schedule those jobs. Those pull requests still get the
-hosted Linux **Change Contract** check. Windows CI for them is not provided
-until a later hosted-runner stage.
+Every pull request, including forks and Dependabot, gets the hosted Windows
+verify gate on `windows-11-arm`. Those jobs install the toolchain and run
+`scripts/verify.ps1`. They are the merge gate. They use read-only contents
+permission and do not receive signing or release-mirror secrets.
+
+The owner's self-hosted runners are not that gate. `meowcal-ci` is a
+maintainer-only `workflow_dispatch` path for real Snapdragon/Adreno hardware.
+Packaging stays on the labeled self-hosted package runners. Those privileged
+jobs run only when the GitHub actor is `PeterShanxin` or `ianmeowmeow`. Host
+trust is those named logins, not write access in general. A fork PR,
+Dependabot, or any other login does **not** schedule them.
+
+The **Change Contract** check stays on hosted Ubuntu.
 
 Do **not** register your personal computer as a runner. A runner executes
 repository code directly on the host, so attaching one is a decision the
 repository owner makes, not a way to speed up your own pull request.
-`scripts/verify.ps1` is your equivalent of CI.
+`scripts/verify.ps1` is your local equivalent of the hosted gate.
 
-If no trusted-job runner is online, that job queues rather than failing over to
-a GitHub-hosted Windows runner. That is intentional. See
+If no self-hosted packaging or hardware runner is online, that job queues
+rather than failing over to hosted Windows. That is intentional. See
 [`docs/SELF_HOSTED_RUNNERS.md`](docs/SELF_HOSTED_RUNNERS.md).
 
 ## Manual Windows validation

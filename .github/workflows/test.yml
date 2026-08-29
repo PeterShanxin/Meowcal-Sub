@@ -1,22 +1,24 @@
-# CI pipeline for Meowcal-Sub.
-# Runs on every pull request to main and on pushes to main.
+# Stage 2 pull-request and post-merge verify gate.
 #
-# Self-hosted Windows jobs run only when github.actor is PeterShanxin or
-# ianmeowmeow. That covers push to main, pull_request, and any later tag
-# trigger. Host trust is those two logins, not write access in general. Forks,
-# Dependabot, and any other login must not land on meowcal-ci.
-# A pull_request must also be same-repo and authored by PeterShanxin or
-# ianmeowmeow. `user.login` is the PR author and does not change when someone
-# else pushes; `github.actor` is who triggered this run. GitHub evaluates that
-# `if:` before dispatch. Dependabot is excluded explicitly. Other PRs have no
-# Windows CI until a later hosted-runner stage; that is intentional.
-# `meowcal-ci` is a custom label, so these jobs can never match a GitHub-hosted
-# runner: when no runner is online the work queues instead of quietly spending
-# hosted minutes. That queuing is the designed behavior, not an outage.
-# Keep the pull_request trigger: dropping it would deadlock required Windows
-# checks on trusted same-repo PRs.
+# These jobs are the merge gate. They run on GitHub-hosted windows-11-arm for
+# every pull request to main and every push to main, including forks and
+# Dependabot. They install the toolchain and run scripts/verify.ps1. They are
+# not a silent fallback for an offline self-hosted host.
 #
-# See docs/SELF_HOSTED_RUNNERS.md for the host contract and the security model.
+# Required check names (Lint & Format, Tests, Frontend & Browser) stay on this
+# workflow's pull_request jobs. Do not drop the pull_request trigger: that
+# would deadlock those required checks.
+#
+# Security for this hosted gate:
+# - permissions: contents: read only
+# - never interpolate TAURI_SIGNING_PRIVATE_KEY,
+#   TAURI_SIGNING_PRIVATE_KEY_PASSWORD, or RELEASE_MIRROR_TOKEN
+# - persist-credentials: false
+#
+# Real Snapdragon/Adreno hardware verify is not this workflow. That path is
+# maintainer-only workflow_dispatch on meowcal-ci; see hardware.yml.
+#
+# See docs/SELF_HOSTED_RUNNERS.md.
 
 name: CI
 
@@ -26,10 +28,9 @@ on:
   push:
     branches: [main]
 
-# Superseded pull request runs are cancelled. On a single self-hosted machine an
-# obsolete run is worse than a wasted bill: it is a queue every later run waits
-# behind. `main` is deliberately excluded from cancellation, because cancelling a
-# post-merge run leaves the branch every other branch is cut from unverified.
+# Superseded pull request runs are cancelled. `main` is excluded from
+# cancellation, because cancelling a post-merge run leaves the branch every
+# other branch is cut from unverified.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
@@ -40,161 +41,90 @@ permissions:
 env:
   CARGO_TERM_COLOR: always
 
-# Shared by every self-hosted job. Keep this expression in each job's `if:`
-# rather than a reusable workflow: GitHub must see it at dispatch time.
-# Actor must be PeterShanxin or ianmeowmeow on push, pull_request, and any
-# later tag trigger. A pull_request must also be same-repo and authored by
-# one of those two. Author alone is not enough: another login can push onto
-# an already-open trusted PR and `user.login` stays the original author.
-# dependabot[bot] is excluded explicitly even though it cannot satisfy the
-# trusted-actor check. A fail-closed step repeats the same allowlist before
-# checkout so a bypassed `if:` still refuses the job.
+defaults:
+  run:
+    shell: pwsh
 
 jobs:
   lint:
     name: Lint & Format
-    if: >-
-      (github.actor == 'PeterShanxin' || github.actor == 'ianmeowmeow') &&
-      github.actor != 'dependabot[bot]' &&
-      (github.event_name == 'push' ||
-      (github.event.pull_request.head.repo.full_name == github.repository &&
-      (github.event.pull_request.user.login == 'PeterShanxin' ||
-      github.event.pull_request.user.login == 'ianmeowmeow')))
-    # ARM64 here is load-bearing rather than descriptive. Windows x64 emulation
-    # runs one way only, so only an ARM64 host can build *and execute* both
-    # shipped architectures. The crate compiles different code for each - see the
-    # cfg(target_arch) split in src-tauri/src/engine_launch.rs - and
-    # docs/AGENT_GUIDE.md forbids treating one architecture's evidence as the
-    # other's.
-    runs-on: [self-hosted, Windows, ARM64, meowcal-ci]
+    runs-on: windows-11-arm
+    timeout-minutes: 120
     steps:
-      - name: Require a trusted actor
-        shell: pwsh
-        run: |
-          $trusted = @('PeterShanxin', 'ianmeowmeow')
-          if ($trusted -notcontains $env:GITHUB_ACTOR) {
-            throw "Privileged job refused actor '$($env:GITHUB_ACTOR)'."
-          }
-          if ($env:GITHUB_EVENT_NAME -eq 'pull_request') {
-            $event = Get-Content -LiteralPath $env:GITHUB_EVENT_PATH -Raw | ConvertFrom-Json
-            $author = [string]$event.pull_request.user.login
-            $head = [string]$event.pull_request.head.repo.full_name
-            if ($trusted -notcontains $author) {
-              throw "Privileged job refused PR author '$author'."
-            }
-            if ($head -ne $env:GITHUB_REPOSITORY) {
-              throw "Privileged job refused fork head '$head'."
-            }
-          }
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 2
           persist-credentials: false
-          # The runner workspace persists between runs. A clean checkout runs
-          # `git clean -ffdx`, which would delete src-tauri/target and
-          # node_modules and force a cold Rust rebuild every single run. Tracked
-          # files are still force-checked-out, so only ignored build output
-          # survives. Packaging keeps the default clean checkout, where
-          # reproducibility outranks speed. `clean: false` is acceptable only
-          # because this job never runs fork, untrusted, or Dependabot code.
-          clean: false
 
-      # The toolchain is a property of the host, installed and verified by
-      # scripts/setup-self-hosted-runner.ps1, not something CI installs per run.
-      # A self-hosted runner that rewrites its own global Rust and Node
-      # installation on every job is a machine nobody can reason about.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install Rust toolchain and both Windows targets
+        run: |
+          rustup toolchain install stable --profile minimal --component rustfmt --component clippy
+          rustup target add aarch64-pc-windows-msvc
+          rustup target add x86_64-pc-windows-msvc
+          rustup default stable
+
       - name: Lint the native ARM64 target
-        shell: pwsh
         run: ./scripts/verify.ps1 -Stage Lint -Target aarch64-pc-windows-msvc
 
       - name: Lint the x64 target
-        shell: pwsh
         run: ./scripts/verify.ps1 -Stage Lint -Target x86_64-pc-windows-msvc
 
   test:
     name: Tests
-    if: >-
-      (github.actor == 'PeterShanxin' || github.actor == 'ianmeowmeow') &&
-      github.actor != 'dependabot[bot]' &&
-      (github.event_name == 'push' ||
-      (github.event.pull_request.head.repo.full_name == github.repository &&
-      (github.event.pull_request.user.login == 'PeterShanxin' ||
-      github.event.pull_request.user.login == 'ianmeowmeow')))
-    runs-on: [self-hosted, Windows, ARM64, meowcal-ci]
+    runs-on: windows-11-arm
+    timeout-minutes: 120
     steps:
-      - name: Require a trusted actor
-        shell: pwsh
-        run: |
-          $trusted = @('PeterShanxin', 'ianmeowmeow')
-          if ($trusted -notcontains $env:GITHUB_ACTOR) {
-            throw "Privileged job refused actor '$($env:GITHUB_ACTOR)'."
-          }
-          if ($env:GITHUB_EVENT_NAME -eq 'pull_request') {
-            $event = Get-Content -LiteralPath $env:GITHUB_EVENT_PATH -Raw | ConvertFrom-Json
-            $author = [string]$event.pull_request.user.login
-            $head = [string]$event.pull_request.head.repo.full_name
-            if ($trusted -notcontains $author) {
-              throw "Privileged job refused PR author '$author'."
-            }
-            if ($head -ne $env:GITHUB_REPOSITORY) {
-              throw "Privileged job refused fork head '$head'."
-            }
-          }
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 2
           persist-credentials: false
-          clean: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install Rust toolchain and both Windows targets
+        run: |
+          rustup toolchain install stable --profile minimal --component rustfmt --component clippy
+          rustup target add aarch64-pc-windows-msvc
+          rustup target add x86_64-pc-windows-msvc
+          rustup default stable
 
       - name: Test the native ARM64 target
-        shell: pwsh
         run: ./scripts/verify.ps1 -Stage Test -Target aarch64-pc-windows-msvc
 
       # Executed, not merely compiled: the ARM64 host runs x64 binaries under
-      # emulation, so this is the same evidence the hosted x64 runner produced.
+      # emulation, so this is the dual-arch contract without a second x64 image.
       - name: Test the x64 target under emulation
-        shell: pwsh
         run: ./scripts/verify.ps1 -Stage Test -Target x86_64-pc-windows-msvc
 
   frontend:
     name: Frontend & Browser
-    if: >-
-      (github.actor == 'PeterShanxin' || github.actor == 'ianmeowmeow') &&
-      github.actor != 'dependabot[bot]' &&
-      (github.event_name == 'push' ||
-      (github.event.pull_request.head.repo.full_name == github.repository &&
-      (github.event.pull_request.user.login == 'PeterShanxin' ||
-      github.event.pull_request.user.login == 'ianmeowmeow')))
-    runs-on: [self-hosted, Windows, ARM64, meowcal-ci]
+    runs-on: windows-11-arm
+    timeout-minutes: 120
     steps:
-      - name: Require a trusted actor
-        shell: pwsh
-        run: |
-          $trusted = @('PeterShanxin', 'ianmeowmeow')
-          if ($trusted -notcontains $env:GITHUB_ACTOR) {
-            throw "Privileged job refused actor '$($env:GITHUB_ACTOR)'."
-          }
-          if ($env:GITHUB_EVENT_NAME -eq 'pull_request') {
-            $event = Get-Content -LiteralPath $env:GITHUB_EVENT_PATH -Raw | ConvertFrom-Json
-            $author = [string]$event.pull_request.user.login
-            $head = [string]$event.pull_request.head.repo.full_name
-            if ($trusted -notcontains $author) {
-              throw "Privileged job refused PR author '$author'."
-            }
-            if ($head -ne $env:GITHUB_REPOSITORY) {
-              throw "Privileged job refused fork head '$head'."
-            }
-          }
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 2
           persist-credentials: false
-          clean: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install Rust toolchain and both Windows targets
+        run: |
+          rustup toolchain install stable --profile minimal --component rustfmt --component clippy
+          rustup target add aarch64-pc-windows-msvc
+          rustup target add x86_64-pc-windows-msvc
+          rustup default stable
 
       # Architecture-independent by nature: this stage checks the frontend and
-      # drives browser mode against the host-native Rust backend. The browser
-      # smoke uses the system Google Chrome channel, which the runner host
-      # provides.
+      # drives browser mode against the host-native Rust backend. The hosted
+      # image provides the system Google Chrome channel the smoke uses.
       - name: Run frontend and browser verification
-        shell: pwsh
         run: ./scripts/verify.ps1 -Stage Frontend

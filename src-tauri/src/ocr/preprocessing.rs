@@ -81,7 +81,7 @@ pub fn preprocess_image(
     // intensity alone.
     let mut intensity = vec![0u8; expected_size / 4];
     let mut histogram = [0u32; 256];
-    for (gray, pixel) in intensity.iter_mut().zip(image_data.chunks_exact(4)) {
+    for (gray, pixel) in intensity.iter_mut().zip(image_data.as_chunks::<4>().0) {
         let b = pixel[0] as f32;
         let g = pixel[1] as f32;
         let r = pixel[2] as f32;
@@ -95,7 +95,7 @@ pub fn preprocess_image(
     // Pass 2: write the shade straight into the BGRA the OCR engine wants.
     // Alpha is already opaque from the fill, so only three bytes move.
     let mut output = vec![255u8; expected_size];
-    for (gray, pixel) in intensity.iter().zip(output.chunks_exact_mut(4)) {
+    for (gray, pixel) in intensity.iter().zip(output.as_chunks_mut::<4>().0) {
         let shade = lut[*gray as usize];
         pixel[0] = shade;
         pixel[1] = shade;

@@ -1,11 +1,22 @@
 # Self-hosted runners
 
-Meowcal Sub runs its CI and Windows packaging on self-hosted Windows runners that
-the repository owner controls. This document is the contract for those machines:
-who may attach one, what the host must provide, and what happens when it is gone.
+This document is the contract for the owner's Windows machines: who may attach
+one, what the host must provide, and what happens when it is gone.
 
-Workflow-side detail lives in `.github/workflows/`. The rationale and the
-measurements behind the design are in issue #82.
+**Stage 2 pull-request CI is not this host.** The merge gate is GitHub-hosted
+`windows-11-arm` in `.github/workflows/test.yml`. It installs the toolchain and
+runs `scripts/verify.ps1` for every pull request and every push to `main`. That
+is an explicit Stage 2 gate, not a silent fallback for an offline self-hosted
+runner.
+
+Self-hosted runners remain for two maintainer paths only:
+
+- Windows packaging on `meowcal-package-x64` and `meowcal-package-arm64`
+- real Snapdragon/Adreno hardware verify on `meowcal-ci`, started only with
+  `workflow_dispatch` from `.github/workflows/hardware.yml`
+
+Workflow-side detail lives in `.github/workflows/`. The measurements behind the
+original self-hosted move are in issue #82.
 
 ## If you are a contributor, you do not need a runner
 
@@ -14,14 +25,15 @@ executes repository code directly on the host, and attaching one is a decision
 about who may run code on whose machine. It is not a way to speed up your own
 pull request.
 
-Run the same gate CI runs, locally:
+A pull request already gets the hosted Windows verify gate. Run the same gate
+locally:
 
 ```powershell
 .\scripts\verify.ps1
 ```
 
-That is the contributor handoff gate and it is the closest equivalent to CI. If
-you want to mirror CI exactly, run the per-architecture form CI uses:
+That is the contributor handoff gate. If you want to mirror the hosted jobs
+exactly, run the per-architecture form they use:
 
 ```powershell
 .\scripts\verify.ps1 -Stage Lint -Target aarch64-pc-windows-msvc
@@ -33,13 +45,35 @@ you want to mirror CI exactly, run the per-architecture form CI uses:
 
 On an x64 machine the `aarch64` lines will refuse to run, and that refusal is
 correct: Windows x64 emulation runs one way only, so an x64 host cannot execute
-ARM64 test binaries. A same-repo pull request from `PeterShanxin` or
-`ianmeowmeow` that they also triggered still gets both architectures from CI.
-A fork pull request, Dependabot, and any other login do not: those jobs never
-schedule on this host.
+ARM64 test binaries. The hosted `windows-11-arm` gate can build and execute
+both. Maintainer hardware CI on this host can too; it is not the merge gate.
 
-When no runner is online, a trusted job **queues**. It is not lost and it is not
-failing. GitHub cancels a job that stays queued for 24 hours.
+When no self-hosted runner is online, a trusted packaging or hardware job
+**queues**. It is not lost and it is not failing. GitHub cancels a job that
+stays queued for 24 hours. The hosted PR gate does not wait on this machine.
+
+## The Stage 2 hosted Windows PR gate
+
+`.github/workflows/test.yml` is the merge gate. It is supposed to name
+`windows-11-arm`. Required check names stay `Lint & Format`, `Tests`, and
+`Frontend & Browser`, and the workflow keeps the `pull_request` trigger so those
+checks do not deadlock.
+
+Hosted PR/push jobs:
+
+- install Node 24 and the Rust stable toolchain with both Windows targets
+- run `scripts/verify.ps1` for ARM64 and x64
+- use `permissions: contents: read` only
+- never interpolate `TAURI_SIGNING_PRIVATE_KEY`,
+  `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`, or `RELEASE_MIRROR_TOKEN`
+
+`windows-latest`, `windows-2022`, `windows-2025`, and macOS stay forbidden.
+Native x64 is not a second hosted image here: the ARM64 hosted host executes
+x64 under emulation, which is the same dual-arch contract the self-hosted
+`meowcal-ci` host used when it was the merge gate.
+
+The Change Contract job stays on hosted Ubuntu (`ubuntu-24.04`). Do not move it
+onto `windows-11-arm` or this privileged host.
 
 ## Who may attach a runner
 
@@ -48,34 +82,32 @@ for this purpose**. Approval to contribute code is not approval to attach a
 runner.
 
 The reason is narrow and worth stating plainly: only a GitHub actor of
-`PeterShanxin` or `ianmeowmeow` may run work on this host, including `push` to
-`main`, `workflow_dispatch`, `workflow_call`, and a same-repo pull request
-that is also authored by one of those two. Host trust is those named logins,
-not write access in general. PR author alone is not enough: another login can
-push onto an already-open trusted PR and `user.login` stays the original
-author. Forks, Dependabot, and any other login are excluded. A runner is
-privileged infrastructure, closer to a deploy key than to a build cache.
+`PeterShanxin` or `ianmeowmeow` may run work on this host, including
+`workflow_dispatch` and `workflow_call`. Host trust is those named logins, not
+write access in general. Forks, Dependabot, and any other login are excluded.
+A runner is privileged infrastructure, closer to a deploy key than to a build
+cache.
 
-### Public is allowed only because untrusted pull requests never land here
+### Public is allowed because untrusted pull requests never reach this host
 
-These runners may stay attached after the repository is public **only because**
-every self-hosted job requires `github.actor` to be `PeterShanxin` or
-`ianmeowmeow` (and excludes `dependabot[bot]`) before dispatch. That covers
-`push`, `pull_request`, `workflow_dispatch`, and `workflow_call`. A
-`pull_request` must also have `head.repo.full_name` equal to
-`github.repository` and `user.login` equal to `PeterShanxin` or `ianmeowmeow`.
-GitHub evaluates that job-level `if:` before dispatch, so a fork PR,
-Dependabot, and any other login are never queued onto the owner machine.
-Workspace reuse (`clean: false`) is acceptable on that path because that
-untrusted code never runs.
+These runners stay attached after the repository is public **only because**
+untrusted pull requests run on hosted `windows-11-arm`, and every remaining
+self-hosted job requires `github.actor` to be `PeterShanxin` or `ianmeowmeow`
+(and excludes `dependabot[bot]`) before dispatch. That covers
+`workflow_dispatch`, `workflow_call`, and any later `push` or `pull_request`
+someone might add. GitHub evaluates that job-level `if:` before dispatch, so a
+fork PR, Dependabot, and any other login are never queued onto the owner
+machine. Workspace reuse (`clean: false`) is acceptable on that path because
+that untrusted code never runs.
 
 That filter is local to **these** workflow files. A pull request can still add a
-**new** workflow that names these runner labels. Before the repository is made
-public, set Actions → **Require approval for all outside collaborators** so a
-fork's new workflow cannot run until a maintainer approves it. Do not treat
-that setting as covering anyone outside those two logins; they are still not
-host-trusted, and these job `if:` checks plus fail-closed steps are what keep
-forks and other logins off the runners and off `RELEASE_MIRROR_TOKEN`.
+**new** workflow that names these runner labels. Actions → **Require approval
+for all outside collaborators** stops a fork's new workflow until a maintainer
+approves it. Do not treat that setting as covering anyone outside those two
+logins; they are still not host-trusted. Fork approval does not cover a future
+write login adding a new workflow. These job `if:` checks plus fail-closed
+steps are what keep forks and other logins off the runners and off
+`RELEASE_MIRROR_TOKEN`.
 
 **Never attach these runners to any other public repository.** Do not register
 them at organization or enterprise scope, where another repository could
@@ -96,8 +128,10 @@ stopped when that work is done. It is deliberately **not** a Windows service.
   for that explicitly. See [the service account
   section](#the-service-account-matters-more-than-it-looks) for the constraint
   that makes a service more than a convenience toggle.
-- **Never fall back to a GitHub-hosted Windows runner** because the runner
-  happens to be offline. Starting it is the fix; queuing is the safe default.
+- **Never move a self-hosted packaging or hardware job onto hosted Windows**
+  because this runner happens to be offline. Starting it is the fix; queuing is
+  the safe default. The Stage 2 PR gate already lives on `windows-11-arm` and
+  is not a standby for these labels.
 
 ### Finding the runner
 
@@ -203,9 +237,9 @@ That download happens during job **initialization**, before any step exists.
 Nothing in a workflow can retry it — not `timeout-minutes`, not a retry loop in a
 `run:` block. The runner tries three times and then fails the job with `Caught
 exception from JobExtension Initialization`, naming the action, which reads like
-a broken workflow rather than an infrastructure limit. `test.yml` runs three
-self-hosted jobs and each one checks out, so one CI run asked codeload for the
-same bytes three times.
+a broken workflow rather than an infrastructure limit. `hardware.yml` runs
+three self-hosted jobs and each one checks out, so one hardware run asked
+codeload for the same bytes three times.
 
 The runner's own escape hatch is a directory it consults before the network:
 
@@ -268,18 +302,19 @@ Two things worth knowing before you judge whether it is working:
 
 ## Runner labels
 
-Workflows select runners by custom label, never by the bare `self-hosted` label
-and never by a GitHub-hosted label.
+Self-hosted workflows select runners by custom label, never by the bare
+`self-hosted` label and never by a GitHub-hosted label. The Stage 2 PR gate is
+the exception: it names `windows-11-arm` directly.
 
 | Label | Used by | Host requirement |
 | --- | --- | --- |
-| `meowcal-ci` | `test.yml` lint, tests, frontend | **ARM64 only** |
+| `meowcal-ci` | `hardware.yml` lint, tests, frontend (`workflow_dispatch` only) | **ARM64 only** |
 | `meowcal-package-x64` | `package.yml` when `architecture: x64` | ARM64 or x64 |
 | `meowcal-package-arm64` | `package.yml` when `architecture: arm64` | ARM64 only |
 
-`meowcal-ci` requires an ARM64 host because CI covers both shipped
-architectures from one machine. The crate compiles genuinely different code per
-architecture — see the `cfg(target_arch)` split in
+`meowcal-ci` requires an ARM64 host because hardware verify covers both shipped
+architectures from one Snapdragon machine. The crate compiles genuinely
+different code per architecture — see the `cfg(target_arch)` split in
 `src-tauri/src/engine_launch.rs` — and `docs/AGENT_GUIDE.md` forbids treating one
 architecture's evidence as the other's. An ARM64 host can build and *execute*
 both; an x64 host cannot execute ARM64 binaries and so cannot supply that
@@ -372,8 +407,8 @@ Recommended, in rough order of value:
   the interactive account that started it, so anything that account can reach, an
   owner pull request's build scripts can reach too, for as long as the runner is
   running. Fork PRs, Dependabot, and any other login never reach this host; see
-  [public is allowed only because untrusted pull requests never land
-  here](#public-is-allowed-only-because-untrusted-pull-requests-never-land-here).
+  [public is allowed because untrusted pull requests never reach this
+  host](#public-is-allowed-because-untrusted-pull-requests-never-reach-this-host).
   Starting it only when work needs it and stopping it afterwards is what bounds
   that window, which is a reason to follow [the operating
   model](#operating-model-on-demand-foreground) rather than leave it running.
@@ -395,22 +430,23 @@ Secret scoping is enforced in the workflows and should stay that way:
 - `RELEASE_MIRROR_TOKEN` never reaches a self-hosted host at all. The job that
   holds it stays on a GitHub-hosted Linux runner on purpose — see below.
 
-## Workspace reuse, and why CI and packaging differ
+## Workspace reuse, and why hardware CI and packaging differ
 
-CI checks out with `clean: false`. The runner workspace persists between runs, and
-a clean checkout would run `git clean -ffdx` and delete `src-tauri/target` and
-`node_modules`, forcing a cold Rust rebuild every run. Tracked files are still
-force-checked-out; only ignored build output survives. That reuse is acceptable
-because fork PRs, Dependabot, and any other login never run on this host.
+Hardware CI checks out with `clean: false`. The runner workspace persists between
+runs, and a clean checkout would run `git clean -ffdx` and delete
+`src-tauri/target` and `node_modules`, forcing a cold Rust rebuild every run.
+Tracked files are still force-checked-out; only ignored build output survives.
+That reuse is acceptable because fork PRs, Dependabot, and any other login
+never run on this host. The hosted PR gate uses a clean ephemeral VM.
 
 Packaging keeps the default clean checkout. A release build must not reuse
 incremental artifacts, and the extra minutes are local compute.
 
 That difference has one consequence worth knowing: if the same runner instance
-serves both roles, a packaging run wipes the CI workspace and the next CI run
-rebuilds cold. If that becomes annoying, register **two runner instances** in
-separate directories — one `-Role ci`, one `-Role package` — so each keeps its
-own `_work`.
+serves both roles, a packaging run wipes the hardware-CI workspace and the next
+hardware run rebuilds cold. If that becomes annoying, register **two runner
+instances** in separate directories — one `-Role ci`, one `-Role package` — so
+each keeps its own `_work`.
 
 ## Running it as a Windows service, if that is ever asked for
 
@@ -495,27 +531,27 @@ Lists every registered runner with its status, whether it is busy, and its
 labels. If nothing is listed, self-hosted jobs will queue until a runner comes
 online.
 
-## Jobs stay queued rather than falling back
+## Self-hosted jobs stay queued rather than falling over to hosted Windows
 
-No workflow names a GitHub-hosted **Windows** runner, and none may. There is no
-expression that selects `windows-latest` or `windows-11-arm` when a self-hosted
-runner is unavailable.
+Packaging and hardware-CI jobs must not select `windows-11-arm`,
+`windows-latest`, or any other hosted Windows image when this host is offline.
+There is no expression that fails a self-hosted label over to hosted Windows.
 
-This is deliberate. An automatic fallback would resume spending hosted minutes
-silently, and it would do so hardest exactly when the host is down and nobody is
-watching. Queuing is visible; a bill is not. Returning to hosted runners is a
-reviewed revert of the workflow change, never an automatic failover.
+This is deliberate. An automatic failover would put privileged packaging work
+on a different machine than the one that holds the toolchain and the signing
+path, and it would do so hardest exactly when the host is down and nobody is
+watching. Queuing is visible. The Stage 2 PR gate already uses `windows-11-arm`
+on purpose; that is not a standby for `meowcal-ci` or the package labels.
 
 ### The jobs that stay hosted, and why
 
-Four jobs remain on `ubuntu-latest`:
-
-| Job | Reason |
-| --- | --- |
-| `release.yml` / `validate` | Linux, 1x billing, about a minute; holds `contents: write` to reserve the release tag |
-| `release.yml` / `draft-release` | Linux, 1x billing; holds release-write permission |
-| `publish-update.yml` / `publish` | Holds `RELEASE_MIRROR_TOKEN` |
-| `change-contract.yml` / `Change Contract` | Reads Git metadata only; reports a misnamed commit or pull request title in seconds without starting the single Windows runner, and never queues ahead of a real build |
+| Job | Runner | Reason |
+| --- | --- | --- |
+| `test.yml` / `Lint & Format`, `Tests`, `Frontend & Browser` | `windows-11-arm` | Stage 2 merge gate; installs the toolchain and runs `verify.ps1` for every pull request and every push to `main` |
+| `change-contract.yml` / `Change Contract` | `ubuntu-24.04` | Reads Git metadata only; reports a misnamed commit or pull request title in seconds without occupying the Windows gate |
+| `release.yml` / `validate` | `ubuntu-latest` | Linux, about a minute; holds `contents: write` to reserve the release tag |
+| `release.yml` / `draft-release` | `ubuntu-latest` | Holds release-write permission |
+| `publish-update.yml` / `publish` | `ubuntu-latest` | Holds `RELEASE_MIRROR_TOKEN` |
 
 `RELEASE_MIRROR_TOKEN` can publish to the endpoint every installed copy checks
 for updates. Keeping the job that holds it on an ephemeral hosted runner keeps it
