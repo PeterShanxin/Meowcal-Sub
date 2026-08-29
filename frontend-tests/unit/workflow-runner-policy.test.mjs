@@ -21,12 +21,17 @@ describe("runner policy", () => {
 
   it("accepts the Linux hosted runners the release jobs deliberately keep", () => {
     expect(check("    runs-on: ubuntu-latest")).toEqual([]);
+    expect(check("    runs-on: ubuntu-24.04")).toEqual([]);
   });
 
-  it("rejects hosted Windows and macOS runners", () => {
+  it("accepts the Stage 2 hosted Windows PR gate runner", () => {
+    expect(check("    runs-on: windows-11-arm")).toEqual([]);
+  });
+
+  it("rejects other hosted Windows images and macOS runners", () => {
     expect(check("    runs-on: windows-latest").length).toBeGreaterThan(0);
-    expect(check("    runs-on: windows-11-arm").length).toBeGreaterThan(0);
     expect(check("    runs-on: windows-2022").length).toBeGreaterThan(0);
+    expect(check("    runs-on: windows-2025").length).toBeGreaterThan(0);
     expect(check("    runs-on: macos-14").length).toBeGreaterThan(0);
   });
 

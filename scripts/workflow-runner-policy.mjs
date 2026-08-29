@@ -1,20 +1,22 @@
 // Runner policy rules for .github/workflows, kept separate from the CLI in
 // check-workflow-runners.mjs so they can be tested against crafted workflows.
 //
-// The failure this prevents is quiet: someone adds a job, reaches for
-// `windows-latest` out of habit or as a fallback for when the self-hosted host
-// is offline, and the repository resumes spending paid Windows minutes with
-// nothing visibly broken. Queuing is the designed behavior when no runner is
-// online, so there is no legitimate hosted-Windows fallback to allow.
+// Stage 2 allows one hosted Windows label on purpose: `windows-11-arm` is the
+// pull-request and post-merge verify gate. It is not a fallback for an offline
+// self-hosted host. The failure this still prevents is quiet: someone reaches
+// for `windows-latest`, a dated `windows-20xx` image, or macOS out of habit,
+// or wires a self-hosted packaging job to fail over to hosted Windows.
 
-// Hosted runners that bill above the Linux rate. macOS is included because it is
-// the same mistake at ten times the multiplier.
-const FORBIDDEN_RUNNER = /\b(windows-latest|windows-\d{4}|windows-11-arm|macos-[\w.-]+)\b/g;
+// Hosted runners that are not the Stage 2 Windows gate and bill above the
+// Linux rate. macOS is included because it is the same mistake at ten times
+// the multiplier. `windows-11-arm` is allowlisted below, not matched here.
+const FORBIDDEN_RUNNER = /\b(windows-latest|windows-\d{4}|macos-[\w.-]+)\b/g;
 
 // Linux hosted runners stay allowed: three release jobs use them deliberately,
 // to keep RELEASE_MIRROR_TOKEN and release-write permission off a long-lived
-// host that also executes contributor pull request code.
-const ALLOWED_HOSTED = new Set(["ubuntu-latest", "ubuntu-24.04", "ubuntu-22.04"]);
+// host that also executes contributor pull request code. `windows-11-arm` is
+// the Stage 2 PR/push verify gate. `ubuntu-24.04` is the Change Contract host.
+const ALLOWED_HOSTED = new Set(["ubuntu-latest", "ubuntu-24.04", "ubuntu-22.04", "windows-11-arm"]);
 
 /**
  * Removes a YAML end-of-line comment.
@@ -63,8 +65,9 @@ function findForbiddenRunners(relativePath, lines) {
   for (const [index, text] of lines.entries()) {
     for (const match of stripYamlComment(text).matchAll(FORBIDDEN_RUNNER)) {
       violations.push(
-        `${relativePath}:${index + 1}: '${match[0]}' is a paid hosted runner. ` +
-          `Use a meowcal-* self-hosted label; jobs queue when no runner is online.`,
+        `${relativePath}:${index + 1}: '${match[0]}' is not an allowed hosted runner. ` +
+          `The Stage 2 Windows gate is windows-11-arm; self-hosted jobs use a ` +
+          `meowcal-* label and queue when no runner is online.`,
       );
     }
   }
@@ -135,8 +138,9 @@ function findRunsOnViolations(relativePath, lines) {
     if (!isAllowedHosted && !isSelfHosted) {
       violations.push(
         `${relativePath}:${index + 1}: runs-on '${value}' is neither an allowed ` +
-          `Linux hosted runner nor a self-hosted label set. An indirect value such as ` +
-          `a repository variable can resolve to a paid runner and is not allowed.`,
+          `hosted runner (ubuntu-*, windows-11-arm) nor a self-hosted label set. An ` +
+          `indirect value such as a repository variable can resolve to a paid runner ` +
+          `and is not allowed.`,
       );
     }
 

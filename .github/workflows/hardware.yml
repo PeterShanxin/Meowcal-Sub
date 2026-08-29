@@ -1,0 +1,153 @@
+# Maintainer-only Snapdragon/Adreno hardware verify.
+#
+# This is not the merge gate. The merge gate is the hosted windows-11-arm
+# jobs in test.yml. These jobs stay on the owner's meowcal-ci ARM64 host and
+# run only when a trusted maintainer starts them with workflow_dispatch.
+#
+# Host trust is PeterShanxin and ianmeowmeow, not write access in general.
+# Dependabot is excluded explicitly. GitHub evaluates that job-level `if:`
+# before dispatch. A fail-closed step repeats the allowlist before checkout.
+# Fork approval does not cover a future write login adding a new workflow:
+# remaining self-hosted jobs must keep this allowlist.
+#
+# Do not add pull_request here. That would put contributor code back on the
+# privileged host and is not needed for required checks (those live on the
+# hosted gate).
+#
+# See docs/SELF_HOSTED_RUNNERS.md.
+
+name: Hardware CI
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  lint:
+    name: Hardware Lint & Format
+    if: >-
+      (github.actor == 'PeterShanxin' || github.actor == 'ianmeowmeow') &&
+      github.actor != 'dependabot[bot]'
+    # ARM64 here is load-bearing rather than descriptive. Windows x64 emulation
+    # runs one way only, so only an ARM64 host can build *and execute* both
+    # shipped architectures on real Snapdragon/Adreno hardware.
+    runs-on: [self-hosted, Windows, ARM64, meowcal-ci]
+    steps:
+      - name: Require a trusted actor
+        shell: pwsh
+        run: |
+          $trusted = @('PeterShanxin', 'ianmeowmeow')
+          if ($trusted -notcontains $env:GITHUB_ACTOR) {
+            throw "Privileged job refused actor '$($env:GITHUB_ACTOR)'."
+          }
+          if ($env:GITHUB_EVENT_NAME -eq 'pull_request') {
+            $event = Get-Content -LiteralPath $env:GITHUB_EVENT_PATH -Raw | ConvertFrom-Json
+            $author = [string]$event.pull_request.user.login
+            $head = [string]$event.pull_request.head.repo.full_name
+            if ($trusted -notcontains $author) {
+              throw "Privileged job refused PR author '$author'."
+            }
+            if ($head -ne $env:GITHUB_REPOSITORY) {
+              throw "Privileged job refused fork head '$head'."
+            }
+          }
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+          # The runner workspace persists between runs. A clean checkout runs
+          # `git clean -ffdx`, which would delete src-tauri/target and
+          # node_modules and force a cold Rust rebuild every single run. Tracked
+          # files are still force-checked-out, so only ignored build output
+          # survives. `clean: false` is acceptable only because this job never
+          # runs fork, untrusted, or Dependabot code.
+          clean: false
+
+      # The toolchain is a property of the host, installed and verified by
+      # scripts/setup-self-hosted-runner.ps1, not something CI installs per run.
+      - name: Lint the native ARM64 target
+        shell: pwsh
+        run: ./scripts/verify.ps1 -Stage Lint -Target aarch64-pc-windows-msvc
+
+      - name: Lint the x64 target
+        shell: pwsh
+        run: ./scripts/verify.ps1 -Stage Lint -Target x86_64-pc-windows-msvc
+
+  test:
+    name: Hardware Tests
+    if: >-
+      (github.actor == 'PeterShanxin' || github.actor == 'ianmeowmeow') &&
+      github.actor != 'dependabot[bot]'
+    runs-on: [self-hosted, Windows, ARM64, meowcal-ci]
+    steps:
+      - name: Require a trusted actor
+        shell: pwsh
+        run: |
+          $trusted = @('PeterShanxin', 'ianmeowmeow')
+          if ($trusted -notcontains $env:GITHUB_ACTOR) {
+            throw "Privileged job refused actor '$($env:GITHUB_ACTOR)'."
+          }
+          if ($env:GITHUB_EVENT_NAME -eq 'pull_request') {
+            $event = Get-Content -LiteralPath $env:GITHUB_EVENT_PATH -Raw | ConvertFrom-Json
+            $author = [string]$event.pull_request.user.login
+            $head = [string]$event.pull_request.head.repo.full_name
+            if ($trusted -notcontains $author) {
+              throw "Privileged job refused PR author '$author'."
+            }
+            if ($head -ne $env:GITHUB_REPOSITORY) {
+              throw "Privileged job refused fork head '$head'."
+            }
+          }
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+          clean: false
+
+      - name: Test the native ARM64 target
+        shell: pwsh
+        run: ./scripts/verify.ps1 -Stage Test -Target aarch64-pc-windows-msvc
+
+      - name: Test the x64 target under emulation
+        shell: pwsh
+        run: ./scripts/verify.ps1 -Stage Test -Target x86_64-pc-windows-msvc
+
+  frontend:
+    name: Hardware Frontend & Browser
+    if: >-
+      (github.actor == 'PeterShanxin' || github.actor == 'ianmeowmeow') &&
+      github.actor != 'dependabot[bot]'
+    runs-on: [self-hosted, Windows, ARM64, meowcal-ci]
+    steps:
+      - name: Require a trusted actor
+        shell: pwsh
+        run: |
+          $trusted = @('PeterShanxin', 'ianmeowmeow')
+          if ($trusted -notcontains $env:GITHUB_ACTOR) {
+            throw "Privileged job refused actor '$($env:GITHUB_ACTOR)'."
+          }
+          if ($env:GITHUB_EVENT_NAME -eq 'pull_request') {
+            $event = Get-Content -LiteralPath $env:GITHUB_EVENT_PATH -Raw | ConvertFrom-Json
+            $author = [string]$event.pull_request.user.login
+            $head = [string]$event.pull_request.head.repo.full_name
+            if ($trusted -notcontains $author) {
+              throw "Privileged job refused PR author '$author'."
+            }
+            if ($head -ne $env:GITHUB_REPOSITORY) {
+              throw "Privileged job refused fork head '$head'."
+            }
+          }
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+          clean: false
+
+      - name: Run frontend and browser verification
+        shell: pwsh
+        run: ./scripts/verify.ps1 -Stage Frontend

@@ -169,31 +169,38 @@ DPI/window behavior.
 
 ## Continuous integration
 
-- CI and Windows packaging run on the owner's self-hosted Windows runners,
-  selected by the custom labels `meowcal-ci`, `meowcal-package-x64`, and
-  `meowcal-package-arm64`. `docs/SELF_HOSTED_RUNNERS.md` is the contract.
-- Self-hosted CI and packaging jobs, and the hosted publish-update job that
-  holds `RELEASE_MIRROR_TOKEN`, run only when `github.actor` is `PeterShanxin`
-  or `ianmeowmeow`. That includes `push`, `pull_request`, `workflow_dispatch`,
-  and `workflow_call`. Host trust is those two logins, not write access in
-  general. A `pull_request` must also be same-repo and authored by one of those
-  two. Forks, Dependabot, and any other login must not schedule those jobs. Do
-  not drop the `pull_request` trigger: that would deadlock required Windows
-  checks on trusted same-repo pull requests.
-- No workflow may name a GitHub-hosted **Windows** runner, directly or through a
-  conditional, a matrix value, or a default. When no runner is online, jobs queue.
-  That is the designed behavior; returning to hosted runners is a reviewed
-  revert, never an automatic failover.
-- `meowcal-ci` requires an ARM64 host. It is the only host that can build and
-  execute both shipped architectures, which is what keeps the x64 evidence the
-  hosted runners used to provide.
+- The Stage 2 merge gate is GitHub-hosted `windows-11-arm` in `test.yml`. Those
+  jobs install the toolchain and run `scripts/verify.ps1` on every pull request
+  and every push to `main`, including forks and Dependabot. They use
+  `permissions: contents: read` only and must never interpolate
+  `TAURI_SIGNING_PRIVATE_KEY`, `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`, or
+  `RELEASE_MIRROR_TOKEN`. Do not drop the `pull_request` trigger: that would
+  deadlock the required Windows checks (`Lint & Format`, `Tests`,
+  `Frontend & Browser`).
+- `meowcal-ci` is not the merge gate. It is maintainer `workflow_dispatch` in
+  `hardware.yml` for real Snapdragon/Adreno ARM64 hardware. Windows packaging
+  stays on `meowcal-package-x64` and `meowcal-package-arm64`.
+  `docs/SELF_HOSTED_RUNNERS.md` is the contract.
+- Remaining self-hosted jobs, and the hosted publish-update job that holds
+  `RELEASE_MIRROR_TOKEN`, run only when `github.actor` is `PeterShanxin` or
+  `ianmeowmeow`. That includes `workflow_dispatch` and `workflow_call`. Host
+  trust is those two logins, not write access in general. Forks, Dependabot,
+  and any other login must not schedule those jobs. Fork approval does not
+  cover a future write login adding a new workflow.
+- Self-hosted packaging and hardware jobs must not fail over to hosted Windows
+  when no runner is online. They queue. `windows-latest`, `windows-2022`,
+  `windows-2025`, and macOS stay forbidden. `windows-11-arm` is allowed only as
+  the explicit Stage 2 PR/push gate, never as a silent fallback.
+- `meowcal-ci` requires an ARM64 host. It can build and execute both shipped
+  architectures on real Snapdragon hardware. The hosted `windows-11-arm` gate
+  covers the same dual-arch contract for merge.
 - Three release jobs stay on `ubuntu-latest` deliberately, because
   `RELEASE_MIRROR_TOKEN` and release-write permission belong on an ephemeral host
   rather than one that also runs contributor pull request code.
-- The `Change Contract` job also stays on `ubuntu-latest`: it reads Git metadata
+- The `Change Contract` job stays on `ubuntu-24.04`: it reads Git metadata
   and runs a dependency-free Node script, so putting it on Linux reports a
-  misnamed commit in seconds without starting the single Windows runner or
-  queuing ahead of a real build.
+  misnamed commit in seconds without occupying the hosted Windows gate or the
+  Snapdragon runner.
 - Superseded pull request runs cancel; `main` runs do not, because a cancelled
   post-merge run leaves `main` unverified.
 
@@ -206,8 +213,9 @@ holds the full procedure; these are the standing rules.
 - Never re-register the runner as part of normal work. `-Mode Install` is for a
   new host, a replaced host, or a label change.
 - Never install it as a Windows service unless the owner explicitly asks.
-- Never resolve an offline runner by routing work to a GitHub-hosted Windows
-  runner. Starting the runner is the fix.
+- Never resolve an offline self-hosted runner by routing that job to a
+  GitHub-hosted Windows runner. Starting the runner is the fix. The PR gate
+  already lives on `windows-11-arm`; packaging and hardware CI must queue.
 - Discover the runner directory rather than hard-coding it:
   `(Get-Help .\scripts\setup-self-hosted-runner.ps1 -Parameter RunnerDirectory).defaultValue`.
   Read registration state from GitHub with `-Mode Status`.
@@ -221,7 +229,7 @@ holds the full procedure; these are the standing rules.
   instead. `.env` is read once at listener start, so never restart a live runner
   to apply it.
 
-Before relying on a self-hosted CI or packaging run:
+Before relying on a self-hosted hardware or packaging run:
 
 1. check status, and do not start a second runner if one is already online;
 2. if offline, start it with `.\scripts\setup-self-hosted-runner.ps1 -Mode Start`,
@@ -271,8 +279,8 @@ other required manual gates remain outstanding.
 - `docs/CHANGE_CONTRACT.md`: commit, version, and pull request contract.
 - `docs/ARCHITECTURE.md`: current and target module ownership.
 - `docs/MAINTAINABILITY_BASELINE.md`: enforced ceilings and ratchet procedure.
-- `docs/SELF_HOSTED_RUNNERS.md`: runner labels, host contract, and who may
-  attach one.
+- `docs/SELF_HOSTED_RUNNERS.md`: Stage 2 hosted Windows PR gate, self-hosted
+  labels, host contract, and who may attach a runner.
 - `docs/adr/`: accepted or proposed cross-cutting decisions.
   [`adr/README.md`](adr/README.md) owns when a decision needs an ADR at all, the
   four status values, and how one ADR supersedes another.

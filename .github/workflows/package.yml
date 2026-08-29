@@ -2,9 +2,8 @@ name: Windows Packages
 
 # Packaging runs on the owner's self-hosted Windows runners. The architecture
 # input selects a custom label, never a GitHub-hosted runner, so there is no
-# expression here that can fall back to paid Windows minutes. If the matching
-# runner is offline the job queues; that is deliberate. Returning to hosted
-# runners is a reviewed revert, not an automatic failover.
+# expression here that can fall back to the Stage 2 windows-11-arm PR gate.
+# If the matching runner is offline the job queues; that is deliberate.
 #
 # Host trust is PeterShanxin and ianmeowmeow, not write access in general.
 # Forks, Dependabot, and any other login must not run this job: it executes on
