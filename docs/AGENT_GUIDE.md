@@ -173,12 +173,13 @@ DPI/window behavior.
   selected by the custom labels `meowcal-ci`, `meowcal-package-x64`, and
   `meowcal-package-arm64`. `docs/SELF_HOSTED_RUNNERS.md` is the contract.
 - Self-hosted CI jobs run only for pushes to `main` and for pull requests
-  authored by `PeterShanxin` whose head repository is this one. Write access is
-  not host trust. Fork, collaborator, and Dependabot pull requests must not
-  schedule those jobs; the job-level `if:` in `test.yml` is what keeps them off
-  the owner machine. Those pull requests have no Windows CI until a later hosted
-  runner stage. Do not drop the `pull_request` trigger: that would deadlock
-  required Windows checks on the owner's own pull requests.
+  whose head repository is this one and whose author and GitHub actor are both
+  `PeterShanxin`. Write access is not host trust. Fork PRs, collaborator PRs,
+  collaborator pushes onto an owner PR, and Dependabot must not schedule those
+  jobs; the job-level `if:` in `test.yml` is what keeps them off the owner
+  machine. Those pull requests have no Windows CI until a later hosted runner
+  stage. Do not drop the `pull_request` trigger: that would deadlock required
+  Windows checks on the owner's own pull requests.
 - No workflow may name a GitHub-hosted **Windows** runner, directly or through a
   conditional, a matrix value, or a default. When no runner is online, jobs queue.
   That is the designed behavior; returning to hosted runners is a reviewed

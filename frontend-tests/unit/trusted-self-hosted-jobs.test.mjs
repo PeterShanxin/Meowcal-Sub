@@ -11,6 +11,7 @@ const OWNER_SELF_HOSTED_CLAUSES = [
   "github.event_name == 'push'",
   "github.event.pull_request.head.repo.full_name == github.repository",
   "github.event.pull_request.user.login == 'PeterShanxin'",
+  "github.actor == 'PeterShanxin'",
 ];
 
 describe("self-hosted CI jobs stay off untrusted pull requests", () => {
@@ -41,6 +42,10 @@ describe("self-hosted CI jobs stay off untrusted pull requests", () => {
         /if: github\.event_name == 'push' \|\| github\.event\.pull_request\.head\.repo\.full_name == github\.repository\s*$/,
       );
       expect(text, job.name).toContain("github.event.pull_request.user.login == 'PeterShanxin'");
+      expect(text, job.name).toContain("github.actor == 'PeterShanxin'");
+      expect(text, job.name).toMatch(
+        /github\.event\.pull_request\.user\.login == 'PeterShanxin' && github\.actor == 'PeterShanxin'/,
+      );
     }
   });
 
