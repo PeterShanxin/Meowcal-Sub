@@ -47,3 +47,7 @@ its manual gate. Otherwise use Refs.
 -->
 
 Refs #
+
+---
+
+<sub>By submitting this pull request, you agree to the <a href="https://github.com/PeterShanxin/Meowcal-Sub/blob/main/CLA.md">Contributor License Agreement</a>.</sub>
