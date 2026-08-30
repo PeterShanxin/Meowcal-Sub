@@ -1,8 +1,7 @@
 # Contributing to Meowcal Sub
 
 **By intentionally submitting a contribution to this project, you agree to the
-[Contributor License Agreement](CLA.md) for that contribution.** No per-pull-
-request checkbox is required.
+[Contributor License Agreement](CLA.md) for that contribution.**
 
 Meowcal Sub is a Windows desktop application for private, local subtitle
 translation. It is an AGPL-3.0-only community project. The approved product
