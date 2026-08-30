@@ -12,10 +12,10 @@
 // the multiplier. `windows-11-arm` is allowlisted below, not matched here.
 const FORBIDDEN_RUNNER = /\b(windows-latest|windows-\d{4}|macos-[\w.-]+)\b/g;
 
-// Linux hosted runners stay allowed: three release jobs use them deliberately,
-// to keep RELEASE_MIRROR_TOKEN and release-write permission off a long-lived
-// host that also executes contributor pull request code. `windows-11-arm` is
-// the Stage 2 PR/push verify gate. `ubuntu-24.04` is the Change Contract host.
+// Linux hosted runners stay allowed for release administration and the narrow
+// legacy updater bridge, keeping release-write credentials off physical build
+// hosts. `windows-11-arm` is the Stage 2 PR/push verify gate. `ubuntu-24.04` is
+// the Change Contract host.
 const ALLOWED_HOSTED = new Set(["ubuntu-latest", "ubuntu-24.04", "ubuntu-22.04", "windows-11-arm"]);
 
 /**

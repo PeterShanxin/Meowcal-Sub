@@ -86,7 +86,7 @@ describe("hosted PR gate is the merge gate", () => {
     }
   });
 
-  it("never interpolates signing or mirror secrets on the hosted gate", () => {
+  it("never interpolates signing or legacy-bridge secrets on the hosted gate", () => {
     expectNoForbiddenSecrets(readWorkflow("test.yml"), "test.yml");
   });
 
@@ -137,7 +137,12 @@ describe("self-hosted hardware CI is maintainer dispatch only", () => {
   });
 
   it("does not add pull_request to maintainer-only packaging and release workflows", () => {
-    for (const name of ["hardware.yml", "package.yml", "release.yml", "publish-update.yml"]) {
+    for (const name of [
+      "hardware.yml",
+      "package.yml",
+      "release.yml",
+      "publish-legacy-update-bridge.yml",
+    ]) {
       const contents = readWorkflow(name);
       expect(contents, name).not.toMatch(/^\s*pull_request:/m);
     }
@@ -152,7 +157,7 @@ describe("host trust is PeterShanxin and ianmeowmeow only", () => {
       "hardware.yml",
       "package.yml",
       "release.yml",
-      "publish-update.yml",
+      "publish-legacy-update-bridge.yml",
     ]) {
       for (const job of splitWorkflowJobs(readWorkflow(name))) {
         const runsOn = jobRunsOn(job);
@@ -171,11 +176,11 @@ describe("host trust is PeterShanxin and ianmeowmeow only", () => {
     ]);
   });
 
-  it("gates packaging, release, and publish-update jobs on both trusted actors", () => {
+  it("gates packaging, release, and legacy-bridge jobs on both trusted actors", () => {
     const expected = {
       "package.yml": ["package"],
       "release.yml": ["validate", "package-x64", "package-arm64", "draft-release"],
-      "publish-update.yml": ["publish"],
+      "publish-legacy-update-bridge.yml": ["publish"],
     };
     for (const [name, jobNames] of Object.entries(expected)) {
       const jobs = splitWorkflowJobs(readWorkflow(name));
@@ -190,5 +195,14 @@ describe("host trust is PeterShanxin and ianmeowmeow only", () => {
         }
       }
     }
+  });
+
+  it("keeps the legacy bridge manifest-only and pointed at canonical assets", () => {
+    const contents = readWorkflow("publish-legacy-update-bridge.yml");
+    expect(contents).toContain("--pattern latest.json");
+    expect(contents).toContain("bridge-assets/latest.json");
+    expect(contents).toContain("https://github.com/$env:GITHUB_REPOSITORY/releases/download/");
+    expect(contents).not.toContain("export-showcase");
+    expect(contents).not.toContain("gh release download ${{ steps.release.outputs.tag }}");
   });
 });

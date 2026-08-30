@@ -47,10 +47,3 @@ its manual gate. Otherwise use Refs.
 -->
 
 Refs #
-
-## Contributor License Agreement
-
-- [ ] I agree to the [Contributor License Agreement](https://github.com/PeterShanxin/Meowcal-Sub/blob/main/CLA.md)
-  for this contribution. I keep copyright and grant the licenses described
-  there, including dual-licensing rights.
-

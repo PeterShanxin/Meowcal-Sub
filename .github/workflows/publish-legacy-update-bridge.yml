@@ -1,0 +1,214 @@
+name: Publish Legacy Update Bridge
+
+# Old Meowcal Sub clients fetch latest.json from Meowcal-Sub-releases. New
+# releases and binaries are canonical in this public repository; this manual
+# bridge copies only the signature-bearing updater manifest so old clients can
+# follow its HTTPS URLs to the canonical release assets.
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Semantic version without the v prefix, for example 0.6.10
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+env:
+  LEGACY_REPO: PeterShanxin/Meowcal-Sub-releases
+
+jobs:
+  publish:
+    name: Publish compatibility manifest
+    if: >-
+      (github.actor == 'PeterShanxin' || github.actor == 'ianmeowmeow') &&
+      github.actor != 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require a trusted actor
+        shell: pwsh
+        run: |
+          $trusted = @('PeterShanxin', 'ianmeowmeow')
+          if ($trusted -notcontains $env:GITHUB_ACTOR) {
+            throw "Privileged job refused actor '$($env:GITHUB_ACTOR)'."
+          }
+
+      - name: Resolve the canonical latest release
+        id: release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_VERSION: ${{ inputs.version }}
+        run: |
+          if ($env:RELEASE_VERSION -notmatch '^\d+\.\d+\.\d+$') {
+            throw "Version must use major.minor.patch without a v prefix."
+          }
+          $tag = "v$env:RELEASE_VERSION"
+          $release = gh release view $tag `
+            --repo $env:GITHUB_REPOSITORY `
+            --json isDraft,isPrerelease,assets | ConvertFrom-Json
+          if ($LASTEXITCODE -ne 0) {
+            throw "Canonical release $tag does not exist."
+          }
+          if ($release.isDraft -or $release.isPrerelease) {
+            throw "Canonical release $tag must be published and non-prerelease."
+          }
+
+          $latestTag = gh api "repos/$env:GITHUB_REPOSITORY/releases/latest" --jq .tag_name
+          if ($LASTEXITCODE -ne 0 -or $latestTag -ne $tag) {
+            throw "$tag is not the canonical latest release (found '$latestTag')."
+          }
+
+          $assetNames = @($release.assets | ForEach-Object { $_.name })
+          foreach ($pattern in @(
+            "Meowcal.Sub_${env:RELEASE_VERSION}_x64-setup.exe",
+            "Meowcal.Sub_${env:RELEASE_VERSION}_arm64-setup.exe",
+            "Meowcal.Sub_${env:RELEASE_VERSION}_x64_en-US.msi",
+            "Meowcal.Sub_${env:RELEASE_VERSION}_arm64_en-US.msi",
+            "SHA256SUMS.txt",
+            "latest.json"
+          )) {
+            if ($assetNames -notcontains $pattern) {
+              throw "Canonical release $tag is missing $pattern."
+            }
+          }
+
+          New-Item -ItemType Directory -Path bridge-assets | Out-Null
+          gh release download $tag `
+            --repo $env:GITHUB_REPOSITORY `
+            --pattern latest.json `
+            --dir bridge-assets
+          if ($LASTEXITCODE -ne 0) {
+            throw "Failed to download canonical latest.json for $tag."
+          }
+
+          "tag=$tag" >> $env:GITHUB_OUTPUT
+
+      - name: Validate canonical manifest and assets
+        shell: pwsh
+        env:
+          RELEASE_VERSION: ${{ inputs.version }}
+        run: |
+          $manifest = Get-Content bridge-assets/latest.json -Raw | ConvertFrom-Json
+          $tag = "v$env:RELEASE_VERSION"
+          $expectedPrefix =
+            "https://github.com/$env:GITHUB_REPOSITORY/releases/download/$tag/"
+
+          if ($manifest.version -ne $env:RELEASE_VERSION) {
+            throw "latest.json declares $($manifest.version), not $env:RELEASE_VERSION."
+          }
+          foreach ($platform in @("windows-x86_64", "windows-aarch64")) {
+            $entry = $manifest.platforms.$platform
+            if (-not $entry) {
+              throw "latest.json has no $platform entry."
+            }
+            if (-not $entry.url.StartsWith($expectedPrefix)) {
+              throw "$platform points outside the canonical release: $($entry.url)"
+            }
+            if (-not $entry.url.EndsWith("-setup.exe")) {
+              throw "$platform does not point to a signed updater installer."
+            }
+            if ([string]::IsNullOrWhiteSpace($entry.signature)) {
+              throw "$platform has no updater signature."
+            }
+            try {
+              $signatureText = [Text.Encoding]::UTF8.GetString(
+                [Convert]::FromBase64String($entry.signature)
+              )
+            } catch {
+              throw "$platform signature is not valid base64."
+            }
+            if (-not $signatureText.StartsWith("untrusted comment: signature from tauri secret key")) {
+              throw "$platform signature does not have the expected Tauri minisign format."
+            }
+
+            $response = Invoke-WebRequest `
+              -Uri $entry.url `
+              -Method Head `
+              -MaximumRedirection 5
+            if ($response.StatusCode -ne 200) {
+              throw "$platform canonical asset returned HTTP $($response.StatusCode)."
+            }
+          }
+
+      - name: Publish the legacy compatibility manifest
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_MIRROR_TOKEN }}
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:GH_TOKEN)) {
+            throw "RELEASE_MIRROR_TOKEN is not set; the legacy bridge cannot be written."
+          }
+          $tag = "${{ steps.release.outputs.tag }}"
+          gh release view $tag --repo $env:LEGACY_REPO *> $null
+          if ($LASTEXITCODE -eq 0) {
+            gh release upload $tag bridge-assets/latest.json `
+              --repo $env:LEGACY_REPO `
+              --clobber
+            if ($LASTEXITCODE -ne 0) {
+              throw "Failed to update the legacy manifest for $tag."
+            }
+            gh release edit $tag `
+              --repo $env:LEGACY_REPO `
+              --draft=false `
+              --prerelease=false `
+              --latest
+            if ($LASTEXITCODE -ne 0) {
+              throw "Failed to mark legacy release $tag as latest."
+            }
+          } else {
+            $notes = @"
+          Legacy updater compatibility bridge for old Meowcal Sub clients.
+
+          Canonical release and downloads: https://github.com/$env:GITHUB_REPOSITORY/releases/tag/$tag
+          "@
+            gh release create $tag bridge-assets/latest.json `
+              --repo $env:LEGACY_REPO `
+              --title "Meowcal Sub $tag — legacy updater bridge" `
+              --notes $notes `
+              --latest
+            if ($LASTEXITCODE -ne 0) {
+              throw "Failed to create legacy bridge release $tag."
+            }
+          }
+
+      - name: Verify the legacy endpoint
+        shell: pwsh
+        env:
+          RELEASE_VERSION: ${{ inputs.version }}
+        run: |
+          $endpoint =
+            "https://github.com/$env:LEGACY_REPO/releases/latest/download/latest.json"
+          $manifest = $null
+          foreach ($attempt in 1..6) {
+            try {
+              $candidate = Invoke-RestMethod -Uri $endpoint -MaximumRedirection 5
+              if ($candidate.version -eq $env:RELEASE_VERSION) {
+                $manifest = $candidate
+                break
+              }
+            } catch {
+              Write-Warning "Legacy endpoint attempt $attempt failed: $($_.Exception.Message)"
+            }
+            if ($attempt -lt 6) { Start-Sleep -Seconds 5 }
+          }
+          $expectedPrefix =
+            "https://github.com/$env:GITHUB_REPOSITORY/releases/download/v$env:RELEASE_VERSION/"
+          if (-not $manifest) {
+            throw "Legacy endpoint did not serve $env:RELEASE_VERSION after six attempts."
+          }
+          foreach ($platform in @("windows-x86_64", "windows-aarch64")) {
+            $entry = $manifest.platforms.$platform
+            if (-not $entry.url.StartsWith($expectedPrefix)) {
+              throw "$platform did not bridge to the canonical release."
+            }
+            $response = Invoke-WebRequest `
+              -Uri $entry.url `
+              -Method Head `
+              -MaximumRedirection 5
+            if ($response.StatusCode -ne 200) {
+              throw "$platform canonical asset returned HTTP $($response.StatusCode)."
+            }
+          }

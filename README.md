@@ -151,8 +151,8 @@ Current release: **v0.6.9**
 ## Development
 
 Start with [CONTRIBUTING.md](CONTRIBUTING.md) and
-[docs/AGENT_GUIDE.md](docs/AGENT_GUIDE.md). Contributions need a CLA before
-merge; see [CLA.md](CLA.md).
+[docs/AGENT_GUIDE.md](docs/AGENT_GUIDE.md). Intentional submissions are
+governed by the [CLA](CLA.md).
 
 From a clean checkout:
 
@@ -174,6 +174,8 @@ See [SECURITY.md](SECURITY.md) to report a vulnerability privately and
 
 Meowcal Sub community source is licensed under the
 [GNU Affero General Public License version 3 only](LICENSE) (`AGPL-3.0-only`).
+The project-specific application notice is in
+[LICENSE-NOTICE.md](LICENSE-NOTICE.md).
 Commercial licensing is available for organizations that require terms outside
 AGPL-3.0.
 
