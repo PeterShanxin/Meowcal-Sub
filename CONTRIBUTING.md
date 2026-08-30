@@ -1,5 +1,9 @@
 # Contributing to Meowcal Sub
 
+**By intentionally submitting a contribution to this project, you agree to the
+[Contributor License Agreement](CLA.md) for that contribution.** No per-pull-
+request checkbox is required.
+
 Meowcal Sub is a Windows desktop application for private, local subtitle
 translation. It is an AGPL-3.0-only community project. The approved product
 direction is a curated Tencent HY-MT engine, Windows OCR, and a Tauri 2/Rust
@@ -129,15 +133,14 @@ Community source is licensed under the GNU Affero General Public License
 version 3 only. See [`LICENSE`](LICENSE). Commercial licensing is available
 for organizations that require terms outside AGPL-3.0.
 
-Before a contribution is merged, you must agree to [`CLA.md`](CLA.md). You keep
-copyright in your work. The CLA grants the project owner a perpetual copyright
-and patent license, and enough relicensing rights for the owner to dual-license
-the project (community AGPL plus separate commercial terms). Individuals and
-entities use the same grant.
-
-Agree by ticking the CLA checkbox on the pull request template. That is your
-agreement for that pull request and later ones, until you write to the
-maintainer that you withdraw it for future work. There is no CLA bot.
+Acceptance is submission-based: the CLA terms in effect when you intentionally
+submit material for inclusion govern that contribution. You keep copyright in
+your work. The CLA grants the project owner perpetual copyright and patent
+licenses, including sublicensing and relicensing rights needed to offer
+separately commercially licensed versions. Individuals and entities use the
+same grant. Viewing, starring, or forking the repository, opening an issue, or
+joining a discussion does not by itself accept the CLA. Commercial use of the
+public project under AGPL-3.0 does not require payment.
 
 Name and logo use is separate from the code license. See
 [`TRADEMARKS.md`](TRADEMARKS.md). Report vulnerabilities privately; see
@@ -156,7 +159,7 @@ treat this repository going public as completing that gate.
 Every pull request, including forks and Dependabot, gets the hosted Windows
 verify gate on `windows-11-arm`. Those jobs install the toolchain and run
 `scripts/verify.ps1`. They are the merge gate. They use read-only contents
-permission and do not receive signing or release-mirror secrets.
+permission and do not receive signing or legacy-bridge secrets.
 
 The owner's self-hosted runners are not that gate. `meowcal-ci` is a
 maintainer-only `workflow_dispatch` path for real Snapdragon/Adreno hardware.
@@ -251,11 +254,11 @@ mechanical parts in the **Change Contract** check.
 
 `main` takes changes only through a pull request, with `Lint & Format`, `Tests`,
 `Frontend & Browser`, and `Change Contract` green and every review conversation
-resolved. Fork PRs, Dependabot, and any other login skip the three Windows
-jobs by design; those required checks are for same-repo runs by `PeterShanxin`
-or `ianmeowmeow` and for their pushes to `main`. Required approvals are zero
-while this repository is effectively solo-maintained; the contract says when
-that changes and who may bypass a rule to recover.
+resolved. Every pull request, including forks and Dependabot, takes those
+GitHub-hosted checks. Privileged packaging and real Snapdragon/Adreno hardware
+validation remain trusted-admin-only and are not pull-request jobs. Required
+approvals are zero while this repository is effectively solo-maintained; the
+contract says when that changes and who may bypass a rule to recover.
 
 Merging always produces a merge commit - squash and rebase are disabled - and
 the merged branch is deleted automatically. Your local branch and worktree are

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
 import {
   buildUpdaterManifest,
   githubAssetName,
@@ -128,5 +129,24 @@ describe("manifest assembly", () => {
         baseUrl: "https://example.invalid/download",
       }),
     ).toThrow(/empty/);
+  });
+});
+
+describe("canonical update channel", () => {
+  it("keeps future clients and release manifests on the main repository", () => {
+    const config = JSON.parse(
+      readFileSync(new URL("../../src-tauri/tauri.conf.json", import.meta.url), "utf8"),
+    );
+    expect(config.plugins.updater.endpoints).toEqual([
+      "https://github.com/PeterShanxin/Meowcal-Sub/releases/latest/download/latest.json",
+    ]);
+    expect(config.bundle.homepage).toBe("https://github.com/PeterShanxin/Meowcal-Sub");
+
+    const releaseWorkflow = readFileSync(
+      new URL("../../.github/workflows/release.yml", import.meta.url),
+      "utf8",
+    );
+    expect(releaseWorkflow).toContain("--repo $env:GITHUB_REPOSITORY");
+    expect(releaseWorkflow).not.toContain("UPDATE_MIRROR_REPO");
   });
 });

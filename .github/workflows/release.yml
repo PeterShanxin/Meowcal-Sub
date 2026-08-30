@@ -160,10 +160,6 @@ jobs:
     env:
       GH_TOKEN: ${{ github.token }}
       RELEASE_VERSION: ${{ needs.validate.outputs.version }}
-      # This repository is private, so its release assets are not downloadable
-      # without a token and cannot serve the updater. The manifest therefore
-      # points at the public mirror, which `publish-update.yml` fills.
-      UPDATE_MIRROR_REPO: PeterShanxin/Meowcal-Sub-releases
     steps:
       - name: Require a trusted actor
         shell: pwsh
@@ -225,14 +221,14 @@ jobs:
       - name: Build the updater manifest
         shell: pwsh
         run: |
-          # The URLs name the mirror's copy of this tag's assets, which exist
-          # only once `publish-update.yml` has run. Publishing there is what
-          # turns the update on for every installed copy.
+          # The public canonical repository owns both the release assets and
+          # the updater manifest. The separate legacy bridge copies only this
+          # manifest for clients shipped with the former endpoint.
           node scripts/build-updater-manifest.mjs `
             --directory release-assets `
             --version $env:RELEASE_VERSION `
             --tag "v$env:RELEASE_VERSION" `
-            --repo $env:UPDATE_MIRROR_REPO `
+            --repo $env:GITHUB_REPOSITORY `
             --notes-file "docs/releases/v$env:RELEASE_VERSION.md" `
             --output release-assets/latest.json
           if ($LASTEXITCODE -ne 0) {

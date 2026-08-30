@@ -84,15 +84,17 @@ local branch and worktree survive; remove a finished worktree deliberately with
   built artifacts, never written by hand. It names `windows-x86_64` and
   `windows-aarch64` explicitly, and the release job fails when either
   architecture's installer or signature is missing.
-- This repository is private, so its release assets are not downloadable without
-  a token and cannot serve the updater. Public artifacts live in
-  `PeterShanxin/Meowcal-Sub-releases`, and the manifest's URLs point there.
-- Releasing is three deliberate steps: `release.yml` builds the draft here,
-  a human promotes that draft after the manual gate, and `publish-update.yml`
-  copies the assets to the mirror as its latest release. That last run is the
-  moment the update becomes live for every installed copy; it refuses to mirror
-  a draft. It needs `RELEASE_MIRROR_TOKEN`, a fine-grained token with
-  Contents: read and write on the mirror only.
+- This public repository is the canonical release and updater location. New
+  builds fetch `releases/latest/download/latest.json` here, and that manifest's
+  installer URLs point to assets on the same canonical release.
+- Clients released through v0.6.9 still fetch `latest.json` from
+  `PeterShanxin/Meowcal-Sub-releases`. After a human promotes the canonical
+  draft, manually run `publish-legacy-update-bridge.yml`. It verifies the
+  canonical latest release and copies **only** `latest.json` to the matching
+  legacy release. The manifest still points back to canonical installers; no
+  duplicate binaries or showcase content is published. The workflow needs
+  `RELEASE_MIRROR_TOKEN`, a fine-grained token with Contents: read and write on
+  the legacy repository only.
 - Applying an update runs the installer over the running installation and ends
   this process without `RunEvent::Exit`. Anything that must happen first belongs
   in `update_handoff`, not in an exit handler.
@@ -181,7 +183,7 @@ DPI/window behavior.
   `hardware.yml` for real Snapdragon/Adreno ARM64 hardware. Windows packaging
   stays on `meowcal-package-x64` and `meowcal-package-arm64`.
   `docs/SELF_HOSTED_RUNNERS.md` is the contract.
-- Remaining self-hosted jobs, and the hosted publish-update job that holds
+- Remaining self-hosted jobs, and the hosted legacy-bridge job that holds
   `RELEASE_MIRROR_TOKEN`, run only when `github.actor` is `PeterShanxin` or
   `ianmeowmeow`. That includes `workflow_dispatch` and `workflow_call`. Host
   trust is those two logins, not write access in general. Forks, Dependabot,
@@ -194,9 +196,9 @@ DPI/window behavior.
 - `meowcal-ci` requires an ARM64 host. It can build and execute both shipped
   architectures on real Snapdragon hardware. The hosted `windows-11-arm` gate
   covers the same dual-arch contract for merge.
-- Three release jobs stay on `ubuntu-latest` deliberately, because
-  `RELEASE_MIRROR_TOKEN` and release-write permission belong on an ephemeral host
-  rather than one that also runs contributor pull request code.
+- Release administration and the legacy bridge stay on `ubuntu-latest`
+  deliberately, because `RELEASE_MIRROR_TOKEN` and release-write permission
+  belong on an ephemeral host rather than a physical packaging runner.
 - The `Change Contract` job stays on `ubuntu-24.04`: it reads Git metadata
   and runs a dependency-free Node script, so putting it on Linux reports a
   misnamed commit in seconds without occupying the hosted Windows gate or the

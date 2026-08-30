@@ -106,8 +106,8 @@ for all outside collaborators** stops a fork's new workflow until a maintainer
 approves it. Do not treat that setting as covering anyone outside those two
 logins; they are still not host-trusted. Fork approval does not cover a future
 write login adding a new workflow. These job `if:` checks plus fail-closed
-steps are what keep forks and other logins off the runners and off
-`RELEASE_MIRROR_TOKEN`.
+steps are what keep forks and other logins off the runners and off the legacy
+bridge credential.
 
 **Never attach these runners to any other public repository.** Do not register
 them at organization or enterprise scope, where another repository could
@@ -427,8 +427,9 @@ Recommended, in rough order of value:
 Secret scoping is enforced in the workflows and should stay that way:
 
 - The updater signing key reaches packaging jobs only.
-- `RELEASE_MIRROR_TOKEN` never reaches a self-hosted host at all. The job that
-  holds it stays on a GitHub-hosted Linux runner on purpose — see below.
+- `RELEASE_MIRROR_TOKEN` never reaches a self-hosted host. The narrow legacy
+  compatibility job that holds it stays on a GitHub-hosted Linux runner — see
+  below.
 
 ## Workspace reuse, and why hardware CI and packaging differ
 
@@ -551,19 +552,17 @@ on purpose; that is not a standby for `meowcal-ci` or the package labels.
 | `change-contract.yml` / `Change Contract` | `ubuntu-24.04` | Reads Git metadata only; reports a misnamed commit or pull request title in seconds without occupying the Windows gate |
 | `release.yml` / `validate` | `ubuntu-latest` | Linux, about a minute; holds `contents: write` to reserve the release tag |
 | `release.yml` / `draft-release` | `ubuntu-latest` | Holds release-write permission |
-| `publish-update.yml` / `publish` | `ubuntu-latest` | Holds `RELEASE_MIRROR_TOKEN` |
+| `publish-legacy-update-bridge.yml` / `publish` | `ubuntu-latest` | Verifies the canonical release and holds the legacy-only `RELEASE_MIRROR_TOKEN` |
 
-`RELEASE_MIRROR_TOKEN` can publish to the endpoint every installed copy checks
-for updates. Keeping the job that holds it on an ephemeral hosted runner keeps it
-off a long-lived machine that also executes contributor pull request code.
-Write access is still not enough for any other login: `publish`, `validate`, and
-`draft-release` require `github.actor` to be `PeterShanxin` or `ianmeowmeow`,
-the same gate as the self-hosted packager. The Change Contract job is the
-exception: it must run on every pull request so a misnamed commit is reported
-without a trusted-actor dispatch.
-Moving the token-holding jobs to the self-hosted host would save about a minute
-per release and would put the most dangerous credential in the system on the
-least ephemeral host in it.
+`RELEASE_MIRROR_TOKEN` can publish only the compatibility manifest consumed by
+clients shipped with the former endpoint. Keeping the job that holds it on an
+ephemeral hosted runner keeps it off the physical packaging machines. The
+workflow copies no binaries or showcase content. Write access is still not
+enough for any other login: `publish`, `validate`, and `draft-release` require
+`github.actor` to be `PeterShanxin` or `ianmeowmeow`, the same gate as the
+self-hosted packager. The Change Contract job is the exception: it must run on
+every pull request so a misnamed commit is reported without a trusted-actor
+dispatch.
 
 ## Troubleshooting
 
