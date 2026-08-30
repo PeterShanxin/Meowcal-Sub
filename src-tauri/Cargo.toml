@@ -175,7 +175,7 @@ tauri-build = { version = "2", features = [] }
 # =============================================================================
 # TEST DEPENDENCIES
 # =============================================================================
-# These are only used when running tests, not at runtime
+# These are only used when running tests (cargo test)
 
 [dev-dependencies]
 # Testing utilities for async code
