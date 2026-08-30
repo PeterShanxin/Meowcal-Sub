@@ -1,20 +1,22 @@
 # Stage 2 pull-request and post-merge verify gate.
 #
-# Pull requests are classified before the required checks start. Runtime/build
-# changes run the full GitHub-hosted windows-11-arm suite. Documentation-only
-# changes keep the SAME required check names but take a lightweight Ubuntu path,
-# so contributors do not wait for Rust/Node/browser setup just to edit docs.
+# Pull requests are classified before verification. Runtime/build changes run
+# the full GitHub-hosted windows-11-arm suite. Documentation-only changes skip
+# those heavy Windows jobs entirely, while lightweight Ubuntu wrapper jobs keep
+# the SAME required check names green.
+#
 # Pushes to main always run the full suite.
 #
 # Do not replace this with workflow-level `paths-ignore`: if an entire required
 # workflow is omitted, GitHub can leave its required checks Pending forever.
-# The classifier is fail-closed: every required job runs with `always()` and
-# explicitly fails when classification fails, rather than silently skipping CI.
+# The wrappers are fail-closed: they run with `always()` and fail if the path
+# classifier failed or if a required heavy job did not succeed.
 #
 # Required check names: Lint & Format, Tests, Frontend & Browser.
 #
 # Security for this hosted gate:
 # - permissions are read-only (contents + pull request metadata)
+# - all runner labels are literal allowlisted hosted runners
 # - never interpolate TAURI_SIGNING_PRIVATE_KEY,
 #   TAURI_SIGNING_PRIVATE_KEY_PASSWORD, or legacy bridge credentials
 # - persist-credentials: false
@@ -79,7 +81,7 @@ jobs:
 
           # Use GitHub's PR file list so fork pull requests do not depend on the
           # fork's head commit being fetchable from the base repository remote.
-          # A failed API call fails this job; the three required jobs then fail
+          # A failed API call fails this job; the required wrappers then fail
           # closed instead of treating an unknown change set as documentation.
           gh api --paginate \
             "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER/files?per_page=100" \
@@ -107,38 +109,23 @@ jobs:
 
           echo "full=$full" >> "$GITHUB_OUTPUT"
 
-  lint:
-    name: Lint & Format
+  lint_windows:
+    name: Lint & Format (Windows full)
     needs: scope
-    if: ${{ always() }}
-    runs-on: ${{ needs.scope.outputs.full == 'true' && 'windows-11-arm' || 'ubuntu-24.04' }}
+    if: ${{ needs.scope.result == 'success' && needs.scope.outputs.full == 'true' }}
+    runs-on: windows-11-arm
     timeout-minutes: 120
     steps:
-      - name: Fail closed if path classification failed
-        if: ${{ needs.scope.result != 'success' }}
-        shell: bash
-        run: |
-          echo "::error::Could not classify changed files; full verification was not bypassed."
-          exit 1
-
-      - name: Documentation-only fast path
-        if: ${{ needs.scope.result == 'success' && needs.scope.outputs.full != 'true' }}
-        shell: bash
-        run: echo "No runtime/build files changed; Lint & Format is satisfied without the Windows toolchain."
-
       - uses: actions/checkout@v4
-        if: ${{ needs.scope.outputs.full == 'true' }}
         with:
           persist-credentials: false
 
       - uses: actions/setup-node@v4
-        if: ${{ needs.scope.outputs.full == 'true' }}
         with:
           node-version: 24
           cache: npm
 
       - name: Install Rust toolchain and both Windows targets
-        if: ${{ needs.scope.outputs.full == 'true' }}
         run: |
           rustup toolchain install stable --profile minimal --component rustfmt --component clippy
           rustup target add aarch64-pc-windows-msvc
@@ -146,45 +133,28 @@ jobs:
           rustup default stable
 
       - name: Lint the native ARM64 target
-        if: ${{ needs.scope.outputs.full == 'true' }}
         run: ./scripts/verify.ps1 -Stage Lint -Target aarch64-pc-windows-msvc
 
       - name: Lint the x64 target
-        if: ${{ needs.scope.outputs.full == 'true' }}
         run: ./scripts/verify.ps1 -Stage Lint -Target x86_64-pc-windows-msvc
 
-  test:
-    name: Tests
+  test_windows:
+    name: Tests (Windows full)
     needs: scope
-    if: ${{ always() }}
-    runs-on: ${{ needs.scope.outputs.full == 'true' && 'windows-11-arm' || 'ubuntu-24.04' }}
+    if: ${{ needs.scope.result == 'success' && needs.scope.outputs.full == 'true' }}
+    runs-on: windows-11-arm
     timeout-minutes: 120
     steps:
-      - name: Fail closed if path classification failed
-        if: ${{ needs.scope.result != 'success' }}
-        shell: bash
-        run: |
-          echo "::error::Could not classify changed files; full verification was not bypassed."
-          exit 1
-
-      - name: Documentation-only fast path
-        if: ${{ needs.scope.result == 'success' && needs.scope.outputs.full != 'true' }}
-        shell: bash
-        run: echo "No runtime/build files changed; Tests is satisfied without the Windows toolchain."
-
       - uses: actions/checkout@v4
-        if: ${{ needs.scope.outputs.full == 'true' }}
         with:
           persist-credentials: false
 
       - uses: actions/setup-node@v4
-        if: ${{ needs.scope.outputs.full == 'true' }}
         with:
           node-version: 24
           cache: npm
 
       - name: Install Rust toolchain and both Windows targets
-        if: ${{ needs.scope.outputs.full == 'true' }}
         run: |
           rustup toolchain install stable --profile minimal --component rustfmt --component clippy
           rustup target add aarch64-pc-windows-msvc
@@ -192,47 +162,30 @@ jobs:
           rustup default stable
 
       - name: Test the native ARM64 target
-        if: ${{ needs.scope.outputs.full == 'true' }}
         run: ./scripts/verify.ps1 -Stage Test -Target aarch64-pc-windows-msvc
 
       # Executed, not merely compiled: the ARM64 host runs x64 binaries under
       # emulation, so this is the dual-arch contract without a second x64 image.
       - name: Test the x64 target under emulation
-        if: ${{ needs.scope.outputs.full == 'true' }}
         run: ./scripts/verify.ps1 -Stage Test -Target x86_64-pc-windows-msvc
 
-  frontend:
-    name: Frontend & Browser
+  frontend_windows:
+    name: Frontend & Browser (Windows full)
     needs: scope
-    if: ${{ always() }}
-    runs-on: ${{ needs.scope.outputs.full == 'true' && 'windows-11-arm' || 'ubuntu-24.04' }}
+    if: ${{ needs.scope.result == 'success' && needs.scope.outputs.full == 'true' }}
+    runs-on: windows-11-arm
     timeout-minutes: 120
     steps:
-      - name: Fail closed if path classification failed
-        if: ${{ needs.scope.result != 'success' }}
-        shell: bash
-        run: |
-          echo "::error::Could not classify changed files; full verification was not bypassed."
-          exit 1
-
-      - name: Documentation-only fast path
-        if: ${{ needs.scope.result == 'success' && needs.scope.outputs.full != 'true' }}
-        shell: bash
-        run: echo "No runtime/build files changed; Frontend & Browser is satisfied without the Windows toolchain."
-
       - uses: actions/checkout@v4
-        if: ${{ needs.scope.outputs.full == 'true' }}
         with:
           persist-credentials: false
 
       - uses: actions/setup-node@v4
-        if: ${{ needs.scope.outputs.full == 'true' }}
         with:
           node-version: 24
           cache: npm
 
       - name: Install Rust toolchain and both Windows targets
-        if: ${{ needs.scope.outputs.full == 'true' }}
         run: |
           rustup toolchain install stable --profile minimal --component rustfmt --component clippy
           rustup target add aarch64-pc-windows-msvc
@@ -243,5 +196,121 @@ jobs:
       # drives browser mode against the host-native Rust backend. The hosted
       # image provides the system Google Chrome channel the smoke uses.
       - name: Run frontend and browser verification
-        if: ${{ needs.scope.outputs.full == 'true' }}
         run: ./scripts/verify.ps1 -Stage Frontend
+
+  lint:
+    name: Lint & Format
+    needs: [scope, lint_windows]
+    if: ${{ always() }}
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Resolve required check
+        shell: bash
+        env:
+          SCOPE_RESULT: ${{ needs.scope.result }}
+          FULL: ${{ needs.scope.outputs.full }}
+          HEAVY_RESULT: ${{ needs.lint_windows.result }}
+        run: |
+          set -euo pipefail
+          if [[ "$SCOPE_RESULT" != "success" ]]; then
+            echo "::error::Changed-file classification failed."
+            exit 1
+          fi
+          case "$FULL" in
+            true)
+              if [[ "$HEAVY_RESULT" != "success" ]]; then
+                echo "::error::Full Lint & Format verification did not succeed (result: $HEAVY_RESULT)."
+                exit 1
+              fi
+              echo "Full Lint & Format verification passed."
+              ;;
+            false)
+              if [[ "$HEAVY_RESULT" != "skipped" ]]; then
+                echo "::error::Docs-only classification expected the Windows lint job to be skipped (result: $HEAVY_RESULT)."
+                exit 1
+              fi
+              echo "Documentation-only change: heavy Lint & Format verification skipped."
+              ;;
+            *)
+              echo "::error::Unknown verification scope '$FULL'."
+              exit 1
+              ;;
+          esac
+
+  test:
+    name: Tests
+    needs: [scope, test_windows]
+    if: ${{ always() }}
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Resolve required check
+        shell: bash
+        env:
+          SCOPE_RESULT: ${{ needs.scope.result }}
+          FULL: ${{ needs.scope.outputs.full }}
+          HEAVY_RESULT: ${{ needs.test_windows.result }}
+        run: |
+          set -euo pipefail
+          if [[ "$SCOPE_RESULT" != "success" ]]; then
+            echo "::error::Changed-file classification failed."
+            exit 1
+          fi
+          case "$FULL" in
+            true)
+              if [[ "$HEAVY_RESULT" != "success" ]]; then
+                echo "::error::Full Tests verification did not succeed (result: $HEAVY_RESULT)."
+                exit 1
+              fi
+              echo "Full Tests verification passed."
+              ;;
+            false)
+              if [[ "$HEAVY_RESULT" != "skipped" ]]; then
+                echo "::error::Docs-only classification expected the Windows test job to be skipped (result: $HEAVY_RESULT)."
+                exit 1
+              fi
+              echo "Documentation-only change: heavy Tests verification skipped."
+              ;;
+            *)
+              echo "::error::Unknown verification scope '$FULL'."
+              exit 1
+              ;;
+          esac
+
+  frontend:
+    name: Frontend & Browser
+    needs: [scope, frontend_windows]
+    if: ${{ always() }}
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Resolve required check
+        shell: bash
+        env:
+          SCOPE_RESULT: ${{ needs.scope.result }}
+          FULL: ${{ needs.scope.outputs.full }}
+          HEAVY_RESULT: ${{ needs.frontend_windows.result }}
+        run: |
+          set -euo pipefail
+          if [[ "$SCOPE_RESULT" != "success" ]]; then
+            echo "::error::Changed-file classification failed."
+            exit 1
+          fi
+          case "$FULL" in
+            true)
+              if [[ "$HEAVY_RESULT" != "success" ]]; then
+                echo "::error::Full Frontend & Browser verification did not succeed (result: $HEAVY_RESULT)."
+                exit 1
+              fi
+              echo "Full Frontend & Browser verification passed."
+              ;;
+            false)
+              if [[ "$HEAVY_RESULT" != "skipped" ]]; then
+                echo "::error::Docs-only classification expected the Windows frontend job to be skipped (result: $HEAVY_RESULT)."
+                exit 1
+              fi
+              echo "Documentation-only change: heavy Frontend & Browser verification skipped."
+              ;;
+            *)
+              echo "::error::Unknown verification scope '$FULL'."
+              exit 1
+              ;;
+          esac
