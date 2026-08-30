@@ -3,11 +3,12 @@
 This document is the contract for the owner's Windows machines: who may attach
 one, what the host must provide, and what happens when it is gone.
 
-**Stage 2 pull-request CI is not this host.** The merge gate is GitHub-hosted
-`windows-11-arm` in `.github/workflows/test.yml`. It installs the toolchain and
-runs `scripts/verify.ps1` for every pull request and every push to `main`. That
-is an explicit Stage 2 gate, not a silent fallback for an offline self-hosted
-runner.
+**Stage 2 pull-request CI is not this host.** The merge gate is
+`.github/workflows/test.yml`. Runtime, build, and workflow changes, and every
+push to `main`, run `scripts/verify.ps1` on GitHub-hosted `windows-11-arm`.
+Documentation-only pull requests skip that Windows suite; Ubuntu wrappers keep
+the required check names green. That is an explicit Stage 2 gate, not a silent
+fallback for an offline self-hosted runner.
 
 Self-hosted runners remain for two maintainer paths only:
 
@@ -54,16 +55,18 @@ stays queued for 24 hours. The hosted PR gate does not wait on this machine.
 
 ## The Stage 2 hosted Windows PR gate
 
-`.github/workflows/test.yml` is the merge gate. It is supposed to name
+`.github/workflows/test.yml` is the merge gate. Full verification still names
 `windows-11-arm`. Required check names stay `Lint & Format`, `Tests`, and
-`Frontend & Browser`, and the workflow keeps the `pull_request` trigger so those
-checks do not deadlock.
+`Frontend & Browser` on fail-closed Ubuntu wrappers, and the workflow keeps the
+`pull_request` trigger so those checks do not deadlock.
 
 Hosted PR/push jobs:
 
-- install Node 24 and the Rust stable toolchain with both Windows targets
-- run `scripts/verify.ps1` for ARM64 and x64
-- use `permissions: contents: read` only
+- classify the pull-request file list before choosing the Windows suite
+- install Node 24 and the Rust stable toolchain with both Windows targets when
+  full verification runs
+- run `scripts/verify.ps1` for ARM64 and x64 when full verification runs
+- use `permissions: contents: read` and `pull-requests: read`
 - never interpolate `TAURI_SIGNING_PRIVATE_KEY`,
   `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`, or `RELEASE_MIRROR_TOKEN`
 
@@ -548,7 +551,7 @@ on purpose; that is not a standby for `meowcal-ci` or the package labels.
 
 | Job | Runner | Reason |
 | --- | --- | --- |
-| `test.yml` / `Lint & Format`, `Tests`, `Frontend & Browser` | `windows-11-arm` | Stage 2 merge gate; installs the toolchain and runs `verify.ps1` for every pull request and every push to `main` |
+| `test.yml` / `Lint & Format`, `Tests`, `Frontend & Browser` | Ubuntu wrappers over `windows-11-arm` | Stage 2 merge gate; docs-only PRs skip Windows, otherwise hosted ARM64 runs `verify.ps1`; `main` always runs the full suite |
 | `change-contract.yml` / `Change Contract` | `ubuntu-24.04` | Reads Git metadata only; reports a misnamed commit or pull request title in seconds without occupying the Windows gate |
 | `release.yml` / `validate` | `ubuntu-latest` | Linux, about a minute; holds `contents: write` to reserve the release tag |
 | `release.yml` / `draft-release` | `ubuntu-latest` | Holds release-write permission |

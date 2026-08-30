@@ -171,14 +171,15 @@ DPI/window behavior.
 
 ## Continuous integration
 
-- The Stage 2 merge gate is GitHub-hosted `windows-11-arm` in `test.yml`. Those
-  jobs install the toolchain and run `scripts/verify.ps1` on every pull request
-  and every push to `main`, including forks and Dependabot. They use
-  `permissions: contents: read` only and must never interpolate
-  `TAURI_SIGNING_PRIVATE_KEY`, `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`, or
-  `RELEASE_MIRROR_TOKEN`. Do not drop the `pull_request` trigger: that would
-  deadlock the required Windows checks (`Lint & Format`, `Tests`,
-  `Frontend & Browser`).
+- The Stage 2 merge gate is `.github/workflows/test.yml`. Runtime, build, and
+  workflow changes, and every push to `main`, run `scripts/verify.ps1` on
+  GitHub-hosted `windows-11-arm`, including forks and Dependabot.
+  Documentation-only pull requests skip that Windows suite; Ubuntu wrappers keep
+  the required names `Lint & Format`, `Tests`, and `Frontend & Browser`. They
+  use `permissions: contents: read` and `pull-requests: read` and must never
+  interpolate `TAURI_SIGNING_PRIVATE_KEY`, `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`,
+  or `RELEASE_MIRROR_TOKEN`. Do not drop the `pull_request` trigger: that would
+  deadlock those required checks.
 - `meowcal-ci` is not the merge gate. It is maintainer `workflow_dispatch` in
   `hardware.yml` for real Snapdragon/Adreno ARM64 hardware. Windows packaging
   stays on `meowcal-package-x64` and `meowcal-package-arm64`.

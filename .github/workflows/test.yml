@@ -1,18 +1,26 @@
 # Stage 2 pull-request and post-merge verify gate.
 #
-# These jobs are the merge gate. They run on GitHub-hosted windows-11-arm for
-# every pull request to main and every push to main, including forks and
-# Dependabot. They install the toolchain and run scripts/verify.ps1. They are
-# not a silent fallback for an offline self-hosted host.
+# Pull requests are classified before verification. Runtime/build changes run
+# the full GitHub-hosted windows-11-arm suite. Documentation-only changes skip
+# those heavy Windows jobs entirely, while lightweight Ubuntu wrapper jobs keep
+# the SAME required check names green.
 #
-# Required check names (Lint & Format, Tests, Frontend & Browser) stay on this
-# workflow's pull_request jobs. Do not drop the pull_request trigger: that
-# would deadlock those required checks.
+# Pushes to main always run the full suite.
+#
+# Do not replace this with workflow-level `paths-ignore`: if an entire required
+# workflow is omitted, GitHub can leave its required checks Pending forever.
+# The wrappers are fail-closed: they run with `always()` and fail if the path
+# classifier failed or if a required heavy job did not succeed. The classifier
+# itself fails closed on a truncated PR file list (the files API caps at 3000
+# paths) and treats a rename's previous path as part of the change set.
+#
+# Required check names: Lint & Format, Tests, Frontend & Browser.
 #
 # Security for this hosted gate:
-# - permissions: contents: read only
+# - permissions are read-only (contents + pull request metadata)
+# - all runner labels are literal allowlisted hosted runners
 # - never interpolate TAURI_SIGNING_PRIVATE_KEY,
-#   TAURI_SIGNING_PRIVATE_KEY_PASSWORD, or RELEASE_MIRROR_TOKEN
+#   TAURI_SIGNING_PRIVATE_KEY_PASSWORD, or legacy bridge credentials
 # - persist-credentials: false
 #
 # Real Snapdragon/Adreno hardware verify is not this workflow. That path is
@@ -37,6 +45,7 @@ concurrency:
 
 permissions:
   contents: read
+  pull-requests: read
 
 env:
   CARGO_TERM_COLOR: always
@@ -46,8 +55,97 @@ defaults:
     shell: pwsh
 
 jobs:
-  lint:
-    name: Lint & Format
+  scope:
+    name: Classify verification scope
+    runs-on: ubuntu-24.04
+    outputs:
+      full: ${{ steps.scope.outputs.full }}
+    steps:
+      - name: Decide whether full verification is required
+        id: scope
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          # Uncapped count from the same pull_request event. The files API
+          # silently stops at 3000 paths, so this is the completeness check.
+          CHANGED_FILES_COUNT: ${{ github.event.pull_request.changed_files }}
+        run: |
+          set -euo pipefail
+
+          # Keep the existing post-merge contract: every push to main gets the
+          # full suite regardless of what the merged pull request changed.
+          if [[ "$GITHUB_EVENT_NAME" != "pull_request" ]]; then
+            echo "full=true" >> "$GITHUB_OUTPUT"
+            echo "Push event: full verification required."
+            exit 0
+          fi
+
+          is_docs_only() {
+            case "$1" in
+              *.md|docs/*|.github/ISSUE_TEMPLATE/*|.github/PULL_REQUEST_TEMPLATE/*|.github/PULL_REQUEST_TEMPLATE.md|.github/pull_request_template.md|LICENSE|LICENSE-*|COPYING|COPYING.*|NOTICE|NOTICE.*)
+                return 0
+                ;;
+              *)
+                return 1
+                ;;
+            esac
+          }
+
+          changed_files="$(mktemp)"
+          trap 'rm -f "$changed_files"' EXIT
+
+          # Use GitHub's PR file list so fork pull requests do not depend on the
+          # fork's head commit being fetchable from the base repository remote.
+          # A failed API call fails this job; the required wrappers then fail
+          # closed instead of treating an unknown change set as documentation.
+          # Include previous_filename so a rename of runtime code onto a docs
+          # path cannot skip the Windows suite.
+          gh api --paginate \
+            "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER/files?per_page=100" \
+            --jq '.[] | [.filename, (.previous_filename // "")] | @tsv' \
+            > "$changed_files"
+
+          api_count="$(wc -l < "$changed_files" | tr -d '[:space:]')"
+          expected_count="${CHANGED_FILES_COUNT:-}"
+
+          if ! [[ "$expected_count" =~ ^[0-9]+$ ]]; then
+            echo "::error::Pull request changed-file count was missing; refusing to skip verification."
+            exit 1
+          fi
+
+          if (( api_count == 0 )); then
+            echo "::error::GitHub returned no changed files; refusing to skip verification."
+            exit 1
+          fi
+
+          # The List Pull Request Files API returns HTTP 200 with at most 3000
+          # paths. A truncated all-docs prefix would otherwise skip Windows.
+          if (( api_count >= 3000 )) || (( api_count != expected_count )); then
+            echo "::error::PR file list is incomplete (api=$api_count expected=$expected_count); refusing to skip verification."
+            exit 1
+          fi
+
+          full=false
+          while IFS=$'\t' read -r filename previous || [[ -n "${filename:-}" ]]; do
+            for file in "$filename" "$previous"; do
+              [[ -z "$file" ]] && continue
+              if is_docs_only "$file"; then
+                echo "docs-only: $file"
+              else
+                echo "full verification required by: $file"
+                full=true
+                break 2
+              fi
+            done
+          done < "$changed_files"
+
+          echo "full=$full" >> "$GITHUB_OUTPUT"
+
+  lint_windows:
+    name: Lint & Format (Windows full)
+    needs: scope
+    if: ${{ needs.scope.result == 'success' && needs.scope.outputs.full == 'true' }}
     runs-on: windows-11-arm
     timeout-minutes: 120
     steps:
@@ -73,8 +171,10 @@ jobs:
       - name: Lint the x64 target
         run: ./scripts/verify.ps1 -Stage Lint -Target x86_64-pc-windows-msvc
 
-  test:
-    name: Tests
+  test_windows:
+    name: Tests (Windows full)
+    needs: scope
+    if: ${{ needs.scope.result == 'success' && needs.scope.outputs.full == 'true' }}
     runs-on: windows-11-arm
     timeout-minutes: 120
     steps:
@@ -102,8 +202,10 @@ jobs:
       - name: Test the x64 target under emulation
         run: ./scripts/verify.ps1 -Stage Test -Target x86_64-pc-windows-msvc
 
-  frontend:
-    name: Frontend & Browser
+  frontend_windows:
+    name: Frontend & Browser (Windows full)
+    needs: scope
+    if: ${{ needs.scope.result == 'success' && needs.scope.outputs.full == 'true' }}
     runs-on: windows-11-arm
     timeout-minutes: 120
     steps:
@@ -128,3 +230,120 @@ jobs:
       # image provides the system Google Chrome channel the smoke uses.
       - name: Run frontend and browser verification
         run: ./scripts/verify.ps1 -Stage Frontend
+
+  lint:
+    name: Lint & Format
+    needs: [scope, lint_windows]
+    if: ${{ always() }}
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Resolve required check
+        shell: bash
+        env:
+          SCOPE_RESULT: ${{ needs.scope.result }}
+          FULL: ${{ needs.scope.outputs.full }}
+          HEAVY_RESULT: ${{ needs.lint_windows.result }}
+        run: |
+          set -euo pipefail
+          if [[ "$SCOPE_RESULT" != "success" ]]; then
+            echo "::error::Changed-file classification failed."
+            exit 1
+          fi
+          case "$FULL" in
+            true)
+              if [[ "$HEAVY_RESULT" != "success" ]]; then
+                echo "::error::Full Lint & Format verification did not succeed (result: $HEAVY_RESULT)."
+                exit 1
+              fi
+              echo "Full Lint & Format verification passed."
+              ;;
+            false)
+              if [[ "$HEAVY_RESULT" != "skipped" ]]; then
+                echo "::error::Docs-only classification expected the Windows lint job to be skipped (result: $HEAVY_RESULT)."
+                exit 1
+              fi
+              echo "Documentation-only change: heavy Lint & Format verification skipped."
+              ;;
+            *)
+              echo "::error::Unknown verification scope '$FULL'."
+              exit 1
+              ;;
+          esac
+
+  test:
+    name: Tests
+    needs: [scope, test_windows]
+    if: ${{ always() }}
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Resolve required check
+        shell: bash
+        env:
+          SCOPE_RESULT: ${{ needs.scope.result }}
+          FULL: ${{ needs.scope.outputs.full }}
+          HEAVY_RESULT: ${{ needs.test_windows.result }}
+        run: |
+          set -euo pipefail
+          if [[ "$SCOPE_RESULT" != "success" ]]; then
+            echo "::error::Changed-file classification failed."
+            exit 1
+          fi
+          case "$FULL" in
+            true)
+              if [[ "$HEAVY_RESULT" != "success" ]]; then
+                echo "::error::Full Tests verification did not succeed (result: $HEAVY_RESULT)."
+                exit 1
+              fi
+              echo "Full Tests verification passed."
+              ;;
+            false)
+              if [[ "$HEAVY_RESULT" != "skipped" ]]; then
+                echo "::error::Docs-only classification expected the Windows test job to be skipped (result: $HEAVY_RESULT)."
+                exit 1
+              fi
+              echo "Documentation-only change: heavy Tests verification skipped."
+              ;;
+            *)
+              echo "::error::Unknown verification scope '$FULL'."
+              exit 1
+              ;;
+          esac
+
+  frontend:
+    name: Frontend & Browser
+    needs: [scope, frontend_windows]
+    if: ${{ always() }}
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Resolve required check
+        shell: bash
+        env:
+          SCOPE_RESULT: ${{ needs.scope.result }}
+          FULL: ${{ needs.scope.outputs.full }}
+          HEAVY_RESULT: ${{ needs.frontend_windows.result }}
+        run: |
+          set -euo pipefail
+          if [[ "$SCOPE_RESULT" != "success" ]]; then
+            echo "::error::Changed-file classification failed."
+            exit 1
+          fi
+          case "$FULL" in
+            true)
+              if [[ "$HEAVY_RESULT" != "success" ]]; then
+                echo "::error::Full Frontend & Browser verification did not succeed (result: $HEAVY_RESULT)."
+                exit 1
+              fi
+              echo "Full Frontend & Browser verification passed."
+              ;;
+            false)
+              if [[ "$HEAVY_RESULT" != "skipped" ]]; then
+                echo "::error::Docs-only classification expected the Windows frontend job to be skipped (result: $HEAVY_RESULT)."
+                exit 1
+              fi
+              echo "Documentation-only change: heavy Frontend & Browser verification skipped."
+              ;;
+            *)
+              echo "::error::Unknown verification scope '$FULL'."
+              exit 1
+              ;;
+          esac
