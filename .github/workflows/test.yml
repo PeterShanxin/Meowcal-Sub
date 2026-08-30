@@ -1,18 +1,22 @@
 # Stage 2 pull-request and post-merge verify gate.
 #
-# These jobs are the merge gate. They run on GitHub-hosted windows-11-arm for
-# every pull request to main and every push to main, including forks and
-# Dependabot. They install the toolchain and run scripts/verify.ps1. They are
-# not a silent fallback for an offline self-hosted host.
+# Pull requests are classified before the required checks start. Runtime/build
+# changes run the full GitHub-hosted windows-11-arm suite. Documentation-only
+# changes keep the SAME required check names but take a lightweight Ubuntu path,
+# so contributors do not wait for Rust/Node/browser setup just to edit docs.
+# Pushes to main always run the full suite.
 #
-# Required check names (Lint & Format, Tests, Frontend & Browser) stay on this
-# workflow's pull_request jobs. Do not drop the pull_request trigger: that
-# would deadlock those required checks.
+# Do not replace this with workflow-level `paths-ignore`: if an entire required
+# workflow is omitted, GitHub can leave its required checks Pending forever.
+# The classifier is fail-closed: every required job runs with `always()` and
+# explicitly fails when classification fails, rather than silently skipping CI.
+#
+# Required check names: Lint & Format, Tests, Frontend & Browser.
 #
 # Security for this hosted gate:
-# - permissions: contents: read only
+# - permissions are read-only (contents + pull request metadata)
 # - never interpolate TAURI_SIGNING_PRIVATE_KEY,
-#   TAURI_SIGNING_PRIVATE_KEY_PASSWORD, or RELEASE_MIRROR_TOKEN
+#   TAURI_SIGNING_PRIVATE_KEY_PASSWORD, or legacy bridge credentials
 # - persist-credentials: false
 #
 # Real Snapdragon/Adreno hardware verify is not this workflow. That path is
@@ -37,6 +41,7 @@ concurrency:
 
 permissions:
   contents: read
+  pull-requests: read
 
 env:
   CARGO_TERM_COLOR: always
@@ -46,21 +51,94 @@ defaults:
     shell: pwsh
 
 jobs:
+  scope:
+    name: Classify verification scope
+    runs-on: ubuntu-24.04
+    outputs:
+      full: ${{ steps.scope.outputs.full }}
+    steps:
+      - name: Decide whether full verification is required
+        id: scope
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+
+          # Keep the existing post-merge contract: every push to main gets the
+          # full suite regardless of what the merged pull request changed.
+          if [[ "$GITHUB_EVENT_NAME" != "pull_request" ]]; then
+            echo "full=true" >> "$GITHUB_OUTPUT"
+            echo "Push event: full verification required."
+            exit 0
+          fi
+
+          changed_files="$(mktemp)"
+          trap 'rm -f "$changed_files"' EXIT
+
+          # Use GitHub's PR file list so fork pull requests do not depend on the
+          # fork's head commit being fetchable from the base repository remote.
+          # A failed API call fails this job; the three required jobs then fail
+          # closed instead of treating an unknown change set as documentation.
+          gh api --paginate \
+            "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER/files?per_page=100" \
+            --jq '.[].filename' > "$changed_files"
+
+          mapfile -t files < "$changed_files"
+          if (( ${#files[@]} == 0 )); then
+            echo "::error::GitHub returned no changed files; refusing to skip verification."
+            exit 1
+          fi
+
+          full=false
+          for file in "${files[@]}"; do
+            case "$file" in
+              *.md|docs/*|.github/ISSUE_TEMPLATE/*|.github/PULL_REQUEST_TEMPLATE/*|.github/PULL_REQUEST_TEMPLATE.md|.github/pull_request_template.md|LICENSE|LICENSE-*|COPYING|COPYING.*|NOTICE|NOTICE.*)
+                echo "docs-only: $file"
+                ;;
+              *)
+                echo "full verification required by: $file"
+                full=true
+                break
+                ;;
+            esac
+          done
+
+          echo "full=$full" >> "$GITHUB_OUTPUT"
+
   lint:
     name: Lint & Format
-    runs-on: windows-11-arm
+    needs: scope
+    if: ${{ always() }}
+    runs-on: ${{ needs.scope.outputs.full == 'true' && 'windows-11-arm' || 'ubuntu-24.04' }}
     timeout-minutes: 120
     steps:
+      - name: Fail closed if path classification failed
+        if: ${{ needs.scope.result != 'success' }}
+        shell: bash
+        run: |
+          echo "::error::Could not classify changed files; full verification was not bypassed."
+          exit 1
+
+      - name: Documentation-only fast path
+        if: ${{ needs.scope.result == 'success' && needs.scope.outputs.full != 'true' }}
+        shell: bash
+        run: echo "No runtime/build files changed; Lint & Format is satisfied without the Windows toolchain."
+
       - uses: actions/checkout@v4
+        if: ${{ needs.scope.outputs.full == 'true' }}
         with:
           persist-credentials: false
 
       - uses: actions/setup-node@v4
+        if: ${{ needs.scope.outputs.full == 'true' }}
         with:
           node-version: 24
           cache: npm
 
       - name: Install Rust toolchain and both Windows targets
+        if: ${{ needs.scope.outputs.full == 'true' }}
         run: |
           rustup toolchain install stable --profile minimal --component rustfmt --component clippy
           rustup target add aarch64-pc-windows-msvc
@@ -68,26 +146,45 @@ jobs:
           rustup default stable
 
       - name: Lint the native ARM64 target
+        if: ${{ needs.scope.outputs.full == 'true' }}
         run: ./scripts/verify.ps1 -Stage Lint -Target aarch64-pc-windows-msvc
 
       - name: Lint the x64 target
+        if: ${{ needs.scope.outputs.full == 'true' }}
         run: ./scripts/verify.ps1 -Stage Lint -Target x86_64-pc-windows-msvc
 
   test:
     name: Tests
-    runs-on: windows-11-arm
+    needs: scope
+    if: ${{ always() }}
+    runs-on: ${{ needs.scope.outputs.full == 'true' && 'windows-11-arm' || 'ubuntu-24.04' }}
     timeout-minutes: 120
     steps:
+      - name: Fail closed if path classification failed
+        if: ${{ needs.scope.result != 'success' }}
+        shell: bash
+        run: |
+          echo "::error::Could not classify changed files; full verification was not bypassed."
+          exit 1
+
+      - name: Documentation-only fast path
+        if: ${{ needs.scope.result == 'success' && needs.scope.outputs.full != 'true' }}
+        shell: bash
+        run: echo "No runtime/build files changed; Tests is satisfied without the Windows toolchain."
+
       - uses: actions/checkout@v4
+        if: ${{ needs.scope.outputs.full == 'true' }}
         with:
           persist-credentials: false
 
       - uses: actions/setup-node@v4
+        if: ${{ needs.scope.outputs.full == 'true' }}
         with:
           node-version: 24
           cache: npm
 
       - name: Install Rust toolchain and both Windows targets
+        if: ${{ needs.scope.outputs.full == 'true' }}
         run: |
           rustup toolchain install stable --profile minimal --component rustfmt --component clippy
           rustup target add aarch64-pc-windows-msvc
@@ -95,28 +192,47 @@ jobs:
           rustup default stable
 
       - name: Test the native ARM64 target
+        if: ${{ needs.scope.outputs.full == 'true' }}
         run: ./scripts/verify.ps1 -Stage Test -Target aarch64-pc-windows-msvc
 
       # Executed, not merely compiled: the ARM64 host runs x64 binaries under
       # emulation, so this is the dual-arch contract without a second x64 image.
       - name: Test the x64 target under emulation
+        if: ${{ needs.scope.outputs.full == 'true' }}
         run: ./scripts/verify.ps1 -Stage Test -Target x86_64-pc-windows-msvc
 
   frontend:
     name: Frontend & Browser
-    runs-on: windows-11-arm
+    needs: scope
+    if: ${{ always() }}
+    runs-on: ${{ needs.scope.outputs.full == 'true' && 'windows-11-arm' || 'ubuntu-24.04' }}
     timeout-minutes: 120
     steps:
+      - name: Fail closed if path classification failed
+        if: ${{ needs.scope.result != 'success' }}
+        shell: bash
+        run: |
+          echo "::error::Could not classify changed files; full verification was not bypassed."
+          exit 1
+
+      - name: Documentation-only fast path
+        if: ${{ needs.scope.result == 'success' && needs.scope.outputs.full != 'true' }}
+        shell: bash
+        run: echo "No runtime/build files changed; Frontend & Browser is satisfied without the Windows toolchain."
+
       - uses: actions/checkout@v4
+        if: ${{ needs.scope.outputs.full == 'true' }}
         with:
           persist-credentials: false
 
       - uses: actions/setup-node@v4
+        if: ${{ needs.scope.outputs.full == 'true' }}
         with:
           node-version: 24
           cache: npm
 
       - name: Install Rust toolchain and both Windows targets
+        if: ${{ needs.scope.outputs.full == 'true' }}
         run: |
           rustup toolchain install stable --profile minimal --component rustfmt --component clippy
           rustup target add aarch64-pc-windows-msvc
@@ -127,4 +243,5 @@ jobs:
       # drives browser mode against the host-native Rust backend. The hosted
       # image provides the system Google Chrome channel the smoke uses.
       - name: Run frontend and browser verification
+        if: ${{ needs.scope.outputs.full == 'true' }}
         run: ./scripts/verify.ps1 -Stage Frontend
