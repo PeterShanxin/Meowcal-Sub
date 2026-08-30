@@ -65,24 +65,52 @@ describe("hosted PR gate is the merge gate", () => {
   it("keeps required check names, pull_request, and contents: read on windows-11-arm", () => {
     const contents = readWorkflow("test.yml");
     expect(contents).toMatch(/^permissions:\n {2}contents: read$/m);
+    expect(contents).toMatch(/^ {2}pull-requests: read$/m);
     expect(contents).toMatch(/^ {2}pull_request:$/m);
     expect(contents).toMatch(/^ {2}push:$/m);
 
     const jobs = splitWorkflowJobs(contents);
-    expect(jobs.map((job) => job.name)).toEqual(["lint", "test", "frontend"]);
+    expect(jobs.map((job) => job.name)).toEqual([
+      "scope",
+      "lint_windows",
+      "test_windows",
+      "frontend_windows",
+      "lint",
+      "test",
+      "frontend",
+    ]);
+    const byName = Object.fromEntries(jobs.map((job) => [job.name, job]));
 
     const displayNames = jobs.map((job) => {
       const match = jobText(job).match(/^\s*name:\s*(.+)$/m);
       return match ? match[1].trim() : job.name;
     });
-    expect(displayNames).toEqual(["Lint & Format", "Tests", "Frontend & Browser"]);
+    expect(displayNames).toEqual([
+      "Classify verification scope",
+      "Lint & Format (Windows full)",
+      "Tests (Windows full)",
+      "Frontend & Browser (Windows full)",
+      "Lint & Format",
+      "Tests",
+      "Frontend & Browser",
+    ]);
 
-    for (const job of jobs) {
-      expect(jobRunsOn(job), job.name).toBe("windows-11-arm");
-      expect(jobText(job), job.name).toContain("persist-credentials: false");
-      expect(jobText(job), job.name).toContain("./scripts/verify.ps1");
-      expect(jobText(job), job.name).not.toContain("self-hosted");
-      expect(jobText(job), job.name).not.toContain(TRUSTED_ACTOR_IF);
+    for (const name of ["lint_windows", "test_windows", "frontend_windows"]) {
+      const job = byName[name];
+      expect(jobRunsOn(job), name).toBe("windows-11-arm");
+      expect(jobText(job), name).toContain("persist-credentials: false");
+      expect(jobText(job), name).toContain("./scripts/verify.ps1");
+      expect(jobText(job), name).not.toContain("self-hosted");
+      expect(jobText(job), name).not.toContain(TRUSTED_ACTOR_IF);
+    }
+
+    expect(jobRunsOn(byName.scope)).toBe("ubuntu-24.04");
+    for (const name of ["lint", "test", "frontend"]) {
+      const job = byName[name];
+      expect(jobRunsOn(job), name).toBe("ubuntu-24.04");
+      expect(jobText(job), name).toContain("if: ${{ always() }}");
+      expect(jobText(job), name).toContain("Changed-file classification failed.");
+      expect(jobText(job), name).not.toContain("self-hosted");
     }
   });
 

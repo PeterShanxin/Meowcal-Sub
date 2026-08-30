@@ -156,10 +156,13 @@ treat this repository going public as completing that gate.
 
 ## Continuous integration
 
-Every pull request, including forks and Dependabot, gets the hosted Windows
-verify gate on `windows-11-arm`. Those jobs install the toolchain and run
-`scripts/verify.ps1`. They are the merge gate. They use read-only contents
-permission and do not receive signing or legacy-bridge secrets.
+Every pull request, including forks and Dependabot, is classified first.
+Runtime, build, and workflow changes get the hosted Windows verify gate on
+`windows-11-arm`. Those jobs install the toolchain and run `scripts/verify.ps1`.
+Documentation-only pull requests skip that Windows suite; Ubuntu wrappers keep
+the required check names green. They are the merge gate. They use read-only
+contents and pull-request permission and do not receive signing or
+legacy-bridge secrets. Pushes to `main` always run the full Windows suite.
 
 The owner's self-hosted runners are not that gate. `meowcal-ci` is a
 maintainer-only `workflow_dispatch` path for real Snapdragon/Adreno hardware.
