@@ -10,7 +10,9 @@
 # Do not replace this with workflow-level `paths-ignore`: if an entire required
 # workflow is omitted, GitHub can leave its required checks Pending forever.
 # The wrappers are fail-closed: they run with `always()` and fail if the path
-# classifier failed or if a required heavy job did not succeed.
+# classifier failed or if a required heavy job did not succeed. The classifier
+# itself fails closed on a truncated PR file list (the files API caps at 3000
+# paths) and treats a rename's previous path as part of the change set.
 #
 # Required check names: Lint & Format, Tests, Frontend & Browser.
 #
@@ -65,6 +67,9 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
+          # Uncapped count from the same pull_request event. The files API
+          # silently stops at 3000 paths, so this is the completeness check.
+          CHANGED_FILES_COUNT: ${{ github.event.pull_request.changed_files }}
         run: |
           set -euo pipefail
 
@@ -76,6 +81,17 @@ jobs:
             exit 0
           fi
 
+          is_docs_only() {
+            case "$1" in
+              *.md|docs/*|.github/ISSUE_TEMPLATE/*|.github/PULL_REQUEST_TEMPLATE/*|.github/PULL_REQUEST_TEMPLATE.md|.github/pull_request_template.md|LICENSE|LICENSE-*|COPYING|COPYING.*|NOTICE|NOTICE.*)
+                return 0
+                ;;
+              *)
+                return 1
+                ;;
+            esac
+          }
+
           changed_files="$(mktemp)"
           trap 'rm -f "$changed_files"' EXIT
 
@@ -83,29 +99,46 @@ jobs:
           # fork's head commit being fetchable from the base repository remote.
           # A failed API call fails this job; the required wrappers then fail
           # closed instead of treating an unknown change set as documentation.
+          # Include previous_filename so a rename of runtime code onto a docs
+          # path cannot skip the Windows suite.
           gh api --paginate \
             "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER/files?per_page=100" \
-            --jq '.[].filename' > "$changed_files"
+            --jq '.[] | [.filename, (.previous_filename // "")] | @tsv' \
+            > "$changed_files"
 
-          mapfile -t files < "$changed_files"
-          if (( ${#files[@]} == 0 )); then
+          api_count="$(wc -l < "$changed_files" | tr -d '[:space:]')"
+          expected_count="${CHANGED_FILES_COUNT:-}"
+
+          if ! [[ "$expected_count" =~ ^[0-9]+$ ]]; then
+            echo "::error::Pull request changed-file count was missing; refusing to skip verification."
+            exit 1
+          fi
+
+          if (( api_count == 0 )); then
             echo "::error::GitHub returned no changed files; refusing to skip verification."
             exit 1
           fi
 
+          # The List Pull Request Files API returns HTTP 200 with at most 3000
+          # paths. A truncated all-docs prefix would otherwise skip Windows.
+          if (( api_count >= 3000 )) || (( api_count != expected_count )); then
+            echo "::error::PR file list is incomplete (api=$api_count expected=$expected_count); refusing to skip verification."
+            exit 1
+          fi
+
           full=false
-          for file in "${files[@]}"; do
-            case "$file" in
-              *.md|docs/*|.github/ISSUE_TEMPLATE/*|.github/PULL_REQUEST_TEMPLATE/*|.github/PULL_REQUEST_TEMPLATE.md|.github/pull_request_template.md|LICENSE|LICENSE-*|COPYING|COPYING.*|NOTICE|NOTICE.*)
+          while IFS=$'\t' read -r filename previous || [[ -n "${filename:-}" ]]; do
+            for file in "$filename" "$previous"; do
+              [[ -z "$file" ]] && continue
+              if is_docs_only "$file"; then
                 echo "docs-only: $file"
-                ;;
-              *)
+              else
                 echo "full verification required by: $file"
                 full=true
-                break
-                ;;
-            esac
-          done
+                break 2
+              fi
+            done
+          done < "$changed_files"
 
           echo "full=$full" >> "$GITHUB_OUTPUT"
 
