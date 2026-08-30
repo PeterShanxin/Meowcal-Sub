@@ -1,7 +1,7 @@
 {
   "name": "meowcal-sub",
   "version": "0.6.9",
-  "description": "NPU-accelerated subtitle translation for Copilot+ PCs",
+  "description": "On-device subtitle capture and translation for Windows",
   "private": true,
   "engines": {
     "node": ">=24 <25",
@@ -48,7 +48,7 @@
     "subtitle",
     "translation",
     "ocr",
-    "copilot-plus"
+    "on-device-ai"
   ],
   "author": "PeterShanxin",
   "license": "AGPL-3.0-only",
