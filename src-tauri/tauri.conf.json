@@ -98,8 +98,8 @@
     "createUpdaterArtifacts": true,
     "publisher": "PeterShanxin",
     "copyright": "Copyright (c) 2026 PeterShanxin",
-    "shortDescription": "NPU-accelerated subtitle translation for Copilot+ PCs",
-    "longDescription": "Meowcal Sub reads subtitles from the screen and translates them locally on the device, using the neural processing unit on Copilot+ PCs. No subtitle text leaves the machine.",
+    "shortDescription": "On-device subtitle capture and translation for Windows",
+    "longDescription": "Meowcal Sub captures subtitles from the screen and translates them locally on Windows. No subtitle text leaves the machine.",
     "homepage": "https://github.com/PeterShanxin/Meowcal-Sub",
     "icon": [
       "icons/32x32.png",
