@@ -78,7 +78,7 @@ lazy_static = "1.4"
 # --- Windows APIs ---
 # This gives us access to Windows-specific features like OCR and screen capture
 # The "features" list specifies which Windows APIs we want to use
-windows = { version = "0.61", features = [
+windows = { version = "0.62", features = [
     # OCR (Optical Character Recognition) - reads text from images
     "Media_Ocr",
     
