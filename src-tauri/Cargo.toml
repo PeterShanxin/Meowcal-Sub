@@ -149,7 +149,7 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 tracing-appender = "0.2"
 chrono = "0.4"              # Date/time for per-session log filenames
-sha2 = "0.10"               # Verify app-managed engine artifacts
+sha2 = "0.11"               # Verify app-managed engine artifacts
 
 # --- Async Trait ---
 # Allows us to use async functions in traits (Rust-specific thing)
