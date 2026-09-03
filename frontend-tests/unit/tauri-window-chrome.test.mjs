@@ -6,6 +6,22 @@ const config = JSON.parse(
   readFileSync(fileURLToPath(new URL("../../src-tauri/tauri.conf.json", import.meta.url)), "utf8"),
 );
 
+const devConfig = JSON.parse(
+  readFileSync(
+    fileURLToPath(new URL("../../src-tauri/tauri.dev.conf.json", import.meta.url)),
+    "utf8",
+  ),
+);
+
+const packageJson = JSON.parse(
+  readFileSync(fileURLToPath(new URL("../../package.json", import.meta.url)), "utf8"),
+);
+
+const devLauncher = readFileSync(
+  fileURLToPath(new URL("../../dev-tauri.cmd", import.meta.url)),
+  "utf8",
+);
+
 const mainRs = readFileSync(
   fileURLToPath(new URL("../../src-tauri/src/main.rs", import.meta.url)),
   "utf8",
@@ -13,6 +29,16 @@ const mainRs = readFileSync(
 
 const trayRs = readFileSync(
   fileURLToPath(new URL("../../src-tauri/src/tray.rs", import.meta.url)),
+  "utf8",
+);
+
+const installerRs = readFileSync(
+  fileURLToPath(new URL("../../src-tauri/src/hy_mt_installer.rs", import.meta.url)),
+  "utf8",
+);
+
+const engineRecoveryRs = readFileSync(
+  fileURLToPath(new URL("../../src-tauri/src/engine_recovery.rs", import.meta.url)),
   "utf8",
 );
 
@@ -31,6 +57,20 @@ const titlebar = readFileSync(
 const windowByLabel = (label) => config.app.windows.find((entry) => entry.label === label);
 
 describe("tauri window chrome", () => {
+  it("keeps the production identity and selects the isolated dev identity", () => {
+    expect(config.identifier).toBe("com.meowcal.sub");
+    expect(devConfig).toEqual({ identifier: "com.meowcal.sub.dev" });
+    expect(packageJson.scripts["tauri:dev"]).toBe(
+      "tauri dev --config src-tauri/tauri.dev.conf.json",
+    );
+    expect(devLauncher).toContain("npx tauri dev --config src-tauri/tauri.dev.conf.json");
+  });
+
+  it("keeps default engine install and recovery on Tauri's profile cache", () => {
+    expect(installerRs).toMatch(/app\s*\.path\(\)\s*\.app_cache_dir\(\)/);
+    expect(engineRecoveryRs).toMatch(/app\s*\.path\(\)\s*\.app_cache_dir\(\)/);
+  });
+
   // Tauri creates a tray icon for `app.trayIcon`, and the tray module builds a
   // second one with the menu and click handlers. Declaring both put two
   // identical cats in the tray, only one of which responded to clicks.
@@ -69,6 +109,14 @@ describe("tauri window chrome", () => {
   it("imports the title bar logo instead of hardcoding its path", () => {
     expect(titlebar).toContain('from "../assets/meowcal-icon.png"');
     expect(titlebar).not.toContain('src="./assets/');
+  });
+
+  it("shows the dev suffix from the effective Tauri identifier", () => {
+    expect(titlebar).toContain("appIdentifier");
+    expect(titlebar).toContain('=== "com.meowcal.sub.dev"');
+    expect(titlebar).toContain('" - Dev"');
+    expect(titlebar).not.toContain("import.meta.env.DEV");
+    expect(trayRs).toContain("AppProfile::current()");
   });
 
   // The overlay relies on Win32 region clipping rather than webview alpha, and

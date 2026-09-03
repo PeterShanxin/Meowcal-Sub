@@ -242,6 +242,11 @@
         return !isTauri;
     }
 
+    // The dev Tauri overlay changes this identifier. Reading it from Tauri
+    // keeps the title bar tied to the effective configuration rather than a
+    // second frontend-only debug check. Browser mode has no Tauri identifier.
+    const appIdentifier = async () => window.__TAURI__?.app?.getIdentifier?.() ?? null;
+
     /**
      * Show browser mode indicator in the UI
      */
@@ -349,6 +354,7 @@
         invoke,
         isTauri,
         isBrowserMode,
+        appIdentifier,
 
         // Event system
         event: {

@@ -122,6 +122,8 @@ export interface UpdatesApi {
 export interface TauriBridgeApi {
   invoke<T = unknown>(command: string, args?: Record<string, unknown>): Promise<T>;
   isBrowserMode(): boolean;
+  /** The identifier from Tauri's merged config; browser mode returns null. */
+  appIdentifier?(): Promise<string | null>;
   event: {
     listen(eventName: string, callback: (event: { payload: unknown }) => void): Promise<() => void>;
     emit(eventName: string, payload: unknown): Promise<void>;

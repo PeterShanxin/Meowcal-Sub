@@ -1,3 +1,4 @@
+use crate::app_profile::AppProfile;
 use crate::config::{AppConfig, CaptureRegion, WindowPreferences};
 use crate::config_save::{remember_provenance, session_provenance, write_atomic, Provenance};
 use crate::config_store::{backup_path, load_durable, read_from, LoadOutcome};
@@ -6,6 +7,8 @@ use crate::http_config::*;
 use std::fs;
 use std::path::PathBuf;
 use std::sync::{Mutex, MutexGuard, OnceLock};
+
+use super::standalone_config_path_for;
 
 /// Serialises the tests that save, because provenance is process-wide.
 ///
@@ -248,14 +251,51 @@ fn a_save_that_carries_a_region_still_replaces_the_one_on_disk() {
     );
 }
 
-// #68: this is the installed app's config file, not a scratch one. Pinned so
-// that if the profiles are ever separated, this test is the reminder that the
-// dev server's path moved too.
-#[cfg(target_os = "windows")]
 #[test]
-fn the_dev_server_uses_the_installed_app_s_config_file() {
+fn production_standalone_config_keeps_the_existing_namespace() {
+    assert_eq!(
+        standalone_config_path_for(
+            AppProfile::Production,
+            Some(r"C:\Users\tester\AppData\Roaming")
+        ),
+        PathBuf::from(r"C:\Users\tester\AppData\Roaming")
+            .join("com.meowcal.sub")
+            .join("config.json")
+    );
+}
+
+#[test]
+fn development_standalone_config_uses_a_distinct_namespace() {
+    assert_eq!(
+        standalone_config_path_for(
+            AppProfile::Development,
+            Some(r"C:\Users\tester\AppData\Roaming")
+        ),
+        PathBuf::from(r"C:\Users\tester\AppData\Roaming")
+            .join("com.meowcal.sub.dev")
+            .join("config.json")
+    );
+}
+
+#[test]
+fn development_standalone_config_has_a_distinct_fallback() {
+    assert_eq!(
+        standalone_config_path_for(AppProfile::Development, None),
+        PathBuf::from("config.dev.json")
+    );
+}
+
+#[cfg(all(target_os = "windows", debug_assertions))]
+#[test]
+fn a_debug_standalone_server_uses_the_development_namespace() {
     let path = standalone_config_path();
-    assert!(path.ends_with(r"com.meowcal.sub\config.json"), "{path:?}");
+    let expected = match std::env::var_os("APPDATA") {
+        Some(appdata) => PathBuf::from(appdata)
+            .join("com.meowcal.sub.dev")
+            .join("config.json"),
+        None => PathBuf::from("config.dev.json"),
+    };
+    assert_eq!(path, expected);
 }
 
 // The backup is what the recovery above restores from, so the dev server must

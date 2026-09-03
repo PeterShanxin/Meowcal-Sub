@@ -6,6 +6,7 @@
 //! tested without mutating the process environment out from under parallel
 //! tests (the same pattern as `env_flags`).
 
+use crate::app_profile::AppProfile;
 use std::path::PathBuf;
 use std::time::{Duration, SystemTime};
 use tracing_subscriber::{EnvFilter, FmtSubscriber};
@@ -114,12 +115,13 @@ fn choose_filter_directive(
     (DEFAULT_LOG_FILTER.to_string(), rejected)
 }
 
-/// Where session logs go: `MEOWCAL_LOG_DIR` when set, else
-/// `%APPDATA%\com.meowcal.sub\logs`, else a relative `logs` directory.
+/// Where session logs go: `MEOWCAL_LOG_DIR` when set, else the current
+/// profile's `%APPDATA%\<identifier>\logs` directory.
 pub fn resolve_log_dir() -> PathBuf {
     choose_log_dir(
         std::env::var("MEOWCAL_LOG_DIR").ok().as_deref(),
         std::env::var("APPDATA").ok().as_deref(),
+        AppProfile::current(),
     )
 }
 
@@ -127,10 +129,10 @@ pub fn resolve_log_dir() -> PathBuf {
 /// environment.
 ///
 /// A non-blank `MEOWCAL_LOG_DIR` wins. Otherwise `APPDATA` is used verbatim
-/// when present — including a blank value, which resolves a relative
-/// `com.meowcal.sub\logs` path exactly as the pre-extraction code did.
-/// Otherwise the relative `logs` directory is used.
-fn choose_log_dir(custom: Option<&str>, appdata: Option<&str>) -> PathBuf {
+/// when present — including a blank value. The production fallback remains the
+/// relative `logs` directory; development has its own relative namespace when
+/// no app-data root is available.
+fn choose_log_dir(custom: Option<&str>, appdata: Option<&str>, profile: AppProfile) -> PathBuf {
     if let Some(dir) = custom {
         let trimmed = dir.trim();
         if !trimmed.is_empty() {
@@ -139,7 +141,13 @@ fn choose_log_dir(custom: Option<&str>, appdata: Option<&str>) -> PathBuf {
     }
 
     if let Some(appdata) = appdata {
-        return PathBuf::from(appdata).join("com.meowcal.sub").join("logs");
+        return PathBuf::from(appdata)
+            .join(profile.identifier())
+            .join("logs");
+    }
+
+    if profile == AppProfile::Development {
+        return PathBuf::from(profile.identifier()).join("logs");
     }
 
     PathBuf::from("logs")
@@ -260,7 +268,8 @@ mod tests {
         assert_eq!(
             choose_log_dir(
                 Some("C:\\logs"),
-                Some("C:\\Users\\tester\\AppData\\Roaming")
+                Some("C:\\Users\\tester\\AppData\\Roaming"),
+                AppProfile::Production,
             ),
             PathBuf::from("C:\\logs")
         );
@@ -269,7 +278,11 @@ mod tests {
     #[test]
     fn a_blank_custom_log_dir_falls_back_to_appdata() {
         assert_eq!(
-            choose_log_dir(Some("   "), Some("C:\\Users\\tester\\AppData\\Roaming")),
+            choose_log_dir(
+                Some("   "),
+                Some("C:\\Users\\tester\\AppData\\Roaming"),
+                AppProfile::Production,
+            ),
             PathBuf::from("C:\\Users\\tester\\AppData\\Roaming")
                 .join("com.meowcal.sub")
                 .join("logs")
@@ -279,7 +292,11 @@ mod tests {
     #[test]
     fn appdata_logs_land_under_the_app_folder() {
         assert_eq!(
-            choose_log_dir(None, Some("C:\\Users\\tester\\AppData\\Roaming")),
+            choose_log_dir(
+                None,
+                Some("C:\\Users\\tester\\AppData\\Roaming"),
+                AppProfile::Production,
+            ),
             PathBuf::from("C:\\Users\\tester\\AppData\\Roaming")
                 .join("com.meowcal.sub")
                 .join("logs")
@@ -288,18 +305,39 @@ mod tests {
 
     #[test]
     fn without_appdata_the_relative_logs_dir_is_used() {
-        assert_eq!(choose_log_dir(None, None), PathBuf::from("logs"));
+        assert_eq!(
+            choose_log_dir(None, None, AppProfile::Production),
+            PathBuf::from("logs")
+        );
     }
 
     #[test]
     fn a_blank_appdata_is_passed_through_unchanged() {
-        // Pre-extraction `main.rs` never trimmed APPDATA, so a blank value
-        // resolved a relative `com.meowcal.sub\logs` path rather than the
-        // `logs` fallback. This structural PR preserves that behavior
-        // deliberately; only MEOWCAL_LOG_DIR is trimmed before use.
         assert_eq!(
-            choose_log_dir(None, Some("   ")),
+            choose_log_dir(None, Some("   "), AppProfile::Production),
             PathBuf::from("   ").join("com.meowcal.sub").join("logs")
+        );
+    }
+
+    #[test]
+    fn development_logs_use_the_development_namespace() {
+        assert_eq!(
+            choose_log_dir(
+                None,
+                Some("C:\\Users\\tester\\AppData\\Roaming"),
+                AppProfile::Development,
+            ),
+            PathBuf::from("C:\\Users\\tester\\AppData\\Roaming")
+                .join("com.meowcal.sub.dev")
+                .join("logs")
+        );
+    }
+
+    #[test]
+    fn development_without_appdata_keeps_logs_separate() {
+        assert_eq!(
+            choose_log_dir(None, None, AppProfile::Development),
+            PathBuf::from("com.meowcal.sub.dev").join("logs")
         );
     }
 

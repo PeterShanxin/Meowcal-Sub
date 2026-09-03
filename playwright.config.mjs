@@ -4,12 +4,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { allocatePorts } from "./scripts/allocate-port.mjs";
 
-// The browser backend reads and writes the config profile `%APPDATA%` points at,
-// which is the *installed app's* profile (issue #68) - and since #71 gave dev
-// mode the app's durable loader, starting it can refresh the backup, and on a
-// damaged config quarantine and restore it. Correct for a developer running the
-// server deliberately; not something a test suite should do to the machine it
-// runs on. So the smoke gets a profile of its own.
+// The browser backend uses the debug build's development namespace under the
+// APPDATA value supplied here. The smoke gets a disposable profile of its own,
+// so it cannot touch a developer's or installed app's state.
 const smokeProfile = join(tmpdir(), "meowcal-browser-smoke");
 mkdirSync(smokeProfile, { recursive: true });
 
