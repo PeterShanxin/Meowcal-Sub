@@ -182,7 +182,7 @@ tauri-build = { version = "2", features = [] }
 tokio-test = "0.4"
 
 # Mocking framework for unit tests
-mockall = "0.14"
+mockall = "0.15"
 
 # Property-based testing (optional)
 proptest = "1.9"
