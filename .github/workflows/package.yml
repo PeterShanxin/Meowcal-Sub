@@ -100,7 +100,7 @@ jobs:
       # previous run's target directory and bundle output, so a release build
       # never reuses incremental artifacts or inherits a stale bundle. The extra
       # cold-build minutes are local compute and cost nothing.
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
 
