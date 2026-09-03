@@ -69,7 +69,7 @@ tokio = { version = "1", features = ["full"] }
 # --- HTTP Client ---
 # Used for downloading translateLocally binaries from GitHub.
 # Use Windows native TLS to avoid rustls/ring toolchain friction on Windows ARM64.
-reqwest = { version = "0.12", default-features = false, features = ["native-tls", "stream", "json"] }
+reqwest = { version = "0.13", default-features = false, features = ["native-tls", "stream", "json"] }
 
 # --- Global State ---
 # For managing persistent capture session
