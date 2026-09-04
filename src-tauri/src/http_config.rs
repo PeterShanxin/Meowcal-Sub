@@ -7,25 +7,15 @@
 // those kept the bug #64 fixed everywhere else: an unparseable config became
 // factory defaults, and a save with no staging file could truncate it.
 //
-// That was never a dev-only risk. `%APPDATA%\com.meowcal.sub\config.json` is
-// the installed app's config too (#68), so `npm run dev:backend` against a real
-// profile could reproduce the original incident in full - engine registration
-// and capture region gone. See issue #71.
-//
-// Storage is now shared, reached through the path-taking entry points. What is
-// not shared is the surrounding behaviour, and two differences are worth naming
-// rather than discovering:
+// The standalone server follows the current build profile's namespace, so its
+// settings remain separate from the installed application's settings.
 //
 // - The Tauri path re-attaches the capture region, its scale factor and the
 //   window geometry from live state before saving. This path has no such state,
 //   so `config_save` preserves those from disk when a save does not carry them.
-// - Both processes can be running against the one file (#68), and neither
-//   revalidates between reading and writing. A save from here still writes the
-//   settings the browser was shown, so a change the app made in between is lost.
-//   Separating the profiles is the fix; until then this door is no safer to use
-//   concurrently than it ever was.
 // =============================================================================
 
+use crate::app_profile::AppProfile;
 use crate::config::AppConfig;
 use crate::http_server::HttpAppState;
 use crate::sync_utils::lock_or_recover;
@@ -33,23 +23,28 @@ use axum::{extract::State, http::StatusCode, response::IntoResponse, Json};
 use std::path::{Path, PathBuf};
 use tracing::{info, warn};
 
-/// Where the dev server reads and writes settings.
-///
-/// Deliberately the same file the installed app uses: dev mode exists to drive
-/// the real backend, and a separate profile here would hide exactly the
-/// config-handling faults it is used to find. The cost is that a careless dev
-/// run edits real settings, which is #68's subject rather than this module's -
-/// so the path is announced on load instead.
+/// Where the standalone HTTP server reads and writes settings.
 pub fn standalone_config_path() -> PathBuf {
-    if cfg!(target_os = "windows") {
-        if let Ok(appdata) = std::env::var("APPDATA") {
-            return PathBuf::from(appdata)
-                .join("com.meowcal.sub")
-                .join("config.json");
-        }
+    let appdata = if cfg!(target_os = "windows") {
+        std::env::var("APPDATA").ok()
+    } else {
+        None
+    };
+    standalone_config_path_for(AppProfile::current(), appdata.as_deref())
+}
+
+/// Resolve a standalone config path without reading process-global state.
+fn standalone_config_path_for(profile: AppProfile, appdata: Option<&str>) -> PathBuf {
+    if let Some(appdata) = appdata {
+        return PathBuf::from(appdata)
+            .join(profile.identifier())
+            .join("config.json");
     }
-    // Fallback
-    PathBuf::from("config.json")
+
+    match profile {
+        AppProfile::Production => PathBuf::from("config.json"),
+        AppProfile::Development => PathBuf::from("config.dev.json"),
+    }
 }
 
 /// Load config without Tauri's AppHandle, with the durability the app has.
@@ -61,14 +56,10 @@ pub fn standalone_config_path() -> PathBuf {
 ///
 /// This writes. The loader it replaced could not touch the disk, and this one
 /// refreshes the backup on a clean load and can quarantine and restore on a bad
-/// one - against the installed app's profile, since they share it (#68). That is
-/// the point of it rather than a side effect: a dev run against a config that
-/// needs recovering should recover it, not step around it. It does mean this is
-/// not a read-only way to inspect a profile, and that a router test written
-/// against a developer's real `%APPDATA%` would rewrite it.
+/// one - against the current standalone profile. It does mean this is not a
+/// read-only way to inspect a profile, and a router test pointed at a real
+/// `%APPDATA%` would rewrite it.
 pub fn load_standalone_config(path: &Path) -> AppConfig {
-    // Named on the way in, because #68 means this is very likely a real profile
-    // rather than a scratch one, and nothing else on screen says so.
     info!("Browser dev mode is using config at {}", path.display());
     crate::config_store::load_and_report(path)
 }

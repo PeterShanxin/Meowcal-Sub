@@ -13,6 +13,9 @@
 /// Shared application state that persists across Tauri commands
 pub mod app_state;
 
+/// The identity and visible name for the current build profile
+pub mod app_profile;
+
 /// Where session logs go, and how old ones are retired
 pub mod app_logging;
 

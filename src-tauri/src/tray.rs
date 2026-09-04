@@ -4,6 +4,7 @@
 //! menu id → action mapping is split from the Tauri event plumbing so the
 //! contract between the tray and the app can be pinned in tests.
 
+use crate::app_profile::AppProfile;
 use tauri::{
     menu::{Menu, MenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
@@ -36,6 +37,10 @@ fn action_for_menu_id(id: &str) -> Option<TrayAction> {
     }
 }
 
+fn tooltip_for(profile: AppProfile) -> String {
+    format!("{} - Click to show", profile.display_name())
+}
+
 /// Build the tray icon and its menu.
 ///
 /// The returned tray handle must stay alive for the tray to exist; binding it
@@ -59,11 +64,13 @@ pub fn setup(app: &tauri::App) -> tauri::Result<()> {
         &[&show_item, &select_area_item, &settings_item, &quit_item],
     )?;
 
+    let tooltip = tooltip_for(AppProfile::current());
+
     // Create the tray icon
     let _tray = TrayIconBuilder::new()
         .icon(app.default_window_icon().unwrap().clone())
         .menu(&menu)
-        .tooltip("Meowcal Sub - Click to show")
+        .tooltip(&tooltip)
         .on_menu_event(|app, event| {
             if let Some(action) = action_for_menu_id(event.id.as_ref()) {
                 handle_action(app, action);
@@ -139,5 +146,17 @@ mod tests {
     fn unknown_menu_ids_are_ignored() {
         assert_eq!(action_for_menu_id("bogus"), None);
         assert_eq!(action_for_menu_id(""), None);
+    }
+
+    #[test]
+    fn tray_tooltip_identifies_only_development_builds() {
+        assert_eq!(
+            tooltip_for(AppProfile::Production),
+            "Meowcal Sub - Click to show"
+        );
+        assert_eq!(
+            tooltip_for(AppProfile::Development),
+            "Meowcal Sub - Dev - Click to show"
+        );
     }
 }

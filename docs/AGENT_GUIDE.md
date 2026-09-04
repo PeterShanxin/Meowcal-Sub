@@ -165,6 +165,10 @@ window, installer, or runtime-process behavior.
 .\scripts\build-package.ps1 -Architecture auto   # architecture-matched MSI/NSIS
 ```
 
+The supported development launchers use the isolated development namespace
+(`com.meowcal.sub.dev`), keeping config, engine/cache, logs, and persisted
+settings separate from the installed production profile (`com.meowcal.sub`).
+
 `build-package.ps1` applies the verified ARM64 compiler safeguards. Browser mode
 does not prove Windows OCR, capture, selector, overlay, tray, installer, or
 DPI/window behavior.

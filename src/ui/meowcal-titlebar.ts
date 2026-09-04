@@ -36,6 +36,7 @@ export class MeowcalTitlebar extends LitElement {
   @property({ type: Boolean, attribute: "no-maximize" }) noMaximize = false;
 
   @state() private maximized = false;
+  @state() private development = false;
 
   protected createRenderRoot(): HTMLElement | DocumentFragment {
     return this;
@@ -44,10 +45,15 @@ export class MeowcalTitlebar extends LitElement {
   connectedCallback(): void {
     super.connectedCallback();
     void this.syncMaximized();
+    void this.syncProfile();
   }
 
   private async syncMaximized(): Promise<void> {
     this.maximized = (await window.TauriBridge?.windowControls?.isMaximized()) === true;
+  }
+
+  private async syncProfile(): Promise<void> {
+    this.development = (await window.TauriBridge?.appIdentifier?.()) === "com.meowcal.sub.dev";
   }
 
   private async run(action: "minimize" | "toggleMaximize" | "close"): Promise<void> {
@@ -62,7 +68,7 @@ export class MeowcalTitlebar extends LitElement {
       <div class="titlebar" data-tauri-drag-region>
         <div class="titlebar-identity" data-tauri-drag-region>
           <img src=${meowcalIcon} alt="" aria-hidden="true" />
-          <span data-tauri-drag-region>${this.label}</span>
+          <span data-tauri-drag-region>${this.label}${this.development ? " - Dev" : ""}</span>
         </div>
         <div class="titlebar-controls">
           <button
