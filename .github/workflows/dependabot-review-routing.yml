@@ -1,0 +1,108 @@
+name: Dependabot review routing
+
+on:
+  pull_request_target:
+    types: [opened, reopened, synchronize, ready_for_review]
+  pull_request_review:
+    types: [submitted]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  route-review:
+    if: github.event.pull_request != null
+    runs-on: ubuntu-latest
+    steps:
+      - name: Route review request
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_HEAD: ${{ github.event.pull_request.head.ref }}
+          EVENT_NAME: ${{ github.event_name }}
+          EVENT_ACTION: ${{ github.event.action }}
+          REVIEW_AUTHOR: ${{ github.event.review.user.login || '' }}
+          REVIEW_BODY: ${{ github.event.review.body || '' }}
+        run: |
+          set -euo pipefail
+
+          api="https://api.github.com/repos/${REPOSITORY}/pulls/${PR_NUMBER}/requested_reviewers"
+          headers=(
+            -H "Authorization: Bearer ${GH_TOKEN}"
+            -H "Accept: application/vnd.github+json"
+            -H "X-GitHub-Api-Version: 2022-11-28"
+          )
+          payload='{"reviewers":["PeterShanxin"]}'
+
+          request_review() {
+            curl --fail-with-body --silent --show-error "${headers[@]}" \
+              -X POST "$api" -d "$payload" >/dev/null
+          }
+
+          remove_review() {
+            # Removing an absent request is harmless for routing purposes.
+            curl --fail-with-body --silent --show-error "${headers[@]}" \
+              -X DELETE "$api" -d "$payload" >/dev/null || true
+          }
+
+          # Normal human/code PRs keep the existing maintainer-review behavior.
+          if [[ "$PR_AUTHOR" != "dependabot[bot]" ]]; then
+            if [[ "$EVENT_NAME" == "pull_request_target" && "$EVENT_ACTION" != "synchronize" ]]; then
+              request_review
+            fi
+            exit 0
+          fi
+
+          normalized="$(printf '%s %s' "$PR_TITLE" "$PR_HEAD" | tr '[:upper:]' '[:lower:]')"
+          low_risk=false
+          if [[ "$normalized" == *"minor-patch"* \
+             || "$normalized" == *"minor-and-patch"* \
+             || "$normalized" == *"compatible-dependencies"* \
+             || "$normalized" == *"compatible-actions"* ]]; then
+            low_risk=true
+          fi
+
+          # Dependabot groups are deliberately named so patch/minor updates are
+          # recognizable without executing PR code. Ungrouped updates are treated
+          # conservatively as manual-review changes (normally majors/breaking bumps).
+          if [[ "$EVENT_NAME" == "pull_request_target" ]]; then
+            if [[ "$low_risk" == true ]]; then
+              remove_review
+            else
+              request_review
+            fi
+            exit 0
+          fi
+
+          # Cursor's approval automation currently submits COMMENTED reviews.
+          # A Codex timeout or pending CI is not by itself a reason to notify the
+          # maintainer. Real failures/findings remain review-worthy.
+          [[ "$REVIEW_AUTHOR" == "cursor" ]] || exit 0
+
+          if [[ "$low_risk" != true ]]; then
+            request_review
+            exit 0
+          fi
+
+          body="$(printf '%s' "$REVIEW_BODY" | tr '[:upper:]' '[:lower:]')"
+          clean_low_risk=false
+          if [[ "$body" == *"risk: low"* \
+             && "$body" == *"security agent passed with no findings"* \
+             && "$body" != *"failed"* \
+             && "$body" != *"failing"* \
+             && "$body" != *"risk: medium"* \
+             && "$body" != *"risk: high"* \
+             && "$body" != *"security finding"* ]]; then
+            clean_low_risk=true
+          fi
+
+          if [[ "$clean_low_risk" == true ]]; then
+            remove_review
+          else
+            request_review
+          fi
