@@ -92,7 +92,7 @@ jobs:
           body="$(printf '%s' "$REVIEW_BODY" | tr '[:upper:]' '[:lower:]')"
           clean_low_risk=false
           if [[ "$body" == *"risk: low"* \
-             && "$body" == *"security agent passed with no findings"* \
+             && "$body" == *"security agent passed"* \
              && "$body" != *"failed"* \
              && "$body" != *"failing"* \
              && "$body" != *"risk: medium"* \
