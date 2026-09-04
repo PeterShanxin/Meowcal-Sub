@@ -224,4 +224,43 @@ try {
     Remove-Item -LiteralPath $fakeOverride -Recurse -Force -ErrorAction SilentlyContinue
 }
 
+# --- OverlayHost solution platforms ------------------------------------------
+
+# Issue #100: Meowcal-Sub.sln must expose concrete architectures (x64 and ARM64)
+# matching OverlayHost.csproj. An unsupported 'Any CPU' mapping breaks solution
+# builds and editor project discovery.
+$solutionPath = Join-Path $repositoryRoot "Meowcal-Sub.sln"
+$solutionContent = Get-Content -LiteralPath $solutionPath -Raw
+
+Assert-True (-not ($solutionContent -match 'Any CPU')) `
+    "Meowcal-Sub.sln must not contain unsupported 'Any CPU' configurations."
+
+$expectedSolutionConfigs = @(
+    "Debug|ARM64 = Debug|ARM64",
+    "Debug|x64 = Debug|x64",
+    "Release|ARM64 = Release|ARM64",
+    "Release|x64 = Release|x64"
+)
+foreach ($config in $expectedSolutionConfigs) {
+    Assert-True ($solutionContent -match [regex]::Escape($config)) `
+        "Meowcal-Sub.sln SolutionConfigurationPlatforms must contain '$config'."
+}
+
+$overlayHostGuid = "{B9541603-20FE-DB2E-31ED-AC0E195A00E4}"
+$expectedProjectMappings = @(
+    "$overlayHostGuid.Debug|ARM64.ActiveCfg = Debug|ARM64",
+    "$overlayHostGuid.Debug|ARM64.Build.0 = Debug|ARM64",
+    "$overlayHostGuid.Debug|x64.ActiveCfg = Debug|x64",
+    "$overlayHostGuid.Debug|x64.Build.0 = Debug|x64",
+    "$overlayHostGuid.Release|ARM64.ActiveCfg = Release|ARM64",
+    "$overlayHostGuid.Release|ARM64.Build.0 = Release|ARM64",
+    "$overlayHostGuid.Release|x64.ActiveCfg = Release|x64",
+    "$overlayHostGuid.Release|x64.Build.0 = Release|x64"
+)
+foreach ($mapping in $expectedProjectMappings) {
+    Assert-True ($solutionContent -match [regex]::Escape($mapping)) `
+        "Meowcal-Sub.sln ProjectConfigurationPlatforms must contain '$mapping'."
+}
+
 Write-Host "dev-environment contract tests passed." -ForegroundColor Green
+
