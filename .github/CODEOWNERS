@@ -7,9 +7,8 @@
 # the catch-all.
 #
 # Required approvals are 0 while this repository is effectively solo-maintained.
-# CODEOWNERS still does useful work at 0: it names the reviewer GitHub requests,
-# and it makes the review requirement a one-setting change instead of a design
-# question. See docs/CHANGE_CONTRACT.md for the activation rule.
+# CODEOWNERS still documents ownership; dependency-update review requests are
+# routed conditionally by .github/workflows/dependabot-review-routing.yml.
 
 *                           @PeterShanxin
 
@@ -33,3 +32,14 @@
 /SECURITY.md                @PeterShanxin
 /TRADEMARKS.md              @PeterShanxin
 /.github/CODEOWNERS         @PeterShanxin
+
+# Dependency-update surfaces are intentionally left without a code owner so
+# low-risk Dependabot patch/minor groups do not notify the maintainer before the
+# routing workflow has evaluated them. Human-authored PRs on these paths are
+# still routed to Peter by that workflow; major/breaking Dependabot PRs are too.
+/package.json
+/package-lock.json
+/src-tauri/Cargo.toml
+/src-tauri/Cargo.lock
+/src-winui3/OverlayHost/OverlayHost.csproj
+/.github/workflows/
