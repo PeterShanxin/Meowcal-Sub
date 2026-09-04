@@ -90,18 +90,20 @@ jobs:
           fi
 
           body="$(printf '%s' "$REVIEW_BODY" | tr '[:upper:]' '[:lower:]')"
-          clean_low_risk=false
-          if [[ "$body" == *"risk: low"* \
-             && "$body" == *"security agent passed"* \
+          clean_dependency_review=false
+          if [[ "$body" == *"security agent passed"* \
              && "$body" != *"failed"* \
              && "$body" != *"failing"* \
-             && "$body" != *"risk: medium"* \
-             && "$body" != *"risk: high"* \
-             && "$body" != *"security finding"* ]]; then
-            clean_low_risk=true
+             && "$body" != *"security finding"* \
+             && "$body" != *"security agent found"* \
+             && "$body" != *"bugbot found"* \
+             && "$body" != *"finding:"* ]]; then
+            clean_dependency_review=true
           fi
 
-          if [[ "$clean_low_risk" == true ]]; then
+          # Codex timeout, pending CI, or Cursor's subjective risk label alone is
+          # not actionable for a grouped patch/minor update.
+          if [[ "$clean_dependency_review" == true ]]; then
             remove_review
           else
             request_review
