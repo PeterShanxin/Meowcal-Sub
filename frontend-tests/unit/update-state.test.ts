@@ -4,6 +4,8 @@ import {
   deriveUpdatePresentation,
   downloadPercent,
   NO_DOWNLOAD,
+  shouldCheckForUpdatesAutomatically,
+  UPDATE_CHECK_INTERVAL_MS,
   type DownloadProgress,
 } from "../../src/ui/update-state";
 
@@ -132,5 +134,61 @@ describe("update presentation", () => {
     expect(deriveUpdatePresentation({ kind: "idle" }, null).detail).toBe(
       "Installed version unknown",
     );
+  });
+});
+
+describe("automatic update eligibility", () => {
+  const now = 1_700_000_000_000;
+
+  it("checks when there is no recorded timestamp", () => {
+    expect(shouldCheckForUpdatesAutomatically({}, now)).toBe(true);
+    expect(shouldCheckForUpdatesAutomatically({ lastUpdateCheckTimeMs: null }, now)).toBe(true);
+    expect(shouldCheckForUpdatesAutomatically({ lastUpdateCheckTimeMs: undefined }, now)).toBe(
+      true,
+    );
+  });
+
+  it("does not check when automatic updates are explicitly disabled", () => {
+    expect(shouldCheckForUpdatesAutomatically({ autoCheckUpdates: false }, now)).toBe(false);
+    expect(
+      shouldCheckForUpdatesAutomatically(
+        { autoCheckUpdates: false, lastUpdateCheckTimeMs: now - UPDATE_CHECK_INTERVAL_MS * 2 },
+        now,
+      ),
+    ).toBe(false);
+  });
+
+  it("does not check when the last check was less than 24 hours ago", () => {
+    const twentyThreeHoursAgo = now - 23 * 60 * 60 * 1000;
+    expect(
+      shouldCheckForUpdatesAutomatically({ lastUpdateCheckTimeMs: twentyThreeHoursAgo }, now),
+    ).toBe(false);
+  });
+
+  it("checks when 24 hours or more have elapsed", () => {
+    const exactlyOneDayAgo = now - UPDATE_CHECK_INTERVAL_MS;
+    const twoDaysAgo = now - UPDATE_CHECK_INTERVAL_MS * 2;
+    expect(
+      shouldCheckForUpdatesAutomatically({ lastUpdateCheckTimeMs: exactlyOneDayAgo }, now),
+    ).toBe(true);
+    expect(shouldCheckForUpdatesAutomatically({ lastUpdateCheckTimeMs: twoDaysAgo }, now)).toBe(
+      true,
+    );
+  });
+
+  it("checks when system clock drifts backwards", () => {
+    const inTheFuture = now + 60 * 60 * 1000;
+    expect(shouldCheckForUpdatesAutomatically({ lastUpdateCheckTimeMs: inTheFuture }, now)).toBe(
+      true,
+    );
+  });
+
+  it("checks when timestamp is not a finite number", () => {
+    expect(
+      shouldCheckForUpdatesAutomatically(
+        { lastUpdateCheckTimeMs: Number.NaN as unknown as number },
+        now,
+      ),
+    ).toBe(true);
   });
 });

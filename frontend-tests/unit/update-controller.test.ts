@@ -107,6 +107,136 @@ describe("checking", () => {
 
     expect(update.install).not.toHaveBeenCalled();
   });
+
+  it("prevents overlapping concurrent checks", async () => {
+    let resolveFirst: (value: PendingUpdate | null) => void = () => {};
+    const firstCheck = new Promise<PendingUpdate | null>((res) => {
+      resolveFirst = res;
+    });
+    const check = vi.fn().mockReturnValueOnce(firstCheck);
+    const { controller } = harness({ currentVersion: vi.fn(), check, restart: vi.fn() });
+
+    const call1 = controller.check();
+    const call2 = controller.check();
+    resolveFirst(null);
+    await Promise.all([call1, call2]);
+
+    expect(check).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("automatic checking", () => {
+  it("publishes available without publishing checking when update is found", async () => {
+    const update = pending();
+    const { controller, patches } = harness({
+      currentVersion: vi.fn(),
+      check: vi.fn().mockResolvedValue(update),
+      restart: vi.fn(),
+    });
+
+    await controller.check("automatic");
+
+    expect(patches.map((p) => p.update?.kind)).toEqual(["available"]);
+    expect(patches[0]?.update).toEqual({
+      kind: "available",
+      version: update.version,
+      notes: update.notes,
+    });
+  });
+
+  it("publishes upToDate quietly without publishing checking when no update is found", async () => {
+    const { controller, patches } = harness({
+      currentVersion: vi.fn(),
+      check: vi.fn().mockResolvedValue(null),
+      restart: vi.fn(),
+    });
+
+    await controller.check("automatic");
+
+    expect(patches.map((p) => p.update?.kind)).toEqual(["upToDate"]);
+  });
+
+  it("fails quietly on network error without publishing error or clearing pending update", async () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const update = pending();
+    const check = vi
+      .fn()
+      .mockResolvedValueOnce(update)
+      .mockRejectedValueOnce(new Error("network error"));
+    const { controller, patches } = harness({ currentVersion: vi.fn(), check, restart: vi.fn() });
+
+    await controller.check("automatic");
+    expect(patches.at(-1)?.update?.kind).toBe("available");
+
+    // Second check automatically fails quietly
+    await controller.check("automatic");
+    expect(patches.some((p) => p.update?.kind === "error")).toBe(false);
+    expect(warnSpy).toHaveBeenCalled();
+
+    // The pending update was kept intact and can still be installed
+    await controller.install();
+    expect(update.install).toHaveBeenCalled();
+  });
+
+  it("does not trigger installation during automatic check", async () => {
+    const update = pending();
+    const { controller } = harness({
+      currentVersion: vi.fn(),
+      check: vi.fn().mockResolvedValue(update),
+      restart: vi.fn(),
+    });
+
+    await controller.check("automatic");
+
+    expect(update.install).not.toHaveBeenCalled();
+  });
+
+  it("skips checkAutomatic in browser mode", async () => {
+    const { controller } = harness(undefined);
+
+    const result = await controller.checkAutomatic({}, () => 12345);
+
+    expect(result).toBeNull();
+  });
+
+  it("skips checkAutomatic when autoCheckUpdates is disabled or not due", async () => {
+    const check = vi.fn().mockResolvedValue(null);
+    const { controller } = harness({ currentVersion: vi.fn(), check, restart: vi.fn() });
+    const now = 1_700_000_000_000;
+
+    const disabledResult = await controller.checkAutomatic({ autoCheckUpdates: false }, () => now);
+    expect(disabledResult).toBeNull();
+    expect(check).not.toHaveBeenCalled();
+
+    const notDueResult = await controller.checkAutomatic(
+      { lastUpdateCheckTimeMs: now - 1000 },
+      () => now,
+    );
+    expect(notDueResult).toBeNull();
+    expect(check).not.toHaveBeenCalled();
+  });
+
+  it("runs checkAutomatic when due and returns clock timestamp", async () => {
+    const check = vi.fn().mockResolvedValue(null);
+    const { controller } = harness({ currentVersion: vi.fn(), check, restart: vi.fn() });
+    const now = 1_700_000_000_000;
+
+    const result = await controller.checkAutomatic({}, () => now);
+
+    expect(result).toBe(now);
+    expect(check).toHaveBeenCalledTimes(1);
+  });
+
+  it("uses default Date.now clock if none provided", async () => {
+    const check = vi.fn().mockResolvedValue(null);
+    const { controller } = harness({ currentVersion: vi.fn(), check, restart: vi.fn() });
+    const now = 1_700_000_000_000;
+    vi.spyOn(Date, "now").mockReturnValue(now);
+
+    const result = await controller.checkAutomatic({});
+
+    expect(result).toBe(now);
+  });
 });
 
 describe("installing", () => {

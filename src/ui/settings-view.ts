@@ -10,6 +10,7 @@ interface SettingsActions {
   onDeveloper(enabled: boolean): void;
   onCheckUpdates(): void;
   onInstallUpdate(): void;
+  onAutoCheckUpdates(enabled: boolean): void;
 }
 
 function recognition(snapshot: UiSnapshot): "fast" | "balanced" | "accurate" {
@@ -28,9 +29,22 @@ function renderUpdates(snapshot: UiSnapshot, actions: SettingsActions): Template
         <i class="ph ph-arrow-circle-up" aria-hidden="true"></i>
         <div>
           <h2 id="updates-heading">Updates</h2>
-          <p>Meowcal Sub only checks when you ask it to.</p>
+          <p>Get the latest fixes and improvements automatically or on demand.</p>
         </div>
       </div>
+      <label class="setting-row">
+        <span>
+          <strong>Automatically check for updates</strong>
+          <small>Checks at most once per day after startup</small>
+        </span>
+        <input
+          class="switch"
+          type="checkbox"
+          .checked=${snapshot.settings.autoCheckUpdates !== false}
+          @change=${(event: Event) =>
+            actions.onAutoCheckUpdates((event.target as HTMLInputElement).checked)}
+        />
+      </label>
       <div class="setting-row">
         <span><strong>${update.headline}</strong><small>${update.detail}</small></span>
         <button

@@ -66,6 +66,33 @@ test("normal setup presents one private HY-MT engine without infrastructure choi
   await page.getByRole("button", { name: "Settings" }).click();
   await expect(page.getByText("Keep running in the tray")).toHaveCount(0);
   await expect(page.getByText("Start with Windows")).toHaveCount(0);
+  const autoCheckInput = page.getByLabel(/Automatically check for updates/i);
+  await expect(autoCheckInput).toBeVisible();
+  await expect(autoCheckInput).toBeChecked();
+  await autoCheckInput.click();
+  await expect(autoCheckInput).not.toBeChecked();
+  await autoCheckInput.click();
+  await expect(autoCheckInput).toBeChecked();
+
+  // Settings nav indicator appears when update is available and clears when not
+  await expect(page.locator(".nav-indicator")).toHaveCount(0);
+  await page.evaluate(() => {
+    const app = document.querySelector("meowcal-app");
+    if (app && app.snapshot) {
+      app.snapshot = {
+        ...app.snapshot,
+        update: { kind: "available", version: "0.6.10", notes: "New fixes" },
+      };
+    }
+  });
+  await expect(page.locator(".nav-indicator")).toBeVisible();
+  await page.evaluate(() => {
+    const app = document.querySelector("meowcal-app");
+    if (app && app.snapshot) {
+      app.snapshot = { ...app.snapshot, update: { kind: "upToDate" } };
+    }
+  });
+  await expect(page.locator(".nav-indicator")).toHaveCount(0);
 
   await page.goto("/wizard.html");
   await expect(page.getByRole("heading", { name: "Welcome to Meowcal Sub" })).toBeVisible();

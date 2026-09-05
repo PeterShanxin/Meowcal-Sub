@@ -164,3 +164,26 @@ export function deriveUpdatePresentation(
       };
   }
 }
+
+export const UPDATE_CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000;
+
+export interface AutoUpdateCheckSettings {
+  autoCheckUpdates?: boolean;
+  lastUpdateCheckTimeMs?: number | null;
+}
+
+export function shouldCheckForUpdatesAutomatically(
+  settings: AutoUpdateCheckSettings,
+  nowMs: number,
+  intervalMs: number = UPDATE_CHECK_INTERVAL_MS,
+): boolean {
+  if (settings.autoCheckUpdates === false) {
+    return false;
+  }
+  const last = settings.lastUpdateCheckTimeMs;
+  if (typeof last !== "number" || !Number.isFinite(last)) {
+    return true;
+  }
+  const elapsed = nowMs - last;
+  return elapsed >= intervalMs || elapsed < 0;
+}

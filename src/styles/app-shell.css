@@ -148,6 +148,15 @@ meowcal-setup {
   font-size: 19px;
 }
 
+.nav-indicator {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  display: inline-block;
+  flex-shrink: 0;
+}
+
 .toast {
   position: absolute;
   right: var(--space-5);

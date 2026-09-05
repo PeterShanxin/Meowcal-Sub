@@ -82,6 +82,8 @@ export class MeowcalApp extends LitElement {
         onDeveloper: (enabled) => this.controller.setDeveloperMode(enabled),
         onCheckUpdates: () => void this.controller.checkForUpdates(),
         onInstallUpdate: () => void this.controller.installUpdate(),
+        onAutoCheckUpdates: (enabled) =>
+          void this.controller.updatePreference("autoCheckUpdates", enabled),
       });
     }
 
@@ -94,7 +96,7 @@ export class MeowcalApp extends LitElement {
     });
   }
 
-  private navButton(screen: AppScreen, label: string, icon: string) {
+  private navButton(screen: AppScreen, label: string, icon: string, hasIndicator = false) {
     const selected = this.snapshot.screen === screen;
     return html`
       <button
@@ -104,6 +106,11 @@ export class MeowcalApp extends LitElement {
         @click=${() => this.controller.setScreen(screen)}
       >
         <i class=${`ph ${icon}`} aria-hidden="true"></i><span>${label}</span>
+        ${
+          hasIndicator
+            ? html`<span class="nav-indicator" role="status" aria-label="Update available"></span>`
+            : nothing
+        }
       </button>
     `;
   }
@@ -122,7 +129,12 @@ export class MeowcalApp extends LitElement {
             this.snapshot.running ? "Adjust overlay" : "Overlay appearance",
             "ph-paint-brush",
           )}
-          ${this.navButton("settings", "Settings", "ph-gear")}
+          ${this.navButton(
+            "settings",
+            "Settings",
+            "ph-gear",
+            this.snapshot.update.kind === "available",
+          )}
         </nav>
 
         ${

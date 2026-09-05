@@ -1,5 +1,13 @@
 import type { PendingUpdate, UiSnapshot } from "./contracts";
-import { advanceDownload, downloadPercent, NO_DOWNLOAD } from "./update-state";
+import {
+  advanceDownload,
+  downloadPercent,
+  NO_DOWNLOAD,
+  shouldCheckForUpdatesAutomatically,
+  type AutoUpdateCheckSettings,
+} from "./update-state";
+
+export type UpdateCheckIntent = "manual" | "automatic";
 
 /**
  * Drives the update check and its apply step, and owns the one piece of state
@@ -10,6 +18,7 @@ import { advanceDownload, downloadPercent, NO_DOWNLOAD } from "./update-state";
  */
 export class UpdateController {
   private pending: PendingUpdate | null = null;
+  private checking = false;
 
   constructor(private readonly publish: (patch: Partial<UiSnapshot>) => void) {}
 
@@ -29,16 +38,22 @@ export class UpdateController {
     }
   }
 
-  async check(): Promise<void> {
+  async check(intent: UpdateCheckIntent = "manual"): Promise<void> {
     const updates = window.TauriBridge.updates;
-    if (!updates) return;
-    // Dropped before the check so a failed one cannot leave the previous
-    // answer installable.
-    this.pending = null;
-    this.publish({ update: { kind: "checking" }, error: null, notice: null });
+    if (!updates || this.checking) return;
+    this.checking = true;
+
+    if (intent === "manual") {
+      // Dropped before a manual check so a failed one cannot leave the previous
+      // answer installable.
+      this.pending = null;
+      this.publish({ update: { kind: "checking" }, error: null, notice: null });
+    }
+
     try {
       const update = await updates.check();
       if (!update) {
+        this.pending = null;
         this.publish({ update: { kind: "upToDate" } });
         return;
       }
@@ -47,8 +62,25 @@ export class UpdateController {
         update: { kind: "available", version: update.version, notes: update.notes },
       });
     } catch (error) {
-      this.publish({ update: { kind: "error", message: UpdateController.message(error) } });
+      if (intent === "manual") {
+        this.publish({ update: { kind: "error", message: UpdateController.message(error) } });
+      } else {
+        console.warn("[Meowcal] automatic update check failed", error);
+      }
+    } finally {
+      this.checking = false;
     }
+  }
+
+  async checkAutomatic(
+    settings: AutoUpdateCheckSettings,
+    clock: () => number = () => Date.now(),
+  ): Promise<number | null> {
+    const updates = window.TauriBridge.updates;
+    if (window.TauriBridge.isBrowserMode() || !updates) return null;
+    if (!shouldCheckForUpdatesAutomatically(settings, clock())) return null;
+    await this.check("automatic");
+    return clock();
   }
 
   /**

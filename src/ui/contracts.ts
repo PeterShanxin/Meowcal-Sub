@@ -56,6 +56,8 @@ export interface AppSettings {
   translation: TranslationConfig;
   lastCaptureRegion?: CaptureRegion | null;
   minimizeToTray: boolean;
+  autoCheckUpdates?: boolean;
+  lastUpdateCheckTimeMs?: number | null;
   [key: string]: unknown;
 }
 
