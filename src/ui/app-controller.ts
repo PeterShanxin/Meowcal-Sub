@@ -28,10 +28,7 @@ const defaultOcr: OcrConfig = {
 const defaultSettings: AppSettings = {
   sourceLanguage: "zh-CN",
   targetLanguage: "en-US",
-  // Must track `default_config()` in src-tauri/src/config.rs. The frontend
-  // saves this whole object back over the stored settings, so a stale value
-  // here silently overrides the backend default - which is how a 500ms capture
-  // interval kept coming back after the backend moved to 250ms.
+  // Must track `default_config()` in src-tauri/src/config.rs so frontend defaults don't override backend.
   captureIntervalMs: 250,
   overlay: {
     fontSize: 32,
@@ -58,21 +55,25 @@ const defaultSettings: AppSettings = {
     ocr: defaultOcr,
   },
   minimizeToTray: true,
+  autoCheckUpdates: true,
+  lastUpdateCheckTimeMs: null,
 };
 
 function mergeSettings(value: Partial<AppSettings> | null): AppSettings {
   if (!value) return structuredClone(defaultSettings);
+  const base = defaultSettings.translation;
   return ensureDistinctLanguagePair({
     ...structuredClone(defaultSettings),
     ...value,
+    autoCheckUpdates: value.autoCheckUpdates !== false,
+    lastUpdateCheckTimeMs: Number.isFinite(value.lastUpdateCheckTimeMs)
+      ? (value.lastUpdateCheckTimeMs as number)
+      : null,
     overlay: { ...defaultSettings.overlay, ...(value.overlay ?? {}) },
     translation: {
-      ...defaultSettings.translation,
+      ...base,
       ...(value.translation ?? {}),
-      localEngine: {
-        ...defaultSettings.translation.localEngine,
-        ...(value.translation?.localEngine ?? {}),
-      },
+      localEngine: { ...base.localEngine, ...(value.translation?.localEngine ?? {}) },
       ocr: { ...defaultOcr, ...(value.translation?.ocr ?? {}) },
     },
   });
@@ -83,10 +84,10 @@ function errorMessage(error: unknown): string {
 }
 
 export class AppController {
-  private subscriber: Subscriber;
   private unlisten: Array<() => void> = [];
   private pollingId: number | null = null;
   private overlaySaveId: number | null = null;
+  private autoCheckTimer: number | null = null;
   private snapshot: UiSnapshot = {
     screen: "home",
     busy: "loading",
@@ -103,9 +104,10 @@ export class AppController {
   };
   private updates = new UpdateController((patch) => this.publish(patch));
 
-  constructor(subscriber: Subscriber) {
-    this.subscriber = subscriber;
-  }
+  constructor(
+    private readonly subscriber: Subscriber,
+    private readonly clock: () => number = () => Date.now(),
+  ) {}
 
   current(): UiSnapshot {
     return this.snapshot;
@@ -142,6 +144,7 @@ export class AppController {
     if (!browserMode && localStorage.getItem(ONBOARDING_COMPLETE_KEY) !== "true") {
       await this.openSetup();
     }
+    this.scheduleAutomaticUpdateCheck();
   }
 
   private async safeInvoke<T>(command: string, fallback: T): Promise<T> {
@@ -166,9 +169,7 @@ export class AppController {
       "engine-wizard-closed",
       (event) => {
         const payload = event.payload as { modelDownloaded?: boolean } | null;
-        if (payload?.modelDownloaded === true) {
-          localStorage.setItem(ONBOARDING_COMPLETE_KEY, "true");
-        }
+        if (payload?.modelDownloaded) localStorage.setItem(ONBOARDING_COMPLETE_KEY, "true");
       },
     );
     this.unlisten.push(regionUnlisten, captureUnlisten, wizardUnlisten);
@@ -177,6 +178,7 @@ export class AppController {
   dispose(): void {
     this.stopRegionPolling();
     if (this.overlaySaveId !== null) window.clearTimeout(this.overlaySaveId);
+    if (this.autoCheckTimer !== null) window.clearTimeout(this.autoCheckTimer);
     this.unlisten.splice(0).forEach((callback) => callback());
   }
 
@@ -203,12 +205,11 @@ export class AppController {
     this.stopRegionPolling();
     let attempts = 0;
     this.pollingId = window.setInterval(async () => {
-      attempts += 1;
       const region = await this.safeInvoke<CaptureRegion | null>("get_capture_region", null);
       if (region) {
         this.stopRegionPolling();
         this.publish({ region, notice: "Subtitle area selected" });
-      } else if (attempts >= 40) {
+      } else if (++attempts >= 40) {
         this.stopRegionPolling();
       }
     }, 250);
@@ -300,17 +301,16 @@ export class AppController {
 
   async setRecognitionPreset(value: "fast" | "balanced" | "accurate"): Promise<void> {
     const settings = structuredClone(this.snapshot.settings);
-    const presets: Record<typeof value, OcrConfig> = {
-      fast: { ...defaultOcr, preprocessingEnabled: false, validationStrictness: "permissive" },
-      balanced: { ...defaultOcr },
+    const overrides = {
+      fast: { preprocessingEnabled: false, validationStrictness: "permissive" as const },
+      balanced: {},
       accurate: {
-        ...defaultOcr,
         enableMultiPass: true,
         multiPassCount: 2,
-        validationStrictness: "strict",
+        validationStrictness: "strict" as const,
       },
     };
-    settings.translation.ocr = presets[value];
+    settings.translation.ocr = { ...defaultOcr, ...overrides[value] };
     this.publish({ settings });
     await this.persistSettingsInBackground();
   }
@@ -339,7 +339,10 @@ export class AppController {
     }, 250);
   }
 
-  async updatePreference(kind: "minimizeToTray", enabled: boolean): Promise<void> {
+  async updatePreference(
+    kind: "minimizeToTray" | "autoCheckUpdates",
+    enabled: boolean,
+  ): Promise<void> {
     const settings = structuredClone(this.snapshot.settings);
     settings[kind] = enabled;
     this.publish({ settings });
@@ -365,8 +368,25 @@ export class AppController {
     }
   }
 
+  private scheduleAutomaticUpdateCheck(): void {
+    if (this.autoCheckTimer !== null) window.clearTimeout(this.autoCheckTimer);
+    this.autoCheckTimer = window.setTimeout(() => {
+      this.autoCheckTimer = null;
+      void this.checkForUpdatesAutomatically();
+    }, 2000);
+  }
+
+  async checkForUpdatesAutomatically(): Promise<void> {
+    const completedAt = await this.updates.checkAutomatic(this.snapshot.settings, this.clock);
+    if (completedAt === null) return;
+    const settings = structuredClone(this.snapshot.settings);
+    settings.lastUpdateCheckTimeMs = completedAt;
+    this.publish({ settings });
+    await this.persistSettingsInBackground();
+  }
+
   async checkForUpdates(): Promise<void> {
-    await this.updates.check();
+    await this.updates.check("manual");
   }
 
   async installUpdate(): Promise<void> {
