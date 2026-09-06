@@ -371,3 +371,94 @@ describe("installing", () => {
     });
   });
 });
+
+describe("in-flight check promotion", () => {
+  it("promotes in-flight automatic check to manual when user triggers manual check", async () => {
+    let resolveCheck!: (val: unknown) => void;
+    const checkPromise = new Promise((resolve) => {
+      resolveCheck = resolve;
+    });
+    const check = vi.fn().mockReturnValue(checkPromise);
+    const { controller, patches } = harness({ currentVersion: vi.fn(), check, restart: vi.fn() });
+
+    const autoCheck = controller.check("automatic");
+    expect(patches).toEqual([]);
+
+    const manualCheck = controller.check("manual");
+
+    expect(patches).toEqual([{ update: { kind: "checking" }, error: null, notice: null }]);
+
+    resolveCheck(null);
+    await Promise.all([autoCheck, manualCheck]);
+
+    expect(check).toHaveBeenCalledTimes(1);
+    expect(patches.at(-1)?.update).toEqual({ kind: "upToDate" });
+  });
+
+  it("surfaces network error in UI when in-flight automatic check was promoted to manual", async () => {
+    let rejectCheck!: (err: Error) => void;
+    const checkPromise = new Promise((_, reject) => {
+      rejectCheck = reject;
+    });
+    const check = vi.fn().mockReturnValue(checkPromise);
+    const { controller, patches } = harness({ currentVersion: vi.fn(), check, restart: vi.fn() });
+
+    const autoCheck = controller.check("automatic");
+    const manualCheck = controller.check("manual");
+
+    expect(patches).toEqual([{ update: { kind: "checking" }, error: null, notice: null }]);
+
+    rejectCheck(new Error("network failure"));
+    await Promise.all([autoCheck, manualCheck]);
+
+    expect(check).toHaveBeenCalledTimes(1);
+    expect(patches.at(-1)?.update).toEqual({
+      kind: "error",
+      message: "network failure",
+    });
+  });
+
+  it("surfaces available update when in-flight automatic check was promoted to manual", async () => {
+    let resolveCheck!: (val: unknown) => void;
+    const checkPromise = new Promise((resolve) => {
+      resolveCheck = resolve;
+    });
+    const check = vi.fn().mockReturnValue(checkPromise);
+    const update = pending();
+    const { controller, patches } = harness({ currentVersion: vi.fn(), check, restart: vi.fn() });
+
+    const autoCheck = controller.check("automatic");
+    const manualCheck = controller.check("manual");
+
+    resolveCheck(update);
+    await Promise.all([autoCheck, manualCheck]);
+
+    expect(check).toHaveBeenCalledTimes(1);
+    expect(patches.at(-1)?.update).toEqual({
+      kind: "available",
+      version: update.version,
+      notes: update.notes,
+    });
+  });
+
+  it("deduplicates multiple manual checks while automatic check is in flight", async () => {
+    let resolveCheck!: (val: unknown) => void;
+    const checkPromise = new Promise((resolve) => {
+      resolveCheck = resolve;
+    });
+    const check = vi.fn().mockReturnValue(checkPromise);
+    const { controller, patches } = harness({ currentVersion: vi.fn(), check, restart: vi.fn() });
+
+    const autoCheck = controller.check("automatic");
+    const manualCheck1 = controller.check("manual");
+    const manualCheck2 = controller.check("manual");
+
+    expect(patches.filter((p) => p.update?.kind === "checking")).toHaveLength(1);
+
+    resolveCheck(null);
+    await Promise.all([autoCheck, manualCheck1, manualCheck2]);
+
+    expect(check).toHaveBeenCalledTimes(1);
+    expect(patches.at(-1)?.update).toEqual({ kind: "upToDate" });
+  });
+});

@@ -329,4 +329,62 @@ describe("AppController automatic update checks", () => {
       }),
     });
   });
+
+  it("persists timestamp after automatic check when settings loaded successfully", async () => {
+    const check = vi.fn().mockResolvedValue(null);
+    const now = 1_700_000_000_000;
+    const invoke: TauriBridgeApi["invoke"] = vi.fn(async (cmd) => {
+      if (cmd === "get_settings") {
+        return { sourceLanguage: "ja-JP", lastUpdateCheckTimeMs: null } as never;
+      }
+      return undefined as never;
+    });
+    const updates = {
+      currentVersion: vi.fn().mockResolvedValue("0.6.9"),
+      check,
+      restart: vi.fn(),
+    };
+    const { controller, storage } = createController(invoke, undefined, false, updates, () => now);
+    storage.getItem.mockReturnValue("true");
+
+    await controller.initialize();
+    await vi.advanceTimersByTimeAsync(2000);
+
+    expect(check).toHaveBeenCalledTimes(1);
+    expect(invoke).toHaveBeenCalledWith("save_settings", {
+      settings: expect.objectContaining({
+        sourceLanguage: "ja-JP",
+        lastUpdateCheckTimeMs: now,
+      }),
+    });
+  });
+
+  it("suppresses background persistence on automatic check when get_settings failed", async () => {
+    const check = vi.fn().mockResolvedValue(null);
+    const now = 1_700_000_000_000;
+    const invoke: TauriBridgeApi["invoke"] = vi.fn(async (cmd) => {
+      if (cmd === "get_settings") throw new Error("database locked");
+      return undefined as never;
+    });
+    const updates = {
+      currentVersion: vi.fn().mockResolvedValue("0.6.9"),
+      check,
+      restart: vi.fn(),
+    };
+    const { controller, storage, snapshots } = createController(
+      invoke,
+      undefined,
+      false,
+      updates,
+      () => now,
+    );
+    storage.getItem.mockReturnValue("true");
+
+    await controller.initialize();
+    await vi.advanceTimersByTimeAsync(2000);
+
+    expect(check).toHaveBeenCalledTimes(1);
+    expect(snapshots.at(-1)?.settings.lastUpdateCheckTimeMs).toBe(now);
+    expect(invoke).not.toHaveBeenCalledWith("save_settings", expect.anything());
+  });
 });
