@@ -18,7 +18,8 @@ export type UpdateCheckIntent = "manual" | "automatic";
  */
 export class UpdateController {
   private pending: PendingUpdate | null = null;
-  private checking = false;
+  private inFlightCheck: Promise<void> | null = null;
+  private inFlightIntent: UpdateCheckIntent = "manual";
 
   constructor(private readonly publish: (patch: Partial<UiSnapshot>) => void) {}
 
@@ -40,9 +41,18 @@ export class UpdateController {
 
   async check(intent: UpdateCheckIntent = "manual"): Promise<void> {
     const updates = window.TauriBridge.updates;
-    if (!updates || this.checking) return;
-    this.checking = true;
+    if (!updates) return;
 
+    if (this.inFlightCheck) {
+      if (intent === "manual" && this.inFlightIntent === "automatic") {
+        this.inFlightIntent = "manual";
+        this.pending = null;
+        this.publish({ update: { kind: "checking" }, error: null, notice: null });
+      }
+      return this.inFlightCheck;
+    }
+
+    this.inFlightIntent = intent;
     if (intent === "manual") {
       // Dropped before a manual check so a failed one cannot leave the previous
       // answer installable.
@@ -50,26 +60,30 @@ export class UpdateController {
       this.publish({ update: { kind: "checking" }, error: null, notice: null });
     }
 
-    try {
-      const update = await updates.check();
-      if (!update) {
-        this.pending = null;
-        this.publish({ update: { kind: "upToDate" } });
-        return;
+    this.inFlightCheck = (async () => {
+      try {
+        const update = await updates.check();
+        if (!update) {
+          this.pending = null;
+          this.publish({ update: { kind: "upToDate" } });
+          return;
+        }
+        this.pending = update;
+        this.publish({
+          update: { kind: "available", version: update.version, notes: update.notes },
+        });
+      } catch (error) {
+        if (this.inFlightIntent === "manual") {
+          this.publish({ update: { kind: "error", message: UpdateController.message(error) } });
+        } else {
+          console.warn("[Meowcal] automatic update check failed", error);
+        }
+      } finally {
+        this.inFlightCheck = null;
       }
-      this.pending = update;
-      this.publish({
-        update: { kind: "available", version: update.version, notes: update.notes },
-      });
-    } catch (error) {
-      if (intent === "manual") {
-        this.publish({ update: { kind: "error", message: UpdateController.message(error) } });
-      } else {
-        console.warn("[Meowcal] automatic update check failed", error);
-      }
-    } finally {
-      this.checking = false;
-    }
+    })();
+
+    return this.inFlightCheck;
   }
 
   async checkAutomatic(

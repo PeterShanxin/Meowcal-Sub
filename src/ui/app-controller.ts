@@ -62,13 +62,13 @@ const defaultSettings: AppSettings = {
 function mergeSettings(value: Partial<AppSettings> | null): AppSettings {
   if (!value) return structuredClone(defaultSettings);
   const base = defaultSettings.translation;
+  const lastCheck = value.lastUpdateCheckTimeMs;
   return ensureDistinctLanguagePair({
     ...structuredClone(defaultSettings),
     ...value,
     autoCheckUpdates: value.autoCheckUpdates !== false,
-    lastUpdateCheckTimeMs: Number.isFinite(value.lastUpdateCheckTimeMs)
-      ? (value.lastUpdateCheckTimeMs as number)
-      : null,
+    lastUpdateCheckTimeMs:
+      typeof lastCheck === "number" && Number.isFinite(lastCheck) ? lastCheck : null,
     overlay: { ...defaultSettings.overlay, ...(value.overlay ?? {}) },
     translation: {
       ...base,
@@ -83,11 +83,14 @@ function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
+type WizardTestResult = { translatedText?: string; latencyMs?: number };
+
 export class AppController {
   private unlisten: Array<() => void> = [];
   private pollingId: number | null = null;
   private overlaySaveId: number | null = null;
   private autoCheckTimer: number | null = null;
+  private settingsLoaded = false;
   private snapshot: UiSnapshot = {
     screen: "home",
     busy: "loading",
@@ -126,10 +129,9 @@ export class AppController {
       this.safeInvoke<string[]>("get_ocr_languages", []),
       this.safeInvoke<EngineStatus>("get_engine_status", { phase: "unknown" }),
       this.safeInvoke<CaptureRegion | null>("get_capture_region", null),
-      browserMode
-        ? Promise.resolve(false)
-        : this.safeInvoke<boolean>("is_translation_running", false),
+      browserMode ? false : this.safeInvoke<boolean>("is_translation_running", false),
     ]);
+    this.settingsLoaded = settings !== null;
     const merged = mergeSettings(settings);
     this.publish({
       settings: merged,
@@ -168,8 +170,9 @@ export class AppController {
     const wizardUnlisten = await window.TauriBridge.event.listen(
       "engine-wizard-closed",
       (event) => {
-        const payload = event.payload as { modelDownloaded?: boolean } | null;
-        if (payload?.modelDownloaded) localStorage.setItem(ONBOARDING_COMPLETE_KEY, "true");
+        if ((event.payload as { modelDownloaded?: boolean } | null)?.modelDownloaded) {
+          localStorage.setItem(ONBOARDING_COMPLETE_KEY, "true");
+        }
       },
     );
     this.unlisten.push(regionUnlisten, captureUnlisten, wizardUnlisten);
@@ -209,9 +212,7 @@ export class AppController {
       if (region) {
         this.stopRegionPolling();
         this.publish({ region, notice: "Subtitle area selected" });
-      } else if (++attempts >= 40) {
-        this.stopRegionPolling();
-      }
+      } else if (++attempts >= 40) this.stopRegionPolling();
     }, 250);
   }
 
@@ -284,6 +285,7 @@ export class AppController {
   async saveSettings(silent = false): Promise<void> {
     try {
       await window.TauriBridge.invoke("save_settings", { settings: this.snapshot.settings });
+      this.settingsLoaded = true;
       if (!silent) this.publish({ notice: "Settings saved", error: null });
     } catch (error) {
       if (!silent) this.publish({ error: errorMessage(error) });
@@ -352,10 +354,7 @@ export class AppController {
   async testTranslation(): Promise<void> {
     this.publish({ busy: "saving", notice: "Running a private sample translation…", error: null });
     try {
-      const result = await window.TauriBridge.invoke<{
-        translatedText?: string;
-        latencyMs?: number;
-      }>("wizard_test_translation", {
+      const result = await window.TauriBridge.invoke<WizardTestResult>("wizard_test_translation", {
         sourceText: pickSampleTranslation(this.snapshot.settings.sourceLanguage),
         sourceLanguage: this.snapshot.settings.sourceLanguage,
         targetLanguage: this.snapshot.settings.targetLanguage,
@@ -382,6 +381,7 @@ export class AppController {
     const settings = structuredClone(this.snapshot.settings);
     settings.lastUpdateCheckTimeMs = completedAt;
     this.publish({ settings });
+    if (!this.settingsLoaded) return;
     await this.persistSettingsInBackground();
   }
 
