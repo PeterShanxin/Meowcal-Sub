@@ -2562,7 +2562,7 @@ dependencies = [
  "interprocess",
  "lazy_static",
  "mockall",
- "png 0.17.16",
+ "png 0.18.1",
  "proptest",
  "raw-window-handle",
  "reqwest 0.12.28",
