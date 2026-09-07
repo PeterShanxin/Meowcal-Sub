@@ -10,6 +10,11 @@ updates:
       time: "09:00"
       timezone: "Asia/Singapore"
     open-pull-requests-limit: 10
+    allow:
+      - dependency-name: "*"
+        update-types:
+          - "version-update:semver-minor"
+          - "version-update:semver-patch"
     groups:
       npm-minor-patch:
         applies-to: "version-updates"
@@ -25,9 +30,14 @@ updates:
     schedule:
       interval: "weekly"
       day: "monday"
-      time: "09:10"
+      time: "09:00"
       timezone: "Asia/Singapore"
     open-pull-requests-limit: 10
+    allow:
+      - dependency-name: "*"
+        update-types:
+          - "version-update:semver-minor"
+          - "version-update:semver-patch"
     groups:
       cargo-minor-patch:
         applies-to: "version-updates"
@@ -43,9 +53,14 @@ updates:
     schedule:
       interval: "weekly"
       day: "monday"
-      time: "09:20"
+      time: "09:00"
       timezone: "Asia/Singapore"
     open-pull-requests-limit: 10
+    allow:
+      - dependency-name: "*"
+        update-types:
+          - "version-update:semver-minor"
+          - "version-update:semver-patch"
     groups:
       nuget-minor-patch:
         applies-to: "version-updates"
@@ -61,9 +76,14 @@ updates:
     schedule:
       interval: "weekly"
       day: "monday"
-      time: "09:30"
+      time: "09:00"
       timezone: "Asia/Singapore"
     open-pull-requests-limit: 10
+    allow:
+      - dependency-name: "*"
+        update-types:
+          - "version-update:semver-minor"
+          - "version-update:semver-patch"
     groups:
       actions-minor-patch:
         applies-to: "version-updates"
