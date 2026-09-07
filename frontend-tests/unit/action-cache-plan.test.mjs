@@ -164,8 +164,8 @@ describe("this repository's own workflows", () => {
     // Pinned so that adding a step which uses a new action is a visible change
     // here rather than a silent extra download on every job.
     expect(collectCacheableActionUses(readRealWorkflows())).toEqual([
-      "actions/checkout@v4",
-      "actions/upload-artifact@v4",
+      "actions/checkout@v7",
+      "actions/upload-artifact@v7",
     ]);
   });
 });

@@ -35,7 +35,7 @@ jobs:
     name: Change Contract
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           # The whole range between the base tip and the head must be present.
           fetch-depth: 0
