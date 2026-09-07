@@ -10,9 +10,9 @@ fn decode_png(data_url: &str) -> (Vec<u8>, u32, u32) {
         .decode(base64_payload)
         .expect("base64 payload");
 
-    let decoder = png::Decoder::new(png_bytes.as_slice());
+    let decoder = png::Decoder::new(std::io::Cursor::new(&png_bytes));
     let mut reader = decoder.read_info().expect("png header");
-    let mut pixels = vec![0u8; reader.output_buffer_size()];
+    let mut pixels = vec![0u8; reader.output_buffer_size().expect("png output buffer size")];
     let info = reader.next_frame(&mut pixels).expect("png frame");
     pixels.truncate(info.buffer_size());
 
