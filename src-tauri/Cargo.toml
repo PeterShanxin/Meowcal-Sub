@@ -188,7 +188,7 @@ mockall = "0.14"
 proptest = "1.9"
 
 # HTTP server testing utilities
-axum-test = "18.0"
+axum-test = "21.0"
 
 # =============================================================================
 # PROFILE SETTINGS
