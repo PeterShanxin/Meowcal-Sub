@@ -212,19 +212,10 @@ DPI/window behavior.
 
 ## Real-device validation is not a CI job
 
-A GitHub-hosted ARM64 runner is a virtual machine. It cannot capture a screen,
-place an overlay, install Windows OCR languages, or exercise the Adreno engine
-path, so no workflow can honestly verify this application on Snapdragon
-hardware. That evidence comes from the manual gate below.
-
-The automated half of the local check is the same script CI runs. On an ARM64
-machine it covers both shipped architectures, because Windows x64 emulation runs
-one way only:
-
-```powershell
-./scripts/verify.ps1 -Stage All -Target aarch64-pc-windows-msvc
-./scripts/verify.ps1 -Stage All -Target x86_64-pc-windows-msvc
-```
+No workflow verifies this application on Snapdragon hardware, because a hosted
+ARM64 runner is a virtual machine. That evidence comes from the manual gate
+below; `docs/RELEASE_PACKAGING.md` explains the boundary and gives the local
+`scripts/verify.ps1` invocations that cover both shipped architectures.
 
 ## Manual gate
 

@@ -3,9 +3,8 @@ param(
     # Directory holding the merged package artifacts from every architecture.
     [Parameter(Mandatory)][string]$Directory,
 
-    # Where to write the SHA256 manifest. Omit to check the assets only, which
-    # is what a preflight run that publishes nothing wants.
-    [string]$ChecksumPath
+    # Where to write the SHA256 manifest.
+    [Parameter(Mandatory)][string]$ChecksumPath
 )
 
 $ErrorActionPreference = "Stop"
@@ -30,11 +29,6 @@ foreach ($architecture in @("x64", "arm64")) {
             throw "Expected exactly one $architecture $($expected.Kind), found $($found.Count)."
         }
     }
-}
-
-if (-not $ChecksumPath) {
-    Write-Host "Release assets satisfy the x64 and arm64 contract." -ForegroundColor Green
-    return
 }
 
 $installers = @($files |

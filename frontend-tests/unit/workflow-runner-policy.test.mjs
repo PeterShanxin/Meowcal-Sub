@@ -54,6 +54,20 @@ describe("runner policy", () => {
     expect(check("    runs-on: self-hosted  # windows-2025").length).toBeGreaterThan(0);
   });
 
+  // One allowed literal must not vouch for an indirect operand beside it. The
+  // forbidden name never appears in the workflow text in these - it lives in
+  // the variable or the matrix - so the line scan cannot catch them either.
+  it("rejects an expression whose other branch is indirect", () => {
+    expect(
+      check(
+        "    runs-on: ${{ github.event_name == 'push' && 'ubuntu-latest' || vars.PACKAGE_RUNNER }}",
+      ),
+    ).toEqual([expect.stringContaining("does not name a runner")]);
+    expect(
+      check("    runs-on: ${{ inputs.architecture == 'arm64' && 'windows-11-arm' || matrix.os }}"),
+    ).toEqual([expect.stringContaining("does not name a runner")]);
+  });
+
   it("rejects an indirect runner value even when a comment names valid labels", () => {
     const violations = check(
       "    # windows-2025 emergency override, see runbook\n" +
@@ -81,7 +95,8 @@ describe("runner policy", () => {
 });
 
 describe("runnerCandidates", () => {
-  it("keeps only the runner-shaped literals of an expression", () => {
+  it("takes the value position of each alternative, not every literal", () => {
+    // The `'arm64'` is a condition operand, so it is not a candidate.
     expect(
       runnerCandidates(
         "${{ inputs.architecture == 'arm64' && 'windows-11-arm' || 'windows-2025' }}",
@@ -89,8 +104,16 @@ describe("runnerCandidates", () => {
     ).toEqual(["windows-11-arm", "windows-2025"]);
   });
 
-  it("reports an expression with no runner literal as indirect", () => {
+  it("reports an expression whose value position is not a literal as indirect", () => {
     expect(runnerCandidates("${{ vars.RUNNER }}")).toBeNull();
+    expect(
+      runnerCandidates("${{ github.event_name == 'push' && 'ubuntu-latest' || vars.RUNNER }}"),
+    ).toBeNull();
+    expect(
+      runnerCandidates(
+        "${{ inputs.a == 'arm64' && fromJSON('[\"self-hosted\"]') || 'windows-2025' }}",
+      ),
+    ).toBeNull();
   });
 
   it("splits a plain label list", () => {

@@ -18,15 +18,9 @@
 const ALLOWED_RUNNERS = new Set([
   "ubuntu-latest",
   "ubuntu-24.04",
-  "ubuntu-22.04",
   "windows-11-arm",
   "windows-2025",
 ]);
-
-// A token that names a runner rather than, say, an architecture input value.
-// `windows-11-arm` matches; the `'arm64'` in a `runs-on` expression's condition
-// does not, which is what lets the expression form below be checked at all.
-const RUNNER_SHAPED = /^(?:self-hosted|ubuntu|windows|macos)[\w.-]*$/i;
 
 // The same names anywhere else in a workflow: a matrix entry, a container
 // image, a reusable-workflow input. `runs-on: ${{ matrix.os }}` is already
@@ -173,21 +167,86 @@ export function foldRunsOnValue(lines, index) {
 }
 
 /**
+ * Split `text` on a top-level `separator`, ignoring occurrences inside quotes
+ * or parentheses.
+ */
+function splitTopLevel(text, separator) {
+  const parts = [];
+  let depth = 0;
+  let quote = null;
+  let start = 0;
+
+  for (let index = 0; index < text.length; index += 1) {
+    const character = text[index];
+
+    if (quote) {
+      if (character === quote) {
+        quote = null;
+      }
+      continue;
+    }
+    if (character === '"' || character === "'") {
+      quote = character;
+      continue;
+    }
+    if (character === "(") {
+      depth += 1;
+      continue;
+    }
+    if (character === ")") {
+      depth -= 1;
+      continue;
+    }
+    if (depth === 0 && text.startsWith(separator, index)) {
+      parts.push(text.slice(start, index));
+      index += separator.length - 1;
+      start = index + 1;
+    }
+  }
+
+  parts.push(text.slice(start));
+  return parts;
+}
+
+/** The text of a single-quoted or double-quoted scalar, or null. */
+function quotedLiteral(text) {
+  const match = /^'([^']*)'$/.exec(text.trim()) ?? /^"([^"]*)"$/.exec(text.trim());
+  return match ? match[1] : null;
+}
+
+/**
  * The runner labels a `runs-on` value can select, or null when it selects
  * something this file cannot see through - a repository variable, a matrix
  * key, anything else indirect.
  *
- * An expression is read through its quoted literals, keeping only the
- * runner-shaped ones. That is what lets the packaging workflow choose its image
- * from the architecture input and still be checked: the `'arm64'` it compares
- * against is not a runner name, and both branches are.
+ * An expression is read by its *value* positions rather than by every literal
+ * in it, which is what lets the packaging workflow pick its image from the
+ * architecture input and still be checked. GitHub's idiom is
+ * `condition && valueA || valueB`, so each `||` alternative contributes the
+ * last of its `&&` terms, and every one of those must be a quoted literal.
+ * Reading literals anywhere in the expression instead would let one allowed
+ * name vouch for an indirect operand beside it: `'ubuntu-latest' ||
+ * vars.PACKAGE_RUNNER` would pass while resolving to whatever that variable
+ * holds. Only the condition may name inputs, because it selects between values
+ * rather than being one.
  */
 export function runnerCandidates(value) {
-  if (value.includes("${{")) {
-    const literals = [...value.matchAll(/'([^']*)'|"([^"]*)"/g)]
-      .map((match) => match[1] ?? match[2])
-      .filter((literal) => RUNNER_SHAPED.test(literal));
-    return literals.length > 0 ? literals : null;
+  const open = value.indexOf("${{");
+  if (open !== -1) {
+    const close = value.lastIndexOf("}}");
+    if (close < open) {
+      return null;
+    }
+    const candidates = [];
+    for (const alternative of splitTopLevel(value.slice(open + 3, close), "||")) {
+      const terms = splitTopLevel(alternative, "&&");
+      const literal = quotedLiteral(terms[terms.length - 1]);
+      if (literal === null) {
+        return null;
+      }
+      candidates.push(literal);
+    }
+    return candidates.length > 0 ? candidates : null;
   }
 
   const candidates = value
