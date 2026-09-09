@@ -13,6 +13,7 @@ use crate::llm::{
     LlmError, PromptRouterOptions, ReadyState, TranslationDiagnosticsState, TranslatorBackend,
 };
 use crate::sync_utils::lock_or_recover;
+use crate::translation_eligibility::Eligibility;
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 use tokio::time::{timeout, Duration};
@@ -28,6 +29,8 @@ pub(super) struct AttemptPolicy {
     pub(super) uncontexted_attempt_cap_ms: u64,
     pub(super) prompt_max_context_chars: usize,
     pub(super) prompt_max_source_chars: usize,
+    /// Whether output is still judged against a subtitle cue's length.
+    pub(super) eligibility: Eligibility,
 }
 
 /// The deadline window an attempt sequence shares with its caller.
@@ -155,6 +158,7 @@ impl TranslationAttemptRunner {
                         &translated,
                         source_language,
                         target_language,
+                        self.policy.eligibility,
                     ) {
                         lock_or_recover(&self.diagnostics).record_error(
                             id,

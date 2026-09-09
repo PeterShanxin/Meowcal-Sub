@@ -500,11 +500,10 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
         contrast_enhancement: translation_config.ocr.contrast_enhancement,
         binarize: translation_config.ocr.binarize,
     };
-    let ocr_validation_strictness = translation_config.ocr.validation_strictness;
-
-    let min_significant_chars = ocr_validation_strictness.min_significant_chars();
-
-    debug!(?translation_config.ocr, min_significant_chars, "OCR settings");
+    let strictness = translation_config.ocr.validation_strictness;
+    let min_chars = strictness.min_significant_chars();
+    let eligibility = translation_config.eligibility();
+    debug!(?translation_config.ocr, min_significant_chars = min_chars, "OCR settings");
 
     // Pace to a deadline: a frame that ran the translator must not also pay a
     // full interval before the next capture.
@@ -521,8 +520,8 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
     }
 
     info!(
-        "✅ Translation started! Interval: {}ms, Target: {}",
-        interval_ms, target_language
+        "✅ Translation started! Interval: {}ms, Target: {}, Text: {:?}",
+        interval_ms, target_language, eligibility
     );
 
     if let Err(e) = overlay::show_overlay(&app).await {
@@ -767,7 +766,7 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
                 continue;
             }
 
-            let ocr_result = band_filter.apply(ocr_result);
+            let ocr_result = band_filter.apply(ocr_result, eligibility);
 
             if ocr_result.is_empty() {
                 debug!("[FILTER: {}] skipping", band_filter.skip_reason());
@@ -790,13 +789,14 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
 
             let current_text = ocr_result.text.trim().to_string();
 
-            if let Some(rejection) = crate::ocr_gate::classify(&current_text, min_significant_chars)
+            if let Some(rejection) =
+                crate::ocr_gate::classify(&current_text, min_chars, eligibility)
             {
                 debug!(
                     "[FILTER: {}] OCR text ({} chars, minimum {})",
                     rejection.as_str(),
                     current_text.chars().count(),
-                    min_significant_chars
+                    min_chars
                 );
                 let busy = translator.is_busy();
                 if let Some(notice) =

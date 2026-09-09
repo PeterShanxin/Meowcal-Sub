@@ -12,6 +12,7 @@
 
 use super::band_tracker::BandTracker;
 use super::OcrResult;
+use crate::translation_eligibility::Eligibility;
 use std::time::Instant;
 use tracing::debug;
 
@@ -61,8 +62,19 @@ impl BandFilter {
     /// A result with no geometry - an OCR path that reports text without
     /// rectangles - passes through untouched. Filtering on absent evidence
     /// would silently blank the overlay for anyone on such a path.
-    pub fn apply(&mut self, result: OcrResult) -> OcrResult {
+    ///
+    /// Every verdict this applies is a claim about how a band *behaves* over
+    /// time, so `Eligibility::AnyText` skips it entirely rather than reading it
+    /// more leniently: stationary page text is `Static` however long it is
+    /// watched, and that is the case the mode exists for. The tracker goes cold
+    /// while it is skipped, so switching back holds nothing until the bands are
+    /// observed again - the safe direction, and the one `Verdict::Warming`
+    /// already takes.
+    pub fn apply(&mut self, result: OcrResult, eligibility: Eligibility) -> OcrResult {
         self.held_lines = 0;
+        if !eligibility.requires_subtitle_shape() {
+            return result;
+        }
         if result.boxes.len() != result.lines.len() || result.lines.is_empty() {
             return result;
         }
@@ -108,6 +120,9 @@ mod tests {
     use super::*;
     use crate::ocr::LineBox;
 
+    const SUBTITLE: Eligibility = Eligibility::SubtitleLike;
+    const ANY_TEXT: Eligibility = Eligibility::AnyText;
+
     fn frame(y: f32, width: f32, chars: usize) -> OcrResult {
         OcrResult::with_boxes(
             vec!["x".repeat(chars)],
@@ -125,13 +140,13 @@ mod tests {
     fn a_result_without_geometry_passes_through_untouched() {
         let mut filter = BandFilter::new(250);
         let plain = OcrResult::new(vec!["a subtitle".to_string()]);
-        assert_eq!(filter.apply(plain).text, "a subtitle");
+        assert_eq!(filter.apply(plain, SUBTITLE).text, "a subtitle");
     }
 
     #[test]
     fn an_empty_result_stays_empty() {
         let mut filter = BandFilter::new(250);
-        assert!(filter.apply(OcrResult::empty()).is_empty());
+        assert!(filter.apply(OcrResult::empty(), SUBTITLE).is_empty());
     }
 
     #[test]
@@ -142,7 +157,7 @@ mod tests {
         // interval, which is dialogue. Changing every frame would be credits.
         for step in 0..40 {
             let cue = step / 8 % 5;
-            last = filter.apply(frame(1000.0, 300.0 + cue as f32 * 60.0, 20 + cue));
+            last = filter.apply(frame(1000.0, 300.0 + cue as f32 * 60.0, 20 + cue), SUBTITLE);
         }
         assert!(!last.is_empty(), "a subtitle band must keep being read");
     }
@@ -155,13 +170,13 @@ mod tests {
     fn a_held_frame_is_not_reported_as_an_empty_one() {
         let mut filter = BandFilter::new(250);
 
-        filter.apply(OcrResult::empty());
+        filter.apply(OcrResult::empty(), SUBTITLE);
         assert_eq!(filter.held_lines(), 0);
         assert_eq!(filter.skip_reason(), "empty");
 
         // One sighting of a band nothing is known about is held as a glimpse -
         // the result is empty, but text was read and thrown away here.
-        let held = filter.apply(frame(1000.0, 300.0, 20));
+        let held = filter.apply(frame(1000.0, 300.0, 20), SUBTITLE);
         assert!(held.is_empty(), "the frame should come back empty");
         assert_eq!(filter.held_lines(), 1);
         assert_eq!(filter.skip_reason(), "band_held");
@@ -173,12 +188,46 @@ mod tests {
     fn changing_the_frame_size_starts_the_bands_over() {
         let mut filter = BandFilter::new(250);
         for _ in 0..40 {
-            filter.apply(frame(1000.0, 300.0, 20));
+            filter.apply(frame(1000.0, 300.0, 20), SUBTITLE);
         }
         let mut narrower = frame(1000.0, 300.0, 20);
         narrower.frame_width = 900.0;
         // A brand new tracker knows nothing, so it holds the first sighting
         // back as a glimpse rather than applying the old band's verdict.
-        assert!(filter.apply(narrower).is_empty());
+        assert!(filter.apply(narrower, SUBTITLE).is_empty());
+    }
+
+    // Page text, application UI, and slides hold still and hold the same words,
+    // which is exactly the `Static` verdict. Subtitle-aware mode must drop it
+    // and general mode must keep it, or the setting changes nothing that
+    // matters.
+    #[test]
+    fn stationary_text_is_held_for_subtitles_and_kept_for_any_text() {
+        let mut subtitles = BandFilter::new(250);
+        let mut anything = BandFilter::new(250);
+        let mut last_subtitles = OcrResult::empty();
+        let mut last_anything = OcrResult::empty();
+        for _ in 0..40 {
+            last_subtitles = subtitles.apply(frame(1000.0, 300.0, 20), SUBTITLE);
+            last_anything = anything.apply(frame(1000.0, 300.0, 20), ANY_TEXT);
+        }
+        assert!(
+            last_subtitles.is_empty(),
+            "unchanging text is not a subtitle"
+        );
+        assert!(subtitles.held_lines() > 0);
+        assert!(!last_anything.is_empty(), "general text must survive");
+        assert_eq!(anything.held_lines(), 0);
+        assert_eq!(anything.skip_reason(), "empty");
+    }
+
+    // Nothing here invents text: an empty frame is still empty, whatever the
+    // pipeline has been asked to translate.
+    #[test]
+    fn any_text_mode_still_reports_an_empty_frame_as_empty() {
+        let mut filter = BandFilter::new(250);
+        assert!(filter.apply(OcrResult::empty(), ANY_TEXT).is_empty());
+        assert_eq!(filter.held_lines(), 0);
+        assert_eq!(filter.skip_reason(), "empty");
     }
 }

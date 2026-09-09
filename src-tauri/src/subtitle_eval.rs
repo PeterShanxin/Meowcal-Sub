@@ -2,6 +2,7 @@ use crate::llm::{
     is_untranslatable_text, output_validation::validate_translation_output,
     output_validation::TranslationOutputRejection,
 };
+use crate::translation_eligibility::Eligibility;
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 
@@ -137,6 +138,7 @@ pub fn run_deterministic(dataset: &SubtitleEvalDataset) -> DeterministicEvalRepo
                     output,
                     &case.source_language,
                     &case.target_language,
+                    Eligibility::SubtitleLike,
                 ) {
                     failures.push(format!(
                         "{}: acceptable output rejected as {}",
@@ -154,6 +156,7 @@ pub fn run_deterministic(dataset: &SubtitleEvalDataset) -> DeterministicEvalRepo
             &fixture.output,
             &fixture.source_language,
             &fixture.target_language,
+            Eligibility::SubtitleLike,
         ) {
             Err(reason) if reason.code() == fixture.expected_reason => {}
             Err(reason) => failures.push(format!(
@@ -193,6 +196,7 @@ pub fn grade_live_output(
         trimmed,
         &case.source_language,
         &case.target_language,
+        Eligibility::SubtitleLike,
     );
     let shape_reason = if trimmed == case.source_text.trim() {
         Some("source_passthrough")

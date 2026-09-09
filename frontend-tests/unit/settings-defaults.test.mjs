@@ -6,7 +6,7 @@ const read = (relativePath) =>
   readFileSync(fileURLToPath(new URL(relativePath, import.meta.url)), "utf8");
 
 const configRs = read("../../src-tauri/src/config.rs");
-const appController = read("../../src/ui/app-controller.ts");
+const settingsDefaults = read("../../src/ui/settings-defaults.ts");
 
 const rustDefault = (field) => {
   const match = configRs.match(new RegExp(`${field}:\\s*(\\d+)`));
@@ -14,7 +14,7 @@ const rustDefault = (field) => {
 };
 
 const frontendDefault = (field) => {
-  const match = appController.match(new RegExp(`${field}:\\s*(\\d+),`));
+  const match = settingsDefaults.match(new RegExp(`${field}:\\s*(\\d+),`));
   return match ? Number(match[1]) : null;
 };
 
@@ -29,5 +29,13 @@ describe("settings defaults", () => {
 
     expect(backend).not.toBeNull();
     expect(frontendDefault("captureIntervalMs")).toBe(backend);
+  });
+
+  // Same failure mode as the capture interval, with a worse result: a frontend
+  // default of `true` would post general-text translation back over a viewer's
+  // stored `false` the first time anything else was saved.
+  it("agrees with the backend that translating all OCR text is off by default", () => {
+    expect(configRs).toMatch(/translate_all_ocr_text: false,/);
+    expect(settingsDefaults).toMatch(/translateAllOcrText: false,/);
   });
 });

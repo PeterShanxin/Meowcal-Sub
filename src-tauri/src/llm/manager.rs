@@ -348,10 +348,9 @@ impl TranslationManager {
             // five, it starts a retry that is killed mid-flight and never
             // reaches the passthrough.
             let total_timeout = Duration::from_millis(timeout_ms).min(backend_budget());
-            let max_attempts = if id == BackendId::FoundryLocal {
-                1 + FOUNDRY_TRANSIENT_MAX_RETRIES
-            } else {
-                1
+            let max_attempts = match id {
+                BackendId::FoundryLocal => 1 + FOUNDRY_TRANSIENT_MAX_RETRIES,
+                _ => 1,
             };
             let attempt_policy = AttemptPolicy {
                 max_attempts,
@@ -360,6 +359,7 @@ impl TranslationManager {
                 uncontexted_attempt_cap_ms: UNCONTEXTED_ATTEMPT_TIMEOUT_MS,
                 prompt_max_context_chars: self.config.prompt_max_context_chars,
                 prompt_max_source_chars: self.config.prompt_max_source_chars,
+                eligibility: self.config.eligibility(),
             };
 
             // Foundry Local supports context and can degrade it on slow/timeout paths

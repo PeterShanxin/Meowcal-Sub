@@ -3,10 +3,10 @@
   "newProductionFileMaxLines": 400,
   "eslintMaxWarnings": 1,
   "frontendCoverageMinimum": {
-    "branches": 74,
-    "functions": 81,
-    "lines": 83,
-    "statements": 80
+    "branches": 77,
+    "functions": 84,
+    "lines": 86,
+    "statements": 83
   },
   "frontendCoverageScope": [
     "src/scripts/ocr-language-tags.js",
@@ -28,6 +28,7 @@
     "src/ui/app-controller.ts",
     "src/ui/home-state.ts",
     "src/ui/languages.ts",
+    "src/ui/settings-defaults.ts",
     "src/ui/sample-translations.ts",
     "src/ui/setup-progress.ts",
     "src/ui/update-controller.ts",
@@ -43,7 +44,7 @@
   "legacyFileMaxLines": {
     "src-tauri/src/capture/graphics_capture.rs": 522,
     "src-tauri/src/commands.rs": 1090,
-    "src-tauri/src/config.rs": 595,
+    "src-tauri/src/config.rs": 475,
     "src-tauri/src/llm/context.rs": 732,
     "src-tauri/src/llm/foundry_local.rs": 1561,
     "src-tauri/src/llm/manager.rs": 726,

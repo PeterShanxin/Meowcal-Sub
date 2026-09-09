@@ -1,83 +1,12 @@
-import type {
-  AppScreen,
-  AppSettings,
-  CaptureRegion,
-  EngineStatus,
-  OcrConfig,
-  UiSnapshot,
-} from "./contracts";
+import type { AppScreen, AppSettings, CaptureRegion, EngineStatus, UiSnapshot } from "./contracts";
 import { pickSampleTranslation } from "./sample-translations";
-import { applyLanguageSelection, ensureDistinctLanguagePair } from "./languages";
+import { applyLanguageSelection } from "./languages";
+import { defaultOcr, defaultSettings, mergeSettings } from "./settings-defaults";
 import { UpdateController } from "./update-controller";
 
 type Subscriber = (snapshot: UiSnapshot) => void;
 
 const ONBOARDING_COMPLETE_KEY = "meowcal.onboardingComplete";
-
-const defaultOcr: OcrConfig = {
-  confidenceThreshold: 0.5,
-  preprocessingEnabled: true,
-  grayscale: true,
-  contrastEnhancement: true,
-  binarize: true,
-  enableMultiPass: false,
-  multiPassCount: 2,
-  validationStrictness: "moderate",
-};
-
-const defaultSettings: AppSettings = {
-  sourceLanguage: "zh-CN",
-  targetLanguage: "en-US",
-  // Must track `default_config()` in src-tauri/src/config.rs so frontend defaults don't override backend.
-  captureIntervalMs: 250,
-  overlay: {
-    fontSize: 32,
-    fontFamily: "Segoe UI",
-    textColor: "#FFFFFF",
-    backgroundColor: "rgba(0, 0, 0, 0.72)",
-    offsetY: 10,
-    maxWidth: 0,
-    showDiagnostics: false,
-  },
-  translation: {
-    enableLocalEngine: true,
-    allowMockFallback: false,
-    enableContextAware: false,
-    contextLevel: "off",
-    contextRecentCount: 3,
-    contextBudgetPercent: 15,
-    contextSummaryCooldownMs: 5000,
-    promptMaxSourceChars: 300,
-    promptMaxContextChars: 600,
-    contextBufferSize: 12,
-    contextResetGapMs: 6000,
-    localEngine: { model: null, timeoutMs: 30000 },
-    ocr: defaultOcr,
-  },
-  minimizeToTray: true,
-  autoCheckUpdates: true,
-  lastUpdateCheckTimeMs: null,
-};
-
-function mergeSettings(value: Partial<AppSettings> | null): AppSettings {
-  if (!value) return structuredClone(defaultSettings);
-  const base = defaultSettings.translation;
-  const lastCheck = value.lastUpdateCheckTimeMs;
-  return ensureDistinctLanguagePair({
-    ...structuredClone(defaultSettings),
-    ...value,
-    autoCheckUpdates: value.autoCheckUpdates !== false,
-    lastUpdateCheckTimeMs:
-      typeof lastCheck === "number" && Number.isFinite(lastCheck) ? lastCheck : null,
-    overlay: { ...defaultSettings.overlay, ...(value.overlay ?? {}) },
-    translation: {
-      ...base,
-      ...(value.translation ?? {}),
-      localEngine: { ...base.localEngine, ...(value.translation?.localEngine ?? {}) },
-      ocr: { ...defaultOcr, ...(value.translation?.ocr ?? {}) },
-    },
-  });
-}
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
@@ -313,6 +242,13 @@ export class AppController {
       },
     };
     settings.translation.ocr = { ...defaultOcr, ...overrides[value] };
+    this.publish({ settings });
+    await this.persistSettingsInBackground();
+  }
+
+  async setTranslateAllOcrText(enabled: boolean): Promise<void> {
+    const settings = structuredClone(this.snapshot.settings);
+    settings.translation.translateAllOcrText = enabled;
     this.publish({ settings });
     await this.persistSettingsInBackground();
   }

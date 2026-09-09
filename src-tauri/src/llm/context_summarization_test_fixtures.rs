@@ -30,6 +30,7 @@ pub(super) fn test_config() -> TranslationConfig {
         context_buffer_size: 12,
         context_reset_gap_ms: 60_000,
         foundry_local: FoundryLocalConfig::default(),
+        translate_all_ocr_text: false,
         ocr: OcrConfig::default(),
     }
 }
