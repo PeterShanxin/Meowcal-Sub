@@ -1,18 +1,18 @@
 name: Windows Packages
 
-# Packaging runs on the owner's self-hosted Windows runners. The architecture
-# input selects a custom label, never a GitHub-hosted runner, so there is no
-# expression here that can fall back to the Stage 2 windows-11-arm PR gate.
-# If the matching runner is offline the job queues; that is deliberate.
+# Packaging runs on GitHub-hosted Windows, native to each shipped architecture:
+# windows-2025 emits x64, windows-11-arm emits ARM64. Neither depends on a
+# machine the maintainer has to keep online, so a release never queues behind a
+# physical host.
 #
 # Host trust is PeterShanxin and ianmeowmeow, not write access in general.
-# Forks, Dependabot, and any other login must not run this job: it executes on
-# the owner machine and holds TAURI_SIGNING_PRIVATE_KEY. GitHub evaluates `if:`
-# before dispatch. The actor allowlist covers workflow_dispatch and
-# workflow_call (the caller of a reusable workflow is the actor who triggered
-# the parent). A fail-closed step repeats the allowlist before checkout.
+# Forks, Dependabot, and any other login must not run this job: it holds
+# TAURI_SIGNING_PRIVATE_KEY. GitHub evaluates `if:` before dispatch. The actor
+# allowlist covers workflow_dispatch and workflow_call (the caller of a reusable
+# workflow is the actor who triggered the parent). A fail-closed step repeats
+# the allowlist before checkout.
 #
-# See docs/SELF_HOSTED_RUNNERS.md.
+# See docs/RELEASE_PACKAGING.md.
 
 on:
   workflow_dispatch:
@@ -41,17 +41,20 @@ jobs:
     if: >-
       (github.actor == 'PeterShanxin' || github.actor == 'ianmeowmeow') &&
       github.actor != 'dependabot[bot]'
-    # One host may carry both package labels, or they may be split onto
-    # architecture-native hosts later; that is a runner registration decision and
-    # needs no change here. An unrecognized architecture lands on the x64 label
-    # and is then rejected by "Resolve package contract" below.
+    # Each architecture builds on its own hardware, so no step depends on
+    # Windows x64 emulation or on an MSVC cross-linker. An unrecognized
+    # architecture lands on the x64 image and is then rejected by "Resolve
+    # package contract" below, before any toolchain work.
     #
     # The continuation lines sit at the same column on purpose, so YAML folds
     # this to a single line before the expression parser sees it.
     runs-on: >-
       ${{ inputs.architecture == 'arm64'
-      && fromJSON('["self-hosted", "Windows", "meowcal-package-arm64"]')
-      || fromJSON('["self-hosted", "Windows", "meowcal-package-x64"]') }}
+      && 'windows-11-arm'
+      || 'windows-2025' }}
+    # A cold release build with CARGO_BUILD_JOBS serialized on ARM64 is well
+    # inside this, and the default six hours is far too long to notice a hang.
+    timeout-minutes: 180
     steps:
       - name: Require a trusted actor
         shell: pwsh
@@ -65,10 +68,10 @@ jobs:
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
         run: |
-          # Checked before the twenty-minute build rather than after it. An
-          # empty value here means a caller invoked this reusable workflow
-          # without `secrets: inherit`, which reads as a signing failure at the
-          # very end of packaging and says nothing about the cause.
+          # Checked before the long build rather than after it. An empty value
+          # here means a caller invoked this reusable workflow without
+          # `secrets: inherit`, which reads as a signing failure at the very end
+          # of packaging and says nothing about the cause.
           if ([string]::IsNullOrWhiteSpace($env:TAURI_SIGNING_PRIVATE_KEY)) {
             throw "TAURI_SIGNING_PRIVATE_KEY is empty. A reusable workflow inherits no secrets unless its caller passes 'secrets: inherit'."
           }
@@ -92,22 +95,44 @@ jobs:
             throw "Unsupported package architecture: $architecture"
           }
 
+          # The runner image must match the architecture being packaged. A
+          # native build is the whole reason there are two images, and silently
+          # emitting an emulated or cross-linked bundle would still upload.
+          $expectedOsArchitecture = if ($architecture -eq "arm64") { "Arm64" } else { "X64" }
+          $actual = [System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture
+          if ($actual -ne $expectedOsArchitecture) {
+            throw "Architecture '$architecture' expects a $expectedOsArchitecture runner but this host is $actual."
+          }
+
           "architecture=$architecture" >> $env:GITHUB_OUTPUT
           "target=$($targets[$architecture])" >> $env:GITHUB_OUTPUT
           "artifact=meowcal-sub-$architecture-packages" >> $env:GITHUB_OUTPUT
 
-      # A clean checkout on purpose, unlike CI. `git clean -ffdx` removes the
-      # previous run's target directory and bundle output, so a release build
-      # never reuses incremental artifacts or inherits a stale bundle. The extra
-      # cold-build minutes are local compute and cost nothing.
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
 
-      # Node, Rust, both Windows target triples, and the MSVC cross-linker are
-      # host properties installed and checked by
-      # scripts/setup-self-hosted-runner.ps1. Packaging deliberately does not
-      # restore a dependency cache: a release build starts cold.
+      # Every toolchain this build needs is declared here rather than assumed
+      # from the image, so a release does not silently change when GitHub
+      # refreshes the runner. Packaging deliberately restores no Rust cache: a
+      # release build starts cold.
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+
+      - uses: actions/setup-dotnet@v5
+        with:
+          # OverlayHost targets net9.0-windows10.0.22621.0.
+          dotnet-version: 9.0.x
+
+      - name: Install the Rust toolchain and the package target
+        shell: pwsh
+        run: |
+          rustup toolchain install stable --profile minimal
+          rustup target add ${{ steps.package.outputs.target }}
+          rustup default stable
+
       - name: Install locked frontend dependencies
         shell: pwsh
         run: npm ci --ignore-scripts

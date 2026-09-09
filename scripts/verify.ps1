@@ -33,10 +33,7 @@ $repositoryRoot = Split-Path -Parent $PSScriptRoot
 $resourceScript = Join-Path $PSScriptRoot "prepare-validation-resources.ps1"
 $contractTest = Join-Path $PSScriptRoot "tests\verify.Tests.ps1"
 $engineSupportTest = Join-Path $PSScriptRoot "tests\engine-support.Tests.ps1"
-$runnerPrerequisiteTest = Join-Path $PSScriptRoot "tests\runner-prerequisites.Tests.ps1"
-$runnerEnvironmentTest = Join-Path $PSScriptRoot "tests\runner-environment.Tests.ps1"
 $devEnvironmentTest = Join-Path $PSScriptRoot "tests\dev-environment.Tests.ps1"
-$actionCacheTest = Join-Path $PSScriptRoot "tests\action-cache.Tests.ps1"
 $rustDirectory = Join-Path $repositoryRoot "src-tauri"
 
 # rustc is the host-architecture process no matter which target it emits, so the
@@ -46,9 +43,9 @@ $rustDirectory = Join-Path $repositoryRoot "src-tauri"
 # is not one.
 #
 # Scoped to a cold directory rather than applied to every ARM64 run, because
-# serializing rustc unconditionally would slow every warm rebuild - locally and
-# on a runner whose workspace persists - to fix a failure that only happens once.
-# An explicit CARGO_BUILD_JOBS from the caller always wins.
+# serializing rustc unconditionally would slow every warm local rebuild to fix a
+# failure that only happens once. An explicit CARGO_BUILD_JOBS from the caller
+# always wins.
 $cargoTargetDirectory = if ([string]::IsNullOrWhiteSpace($env:CARGO_TARGET_DIR)) {
     Join-Path $rustDirectory "target"
 } else {
@@ -110,23 +107,8 @@ if ($env:MEOWCAL_VERIFY_CONTRACT_ACTIVE -ne "1") {
     if ($LASTEXITCODE -ne 0) {
         exit $LASTEXITCODE
     }
-    Write-Host "==> Runner prerequisite contract tests" -ForegroundColor Cyan
-    & pwsh -NoProfile -File $runnerPrerequisiteTest
-    if ($LASTEXITCODE -ne 0) {
-        exit $LASTEXITCODE
-    }
-    Write-Host "==> Runner environment contract tests" -ForegroundColor Cyan
-    & pwsh -NoProfile -File $runnerEnvironmentTest
-    if ($LASTEXITCODE -ne 0) {
-        exit $LASTEXITCODE
-    }
     Write-Host "==> Developer environment contract tests" -ForegroundColor Cyan
     & pwsh -NoProfile -File $devEnvironmentTest
-    if ($LASTEXITCODE -ne 0) {
-        exit $LASTEXITCODE
-    }
-    Write-Host "==> Action cache contract tests" -ForegroundColor Cyan
-    & pwsh -NoProfile -File $actionCacheTest
     if ($LASTEXITCODE -ne 0) {
         exit $LASTEXITCODE
     }

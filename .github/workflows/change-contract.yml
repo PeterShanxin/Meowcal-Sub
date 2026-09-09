@@ -3,9 +3,8 @@
 #
 # This job stays on hosted Ubuntu. It reads Git metadata and runs a
 # dependency-free Node script, so it needs neither Windows nor the toolchain.
-# Do not move it onto windows-11-arm or the privileged self-hosted host: a
-# misnamed commit should fail in seconds without occupying the Stage 2 verify
-# gate or the Snapdragon runner.
+# Do not move it onto windows-11-arm: a misnamed commit should fail in seconds
+# without occupying the Stage 2 verify gate.
 #
 # It runs only on pull requests, and it reads only the commits the branch adds
 # to the current base tip. Nothing already on `main` is validated, which is what

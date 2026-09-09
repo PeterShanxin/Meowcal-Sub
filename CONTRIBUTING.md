@@ -163,23 +163,18 @@ the required check names green. They are the merge gate. They use read-only
 contents and pull-request permission and do not receive signing or
 legacy-bridge secrets. Pushes to `main` always run the full Windows suite.
 
-The owner's self-hosted runners are not that gate. `meowcal-ci` is a
-maintainer-only `workflow_dispatch` path for real Snapdragon/Adreno hardware.
-Packaging stays on the labeled self-hosted package runners. Those privileged
-jobs run only when the GitHub actor is `PeterShanxin` or `ianmeowmeow`. Host
-trust is those named logins, not write access in general. A fork PR,
-Dependabot, or any other login does **not** schedule them.
+Windows release packaging is also GitHub-hosted, native per architecture:
+`windows-2025` builds x64 and `windows-11-arm` builds ARM64. Those jobs hold the
+updater signing key, so they run only when the GitHub actor is `PeterShanxin` or
+`ianmeowmeow`, and they have no `pull_request` trigger at all. Host trust is
+those named logins, not write access in general. A fork PR, Dependabot, or any
+other login does **not** schedule them.
 
 The **Change Contract** check stays on hosted Ubuntu.
 
-Do **not** register your personal computer as a runner. A runner executes
-repository code directly on the host, so attaching one is a decision the
-repository owner makes, not a way to speed up your own pull request.
-`scripts/verify.ps1` is your local equivalent of the hosted gate.
-
-If no self-hosted packaging or hardware runner is online, that job queues
-rather than failing over to hosted Windows. That is intentional. See
-[`docs/SELF_HOSTED_RUNNERS.md`](docs/SELF_HOSTED_RUNNERS.md).
+`scripts/verify.ps1` is your local equivalent of the hosted gate. Run it before
+opening a pull request; it is the same script CI runs. See
+[`docs/RELEASE_PACKAGING.md`](docs/RELEASE_PACKAGING.md) for the runner policy.
 
 ## Manual Windows validation
 

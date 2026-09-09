@@ -1,4 +1,4 @@
-// Enforces the runner policy in docs/SELF_HOSTED_RUNNERS.md against every
+// Enforces the runner policy in docs/RELEASE_PACKAGING.md against every
 // workflow file. The rules themselves live in workflow-runner-policy.mjs.
 
 import { readdir, readFile } from "node:fs/promises";
@@ -32,7 +32,7 @@ if (violations.length > 0) {
   for (const violation of violations) {
     console.error(`  ${violation}`);
   }
-  console.error("\nSee docs/SELF_HOSTED_RUNNERS.md.");
+  console.error("\nSee docs/RELEASE_PACKAGING.md.");
   process.exit(1);
 }
 

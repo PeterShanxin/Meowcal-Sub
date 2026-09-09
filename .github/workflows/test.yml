@@ -23,10 +23,12 @@
 #   TAURI_SIGNING_PRIVATE_KEY_PASSWORD, or legacy bridge credentials
 # - persist-credentials: false
 #
-# Real Snapdragon/Adreno hardware verify is not this workflow. That path is
-# maintainer-only workflow_dispatch on meowcal-ci; see hardware.yml.
+# Real-device verification is not this workflow and is not a GitHub Actions job
+# at all: a hosted ARM64 VM cannot capture a screen, drive the overlay, or
+# exercise the Adreno engine path. That evidence comes from the manual Windows
+# gate in CONTRIBUTING.md.
 #
-# See docs/SELF_HOSTED_RUNNERS.md.
+# See docs/RELEASE_PACKAGING.md for the runner policy.
 
 name: CI
 

@@ -1,34 +1,47 @@
 // Runner policy rules for .github/workflows, kept separate from the CLI in
 // check-workflow-runners.mjs so they can be tested against crafted workflows.
 //
-// Stage 2 allows one hosted Windows label on purpose: `windows-11-arm` is the
-// pull-request and post-merge verify gate. It is not a fallback for an offline
-// self-hosted host. The failure this still prevents is quiet: someone reaches
-// for `windows-latest`, a dated `windows-20xx` image, or macOS out of habit,
-// or wires a self-hosted packaging job to fail over to hosted Windows.
+// Every job runs on a GitHub-hosted runner. No workflow may reach for a
+// self-hosted runner: that would put a release, or a required check, behind a
+// physical machine somebody has to keep online, and would place the update
+// signing key on a long-lived host.
+//
+// The other failure this prevents is quiet: someone reaches for
+// `windows-latest` or a dated `windows-20xx` image out of habit and gets an
+// image the packaging contract was never proven on, or picks macOS, which this
+// repository ships nothing for.
 
-// Hosted runners that are not the Stage 2 Windows gate and bill above the
-// Linux rate. macOS is included because it is the same mistake at ten times
-// the multiplier. `windows-11-arm` is allowlisted below, not matched here.
-const FORBIDDEN_RUNNER = /\b(windows-latest|windows-\d{4}|macos-[\w.-]+)\b/g;
+// Every runner label a job may name. Packaging is native per architecture:
+// `windows-2025` emits x64 and `windows-11-arm` emits ARM64. The Ubuntu images
+// carry release administration, the Change Contract, and the required-check
+// wrappers.
+const ALLOWED_RUNNERS = new Set([
+  "ubuntu-latest",
+  "ubuntu-24.04",
+  "ubuntu-22.04",
+  "windows-11-arm",
+  "windows-2025",
+]);
 
-// Linux hosted runners stay allowed for release administration and the narrow
-// legacy updater bridge, keeping release-write credentials off physical build
-// hosts. `windows-11-arm` is the Stage 2 PR/push verify gate. `ubuntu-24.04` is
-// the Change Contract host.
-const ALLOWED_HOSTED = new Set(["ubuntu-latest", "ubuntu-24.04", "ubuntu-22.04", "windows-11-arm"]);
+// A token that names a runner rather than, say, an architecture input value.
+// `windows-11-arm` matches; the `'arm64'` in a `runs-on` expression's condition
+// does not, which is what lets the expression form below be checked at all.
+const RUNNER_SHAPED = /^(?:self-hosted|ubuntu|windows|macos)[\w.-]*$/i;
+
+// The same names anywhere else in a workflow: a matrix entry, a container
+// image, a reusable-workflow input. `runs-on: ${{ matrix.os }}` is already
+// rejected as indirect, so this is defence in depth against a value that
+// reaches a runner by some route this file does not model.
+const FORBIDDEN_ANYWHERE =
+  /\b(?:self-hosted|windows-latest|windows-2019|windows-2022|macos-[\w.-]+)\b/g;
 
 /**
  * Removes a YAML end-of-line comment.
  *
  * This is load-bearing rather than cosmetic. Matching runner labels against raw
- * line text lets a comment vouch for the code beside it: `runs-on: self-hosted
- * # meowcal-ci` would satisfy a naive "does the line mention meowcal-" test
- * while actually selecting any self-hosted runner, and
- * `runs-on: ${{ vars.RUNNER }} # self-hosted meowcal-ci` would pass while
- * resolving to whatever that variable holds. It also stops a comment that merely
- * *names* `windows-latest`, as several of these workflows do when explaining the
- * policy, from being read as a use of it.
+ * line text lets a comment vouch for the code beside it, and would also let a
+ * comment that merely *names* `windows-latest`, as these workflows do when
+ * explaining the policy, be read as a use of it.
  *
  * A `#` opens a comment only at the start of a line or after whitespace, and
  * never inside a quoted scalar.
@@ -59,15 +72,61 @@ export function stripYamlComment(line) {
   return line;
 }
 
+/**
+ * The jobs of a workflow, each as the block of lines under its key.
+ *
+ * Line-based on purpose, matching the rest of this file: these workflows use
+ * expression syntax and folded scalars that a general YAML loader would
+ * normalize away, and the checks here are about the text a reviewer reads.
+ *
+ * Exported for the workflow contract tests, which assert per-job invariants -
+ * runner, trusted actor, credential handling - that only make sense per job.
+ */
+export function splitWorkflowJobs(contents) {
+  const lines = contents.split(/\r?\n/);
+  const jobsIndex = lines.findIndex((line) => /^(\s*)jobs:\s*$/.test(stripYamlComment(line)));
+  if (jobsIndex === -1) {
+    return [];
+  }
+
+  const jobsIndent = /^\s*/.exec(lines[jobsIndex])[0].length;
+  const jobs = [];
+  let current = null;
+
+  for (let index = jobsIndex + 1; index < lines.length; index += 1) {
+    const line = stripYamlComment(lines[index]);
+    if (line.trim() === "") {
+      continue;
+    }
+
+    const indent = /^\s*/.exec(line)[0].length;
+    if (indent <= jobsIndent) {
+      break;
+    }
+
+    const header = /^\s*([A-Za-z_][\w.-]*):\s*$/.exec(line);
+    if (header && (current === null || indent === current.indent)) {
+      current = { name: header[1], indent, lines: [] };
+      jobs.push(current);
+      continue;
+    }
+
+    if (current) {
+      current.lines.push(line);
+    }
+  }
+
+  return jobs.map((job) => ({ name: job.name, lines: job.lines }));
+}
+
 function findForbiddenRunners(relativePath, lines) {
   const violations = [];
 
   for (const [index, text] of lines.entries()) {
-    for (const match of stripYamlComment(text).matchAll(FORBIDDEN_RUNNER)) {
+    for (const match of stripYamlComment(text).matchAll(FORBIDDEN_ANYWHERE)) {
       violations.push(
-        `${relativePath}:${index + 1}: '${match[0]}' is not an allowed hosted runner. ` +
-          `The Stage 2 Windows gate is windows-11-arm; self-hosted jobs use a ` +
-          `meowcal-* label and queue when no runner is online.`,
+        `${relativePath}:${index + 1}: '${match[0]}' is not an allowed runner. ` +
+          `Every job runs GitHub-hosted: ${[...ALLOWED_RUNNERS].join(", ")}.`,
       );
     }
   }
@@ -89,7 +148,7 @@ function collectRunsOnValue(lines, index, indentWidth) {
     if (/^\s*/.exec(line)[0].length <= indentWidth) {
       break;
     }
-    collected.push(line.trim());
+    collected.push(line.trim().replace(/^-\s*/, ""));
   }
 
   return collected.join(" ");
@@ -98,11 +157,6 @@ function collectRunsOnValue(lines, index, indentWidth) {
 /**
  * The complete `runs-on:` value at `index`, folded onto one line, or null when
  * that line is not a `runs-on:`.
- *
- * Exported because a second reader needs the same answer: action-cache-plan.mjs
- * decides which jobs execute on the owner's own hosts, and two parsers
- * disagreeing about that would surface as a job quietly missing the action
- * archive cache rather than as a failure.
  */
 export function foldRunsOnValue(lines, index) {
   const match = /^(\s*)runs-on:\s*(.*)$/.exec(stripYamlComment(lines[index] ?? ""));
@@ -118,6 +172,32 @@ export function foldRunsOnValue(lines, index) {
   return value;
 }
 
+/**
+ * The runner labels a `runs-on` value can select, or null when it selects
+ * something this file cannot see through - a repository variable, a matrix
+ * key, anything else indirect.
+ *
+ * An expression is read through its quoted literals, keeping only the
+ * runner-shaped ones. That is what lets the packaging workflow choose its image
+ * from the architecture input and still be checked: the `'arm64'` it compares
+ * against is not a runner name, and both branches are.
+ */
+export function runnerCandidates(value) {
+  if (value.includes("${{")) {
+    const literals = [...value.matchAll(/'([^']*)'|"([^"]*)"/g)]
+      .map((match) => match[1] ?? match[2])
+      .filter((literal) => RUNNER_SHAPED.test(literal));
+    return literals.length > 0 ? literals : null;
+  }
+
+  const candidates = value
+    .replace(/^\[|\]$/g, "")
+    .split(",")
+    .map((entry) => entry.replaceAll('"', "").replaceAll("'", "").trim())
+    .filter((entry) => entry !== "");
+  return candidates.length > 0 ? candidates : null;
+}
+
 function findRunsOnViolations(relativePath, lines) {
   const violations = [];
 
@@ -127,27 +207,24 @@ function findRunsOnViolations(relativePath, lines) {
       continue;
     }
 
-    const bare = value
-      .replace(/^\[|\]$/g, "")
-      .replaceAll('"', "")
-      .replaceAll("'", "")
-      .trim();
-    const isAllowedHosted = ALLOWED_HOSTED.has(bare);
-    const isSelfHosted = /self-hosted/.test(value);
-
-    if (!isAllowedHosted && !isSelfHosted) {
+    const candidates = runnerCandidates(value);
+    if (candidates === null) {
       violations.push(
-        `${relativePath}:${index + 1}: runs-on '${value}' is neither an allowed ` +
-          `hosted runner (ubuntu-*, windows-11-arm) nor a self-hosted label set. An ` +
-          `indirect value such as a repository variable can resolve to a paid runner ` +
-          `and is not allowed.`,
+        `${relativePath}:${index + 1}: runs-on '${value}' does not name a runner ` +
+          `directly. An indirect value such as a repository variable or a matrix ` +
+          `key can resolve to any runner, including a self-hosted one.`,
       );
+      continue;
     }
 
-    if (isSelfHosted && !/meowcal-/.test(value)) {
+    for (const candidate of candidates) {
+      if (ALLOWED_RUNNERS.has(candidate)) {
+        continue;
+      }
       violations.push(
-        `${relativePath}:${index + 1}: runs-on '${value}' uses the bare self-hosted ` +
-          `label. Name a meowcal-* label so the job cannot land on an unintended runner.`,
+        `${relativePath}:${index + 1}: runs-on '${value}' selects '${candidate}', ` +
+          `which is not an allowed GitHub-hosted runner ` +
+          `(${[...ALLOWED_RUNNERS].join(", ")}).`,
       );
     }
   }
