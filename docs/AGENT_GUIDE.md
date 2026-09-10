@@ -196,9 +196,9 @@ DPI/window behavior.
   `HEAVY_RESULTS`, or it reports green for an architecture nothing verified.
 - Every Windows gate job shares `.github/actions/windows-rust-gate`: Node, the
   Rust toolchain for that job's one target, `Swatinem/rust-cache`, and the
-  build parallelism. GitHub scopes a cache entry to the ref that wrote it, so a
-  pull request restores `main`'s entry and writes only into its own; fork code
-  cannot put bytes into the entry `main` restores.
+  build parallelism. Only `main` writes a cache entry - five jobs hold 3.4 GB
+  of a 10 GB budget - and a pull request restores it without writing, which is
+  also what keeps fork code out of the entry `main` restores.
 - Every job runs on a GitHub-hosted runner. `ubuntu-24.04`, `ubuntu-latest`,
   `windows-11-arm`, and `windows-2025` are the only runners a workflow may name;
   `windows-latest`, `windows-2022`, macOS, and any indirect value such as a

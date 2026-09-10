@@ -77,7 +77,28 @@ the ARM64 host's emulation to a native `windows-2025` run.
 
 ## After, warm cache
 
-To be recorded from the second run of the same branch.
+Run 34496029684, the next run of the same branch, every entry an exact hit.
+
+| Job | Wall | Restore | Verification step |
+| --- | ---: | ---: | ---: |
+| Lint & Format (ARM64) | 3.4 min | 88 s | 90 s |
+| Lint & Format (x64) | 2.4 min | 73 s | 53 s |
+| Tests (ARM64) | 4.2 min | 85 s | 148 s |
+| Tests (x64) | 3.4 min | 64 s | 131 s |
+| Frontend & Browser (Windows) | 6.7 min | 86 s | 299 s |
+| **Critical path** | **6.7 min** | | |
+
+Restoring costs 30-40 s more than the cold toolchain step and removes minutes
+of compilation, and an exact hit writes nothing back, so the save step is 1 s.
+
+The frontend job is now the slowest, and 206 s of its 299 s is the browser
+smoke: the cache holds the dependency tree but the crate under test is rebuilt
+and linked every run, which is what `cargo run` behind the smoke has to do.
+
+| | Before | After cold | After warm |
+| --- | ---: | ---: | ---: |
+| Critical path | 28.0 min | 9.4 min | 6.7 min |
+| Run wall | 28.5 min | 9.7 min | 7.1 min |
 
 ## Parallel rustc on hosted `windows-11-arm`
 
@@ -100,4 +121,8 @@ Five entries, one per Windows job, 3.4 GB in total:
 | `lint_arm64` | 557 MiB |
 
 A repository gets 10 GB of Actions cache, shared here with the npm and CodeQL
-entries, and GitHub evicts least-recently-used.
+entries, and GitHub evicts least-recently-used. Branches each writing their own
+set would evict one another, so only `main` writes: the key carries no branch,
+so a pull request restoring `main`'s entry gets the same exact hit it would
+otherwise have written. The first `main` run after this lands is therefore a
+cold one, and it is the run that populates the entries.

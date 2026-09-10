@@ -28,12 +28,18 @@ runs:
         rustup default stable
 
     # Without this every job compiles the whole dependency tree from source on
-    # every run. GitHub scopes a cache entry to the ref that wrote it: a pull
-    # request restores `main`'s entry and writes only into its own scope, so
-    # fork and Dependabot code cannot put bytes into the entry `main` restores.
+    # every run.
+    #
+    # Only `main` writes an entry. These five jobs hold 3.4 GB between them and
+    # a repository gets 10 GB, so branches each writing their own set would
+    # evict one another. The key carries no branch, so a pull request restoring
+    # `main`'s entry gets the same exact hit it would otherwise have written.
+    # It is also what keeps fork and Dependabot code out of the entry `main`
+    # restores, because GitHub scopes a written entry to the ref that wrote it.
     - uses: Swatinem/rust-cache@v2
       with:
         workspaces: src-tauri -> target
+        save-if: ${{ github.ref == 'refs/heads/main' }}
 
     - name: Build on every core the runner has
       shell: pwsh
@@ -43,4 +49,5 @@ runs:
         # local Snapdragon machine; a hosted runner has four cores and 16 GB and
         # does not reproduce the STATUS_STACK_BUFFER_OVERRUN it guards against.
         # verify.ps1 honours an explicit value over its own default.
+        Write-Host "CARGO_BUILD_JOBS=$env:NUMBER_OF_PROCESSORS"
         "CARGO_BUILD_JOBS=$env:NUMBER_OF_PROCESSORS" >> $env:GITHUB_ENV
