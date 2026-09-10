@@ -278,6 +278,27 @@ async fn corrupt_runtime_executable_requires_repair() {
     std::fs::remove_file(path).unwrap();
 }
 
+// Startup recovery hashes on the main thread before `setup` returns, and a
+// Windows main thread has a 1 MiB stack. A read buffer that size on the stack
+// overflowed it, so the hash has to fit comfortably inside a much smaller one.
+#[test]
+fn blocking_verification_fits_in_a_small_thread_stack() {
+    let path = fixture_path("small-stack", "bin");
+    std::fs::write(&path, b"trusted").unwrap();
+    let expected_hash = format!("{:x}", Sha256::digest(b"trusted"));
+
+    let verified_path = path.clone();
+    let matched = std::thread::Builder::new()
+        .stack_size(256 * 1024)
+        .spawn(move || file_matches_blocking(&verified_path, 7, &expected_hash))
+        .unwrap()
+        .join()
+        .unwrap();
+
+    std::fs::remove_file(path).unwrap();
+    assert!(matched);
+}
+
 fn fixture_path(label: &str, extension: &str) -> std::path::PathBuf {
     let unique = SystemTime::now()
         .duration_since(UNIX_EPOCH)

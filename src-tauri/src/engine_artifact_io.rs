@@ -333,7 +333,7 @@ fn sha256_file(path: &Path) -> Result<String, String> {
     let mut file =
         std::fs::File::open(path).map_err(|error| format!("ENGINE_VERIFY_OPEN: {error}"))?;
     let mut hasher = Sha256::new();
-    let mut buffer = [0u8; 1024 * 1024];
+    let mut buffer = vec![0u8; 1024 * 1024];
     loop {
         let count = file
             .read(&mut buffer)
