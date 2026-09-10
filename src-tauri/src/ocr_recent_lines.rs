@@ -36,10 +36,10 @@ const WINDOW: Duration = Duration::from_secs(6);
 #[derive(Debug)]
 pub struct RecentLines {
     entries: VecDeque<(String, Instant)>,
-    /// How much of a read is compared: `prompt_max_source_chars`. The model is
-    /// given no more than this, so text past it cannot change the translation,
-    /// and a long page would otherwise make every edit distance quadratic in the
-    /// whole page.
+    /// How much of a read is compared: `prompt_max_source_chars`, applied to the
+    /// cleaned source exactly as the prompt applies it. The model is given no
+    /// more than this, so text past it cannot change the translation, and a long
+    /// page would otherwise make every edit distance quadratic in the whole page.
     max_chars: usize,
 }
 
@@ -52,7 +52,10 @@ impl RecentLines {
     }
 
     fn clip(&self, text: &str) -> String {
-        text.chars().take(self.max_chars).collect()
+        crate::llm::clean_source_text(text)
+            .chars()
+            .take(self.max_chars)
+            .collect()
     }
 
     /// How this read relates to the recent lines, judged against whichever it

@@ -27,6 +27,23 @@ fn a_long_read_changing_only_past_the_translated_text_is_a_repeat() {
     assert_eq!(recent.classify(&after, now), LineChange::Repeat);
 }
 
+// Windows OCR often spaces out Chinese characters, and the prompt joins them
+// back before clipping. Two pages that agree for their first 300 raw characters
+// can send quite different prompts, so the comparison has to use the prompt's
+// own cleaned and clipped source.
+#[test]
+fn a_spaced_out_read_is_compared_by_the_source_the_prompt_sends() {
+    let now = Instant::now();
+    let spaced = "看  ".repeat(100);
+    let before = format!("{spaced}{}", "甲".repeat(200));
+    let after = format!("{spaced}{}", "乙".repeat(200));
+
+    let mut recent = RecentLines::new(300);
+    recent.remember(&before, now);
+
+    assert_eq!(recent.classify(&after, now), LineChange::New);
+}
+
 // The failure this module exists for. OCR returns the top row on one frame and
 // the bottom row on the next, so a single-slot memory compares each read against
 // the other row and calls both of them fresh dialogue.
