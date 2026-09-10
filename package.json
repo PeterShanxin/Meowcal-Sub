@@ -1,6 +1,6 @@
 {
   "name": "meowcal-sub",
-  "version": "0.6.10",
+  "version": "0.7.0",
   "description": "On-device subtitle capture and translation for Windows",
   "private": true,
   "engines": {
