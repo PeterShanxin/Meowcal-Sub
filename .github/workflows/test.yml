@@ -1,9 +1,9 @@
 # Stage 2 pull-request and post-merge verify gate.
 #
 # Pull requests are classified before verification. Runtime/build changes run
-# the full GitHub-hosted windows-11-arm suite. Documentation-only changes skip
-# those heavy Windows jobs entirely, while lightweight Ubuntu wrapper jobs keep
-# the SAME required check names green.
+# the full GitHub-hosted Windows suite. Documentation-only changes skip those
+# heavy Windows jobs entirely, while lightweight Ubuntu wrapper jobs keep the
+# SAME required check names green.
 #
 # Pushes to main always run the full suite.
 #
@@ -15,6 +15,12 @@
 # paths) and treats a rename's previous path as part of the change set.
 #
 # Required check names: Lint & Format, Tests, Frontend & Browser.
+#
+# Both shipped architectures are verified on their own hardware and at the same
+# time: `windows-11-arm` for aarch64, `windows-2025` for x64. No gate job runs
+# under x64 emulation or through an MSVC cross-linker, which is how packaging
+# builds too. The gate's wall time is its slowest job rather than the sum of
+# two targets.
 #
 # Security for this hosted gate:
 # - permissions are read-only (contents + pull request metadata)
@@ -144,88 +150,94 @@ jobs:
 
           echo "full=$full" >> "$GITHUB_OUTPUT"
 
-  lint_windows:
-    name: Lint & Format (Windows full)
+  lint_arm64:
+    name: Lint & Format (ARM64)
     needs: scope
     if: ${{ needs.scope.result == 'success' && needs.scope.outputs.full == 'true' }}
     runs-on: windows-11-arm
-    timeout-minutes: 120
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
 
-      - uses: actions/setup-node@v7
+      - uses: ./.github/actions/windows-rust-gate
         with:
-          node-version: 24
-          cache: npm
+          target: aarch64-pc-windows-msvc
 
-      - name: Install Rust toolchain and both Windows targets
-        run: |
-          rustup toolchain install stable --profile minimal --component rustfmt --component clippy
-          rustup target add aarch64-pc-windows-msvc
-          rustup target add x86_64-pc-windows-msvc
-          rustup default stable
-
-      - name: Lint the native ARM64 target
+      - name: Lint the ARM64 target
         run: ./scripts/verify.ps1 -Stage Lint -Target aarch64-pc-windows-msvc
+
+  lint_x64:
+    name: Lint & Format (x64)
+    needs: scope
+    if: ${{ needs.scope.result == 'success' && needs.scope.outputs.full == 'true' }}
+    runs-on: windows-2025
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: ./.github/actions/windows-rust-gate
+        with:
+          target: x86_64-pc-windows-msvc
 
       - name: Lint the x64 target
         run: ./scripts/verify.ps1 -Stage Lint -Target x86_64-pc-windows-msvc
 
-  test_windows:
-    name: Tests (Windows full)
+  test_arm64:
+    name: Tests (ARM64)
     needs: scope
     if: ${{ needs.scope.result == 'success' && needs.scope.outputs.full == 'true' }}
     runs-on: windows-11-arm
-    timeout-minutes: 120
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
 
-      - uses: actions/setup-node@v7
+      - uses: ./.github/actions/windows-rust-gate
         with:
-          node-version: 24
-          cache: npm
+          target: aarch64-pc-windows-msvc
 
-      - name: Install Rust toolchain and both Windows targets
-        run: |
-          rustup toolchain install stable --profile minimal --component rustfmt --component clippy
-          rustup target add aarch64-pc-windows-msvc
-          rustup target add x86_64-pc-windows-msvc
-          rustup default stable
-
-      - name: Test the native ARM64 target
+      - name: Test the ARM64 target
         run: ./scripts/verify.ps1 -Stage Test -Target aarch64-pc-windows-msvc
 
-      # Executed, not merely compiled: the ARM64 host runs x64 binaries under
-      # emulation, so this is the dual-arch contract without a second x64 image.
-      - name: Test the x64 target under emulation
+  test_x64:
+    name: Tests (x64)
+    needs: scope
+    if: ${{ needs.scope.result == 'success' && needs.scope.outputs.full == 'true' }}
+    # Executed on x64 hardware rather than under the ARM64 host's emulation, so
+    # the x64 half of the dual-architecture contract runs the way it ships.
+    runs-on: windows-2025
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: ./.github/actions/windows-rust-gate
+        with:
+          target: x86_64-pc-windows-msvc
+
+      - name: Test the x64 target
         run: ./scripts/verify.ps1 -Stage Test -Target x86_64-pc-windows-msvc
 
   frontend_windows:
-    name: Frontend & Browser (Windows full)
+    name: Frontend & Browser (Windows)
     needs: scope
     if: ${{ needs.scope.result == 'success' && needs.scope.outputs.full == 'true' }}
     runs-on: windows-11-arm
-    timeout-minutes: 120
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
 
-      - uses: actions/setup-node@v7
+      - uses: ./.github/actions/windows-rust-gate
         with:
-          node-version: 24
-          cache: npm
-
-      - name: Install Rust toolchain and both Windows targets
-        run: |
-          rustup toolchain install stable --profile minimal --component rustfmt --component clippy
-          rustup target add aarch64-pc-windows-msvc
-          rustup target add x86_64-pc-windows-msvc
-          rustup default stable
+          target: aarch64-pc-windows-msvc
 
       # Architecture-independent by nature: this stage checks the frontend and
       # drives browser mode against the host-native Rust backend. The hosted
@@ -235,16 +247,17 @@ jobs:
 
   lint:
     name: Lint & Format
-    needs: [scope, lint_windows]
+    needs: [scope, lint_arm64, lint_x64]
     if: ${{ always() }}
     runs-on: ubuntu-24.04
     steps:
       - name: Resolve required check
         shell: bash
         env:
+          CHECK_NAME: Lint & Format
           SCOPE_RESULT: ${{ needs.scope.result }}
           FULL: ${{ needs.scope.outputs.full }}
-          HEAVY_RESULT: ${{ needs.lint_windows.result }}
+          HEAVY_RESULTS: ${{ needs.lint_arm64.result }} ${{ needs.lint_x64.result }}
         run: |
           set -euo pipefail
           if [[ "$SCOPE_RESULT" != "success" ]]; then
@@ -252,38 +265,31 @@ jobs:
             exit 1
           fi
           case "$FULL" in
-            true)
-              if [[ "$HEAVY_RESULT" != "success" ]]; then
-                echo "::error::Full Lint & Format verification did not succeed (result: $HEAVY_RESULT)."
-                exit 1
-              fi
-              echo "Full Lint & Format verification passed."
-              ;;
-            false)
-              if [[ "$HEAVY_RESULT" != "skipped" ]]; then
-                echo "::error::Docs-only classification expected the Windows lint job to be skipped (result: $HEAVY_RESULT)."
-                exit 1
-              fi
-              echo "Documentation-only change: heavy Lint & Format verification skipped."
-              ;;
-            *)
-              echo "::error::Unknown verification scope '$FULL'."
-              exit 1
-              ;;
+            true) expected=success ;;
+            false) expected=skipped ;;
+            *) echo "::error::Unknown verification scope '$FULL'." ; exit 1 ;;
           esac
+          for result in $HEAVY_RESULTS; do
+            if [[ "$result" != "$expected" ]]; then
+              echo "::error::$CHECK_NAME expected every Windows job to be '$expected' (got: $HEAVY_RESULTS)."
+              exit 1
+            fi
+          done
+          echo "$CHECK_NAME: Windows jobs $HEAVY_RESULTS, full verification $FULL."
 
   test:
     name: Tests
-    needs: [scope, test_windows]
+    needs: [scope, test_arm64, test_x64]
     if: ${{ always() }}
     runs-on: ubuntu-24.04
     steps:
       - name: Resolve required check
         shell: bash
         env:
+          CHECK_NAME: Tests
           SCOPE_RESULT: ${{ needs.scope.result }}
           FULL: ${{ needs.scope.outputs.full }}
-          HEAVY_RESULT: ${{ needs.test_windows.result }}
+          HEAVY_RESULTS: ${{ needs.test_arm64.result }} ${{ needs.test_x64.result }}
         run: |
           set -euo pipefail
           if [[ "$SCOPE_RESULT" != "success" ]]; then
@@ -291,25 +297,17 @@ jobs:
             exit 1
           fi
           case "$FULL" in
-            true)
-              if [[ "$HEAVY_RESULT" != "success" ]]; then
-                echo "::error::Full Tests verification did not succeed (result: $HEAVY_RESULT)."
-                exit 1
-              fi
-              echo "Full Tests verification passed."
-              ;;
-            false)
-              if [[ "$HEAVY_RESULT" != "skipped" ]]; then
-                echo "::error::Docs-only classification expected the Windows test job to be skipped (result: $HEAVY_RESULT)."
-                exit 1
-              fi
-              echo "Documentation-only change: heavy Tests verification skipped."
-              ;;
-            *)
-              echo "::error::Unknown verification scope '$FULL'."
-              exit 1
-              ;;
+            true) expected=success ;;
+            false) expected=skipped ;;
+            *) echo "::error::Unknown verification scope '$FULL'." ; exit 1 ;;
           esac
+          for result in $HEAVY_RESULTS; do
+            if [[ "$result" != "$expected" ]]; then
+              echo "::error::$CHECK_NAME expected every Windows job to be '$expected' (got: $HEAVY_RESULTS)."
+              exit 1
+            fi
+          done
+          echo "$CHECK_NAME: Windows jobs $HEAVY_RESULTS, full verification $FULL."
 
   frontend:
     name: Frontend & Browser
@@ -320,9 +318,10 @@ jobs:
       - name: Resolve required check
         shell: bash
         env:
+          CHECK_NAME: Frontend & Browser
           SCOPE_RESULT: ${{ needs.scope.result }}
           FULL: ${{ needs.scope.outputs.full }}
-          HEAVY_RESULT: ${{ needs.frontend_windows.result }}
+          HEAVY_RESULTS: ${{ needs.frontend_windows.result }}
         run: |
           set -euo pipefail
           if [[ "$SCOPE_RESULT" != "success" ]]; then
@@ -330,22 +329,14 @@ jobs:
             exit 1
           fi
           case "$FULL" in
-            true)
-              if [[ "$HEAVY_RESULT" != "success" ]]; then
-                echo "::error::Full Frontend & Browser verification did not succeed (result: $HEAVY_RESULT)."
-                exit 1
-              fi
-              echo "Full Frontend & Browser verification passed."
-              ;;
-            false)
-              if [[ "$HEAVY_RESULT" != "skipped" ]]; then
-                echo "::error::Docs-only classification expected the Windows frontend job to be skipped (result: $HEAVY_RESULT)."
-                exit 1
-              fi
-              echo "Documentation-only change: heavy Frontend & Browser verification skipped."
-              ;;
-            *)
-              echo "::error::Unknown verification scope '$FULL'."
-              exit 1
-              ;;
+            true) expected=success ;;
+            false) expected=skipped ;;
+            *) echo "::error::Unknown verification scope '$FULL'." ; exit 1 ;;
           esac
+          for result in $HEAVY_RESULTS; do
+            if [[ "$result" != "$expected" ]]; then
+              echo "::error::$CHECK_NAME expected every Windows job to be '$expected' (got: $HEAVY_RESULTS)."
+              exit 1
+            fi
+          done
+          echo "$CHECK_NAME: Windows jobs $HEAVY_RESULTS, full verification $FULL."

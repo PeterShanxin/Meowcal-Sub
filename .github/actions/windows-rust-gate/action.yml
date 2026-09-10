@@ -1,0 +1,46 @@
+name: Windows Rust gate toolchain
+description: >-
+  Node, the Rust toolchain for one Windows target, the Cargo dependency cache,
+  and the build parallelism the hosted verify gate uses.
+
+inputs:
+  target:
+    description: The Rust target triple this job verifies.
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-node@v7
+      with:
+        node-version: 24
+        cache: npm
+
+    # One target per job. Each gate job verifies a single architecture, so
+    # installing the other one buys nothing and an x64 image cannot use it.
+    - name: Install the Rust toolchain and this job's target
+      shell: pwsh
+      env:
+        GATE_TARGET: ${{ inputs.target }}
+      run: |
+        rustup toolchain install stable --profile minimal --component rustfmt --component clippy
+        rustup target add $env:GATE_TARGET
+        rustup default stable
+
+    # Without this every job compiles the whole dependency tree from source on
+    # every run. GitHub scopes a cache entry to the ref that wrote it: a pull
+    # request restores `main`'s entry and writes only into its own scope, so
+    # fork and Dependabot code cannot put bytes into the entry `main` restores.
+    - uses: Swatinem/rust-cache@v2
+      with:
+        workspaces: src-tauri -> target
+
+    - name: Build on every core the runner has
+      shell: pwsh
+      run: |
+        # verify.ps1 serializes rustc whenever an ARM64 host meets a cold target
+        # directory, which a CI checkout always is. That default exists for a
+        # local Snapdragon machine; a hosted runner has four cores and 16 GB and
+        # does not reproduce the STATUS_STACK_BUFFER_OVERRUN it guards against.
+        # verify.ps1 honours an explicit value over its own default.
+        "CARGO_BUILD_JOBS=$env:NUMBER_OF_PROCESSORS" >> $env:GITHUB_ENV

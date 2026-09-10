@@ -89,7 +89,7 @@ describe("every job runs on GitHub-hosted infrastructure", () => {
 });
 
 describe("hosted PR gate is the merge gate", () => {
-  it("keeps required check names, pull_request, and contents: read on windows-11-arm", () => {
+  it("keeps required check names, pull_request, and contents: read on hosted Windows", () => {
     const contents = readWorkflow("test.yml");
     expect(contents).toMatch(/^permissions:\n {2}contents: read$/m);
     expect(contents).toMatch(/^ {2}pull-requests: read$/m);
@@ -99,8 +99,10 @@ describe("hosted PR gate is the merge gate", () => {
     const jobs = splitWorkflowJobs(contents);
     expect(jobs.map((job) => job.name)).toEqual([
       "scope",
-      "lint_windows",
-      "test_windows",
+      "lint_arm64",
+      "lint_x64",
+      "test_arm64",
+      "test_x64",
       "frontend_windows",
       "lint",
       "test",
@@ -114,17 +116,18 @@ describe("hosted PR gate is the merge gate", () => {
     });
     expect(displayNames).toEqual([
       "Classify verification scope",
-      "Lint & Format (Windows full)",
-      "Tests (Windows full)",
-      "Frontend & Browser (Windows full)",
+      "Lint & Format (ARM64)",
+      "Lint & Format (x64)",
+      "Tests (ARM64)",
+      "Tests (x64)",
+      "Frontend & Browser (Windows)",
       "Lint & Format",
       "Tests",
       "Frontend & Browser",
     ]);
 
-    for (const name of ["lint_windows", "test_windows", "frontend_windows"]) {
+    for (const name of ["lint_arm64", "lint_x64", "test_arm64", "test_x64", "frontend_windows"]) {
       const job = byName[name];
-      expect(jobRunsOn(job), name).toBe("windows-11-arm");
       expect(jobText(job), name).toContain("persist-credentials: false");
       expect(jobText(job), name).toContain("./scripts/verify.ps1");
       expect(jobText(job), name).not.toContain(TRUSTED_ACTOR_IF);
@@ -136,6 +139,46 @@ describe("hosted PR gate is the merge gate", () => {
       expect(jobRunsOn(job), name).toBe("ubuntu-24.04");
       expect(jobText(job), name).toContain("if: ${{ always() }}");
       expect(jobText(job), name).toContain("Changed-file classification failed.");
+    }
+  });
+
+  it("verifies each shipped architecture on its own hosted image", () => {
+    // The gate covers both architectures because the crate compiles different
+    // code for each. Emulating one of them on the other host would still pass
+    // this check, so the runner image is asserted alongside the target.
+    const byName = Object.fromEntries(
+      splitWorkflowJobs(readWorkflow("test.yml")).map((job) => [job.name, job]),
+    );
+    const expected = {
+      lint_arm64: ["windows-11-arm", "aarch64-pc-windows-msvc"],
+      test_arm64: ["windows-11-arm", "aarch64-pc-windows-msvc"],
+      lint_x64: ["windows-2025", "x86_64-pc-windows-msvc"],
+      test_x64: ["windows-2025", "x86_64-pc-windows-msvc"],
+      frontend_windows: ["windows-11-arm", "aarch64-pc-windows-msvc"],
+    };
+    for (const [name, [runner, target]] of Object.entries(expected)) {
+      expect(jobRunsOn(byName[name]), name).toBe(runner);
+      expect(jobText(byName[name]), name).toContain(target);
+    }
+  });
+
+  it("gives every required wrapper the result of every job it stands for", () => {
+    // A wrapper that stops naming one of its Windows jobs reports green while
+    // that architecture is unverified, and the required check hides it.
+    const byName = Object.fromEntries(
+      splitWorkflowJobs(readWorkflow("test.yml")).map((job) => [job.name, job]),
+    );
+    const covered = {
+      lint: ["lint_arm64", "lint_x64"],
+      test: ["test_arm64", "test_x64"],
+      frontend: ["frontend_windows"],
+    };
+    for (const [wrapper, heavy] of Object.entries(covered)) {
+      const text = jobText(byName[wrapper]);
+      expect(text, wrapper).toContain(`needs: [scope, ${heavy.join(", ")}]`);
+      for (const name of heavy) {
+        expect(text, `${wrapper} must resolve ${name}`).toContain(`needs.${name}.result`);
+      }
     }
   });
 
