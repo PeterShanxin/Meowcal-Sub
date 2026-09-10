@@ -77,8 +77,7 @@ the ARM64 host's emulation to a native `windows-2025` run.
 
 ## After, warm cache
 
-Run 34497176385, every entry an exact hit. The warm run before it,
-34496029684, agrees within a minute on every job.
+Run 34497176385, every entry an exact hit.
 
 | Job | Wall | Toolchain and restore | Verification step |
 | --- | ---: | ---: | ---: |
@@ -97,10 +96,14 @@ smoke and 49 s is `npm ci`: the cache holds the dependency tree, but the crate
 under test is rebuilt and linked every run, which is what the `cargo run`
 behind the smoke has to do.
 
+Three warm runs put the critical path between 5.4 and 6.7 minutes -
+34496029684 at 6.7, this one at 5.4, and 34499644850 at 6.6. The spread is the
+frontend job; the other four vary by well under a minute.
+
 | | Before | After cold | After warm |
 | --- | ---: | ---: | ---: |
-| Critical path | 28.0 min | 9.4 min | 5.4 min |
-| Run wall | 28.5 min | 9.7 min | 5.7 min |
+| Critical path | 28.0 min | 9.4 min | 5.4-6.7 min |
+| Run wall | 28.5 min | 9.7 min | 5.7-7.1 min |
 
 ## Parallel rustc on hosted `windows-11-arm`
 
