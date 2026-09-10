@@ -25,7 +25,6 @@ There is no bug bounty.
 ## What this project treats as sensitive
 
 - updater signing keys and GitHub tokens;
-- self-hosted runner registration and removal tokens;
 - captured or translated subtitle text;
 - model and runtime download hashes and URLs, which are supply-chain data.
 

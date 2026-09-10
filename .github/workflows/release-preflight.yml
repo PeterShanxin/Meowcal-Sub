@@ -1,0 +1,140 @@
+name: Release Preflight
+
+# Everything Prepare Draft Release does, except reserving a tag and creating a
+# release. It builds both architectures on GitHub-hosted Windows, merges the
+# artifacts, and runs the same asset-contract, checksum, and updater-manifest
+# code the real release runs, so an infrastructure change can be proven without
+# spending a version number.
+#
+# The two workflows share `scripts/verify-release-assets.ps1` and
+# `scripts/build-updater-manifest.mjs` rather than a copied block of YAML: a
+# preflight that validated assets differently from the release would pass while
+# the release failed.
+#
+# Host trust is PeterShanxin and ianmeowmeow. This calls package.yml, which
+# holds TAURI_SIGNING_PRIVATE_KEY, so the same actor allowlist applies.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-preflight-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  package-x64:
+    name: Package x64
+    if: >-
+      (github.actor == 'PeterShanxin' || github.actor == 'ianmeowmeow') &&
+      github.actor != 'dependabot[bot]'
+    uses: ./.github/workflows/package.yml
+    with:
+      architecture: x64
+    # Without this the called workflow sees empty signing secrets and builds
+    # unsignable installers. A reusable workflow inherits nothing by default.
+    secrets: inherit
+    permissions:
+      contents: read
+
+  package-arm64:
+    name: Package ARM64
+    if: >-
+      (github.actor == 'PeterShanxin' || github.actor == 'ianmeowmeow') &&
+      github.actor != 'dependabot[bot]'
+    uses: ./.github/workflows/package.yml
+    with:
+      architecture: arm64
+    secrets: inherit
+    permissions:
+      contents: read
+
+  assets:
+    name: Validate release assets
+    if: >-
+      (github.actor == 'PeterShanxin' || github.actor == 'ianmeowmeow') &&
+      github.actor != 'dependabot[bot]'
+    needs:
+      - package-x64
+      - package-arm64
+    runs-on: ubuntu-latest
+    # Deliberately read-only. This workflow must not be able to reserve a tag or
+    # create a release even if someone later adds a step that tries.
+    permissions:
+      contents: read
+    steps:
+      - name: Require a trusted actor
+        shell: pwsh
+        run: |
+          $trusted = @('PeterShanxin', 'ianmeowmeow')
+          if ($trusted -notcontains $env:GITHUB_ACTOR) {
+            throw "Privileged job refused actor '$($env:GITHUB_ACTOR)'."
+          }
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Download package artifacts
+        uses: actions/download-artifact@v8
+        with:
+          path: release-assets
+          merge-multiple: true
+
+      - name: Resolve the product version
+        id: version
+        shell: pwsh
+        run: |
+          $version = (Get-Content -LiteralPath package.json -Raw | ConvertFrom-Json).version
+          npm run version:check
+          if ($LASTEXITCODE -ne 0) {
+            throw "Product version is not synchronized across the repository."
+          }
+          "version=$version" >> $env:GITHUB_OUTPUT
+
+      - name: Verify assets and write checksums
+        shell: pwsh
+        run: >-
+          ./scripts/verify-release-assets.ps1
+          -Directory release-assets
+          -ChecksumPath release-assets/SHA256SUMS.txt
+
+      - name: Build the updater manifest
+        shell: pwsh
+        env:
+          RELEASE_VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          # Release notes are a release-time artifact, so preflight does not
+          # require them. Everything else - the per-architecture installer
+          # mapping, the download URLs, and the minisign signatures - is built
+          # exactly as the release builds it.
+          $notes = "docs/releases/v$env:RELEASE_VERSION.md"
+          $notesArguments = if (Test-Path -LiteralPath $notes -PathType Leaf) {
+            @("--notes-file", $notes)
+          } else {
+            Write-Host "No $notes yet; building the manifest without notes."
+            @()
+          }
+
+          node scripts/build-updater-manifest.mjs `
+            --directory release-assets `
+            --version $env:RELEASE_VERSION `
+            --tag "v$env:RELEASE_VERSION" `
+            --repo $env:GITHUB_REPOSITORY `
+            @notesArguments `
+            --output release-assets/latest.json
+          if ($LASTEXITCODE -ne 0) {
+            throw "Failed to build latest.json for v$env:RELEASE_VERSION."
+          }
+
+      - name: Report the manifest and checksums
+        shell: pwsh
+        run: |
+          Get-Content -LiteralPath release-assets/SHA256SUMS.txt
+          Get-Content -LiteralPath release-assets/latest.json

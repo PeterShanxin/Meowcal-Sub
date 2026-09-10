@@ -184,78 +184,38 @@ DPI/window behavior.
   interpolate `TAURI_SIGNING_PRIVATE_KEY`, `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`,
   or `RELEASE_MIRROR_TOKEN`. Do not drop the `pull_request` trigger: that would
   deadlock those required checks.
-- `meowcal-ci` is not the merge gate. It is maintainer `workflow_dispatch` in
-  `hardware.yml` for real Snapdragon/Adreno ARM64 hardware. Windows packaging
-  stays on `meowcal-package-x64` and `meowcal-package-arm64`.
-  `docs/SELF_HOSTED_RUNNERS.md` is the contract.
-- Remaining self-hosted jobs, and the hosted legacy-bridge job that holds
-  `RELEASE_MIRROR_TOKEN`, run only when `github.actor` is `PeterShanxin` or
+- Every job runs on a GitHub-hosted runner. `ubuntu-24.04`, `ubuntu-latest`,
+  `windows-11-arm`, and `windows-2025` are the only runners a workflow may name;
+  `windows-latest`, `windows-2022`, macOS, and any indirect value such as a
+  repository variable are refused. `docs/RELEASE_PACKAGING.md` is the contract
+  and `npm run runners:check` enforces it.
+- Windows packaging is native per architecture: `windows-2025` builds x64 and
+  `windows-11-arm` builds ARM64, each with its own Rust target. No packaging
+  step depends on x64 emulation or an MSVC cross-linker.
+- Packaging, release, preflight, and the legacy-bridge job that holds
+  `RELEASE_MIRROR_TOKEN` run only when `github.actor` is `PeterShanxin` or
   `ianmeowmeow`. That includes `workflow_dispatch` and `workflow_call`. Host
   trust is those two logins, not write access in general. Forks, Dependabot,
   and any other login must not schedule those jobs. Fork approval does not
   cover a future write login adding a new workflow.
-- Self-hosted packaging and hardware jobs must not fail over to hosted Windows
-  when no runner is online. They queue. `windows-latest`, `windows-2022`,
-  `windows-2025`, and macOS stay forbidden. `windows-11-arm` is allowed only as
-  the explicit Stage 2 PR/push gate, never as a silent fallback.
-- `meowcal-ci` requires an ARM64 host. It can build and execute both shipped
-  architectures on real Snapdragon hardware. The hosted `windows-11-arm` gate
-  covers the same dual-arch contract for merge.
-- Release administration and the legacy bridge stay on `ubuntu-latest`
-  deliberately, because `RELEASE_MIRROR_TOKEN` and release-write permission
-  belong on an ephemeral host rather than a physical packaging runner.
+- `release-preflight.yml` runs both package jobs and the same asset, checksum,
+  and manifest code the release runs, then stops. Use it to prove a pipeline
+  change instead of spending a version number.
+- Release administration and the legacy bridge stay on `ubuntu-latest`: they
+  need no Windows toolchain, and release-write permission belongs on the
+  narrowest job that can do the work.
 - The `Change Contract` job stays on `ubuntu-24.04`: it reads Git metadata
   and runs a dependency-free Node script, so putting it on Linux reports a
-  misnamed commit in seconds without occupying the hosted Windows gate or the
-  Snapdragon runner.
+  misnamed commit in seconds without occupying the hosted Windows gate.
 - Superseded pull request runs cancel; `main` runs do not, because a cancelled
   post-merge run leaves `main` unverified.
 
-## Self-hosted runner operating model
+## Real-device validation is not a CI job
 
-The runner is **already registered** and is operated **on demand in the
-foreground**. It is deliberately not a Windows service. `docs/SELF_HOSTED_RUNNERS.md`
-holds the full procedure; these are the standing rules.
-
-- Never re-register the runner as part of normal work. `-Mode Install` is for a
-  new host, a replaced host, or a label change.
-- Never install it as a Windows service unless the owner explicitly asks.
-- Never resolve an offline self-hosted runner by routing that job to a
-  GitHub-hosted Windows runner. Starting the runner is the fix. The PR gate
-  already lives on `windows-11-arm`; packaging and hardware CI must queue.
-- Discover the runner directory rather than hard-coding it:
-  `(Get-Help .\scripts\setup-self-hosted-runner.ps1 -Parameter RunnerDirectory).defaultValue`.
-  Read registration state from GitHub with `-Mode Status`.
-- `-Mode Start` also refreshes the **action archive cache**. The runner deletes
-  `_work\_actions` at the start of every job, so without that cache each job
-  re-downloads `actions/checkout` from codeload during *initialization*, where no
-  workflow retry can reach it and one refusal kills the job before a step exists
-  (#132). The refresh is best effort and never blocks a start. Do not judge it by
-  the job log: the runner prints `Download action repository ...` before it
-  consults the cache, so grep `_diag\Worker_*.log` for `Found action archive`
-  instead. `.env` is read once at listener start, so never restart a live runner
-  to apply it.
-
-Before relying on a self-hosted hardware or packaging run:
-
-1. check status, and do not start a second runner if one is already online;
-2. if offline, start it with `.\scripts\setup-self-hosted-runner.ps1 -Mode Start`,
-   never `run.cmd` directly - a foreground runner inherits the environment of the
-   shell that launched it, so an agent session becomes CI configuration (#88) -
-   and keep the `Runner.Listener` process under that directory so you can stop
-   the right one later;
-3. wait for GitHub to report it `online` - a started process is not yet a
-   connected runner;
-4. let an already-queued run drain rather than re-triggering it, which would
-   duplicate work on a single runner;
-5. wait for every relevant job, remembering that one runner executes jobs
-   sequentially;
-6. stop the runner only once it is not busy **and** no queued or in-progress job
-   remains that should complete, including runs you did not trigger.
-
-Never stop a busy runner: it fails that job and leaves the workspace
-part-written. When several unrelated jobs are queued, let them drain instead of
-stopping after the first.
+No workflow verifies this application on Snapdragon hardware, because a hosted
+ARM64 runner is a virtual machine. That evidence comes from the manual gate
+below; `docs/RELEASE_PACKAGING.md` explains the boundary and gives the local
+`scripts/verify.ps1` invocations that cover both shipped architectures.
 
 ## Manual gate
 
@@ -286,8 +246,9 @@ other required manual gates remain outstanding.
 - `docs/CHANGE_CONTRACT.md`: commit, version, and pull request contract.
 - `docs/ARCHITECTURE.md`: current and target module ownership.
 - `docs/MAINTAINABILITY_BASELINE.md`: enforced ceilings and ratchet procedure.
-- `docs/SELF_HOSTED_RUNNERS.md`: Stage 2 hosted Windows PR gate, self-hosted
-  labels, host contract, and who may attach a runner.
+- `docs/RELEASE_PACKAGING.md`: the hosted runner policy, native per-architecture
+  packaging, the release and preflight asset contract, and who may run a
+  privileged job.
 - `docs/adr/`: accepted or proposed cross-cutting decisions.
   [`adr/README.md`](adr/README.md) owns when a decision needs an ADR at all, the
   four status values, and how one ADR supersedes another.

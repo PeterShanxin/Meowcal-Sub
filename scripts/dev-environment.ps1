@@ -168,9 +168,8 @@ function Test-WindowsSdkPresent {
         import, which is the late failure this discovery is meant to replace with
         an early message.
 
-        Read from the registry rather than a guessed path, the same source
-        `scripts/runner-prerequisites.ps1` uses, so an SDK installed off `C:` is
-        still found.
+        Read from the registry rather than a guessed path, so an SDK installed
+        off `C:` is still found.
     #>
     $registryPath = "HKLM:\SOFTWARE\WOW6432Node\Microsoft\Microsoft SDKs\Windows\v10.0"
     $installFolder = (Get-ItemProperty -Path $registryPath -ErrorAction SilentlyContinue).InstallationFolder

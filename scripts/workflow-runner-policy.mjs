@@ -1,34 +1,41 @@
 // Runner policy rules for .github/workflows, kept separate from the CLI in
 // check-workflow-runners.mjs so they can be tested against crafted workflows.
 //
-// Stage 2 allows one hosted Windows label on purpose: `windows-11-arm` is the
-// pull-request and post-merge verify gate. It is not a fallback for an offline
-// self-hosted host. The failure this still prevents is quiet: someone reaches
-// for `windows-latest`, a dated `windows-20xx` image, or macOS out of habit,
-// or wires a self-hosted packaging job to fail over to hosted Windows.
+// Every job runs on a GitHub-hosted runner. No workflow may reach for a
+// self-hosted runner: that would put a release, or a required check, behind a
+// physical machine somebody has to keep online, and would place the update
+// signing key on a long-lived host.
+//
+// The other failure this prevents is quiet: someone reaches for
+// `windows-latest` or a dated `windows-20xx` image out of habit and gets an
+// image the packaging contract was never proven on, or picks macOS, which this
+// repository ships nothing for.
 
-// Hosted runners that are not the Stage 2 Windows gate and bill above the
-// Linux rate. macOS is included because it is the same mistake at ten times
-// the multiplier. `windows-11-arm` is allowlisted below, not matched here.
-const FORBIDDEN_RUNNER = /\b(windows-latest|windows-\d{4}|macos-[\w.-]+)\b/g;
+// Every runner label a job may name. Packaging is native per architecture:
+// `windows-2025` emits x64 and `windows-11-arm` emits ARM64. The Ubuntu images
+// carry release administration, the Change Contract, and the required-check
+// wrappers.
+const ALLOWED_RUNNERS = new Set([
+  "ubuntu-latest",
+  "ubuntu-24.04",
+  "windows-11-arm",
+  "windows-2025",
+]);
 
-// Linux hosted runners stay allowed for release administration and the narrow
-// legacy updater bridge, keeping release-write credentials off physical build
-// hosts. `windows-11-arm` is the Stage 2 PR/push verify gate. `ubuntu-24.04` is
-// the Change Contract host.
-const ALLOWED_HOSTED = new Set(["ubuntu-latest", "ubuntu-24.04", "ubuntu-22.04", "windows-11-arm"]);
+// The same names anywhere else in a workflow: a matrix entry, a container
+// image, a reusable-workflow input. `runs-on: ${{ matrix.os }}` is already
+// rejected as indirect, so this is defence in depth against a value that
+// reaches a runner by some route this file does not model.
+const FORBIDDEN_ANYWHERE =
+  /\b(?:self-hosted|windows-latest|windows-2019|windows-2022|macos-[\w.-]+)\b/g;
 
 /**
  * Removes a YAML end-of-line comment.
  *
  * This is load-bearing rather than cosmetic. Matching runner labels against raw
- * line text lets a comment vouch for the code beside it: `runs-on: self-hosted
- * # meowcal-ci` would satisfy a naive "does the line mention meowcal-" test
- * while actually selecting any self-hosted runner, and
- * `runs-on: ${{ vars.RUNNER }} # self-hosted meowcal-ci` would pass while
- * resolving to whatever that variable holds. It also stops a comment that merely
- * *names* `windows-latest`, as several of these workflows do when explaining the
- * policy, from being read as a use of it.
+ * line text lets a comment vouch for the code beside it, and would also let a
+ * comment that merely *names* `windows-latest`, as these workflows do when
+ * explaining the policy, be read as a use of it.
  *
  * A `#` opens a comment only at the start of a line or after whitespace, and
  * never inside a quoted scalar.
@@ -59,15 +66,61 @@ export function stripYamlComment(line) {
   return line;
 }
 
+/**
+ * The jobs of a workflow, each as the block of lines under its key.
+ *
+ * Line-based on purpose, matching the rest of this file: these workflows use
+ * expression syntax and folded scalars that a general YAML loader would
+ * normalize away, and the checks here are about the text a reviewer reads.
+ *
+ * Exported for the workflow contract tests, which assert per-job invariants -
+ * runner, trusted actor, credential handling - that only make sense per job.
+ */
+export function splitWorkflowJobs(contents) {
+  const lines = contents.split(/\r?\n/);
+  const jobsIndex = lines.findIndex((line) => /^(\s*)jobs:\s*$/.test(stripYamlComment(line)));
+  if (jobsIndex === -1) {
+    return [];
+  }
+
+  const jobsIndent = /^\s*/.exec(lines[jobsIndex])[0].length;
+  const jobs = [];
+  let current = null;
+
+  for (let index = jobsIndex + 1; index < lines.length; index += 1) {
+    const line = stripYamlComment(lines[index]);
+    if (line.trim() === "") {
+      continue;
+    }
+
+    const indent = /^\s*/.exec(line)[0].length;
+    if (indent <= jobsIndent) {
+      break;
+    }
+
+    const header = /^\s*([A-Za-z_][\w.-]*):\s*$/.exec(line);
+    if (header && (current === null || indent === current.indent)) {
+      current = { name: header[1], indent, lines: [] };
+      jobs.push(current);
+      continue;
+    }
+
+    if (current) {
+      current.lines.push(line);
+    }
+  }
+
+  return jobs.map((job) => ({ name: job.name, lines: job.lines }));
+}
+
 function findForbiddenRunners(relativePath, lines) {
   const violations = [];
 
   for (const [index, text] of lines.entries()) {
-    for (const match of stripYamlComment(text).matchAll(FORBIDDEN_RUNNER)) {
+    for (const match of stripYamlComment(text).matchAll(FORBIDDEN_ANYWHERE)) {
       violations.push(
-        `${relativePath}:${index + 1}: '${match[0]}' is not an allowed hosted runner. ` +
-          `The Stage 2 Windows gate is windows-11-arm; self-hosted jobs use a ` +
-          `meowcal-* label and queue when no runner is online.`,
+        `${relativePath}:${index + 1}: '${match[0]}' is not an allowed runner. ` +
+          `Every job runs GitHub-hosted: ${[...ALLOWED_RUNNERS].join(", ")}.`,
       );
     }
   }
@@ -80,6 +133,7 @@ function collectRunsOnValue(lines, index, indentWidth) {
   // more-indented lines. Gather them so the check sees the whole value, minus
   // any comments among them.
   const collected = [];
+  let everyLineIsListItem = true;
 
   for (let next = index + 1; next < lines.length; next += 1) {
     const line = stripYamlComment(lines[next]);
@@ -89,20 +143,21 @@ function collectRunsOnValue(lines, index, indentWidth) {
     if (/^\s*/.exec(line)[0].length <= indentWidth) {
       break;
     }
-    collected.push(line.trim());
+    if (!/^\s*-\s+/.test(line)) {
+      everyLineIsListItem = false;
+    }
+    collected.push(line.trim().replace(/^-\s*/, ""));
   }
 
-  return collected.join(" ");
+  // A block list is the same value as its flow form, so join it the way the
+  // flow form is written. Joining list entries with a space instead would hide
+  // a second label inside what then reads as one unrecognised name.
+  return collected.join(everyLineIsListItem ? ", " : " ");
 }
 
 /**
  * The complete `runs-on:` value at `index`, folded onto one line, or null when
  * that line is not a `runs-on:`.
- *
- * Exported because a second reader needs the same answer: action-cache-plan.mjs
- * decides which jobs execute on the owner's own hosts, and two parsers
- * disagreeing about that would surface as a job quietly missing the action
- * archive cache rather than as a failure.
  */
 export function foldRunsOnValue(lines, index) {
   const match = /^(\s*)runs-on:\s*(.*)$/.exec(stripYamlComment(lines[index] ?? ""));
@@ -118,6 +173,126 @@ export function foldRunsOnValue(lines, index) {
   return value;
 }
 
+/**
+ * Split `text` on a top-level `separator`, ignoring occurrences inside quotes
+ * or parentheses.
+ */
+function splitTopLevel(text, separator) {
+  const parts = [];
+  let depth = 0;
+  let quote = null;
+  let start = 0;
+
+  for (let index = 0; index < text.length; index += 1) {
+    const character = text[index];
+
+    if (quote) {
+      if (character === quote) {
+        quote = null;
+      }
+      continue;
+    }
+    if (character === '"' || character === "'") {
+      quote = character;
+      continue;
+    }
+    if (character === "(") {
+      depth += 1;
+      continue;
+    }
+    if (character === ")") {
+      depth -= 1;
+      continue;
+    }
+    if (depth === 0 && text.startsWith(separator, index)) {
+      parts.push(text.slice(start, index));
+      index += separator.length - 1;
+      start = index + 1;
+    }
+  }
+
+  parts.push(text.slice(start));
+  return parts;
+}
+
+/** The text of a single-quoted or double-quoted scalar, or null. */
+function quotedLiteral(text) {
+  const match = /^'([^']*)'$/.exec(text.trim()) ?? /^"([^"]*)"$/.exec(text.trim());
+  return match ? match[1] : null;
+}
+
+/**
+ * What a `runs-on` value selects, or null when it selects something this file
+ * cannot see through - a repository variable, a matrix key, anything indirect.
+ *
+ * `kind` distinguishes the two ways a value names more than one label, because
+ * GitHub reads them oppositely. An expression picks exactly one of its
+ * branches, so several are fine as long as each is allowed. A label list is a
+ * conjunction: the runner must carry *every* label in it.
+ *
+ * An expression is matched against one permitted grammar rather than parsed as
+ * the general expression language:
+ *
+ *     ${{ (condition && 'label' ||)* 'label' }}
+ *
+ * and it must be the whole value. Anything else is indirect. Recognising a
+ * shape is the point: every way this check has been evaded was a shape a
+ * general parser accepted and GitHub resolved differently.
+ *
+ * - Only the condition may name inputs, so one allowed literal cannot vouch
+ *   for an indirect operand beside it. `'ubuntu-latest' || vars.PACKAGE_RUNNER`
+ *   would otherwise pass while resolving to whatever that variable holds.
+ * - The last alternative carries no condition, because a trailing `&&` yields
+ *   `false` when its condition is false, and `runs-on: false` schedules
+ *   nothing. `${{ inputs.arm64 && 'windows-11-arm' }}` names a real runner and
+ *   still cannot run.
+ * - The expression spans the entire value, because GitHub substitutes it into
+ *   the surrounding scalar: `prefix-${{ 'windows-2025' }}` asks for
+ *   `prefix-windows-2025`, not for the label written inside.
+ *
+ * This is what lets the packaging workflow pick its image from the
+ * architecture input and still be checked, while leaving no room for a shape
+ * whose runtime value this file has not accounted for.
+ */
+export function runnerSelection(value) {
+  const trimmed = value.trim();
+
+  if (trimmed.includes("${{")) {
+    if (!trimmed.startsWith("${{") || !trimmed.endsWith("}}")) {
+      return null;
+    }
+    const body = trimmed.slice(3, -2);
+    if (body.includes("${{")) {
+      return null;
+    }
+
+    const alternatives = splitTopLevel(body, "||");
+    const labels = [];
+    for (const [position, alternative] of alternatives.entries()) {
+      const terms = splitTopLevel(alternative, "&&");
+      const isLast = position === alternatives.length - 1;
+      // Every alternative but the last may be guarded; the last may not, or the
+      // expression can resolve to `false` instead of to a runner.
+      if (isLast && terms.length !== 1) {
+        return null;
+      }
+      const literal = quotedLiteral(terms[terms.length - 1]);
+      if (literal === null) {
+        return null;
+      }
+      labels.push(literal);
+    }
+    return labels.length > 0 ? { kind: "alternatives", labels } : null;
+  }
+
+  const labels = trimmed
+    .replace(/^\[|\]$/g, "")
+    .split(",")
+    .map((entry) => entry.replaceAll('"', "").replaceAll("'", "").trim())
+    .filter((entry) => entry !== "");
+  return labels.length > 0 ? { kind: "labels", labels } : null;
+}
+
 function findRunsOnViolations(relativePath, lines) {
   const violations = [];
 
@@ -127,27 +302,36 @@ function findRunsOnViolations(relativePath, lines) {
       continue;
     }
 
-    const bare = value
-      .replace(/^\[|\]$/g, "")
-      .replaceAll('"', "")
-      .replaceAll("'", "")
-      .trim();
-    const isAllowedHosted = ALLOWED_HOSTED.has(bare);
-    const isSelfHosted = /self-hosted/.test(value);
-
-    if (!isAllowedHosted && !isSelfHosted) {
+    const selection = runnerSelection(value);
+    if (selection === null) {
       violations.push(
-        `${relativePath}:${index + 1}: runs-on '${value}' is neither an allowed ` +
-          `hosted runner (ubuntu-*, windows-11-arm) nor a self-hosted label set. An ` +
-          `indirect value such as a repository variable can resolve to a paid runner ` +
-          `and is not allowed.`,
+        `${relativePath}:${index + 1}: runs-on '${value}' does not name a runner ` +
+          `directly. An indirect value such as a repository variable, a matrix ` +
+          `key, or an expression inside a larger string can resolve to any ` +
+          `runner, including a self-hosted one.`,
+      );
+      continue;
+    }
+
+    // A hosted image carries one label, so a job asking for two waits for a
+    // runner carrying both and never gets one. That queues forever, which is
+    // the failure this policy exists to prevent.
+    if (selection.kind === "labels" && selection.labels.length !== 1) {
+      violations.push(
+        `${relativePath}:${index + 1}: runs-on '${value}' lists ` +
+          `${selection.labels.length} labels. GitHub requires a runner carrying ` +
+          `every label in the list, so name exactly one hosted runner.`,
       );
     }
 
-    if (isSelfHosted && !/meowcal-/.test(value)) {
+    for (const label of selection.labels) {
+      if (ALLOWED_RUNNERS.has(label)) {
+        continue;
+      }
       violations.push(
-        `${relativePath}:${index + 1}: runs-on '${value}' uses the bare self-hosted ` +
-          `label. Name a meowcal-* label so the job cannot land on an unintended runner.`,
+        `${relativePath}:${index + 1}: runs-on '${value}' selects '${label}', ` +
+          `which is not an allowed GitHub-hosted runner ` +
+          `(${[...ALLOWED_RUNNERS].join(", ")}).`,
       );
     }
   }

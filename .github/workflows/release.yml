@@ -1,9 +1,13 @@
 name: Prepare Draft Release
 
 # Host trust is PeterShanxin and ianmeowmeow. workflow_dispatch from any other
-# login must not reserve tags, call the self-hosted packager, or create a draft
-# release. Every job requires that actor allowlist. The package jobs call
-# package.yml, which repeats the check on the self-hosted host.
+# login must not reserve tags, call the packager, or create a draft release.
+# Every job requires that actor allowlist. The package jobs call package.yml,
+# which repeats the check before it touches the signing key.
+#
+# release-preflight.yml runs everything below except the tag reservation and the
+# release creation, so the packaging and asset contract can be exercised without
+# spending a version number.
 
 on:
   workflow_dispatch:
@@ -29,11 +33,9 @@ jobs:
     if: >-
       (github.actor == 'PeterShanxin' || github.actor == 'ianmeowmeow') &&
       github.actor != 'dependabot[bot]'
-    # Stays GitHub-hosted on purpose. This job is Linux, bills at 1x, runs in
-    # about a minute, and holds `contents: write` to reserve the release tag.
-    # Moving it to the self-hosted host would save nothing measurable and would
-    # put release-write permission on a long-lived machine that also executes
-    # contributor pull request code. See docs/SELF_HOSTED_RUNNERS.md.
+    # Linux on purpose. This job needs no Windows toolchain, runs in about a
+    # minute, and is the only job besides draft-release that holds
+    # `contents: write`.
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -183,40 +185,10 @@ jobs:
 
       - name: Verify assets and write checksums
         shell: pwsh
-        run: |
-          # Named per architecture rather than counted, so a run that produced
-          # four x64 files cannot pass as one that produced both architectures.
-          # The signature is checked here too: without it the updater manifest
-          # cannot be built, and that failure belongs before the release exists.
-          $files = @(Get-ChildItem release-assets -Recurse -File)
-          $required = @(
-            @{ Kind = "MSI"; Pattern = "*.msi" },
-            @{ Kind = "NSIS setup"; Pattern = "*-setup.exe" },
-            @{ Kind = "updater signature"; Pattern = "*-setup.exe.sig" }
-          )
-          foreach ($architecture in @("x64", "arm64")) {
-            foreach ($expected in $required) {
-              $found = @($files | Where-Object {
-                $_.Name -like "*$architecture*" -and $_.Name -like $expected.Pattern
-              })
-              if ($found.Count -ne 1) {
-                throw "Expected exactly one $architecture $($expected.Kind), found $($found.Count)."
-              }
-            }
-          }
-
-          $installers = @($files |
-            Where-Object { $_.Extension -eq ".msi" -or $_.Name -like "*-setup.exe" })
-          $checksumLines = $installers |
-            Sort-Object Name |
-            ForEach-Object {
-              $hash = (Get-FileHash -Algorithm SHA256 -LiteralPath $_.FullName).Hash.ToLowerInvariant()
-              # GitHub rewrites spaces in release asset names to periods. Keep
-              # the checksum manifest aligned with the names users download.
-              $downloadName = $_.Name -replace '[^A-Za-z0-9._-]', '.'
-              "$hash  $downloadName"
-            }
-          Set-Content -LiteralPath release-assets/SHA256SUMS.txt -Value $checksumLines -Encoding utf8NoBOM
+        run: >-
+          ./scripts/verify-release-assets.ps1
+          -Directory release-assets
+          -ChecksumPath release-assets/SHA256SUMS.txt
 
       - name: Build the updater manifest
         shell: pwsh
