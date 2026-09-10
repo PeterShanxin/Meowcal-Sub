@@ -77,36 +77,39 @@ the ARM64 host's emulation to a native `windows-2025` run.
 
 ## After, warm cache
 
-Run 34496029684, the next run of the same branch, every entry an exact hit.
+Run 34497176385, every entry an exact hit. The warm run before it,
+34496029684, agrees within a minute on every job.
 
-| Job | Wall | Restore | Verification step |
+| Job | Wall | Toolchain and restore | Verification step |
 | --- | ---: | ---: | ---: |
-| Lint & Format (ARM64) | 3.4 min | 88 s | 90 s |
-| Lint & Format (x64) | 2.4 min | 73 s | 53 s |
-| Tests (ARM64) | 4.2 min | 85 s | 148 s |
-| Tests (x64) | 3.4 min | 64 s | 131 s |
-| Frontend & Browser (Windows) | 6.7 min | 86 s | 299 s |
-| **Critical path** | **6.7 min** | | |
+| Lint & Format (x64) | 2.1 min | 62 s | 52 s |
+| Lint & Format (ARM64) | 2.7 min | 66 s | 75 s |
+| Tests (x64) | 3.8 min | 67 s | 148 s |
+| Tests (ARM64) | 4.1 min | 82 s | 146 s |
+| Frontend & Browser (Windows) | 5.4 min | 82 s | 222 s |
+| **Critical path** | **5.4 min** | | |
 
 Restoring costs 30-40 s more than the cold toolchain step and removes minutes
-of compilation, and an exact hit writes nothing back, so the save step is 1 s.
+of compilation. An exact hit writes nothing back, so the save step is 1 s.
 
-The frontend job is now the slowest, and 206 s of its 299 s is the browser
-smoke: the cache holds the dependency tree but the crate under test is rebuilt
-and linked every run, which is what `cargo run` behind the smoke has to do.
+The frontend job is the slowest of the five. Of its 222 s, 130 s is the browser
+smoke and 49 s is `npm ci`: the cache holds the dependency tree, but the crate
+under test is rebuilt and linked every run, which is what the `cargo run`
+behind the smoke has to do.
 
 | | Before | After cold | After warm |
 | --- | ---: | ---: | ---: |
-| Critical path | 28.0 min | 9.4 min | 6.7 min |
-| Run wall | 28.5 min | 9.7 min | 7.1 min |
+| Critical path | 28.0 min | 9.4 min | 5.4 min |
+| Run wall | 28.5 min | 9.7 min | 5.7 min |
 
 ## Parallel rustc on hosted `windows-11-arm`
 
-Three ARM64 jobs compiled the full dependency tree with
-`CARGO_BUILD_JOBS=4` against a cold target directory and all three passed, with
-no `STATUS_STACK_BUFFER_OVERRUN` (`0xc0000409`). The failure the `verify.ps1`
-default guards against did not reproduce on this image, so the hosted gate
-overrides the default and the local default stays.
+The hosted image reports four processors, so the gate runs
+`CARGO_BUILD_JOBS=4`. Three ARM64 jobs compiled the full dependency tree that
+way against a cold target directory and all three passed, with no
+`STATUS_STACK_BUFFER_OVERRUN` (`0xc0000409`). The failure the `verify.ps1`
+default guards against did not reproduce here, so the hosted gate overrides
+that default and the local one stays as it is.
 
 ## Cache footprint
 
