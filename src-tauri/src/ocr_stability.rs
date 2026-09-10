@@ -57,13 +57,7 @@ const EXTENDED_MIN_NEW_CHARS: usize = 4;
 const SAME_LINE_SIMILARITY: f32 = 0.45;
 
 /// Classify the current OCR text against the last line that was translated.
-///
-/// Equality and containment see the whole of both reads, so text inserted
-/// anywhere still counts as growth. Similarity - the quadratic step - is judged
-/// on at most `max_compared` normalised characters of each, the prompt's source
-/// length: a long page costs no more than that, and differences past it cannot
-/// change what the model is given.
-pub fn classify(previous: &str, current: &str, max_compared: usize) -> LineChange {
+pub fn classify(previous: &str, current: &str) -> LineChange {
     let previous_norm = normalize(previous);
     let current_norm = normalize(current);
 
@@ -103,10 +97,7 @@ pub fn classify(previous: &str, current: &str, max_compared: usize) -> LineChang
     }
 
     if previous_norm.len().max(current_norm.len()) >= MIN_CHARS_FOR_SIMILARITY
-        && similarity(
-            leading(&previous_norm, max_compared),
-            leading(&current_norm, max_compared),
-        ) >= SAME_LINE_SIMILARITY
+        && similarity(&previous_norm, &current_norm) >= SAME_LINE_SIMILARITY
     {
         return LineChange::Repeat;
     }
@@ -164,11 +155,6 @@ fn contains_subsequence(haystack: &[char], needle: &[char]) -> bool {
         .any(|window| window == needle)
 }
 
-/// The first `max` characters of a normalised read.
-pub(crate) fn leading(row: &[char], max: usize) -> &[char] {
-    &row[..row.len().min(max)]
-}
-
 /// Share of characters shared by two reads, by edit distance.
 pub(crate) fn similarity(a: &[char], b: &[char]) -> f32 {
     let longest = a.len().max(b.len());
@@ -179,8 +165,8 @@ pub(crate) fn similarity(a: &[char], b: &[char]) -> f32 {
     1.0 - (distance as f32 / longest as f32)
 }
 
-/// Levenshtein distance over two rows. Callers bound both rows to the prompt's
-/// source length, which keeps the quadratic cost small next to an OCR pass.
+/// Levenshtein distance over two rows. Subtitle lines are short enough that the
+/// quadratic cost is irrelevant next to a single OCR pass.
 fn edit_distance(a: &[char], b: &[char]) -> usize {
     let mut previous_row: Vec<usize> = (0..=b.len()).collect();
     let mut current_row = vec![0usize; b.len() + 1];

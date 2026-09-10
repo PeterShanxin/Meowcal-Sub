@@ -22,7 +22,7 @@ use std::time::{Duration, Instant};
 /// A two-line cue alternates between two rows, and a cue change can leave one
 /// row of the old cue on screen beside one of the new, so four covers the
 /// observed alternations with room to spare. Longer costs an edit distance per
-/// entry per frame, each bounded by the prompt's source length.
+/// entry per frame, against text that is a subtitle's length.
 const REMEMBERED_LINES: usize = 4;
 
 /// How long a line stays worth comparing against.
@@ -33,21 +33,14 @@ const REMEMBERED_LINES: usize = 4;
 const WINDOW: Duration = Duration::from_secs(6);
 
 /// The lines translated recently, newest last.
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct RecentLines {
     entries: VecDeque<(String, Instant)>,
-    /// How many normalised characters of a read similarity compares:
-    /// `prompt_max_source_chars`, so an edit distance on a long page costs no
-    /// more than the text the model is given.
-    max_chars: usize,
 }
 
 impl RecentLines {
-    pub fn new(max_chars: usize) -> Self {
-        Self {
-            entries: VecDeque::new(),
-            max_chars,
-        }
+    pub fn new() -> Self {
+        Self::default()
     }
 
     /// How this read relates to the recent lines, judged against whichever it
@@ -72,8 +65,8 @@ impl RecentLines {
             // happened to spell it. Older lines have to actually resemble the
             // read to count.
             let verdict = if position == newest {
-                crate::ocr_stability::classify(line, current, self.max_chars)
-            } else if resembles(line, current, self.max_chars) {
+                crate::ocr_stability::classify(line, current)
+            } else if resembles(line, current) {
                 LineChange::Repeat
             } else {
                 LineChange::New
@@ -141,11 +134,10 @@ impl RecentLines {
 /// Used for the lines *behind* the one on screen, where the containment rule
 /// does not apply. Deliberately the same threshold `ocr_stability` uses to call
 /// two reads the same line, because that is the claim being made.
-fn resembles(line: &str, current: &str, max_chars: usize) -> bool {
-    use crate::ocr_stability::{leading, normalize, similarity};
-    let remembered = normalize(line);
-    let read = normalize(current);
-    similarity(leading(&remembered, max_chars), leading(&read, max_chars)) >= SAME_CUE_FLOOR
+fn resembles(line: &str, current: &str) -> bool {
+    let remembered = crate::ocr_stability::normalize(line);
+    let read = crate::ocr_stability::normalize(current);
+    crate::ocr_stability::similarity(&remembered, &read) >= SAME_CUE_FLOOR
 }
 
 /// How much two reads must share before one is treated as a rendering of the

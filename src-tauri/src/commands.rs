@@ -503,7 +503,6 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
     let strictness = translation_config.ocr.validation_strictness;
     let min_chars = strictness.min_significant_chars();
     let eligibility = translation_config.eligibility();
-    let max_chars = translation_config.prompt_max_source_chars;
     debug!(?translation_config.ocr, min_significant_chars = min_chars, "OCR settings");
 
     // Pace to a deadline: a frame that ran the translator must not also pay a
@@ -629,7 +628,8 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
             target_language.clone(),
         );
 
-        let mut recent_lines = crate::ocr_recent_lines::RecentLines::new(max_chars);
+        // Several lines rather than one: see `ocr_recent_lines` and issue #59.
+        let mut recent_lines = crate::ocr_recent_lines::RecentLines::new();
         let mut last_attempt_at = Instant::now()
             .checked_sub(crate::pipeline_repeat_policy::MOCK_RETRY_COOLDOWN)
             .unwrap_or_else(Instant::now);

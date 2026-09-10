@@ -156,7 +156,7 @@ impl TranslationAttemptRunner {
                     // Judged against the source the prompt carried, not the whole
                     // read: a long page is clipped before it reaches the model.
                     let sent = super::prompt_router::truncate_chars(
-                        &super::prompt_router::clean_source_text(text),
+                        text,
                         self.policy.prompt_max_source_chars,
                     );
                     if let Err(reason) = validate_translation_output(

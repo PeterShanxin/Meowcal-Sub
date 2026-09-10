@@ -1,11 +1,5 @@
 use super::*;
 
-// Every read here is subtitle length, well inside the prompt's default 300
-// characters, so the similarity bound never cuts into it.
-fn classify(previous: &str, current: &str) -> LineChange {
-    super::classify(previous, current, 300)
-}
-
 #[test]
 fn an_identical_read_is_a_repeat() {
     assert_eq!(classify("我们回家吧", "我们回家吧"), LineChange::Repeat);

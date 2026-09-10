@@ -3,60 +3,11 @@ use crate::ocr_stability::LineChange;
 use std::time::{Duration, Instant};
 
 fn seen(lines: &[&str], now: Instant) -> RecentLines {
-    let mut recent = RecentLines::new(300);
+    let mut recent = RecentLines::new();
     for line in lines {
         recent.remember(line, now);
     }
     recent
-}
-
-// A page longer than the prompt is translated on its first `prompt_max_source_chars`
-// characters. Text further down changing - a list scrolling, a feed updating -
-// leaves that translation exactly as it was, so it must not send the same prompt
-// again.
-#[test]
-fn a_long_read_changing_only_past_the_translated_text_is_a_repeat() {
-    let now = Instant::now();
-    let translated_part = "The quick brown fox jumps over the lazy dog. ".repeat(7);
-    let before = format!("{translated_part}{}", "abcdefghij ".repeat(64));
-    let after = format!("{translated_part}{}", "klmnopqrst ".repeat(64));
-
-    let mut recent = RecentLines::new(300);
-    recent.remember(&before, now);
-
-    assert_eq!(recent.classify(&after, now), LineChange::Repeat);
-}
-
-// Windows OCR often spaces out Chinese characters, and the prompt joins them
-// back before clipping. Two pages that agree for their first 300 raw characters
-// can send quite different prompts, so the comparison must not be cut off by
-// raw character positions.
-#[test]
-fn a_spaced_out_read_is_compared_by_the_source_the_prompt_sends() {
-    let now = Instant::now();
-    let spaced = "看  ".repeat(100);
-    let before = format!("{spaced}{}", "甲".repeat(200));
-    let after = format!("{spaced}{}", "乙".repeat(200));
-
-    let mut recent = RecentLines::new(300);
-    recent.remember(&before, now);
-
-    assert_eq!(recent.classify(&after, now), LineChange::New);
-}
-
-// Text inserted near the top of a long page changes what the model is given, so
-// it has to be retranslated even though the rest of the page is still there.
-// Clipping both reads to the prompt's length used to hide exactly that growth.
-#[test]
-fn text_inserted_before_the_prompt_boundary_of_a_long_page_is_retranslated() {
-    let now = Instant::now();
-    let page = "The meeting has moved to Thursday afternoon. ".repeat(12);
-    let with_heading = format!("Update: {page}");
-
-    let mut recent = RecentLines::new(300);
-    recent.remember(&page, now);
-
-    assert_eq!(recent.classify(&with_heading, now), LineChange::Extended);
 }
 
 // The failure this module exists for. OCR returns the top row on one frame and
@@ -185,7 +136,7 @@ fn a_short_reply_is_not_swallowed_by_the_lines_behind_it() {
 #[test]
 fn nothing_remembered_means_every_read_is_new() {
     let now = Instant::now();
-    let mut recent = RecentLines::new(300);
+    let mut recent = RecentLines::new();
 
     assert_eq!(
         recent.classify("Where are you going?", now),
