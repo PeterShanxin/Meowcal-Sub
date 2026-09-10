@@ -118,6 +118,7 @@ pub(crate) fn default_policy(max_attempts: usize) -> AttemptPolicy {
         uncontexted_attempt_cap_ms: 2500,
         prompt_max_context_chars: 600,
         prompt_max_source_chars: 300,
+        eligibility: crate::translation_eligibility::Eligibility::SubtitleLike,
     }
 }
 

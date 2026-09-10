@@ -29,7 +29,7 @@ describe("translation display states", () => {
   // explanation instead of leaving the previous translation on screen.
   it("retires the previous line when the region has no text", () => {
     expect(getTranslationPresentation("noSubtitleText")).toMatchObject({
-      hint: "No subtitle text in the selected area",
+      hint: "No text in the selected area",
       persist: true,
     });
   });
@@ -77,7 +77,7 @@ describe("translation display states", () => {
 
   it("falls back to a generic reason when the backend sends an unknown one", () => {
     const presentation = getTranslationPresentation("sourceUnreadable", "", ["somethingNew"]);
-    expect(presentation.hint).toBe("Subtitle text in this area could not be read");
+    expect(presentation.hint).toBe("Text in this area could not be read");
   });
 
   // Issue #60: a busy machine used to look like a broken app, because a slow

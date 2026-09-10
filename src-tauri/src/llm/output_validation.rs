@@ -1,7 +1,14 @@
 use super::text_utils::is_cjk_char;
+use crate::translation_eligibility::Eligibility;
 use std::collections::HashSet;
 
-// Absolute runaway-generation guard. Counts characters rather than UTF-8 bytes.
+// Longest translation a subtitle cue can produce. Counts characters rather than
+// UTF-8 bytes.
+//
+// This is a claim about cues, not about runaway generation - the ratio below is
+// what catches a model that will not stop - so it only applies while the
+// pipeline is judging subtitle shape. General screen text is longer by nature
+// and its source is already bounded by `prompt_max_source_chars`.
 const MAX_SUBTITLE_OUTPUT_CHARS: usize = 240;
 const DEFAULT_OUTPUT_RATIO: usize = 4;
 const MIN_SHORT_OUTPUT_CHARS: usize = 32;
@@ -35,6 +42,7 @@ pub(crate) fn validate_translation_output(
     translated: &str,
     source_language: &str,
     target_language: &str,
+    eligibility: Eligibility,
 ) -> Result<(), TranslationOutputRejection> {
     let source_chars = source_text.chars().count().max(1);
     let translated_chars = translated.chars().count();
@@ -52,9 +60,9 @@ pub(crate) fn validate_translation_output(
     } else {
         (DEFAULT_OUTPUT_RATIO, MIN_SHORT_OUTPUT_CHARS)
     };
-    if translated_chars > MAX_SUBTITLE_OUTPUT_CHARS
-        || translated_chars > source_chars.saturating_mul(ratio).max(minimum)
-    {
+    let over_cue_length =
+        eligibility.requires_subtitle_shape() && translated_chars > MAX_SUBTITLE_OUTPUT_CHARS;
+    if over_cue_length || translated_chars > source_chars.saturating_mul(ratio).max(minimum) {
         return Err(TranslationOutputRejection::TooLong);
     }
     if looks_repetition_loop(translated) {

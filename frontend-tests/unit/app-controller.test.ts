@@ -68,6 +68,10 @@ describe("AppController settings persistence", () => {
     ],
     ["continuity", (controller: AppController) => controller.setContinuity(true)],
     [
+      "translate all OCR text",
+      (controller: AppController) => controller.setTranslateAllOcrText(true),
+    ],
+    [
       "preference",
       (controller: AppController) => controller.updatePreference("minimizeToTray", false),
     ],
@@ -79,6 +83,37 @@ describe("AppController settings persistence", () => {
 
     expect(snapshots.at(-1)?.error).toBe("settings unavailable");
     expect(invoke).toHaveBeenCalledWith("save_settings", expect.anything());
+  });
+
+  it("defaults to the subtitle-aware gate and persists a change to it", async () => {
+    const invoke = vi.fn().mockResolvedValue(undefined);
+    const { controller, snapshots } = createController(invoke);
+
+    expect(controller.current().settings.translation.translateAllOcrText).toBe(false);
+
+    await controller.setTranslateAllOcrText(true);
+
+    expect(snapshots.at(-1)?.settings.translation.translateAllOcrText).toBe(true);
+    expect(invoke).toHaveBeenCalledWith("save_settings", {
+      settings: expect.objectContaining({
+        translation: expect.objectContaining({ translateAllOcrText: true }),
+      }),
+    });
+  });
+
+  // Settings written before the toggle existed carry no key for it, and an
+  // upgrade must not turn general-text translation on for them.
+  it("reads a stored settings object without the toggle as off", async () => {
+    const invoke = vi.fn(async (command: string) =>
+      command === "get_settings" ? { translation: { enableContextAware: true } } : undefined,
+    );
+    const { controller, snapshots } = createController(invoke as TauriBridgeApi["invoke"]);
+
+    await controller.initialize();
+
+    expect(snapshots.at(-1)?.settings.translation.translateAllOcrText).toBe(false);
+    expect(snapshots.at(-1)?.settings.translation.enableContextAware).toBe(true);
+    controller.dispose();
   });
 
   it("surfaces appearance save failures without rejecting the update", async () => {

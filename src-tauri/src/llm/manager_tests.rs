@@ -100,6 +100,7 @@ pub(super) fn base_config() -> TranslationConfig {
         context_buffer_size: 12,
         context_reset_gap_ms: 6_000,
         foundry_local: crate::config::FoundryLocalConfig::default(),
+        translate_all_ocr_text: false,
         ocr: crate::config::OcrConfig::default(),
     }
 }

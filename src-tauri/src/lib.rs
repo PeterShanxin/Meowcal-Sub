@@ -21,6 +21,7 @@ pub mod app_logging;
 
 /// Screen capture functionality - takes screenshots of selected areas
 pub mod capture;
+pub mod capture_region;
 
 /// Opt-in switches read from the environment
 pub mod env_flags;
@@ -64,6 +65,7 @@ pub mod pipeline_deadline;
 pub mod pipeline_pacing;
 pub mod pipeline_session;
 pub mod pipeline_translation;
+pub mod translation_eligibility;
 
 /// The capture-area selector window and its desktop-snapshot background
 pub mod selector_window;

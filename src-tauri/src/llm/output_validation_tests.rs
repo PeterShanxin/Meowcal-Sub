@@ -1,10 +1,27 @@
 use super::*;
+use crate::translation_eligibility::Eligibility;
+
+/// These cases are all subtitle cues, so they are judged as such.
+fn validate(
+    source_text: &str,
+    translated: &str,
+    source_language: &str,
+    target_language: &str,
+) -> Result<(), TranslationOutputRejection> {
+    validate_translation_output(
+        source_text,
+        translated,
+        source_language,
+        target_language,
+        Eligibility::SubtitleLike,
+    )
+}
 
 #[test]
 fn rejects_zh_cn_to_en_extreme_output_as_too_long() {
     let translated = "a".repeat(150);
     assert_eq!(
-        validate_translation_output("你好", &translated, "zh-CN", "en-US"),
+        validate("你好", &translated, "zh-CN", "en-US"),
         Err(TranslationOutputRejection::TooLong)
     );
 }
@@ -21,7 +38,7 @@ fn allows_realistic_short_cjk_to_english_expansion() {
         ("もういい", "That's enough for now.", "ja-JP"),
     ] {
         assert!(
-            validate_translation_output(source, translated, language, "en-US").is_ok(),
+            validate(source, translated, language, "en-US").is_ok(),
             "{language} case should pass"
         );
     }
@@ -49,7 +66,7 @@ fn returns_stable_rejection_reasons() {
     ];
     for (source, translated, expected) in cases {
         assert_eq!(
-            validate_translation_output(source, translated, "zh-CN", "en-US"),
+            validate(source, translated, "zh-CN", "en-US"),
             Err(expected)
         );
     }
@@ -57,8 +74,8 @@ fn returns_stable_rejection_reasons() {
 
 #[test]
 fn allows_mixed_and_non_english_target_cases() {
-    assert!(validate_translation_output("需要", "OK 好", "zh-CN", "en-US").is_ok());
-    assert!(validate_translation_output("Need eel.", "需要鲨鱼。", "en-US", "zh-CN",).is_ok());
+    assert!(validate("需要", "OK 好", "zh-CN", "en-US").is_ok());
+    assert!(validate("Need eel.", "需要鲨鱼。", "en-US", "zh-CN",).is_ok());
 }
 
 // The mirror gap in issue #59. With `zh-CN` selected there was no
@@ -73,7 +90,7 @@ fn rejects_latin_output_when_the_target_is_chinese() {
         ("thinnedput", "thinnedput"),
     ] {
         assert_eq!(
-            validate_translation_output(source, translated, "en-US", "zh-CN"),
+            validate(source, translated, "en-US", "zh-CN"),
             Err(TranslationOutputRejection::WrongLanguage),
             "{translated:?} should be rejected for a Chinese target"
         );
@@ -92,7 +109,7 @@ fn rejects_accented_latin_output_when_the_target_is_chinese() {
         ("Grüße für die Prüfung", "Grüße für die Prüfung"),
     ] {
         assert_eq!(
-            validate_translation_output(source, translated, "fr-FR", "zh-CN"),
+            validate(source, translated, "fr-FR", "zh-CN"),
             Err(TranslationOutputRejection::WrongLanguage),
             "{translated:?} should be rejected for a Chinese target"
         );
@@ -104,7 +121,7 @@ fn rejects_accented_latin_output_when_the_target_is_chinese() {
 // shape has to survive.
 #[test]
 fn allows_a_chinese_translation_that_carries_latin_text() {
-    assert!(validate_translation_output(
+    assert!(validate(
         "Imageong - Settings - Updates Discombobulating",
         "Imageong • 设置 — 更新功能让一切变得混乱",
         "en-US",
@@ -141,7 +158,7 @@ fn allows_an_accented_proper_name_for_a_cjk_target() {
         "JEAN-LUC",
     ] {
         assert!(
-            validate_translation_output(name, name, "en-US", "zh-CN").is_ok(),
+            validate(name, name, "en-US", "zh-CN").is_ok(),
             "{name:?} is a name, not a wrong-language result"
         );
     }
@@ -166,7 +183,7 @@ fn the_proper_name_exemption_does_not_admit_garbled_single_tokens() {
         "Wh€reythe",
     ] {
         assert_eq!(
-            validate_translation_output(text, text, "en-US", "zh-CN"),
+            validate(text, text, "en-US", "zh-CN"),
             Err(TranslationOutputRejection::WrongLanguage),
             "{text:?} should still be rejected for a Chinese target"
         );
@@ -177,8 +194,8 @@ fn the_proper_name_exemption_does_not_admit_garbled_single_tokens() {
 // come back as a name, and rejecting turns a usable line into a notice.
 #[test]
 fn allows_short_latin_output_and_output_with_no_letters() {
-    assert!(validate_translation_output("Saber", "Saber", "en-US", "zh-CN").is_ok());
-    assert!(validate_translation_output("12:30", "12:30", "en-US", "zh-CN").is_ok());
+    assert!(validate("Saber", "Saber", "en-US", "zh-CN").is_ok());
+    assert!(validate("12:30", "12:30", "en-US", "zh-CN").is_ok());
 }
 
 // Japanese and Korean targets get the same guard; only the language tag
@@ -187,9 +204,54 @@ fn allows_short_latin_output_and_output_with_no_letters() {
 fn the_guard_covers_the_other_cjk_targets() {
     for target in ["ja-JP", "ko-KR", "zh-Hans-CN"] {
         assert_eq!(
-            validate_translation_output("MFtiÄhave", "MFtiÄhave", "en-US", target),
+            validate("MFtiÄhave", "MFtiÄhave", "en-US", target),
             Err(TranslationOutputRejection::WrongLanguage),
             "{target} should be treated as a CJK target"
         );
     }
+}
+
+// General screen text is longer than a cue by nature, and the cue-length cap
+// would refuse a correct translation of it. The disproportion guard - the only
+// rule here that detects a model running away - still applies in both modes.
+#[test]
+fn the_cue_length_cap_applies_only_while_judging_subtitle_shape() {
+    // A paragraph off a web page, not a cue: longer than any subtitle, and its
+    // translation is the ordinary length for that source.
+    let source = "Open the settings panel and choose a capture region. The app watches \
+                  that area while you read. Recognition runs on this machine, and no text \
+                  leaves it. Close the panel when you are finished.";
+    let translated = "Ouvrez le panneau des reglages et choisissez une zone de capture. \
+                      L'application surveille cette zone pendant votre lecture. La \
+                      reconnaissance fonctionne sur cet ordinateur, et aucun texte n'en \
+                      sort. Fermez le panneau quand vous avez termine.";
+    assert!(translated.chars().count() > 240);
+
+    assert_eq!(
+        validate_translation_output(
+            source,
+            translated,
+            "en-US",
+            "fr-FR",
+            Eligibility::SubtitleLike
+        ),
+        Err(TranslationOutputRejection::TooLong)
+    );
+    assert!(validate_translation_output(
+        source,
+        translated,
+        "en-US",
+        "fr-FR",
+        Eligibility::AnyText
+    )
+    .is_ok());
+}
+
+#[test]
+fn runaway_output_is_refused_even_when_translating_all_text() {
+    let runaway = "no ".repeat(400);
+    assert_eq!(
+        validate_translation_output("Stop.", &runaway, "en-US", "fr-FR", Eligibility::AnyText),
+        Err(TranslationOutputRejection::TooLong)
+    );
 }

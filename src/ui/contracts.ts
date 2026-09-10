@@ -44,6 +44,7 @@ export interface TranslationConfig {
   promptMaxContextChars: number;
   contextBufferSize: number;
   contextResetGapMs: number;
+  translateAllOcrText: boolean;
   localEngine: { model: string | null; timeoutMs: number };
   ocr: OcrConfig;
 }

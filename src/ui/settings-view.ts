@@ -5,6 +5,7 @@ import { deriveUpdatePresentation } from "./update-state";
 interface SettingsActions {
   onRecognition(value: "fast" | "balanced" | "accurate"): void;
   onContinuity(enabled: boolean): void;
+  onTranslateAllOcrText(enabled: boolean): void;
   onRepair(): void;
   onTest(): void;
   onDeveloper(enabled: boolean): void;
@@ -106,9 +107,22 @@ export function renderSettings(snapshot: UiSnapshot, actions: SettingsActions): 
           <i class="ph ph-translate" aria-hidden="true"></i>
           <div>
             <h2 id="translation-heading">Translation</h2>
-            <p>Optional continuity can steady names across nearby lines.</p>
+            <p>Choose what gets translated, and how lines relate to each other.</p>
           </div>
         </div>
+        <label class="setting-row">
+          <span
+            ><strong>Translate any text</strong
+            ><small>Pages, apps, and games, not just subtitles</small></span
+          >
+          <input
+            class="switch"
+            type="checkbox"
+            .checked=${snapshot.settings.translation.translateAllOcrText}
+            @change=${(event: Event) =>
+              actions.onTranslateAllOcrText((event.target as HTMLInputElement).checked)}
+          />
+        </label>
         <label class="setting-row">
           <span
             ><strong>Subtitle continuity</strong

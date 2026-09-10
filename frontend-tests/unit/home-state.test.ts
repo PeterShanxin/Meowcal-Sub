@@ -39,6 +39,7 @@ function snapshot(patch: Partial<UiSnapshot> = {}): UiSnapshot {
         promptMaxContextChars: 600,
         contextBufferSize: 12,
         contextResetGapMs: 6000,
+        translateAllOcrText: false,
         localEngine: { model: null, timeoutMs: 30000 },
         ocr: {
           confidenceThreshold: 0.5,

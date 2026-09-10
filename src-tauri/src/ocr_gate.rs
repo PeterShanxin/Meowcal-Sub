@@ -11,6 +11,8 @@
 // is unit-testable without a screen, a webview, or Windows OCR.
 // =============================================================================
 
+use crate::translation_eligibility::Eligibility;
+
 /// Why a recognised OCR line was not worth translating.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum OcrRejection {
@@ -76,13 +78,21 @@ const MAX_ALPHABETIC_CHARS: usize = 100;
 /// threshold for the crime of being short or unpunctuated, and multiplied them
 /// down again for containing an ellipsis. Every rule here is a claim about the
 /// text that the text itself can support.
-pub fn classify(text: &str, min_significant_chars: usize) -> Option<OcrRejection> {
+pub fn classify(
+    text: &str,
+    min_significant_chars: usize,
+    eligibility: Eligibility,
+) -> Option<OcrRejection> {
     let significant_chars = text.chars().filter(|ch| ch.is_alphanumeric()).count();
     if significant_chars < min_significant_chars {
         return Some(OcrRejection::TooShort);
     }
 
-    if text.chars().count() > length_limit(text) {
+    // The only length rule here is a claim about subtitle shape, so it is the
+    // viewer's to switch off. The prompt builder still clips what it sends, so
+    // dropping it costs a partial translation rather than an unbounded call -
+    // see `prompt_max_source_chars`.
+    if eligibility.requires_subtitle_shape() && text.chars().count() > length_limit(text) {
         return Some(OcrRejection::TooLong);
     }
 
@@ -126,47 +136,58 @@ mod tests {
     use super::*;
 
     const MODERATE: usize = 2;
+    const SUBTITLE: Eligibility = Eligibility::SubtitleLike;
+    const ANY_TEXT: Eligibility = Eligibility::AnyText;
 
     #[test]
     fn accepts_a_line_of_dialogue() {
-        assert_eq!(classify("Where are you going?", MODERATE), None);
+        assert_eq!(classify("Where are you going?", MODERATE, SUBTITLE), None);
     }
 
     // The regression that motivated this rewrite: a perfectly recognised
     // subtitle was discarded for being short and unpunctuated.
     #[test]
     fn accepts_a_short_unpunctuated_subtitle() {
-        assert_eq!(classify("Welcome to Meowcal Sub", MODERATE), None);
-        assert_eq!(classify("Hi", MODERATE), None);
+        assert_eq!(classify("Welcome to Meowcal Sub", MODERATE, SUBTITLE), None);
+        assert_eq!(classify("Hi", MODERATE, SUBTITLE), None);
     }
 
     // Ellipses and dashes are ordinary subtitle punctuation, and the old
     // heuristic multiplied its score down for containing them.
     #[test]
     fn accepts_dialogue_full_of_ellipses_and_dashes() {
-        assert_eq!(classify("I do not know... maybe --- later", MODERATE), None);
+        assert_eq!(
+            classify("I do not know... maybe --- later", MODERATE, SUBTITLE),
+            None
+        );
     }
 
     #[test]
     fn rejects_a_single_alphanumeric_character() {
-        assert_eq!(classify("a.", MODERATE), Some(OcrRejection::TooShort));
+        assert_eq!(
+            classify("a.", MODERATE, SUBTITLE),
+            Some(OcrRejection::TooShort)
+        );
     }
 
     #[test]
     fn rejects_punctuation_only_noise() {
-        assert_eq!(classify("--- ...", MODERATE), Some(OcrRejection::TooShort));
+        assert_eq!(
+            classify("--- ...", MODERATE, SUBTITLE),
+            Some(OcrRejection::TooShort)
+        );
     }
 
     #[test]
     fn honours_the_configured_minimum() {
-        assert_eq!(classify("Hi", MODERATE), None);
-        assert_eq!(classify("Hi", 3), Some(OcrRejection::TooShort));
+        assert_eq!(classify("Hi", MODERATE, SUBTITLE), None);
+        assert_eq!(classify("Hi", 3, SUBTITLE), Some(OcrRejection::TooShort));
     }
 
     #[test]
     fn counts_cjk_glyphs_as_significant() {
         // A two-character Chinese line is a complete subtitle, not noise.
-        assert_eq!(classify("好的", MODERATE), None);
+        assert_eq!(classify("好的", MODERATE, SUBTITLE), None);
     }
 
     #[test]
@@ -186,7 +207,11 @@ mod tests {
     #[test]
     fn rejects_a_line_that_is_mostly_ocr_noise() {
         assert_eq!(
-            classify("Wh€reythe MFtiÄhave relatively;thinnedput?", MODERATE),
+            classify(
+                "Wh€reythe MFtiÄhave relatively;thinnedput?",
+                MODERATE,
+                SUBTITLE
+            ),
             Some(OcrRejection::Garbled)
         );
     }
@@ -196,15 +221,15 @@ mod tests {
     // subtitle is permanent; letting a mangled one through costs 250ms.
     #[test]
     fn a_short_line_is_not_rejected_on_a_single_bad_token() {
-        assert_eq!(classify("of qrßinary•Magebraft.", MODERATE), None);
+        assert_eq!(classify("of qrßinary•Magebraft.", MODERATE, SUBTITLE), None);
     }
 
     // Chinese has no spaces, so the whole line is one token and one ordinary
     // character used to condemn all of it.
     #[test]
     fn an_ordinary_chinese_line_is_not_rejected_as_noise() {
-        assert_eq!(classify("他说:我们明天再谈吧", MODERATE), None);
-        assert_eq!(classify("第一季/第二季都很精彩", MODERATE), None);
+        assert_eq!(classify("他说:我们明天再谈吧", MODERATE, SUBTITLE), None);
+        assert_eq!(classify("第一季/第二季都很精彩", MODERATE, SUBTITLE), None);
     }
 
     // The other side of the same rule. Dropping a real subtitle is the worse
@@ -212,11 +237,19 @@ mod tests {
     #[test]
     fn accepts_a_line_that_is_mostly_readable() {
         assert_eq!(
-            classify("bf//dzz:: However, isn't he a hero from an era", MODERATE),
+            classify(
+                "bf//dzz:: However, isn't he a hero from an era",
+                MODERATE,
+                SUBTITLE
+            ),
             None
         );
         assert_eq!(
-            classify("where the Mystics have relatively thinned out?", MODERATE),
+            classify(
+                "where the Mystics have relatively thinned out?",
+                MODERATE,
+                SUBTITLE
+            ),
             None
         );
     }
@@ -225,16 +258,22 @@ mod tests {
     fn accepts_a_full_two_line_chinese_cue() {
         let cue = "如果想完全复刻再展开的话就会变得非常困难所以先做一个简单的版本";
         assert!(cue.chars().count() <= MAX_CJK_CHARS);
-        assert_eq!(classify(cue, MODERATE), None);
+        assert_eq!(classify(cue, MODERATE, SUBTITLE), None);
     }
 
     #[test]
     fn rejects_a_page_of_chinese_text() {
         let page = "好".repeat(MAX_CJK_CHARS + 1);
-        assert_eq!(classify(&page, MODERATE), Some(OcrRejection::TooLong));
+        assert_eq!(
+            classify(&page, MODERATE, SUBTITLE),
+            Some(OcrRejection::TooLong)
+        );
         // And the character before it still passes, so the limit is where the
         // constant says it is rather than somewhere near it.
-        assert_eq!(classify(&"好".repeat(MAX_CJK_CHARS), MODERATE), None);
+        assert_eq!(
+            classify(&"好".repeat(MAX_CJK_CHARS), MODERATE, SUBTITLE),
+            None
+        );
     }
 
     // The reason there are two limits. Judged against the CJK cap this ordinary
@@ -245,7 +284,7 @@ mod tests {
             "I never expected to see you here again after everything that happened last winter";
         assert!(cue.chars().count() > MAX_CJK_CHARS);
         assert!(cue.chars().count() <= MAX_ALPHABETIC_CHARS);
-        assert_eq!(classify(cue, MODERATE), None);
+        assert_eq!(classify(cue, MODERATE, SUBTITLE), None);
     }
 
     // The failure this gate exists for: a capture region covering most of the
@@ -256,13 +295,60 @@ mod tests {
         let page = "Name Status CPU Memory Disk Network Processes 91.0 MB 82.3 MB 45.1 MB \
                     System 12.4 MB Background processes 34 running";
         assert!(page.chars().count() > MAX_ALPHABETIC_CHARS);
-        assert_eq!(classify(page, MODERATE), Some(OcrRejection::TooLong));
+        assert_eq!(
+            classify(page, MODERATE, SUBTITLE),
+            Some(OcrRejection::TooLong)
+        );
     }
 
     #[test]
     fn a_chinese_line_carrying_a_latin_name_is_still_judged_as_chinese() {
         let mixed = format!("{}Saber", "好".repeat(MAX_CJK_CHARS));
         assert!(mixed.chars().count() <= MAX_ALPHABETIC_CHARS);
-        assert_eq!(classify(&mixed, MODERATE), Some(OcrRejection::TooLong));
+        assert_eq!(
+            classify(&mixed, MODERATE, SUBTITLE),
+            Some(OcrRejection::TooLong)
+        );
+    }
+
+    #[test]
+    fn translating_all_text_keeps_a_page_of_text_that_a_cue_limit_would_drop() {
+        let page = "Name Status CPU Memory Disk Network Processes 91.0 MB 82.3 MB 45.1 MB \
+                    System 12.4 MB Background processes 34 running";
+        assert_eq!(
+            classify(page, MODERATE, SUBTITLE),
+            Some(OcrRejection::TooLong)
+        );
+        assert_eq!(classify(page, MODERATE, ANY_TEXT), None);
+    }
+
+    // The bypass is about subtitle shape only. A line with nothing to translate
+    // in it, or one OCR mangled beyond use, is refused in either mode.
+    #[test]
+    fn translating_all_text_still_refuses_text_that_is_not_translatable() {
+        assert_eq!(
+            classify("", MODERATE, ANY_TEXT),
+            Some(OcrRejection::TooShort)
+        );
+        assert_eq!(
+            classify("   \t  ", MODERATE, ANY_TEXT),
+            Some(OcrRejection::TooShort)
+        );
+        assert_eq!(
+            classify("--- ...", MODERATE, ANY_TEXT),
+            Some(OcrRejection::TooShort)
+        );
+        assert_eq!(
+            classify("7 42 -- 3.14", MODERATE, ANY_TEXT),
+            Some(OcrRejection::Untranslatable)
+        );
+        assert_eq!(
+            classify(
+                "Wh€reythe MFtiÄhave relatively;thinnedput?",
+                MODERATE,
+                ANY_TEXT
+            ),
+            Some(OcrRejection::Garbled)
+        );
     }
 }

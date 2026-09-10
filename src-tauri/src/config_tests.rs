@@ -136,3 +136,52 @@ fn test_legacy_backend_choices_migrate_to_curated_engine() {
     assert!(config.enable_foundry_local);
     assert!(!config.allow_mock_fallback);
 }
+
+// A settings file written before this setting existed - which is every file
+// upgraded from an earlier release - has to keep the subtitle-aware behavior it
+// was configured for, not silently start translating everything on screen.
+#[test]
+fn a_settings_file_without_the_setting_keeps_the_subtitle_gate() {
+    let json = r#"{
+        "enableLocalEngine": true,
+        "enableContextAware": true,
+        "localEngine": { "model": "HY-MT1.5-1.8B-Q4_K_M", "timeoutMs": 30000 },
+        "ocr": { "validationStrictness": "moderate" }
+    }"#;
+
+    let config: TranslationConfig = serde_json::from_str(json).unwrap();
+
+    assert!(!config.translate_all_ocr_text);
+    assert!(config.enable_context_aware);
+    assert_eq!(
+        config.ocr.validation_strictness,
+        ValidationStrictness::Moderate
+    );
+}
+
+#[test]
+fn translate_all_ocr_text_defaults_off_and_survives_a_round_trip() {
+    assert!(!TranslationConfig::default().translate_all_ocr_text);
+
+    let enabled = TranslationConfig {
+        translate_all_ocr_text: true,
+        ..TranslationConfig::default()
+    };
+    let json = serde_json::to_string(&enabled).unwrap();
+    assert!(json.contains(r#""translateAllOcrText":true"#));
+
+    let mut reloaded: AppConfig = serde_json::from_str(
+        &serde_json::to_string(&AppConfig {
+            translation: enabled,
+            ..AppConfig::default()
+        })
+        .unwrap(),
+    )
+    .unwrap();
+    // Normalization runs on every load; it must not undo the viewer's choice.
+    reloaded.normalize();
+
+    assert!(reloaded.translation.translate_all_ocr_text);
+    // The key is modelled, so it never falls through to the carry-through map.
+    assert!(!reloaded.unmodelled.contains_key("translateAllOcrText"));
+}
