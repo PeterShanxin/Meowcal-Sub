@@ -43,7 +43,7 @@ No account. Subtitle text is not uploaded. A one-time download (~1.1 GB) sets up
 | --- | --- |
 | **Screen-region capture** | Select the subtitle band once; the app watches that region while you watch. |
 | **Windows OCR** | Uses the built-in Windows OCR engine — no cloud vision API. |
-| **Translate all OCR text** | Off by default, the app only translates text that behaves like a subtitle track. Turn it on in Settings to translate any readable text in the capture region — web pages, app windows, game text, slides. |
+| **Translate any text** | Off by default, the app only translates text that behaves like a subtitle track. Turn it on in Settings to translate any readable text in the capture region — web pages, app windows, game text, slides. |
 | **On-device translation** | HY-MT runs locally after a one-time model download (~1.1 GB). Subtitle text stays on your machine. |
 | **Floating overlay** | Translated lines render in an always-on-top overlay you can position over the video. |
 | **ARM64 GPU path** | Validated Adreno configurations can offload inference to the GPU with CPU fallback. |

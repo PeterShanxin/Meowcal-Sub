@@ -36,7 +36,7 @@
   };
 
   function unreadableHint(reason) {
-    return UNREADABLE_HINTS[reason] || "Subtitle text in this area could not be read";
+    return UNREADABLE_HINTS[reason] || "Text in this area could not be read";
   }
 
   function normalizeTranslationDisplayState(state, backendUsed) {
@@ -85,7 +85,7 @@
           state: normalized,
           replaceText: false,
           clearText: false,
-          hint: "No subtitle text in the selected area",
+          hint: "No text in the selected area",
           severity: "warn",
           persist: true,
         };

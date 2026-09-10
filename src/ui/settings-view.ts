@@ -112,11 +112,8 @@ export function renderSettings(snapshot: UiSnapshot, actions: SettingsActions): 
         </div>
         <label class="setting-row">
           <span
-            ><strong>Translate all OCR text</strong
-            ><small
-              >Translate any text detected inside the capture region, even when it does not look
-              like subtitles</small
-            ></span
+            ><strong>Translate any text</strong
+            ><small>Pages, apps, and games, not just subtitles</small></span
           >
           <input
             class="switch"
