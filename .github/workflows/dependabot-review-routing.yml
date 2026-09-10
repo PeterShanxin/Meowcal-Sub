@@ -12,7 +12,7 @@ permissions:
 
 jobs:
   route-review:
-    if: github.event.pull_request != null
+    if: github.event.pull_request != null && github.event.pull_request.user.login != 'PeterShanxin'
     runs-on: ubuntu-latest
     steps:
       - name: Route review request
