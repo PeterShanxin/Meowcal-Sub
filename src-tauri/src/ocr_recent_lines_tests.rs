@@ -29,8 +29,8 @@ fn a_long_read_changing_only_past_the_translated_text_is_a_repeat() {
 
 // Windows OCR often spaces out Chinese characters, and the prompt joins them
 // back before clipping. Two pages that agree for their first 300 raw characters
-// can send quite different prompts, so the comparison has to use the prompt's
-// own cleaned and clipped source.
+// can send quite different prompts, so the comparison must not be cut off by
+// raw character positions.
 #[test]
 fn a_spaced_out_read_is_compared_by_the_source_the_prompt_sends() {
     let now = Instant::now();
@@ -42,6 +42,21 @@ fn a_spaced_out_read_is_compared_by_the_source_the_prompt_sends() {
     recent.remember(&before, now);
 
     assert_eq!(recent.classify(&after, now), LineChange::New);
+}
+
+// Text inserted near the top of a long page changes what the model is given, so
+// it has to be retranslated even though the rest of the page is still there.
+// Clipping both reads to the prompt's length used to hide exactly that growth.
+#[test]
+fn text_inserted_before_the_prompt_boundary_of_a_long_page_is_retranslated() {
+    let now = Instant::now();
+    let page = "The meeting has moved to Thursday afternoon. ".repeat(12);
+    let with_heading = format!("Update: {page}");
+
+    let mut recent = RecentLines::new(300);
+    recent.remember(&page, now);
+
+    assert_eq!(recent.classify(&with_heading, now), LineChange::Extended);
 }
 
 // The failure this module exists for. OCR returns the top row on one frame and

@@ -22,7 +22,7 @@ use std::time::{Duration, Instant};
 /// A two-line cue alternates between two rows, and a cue change can leave one
 /// row of the old cue on screen beside one of the new, so four covers the
 /// observed alternations with room to spare. Longer costs an edit distance per
-/// entry per frame, against text no longer than the prompt carries.
+/// entry per frame, each bounded by the prompt's source length.
 const REMEMBERED_LINES: usize = 4;
 
 /// How long a line stays worth comparing against.
@@ -36,10 +36,9 @@ const WINDOW: Duration = Duration::from_secs(6);
 #[derive(Debug)]
 pub struct RecentLines {
     entries: VecDeque<(String, Instant)>,
-    /// How much of a read is compared: `prompt_max_source_chars`, applied to the
-    /// cleaned source exactly as the prompt applies it. The model is given no
-    /// more than this, so text past it cannot change the translation, and a long
-    /// page would otherwise make every edit distance quadratic in the whole page.
+    /// How many normalised characters of a read similarity compares:
+    /// `prompt_max_source_chars`, so an edit distance on a long page costs no
+    /// more than the text the model is given.
     max_chars: usize,
 }
 
@@ -51,13 +50,6 @@ impl RecentLines {
         }
     }
 
-    fn clip(&self, text: &str) -> String {
-        crate::llm::clean_source_text(text)
-            .chars()
-            .take(self.max_chars)
-            .collect()
-    }
-
     /// How this read relates to the recent lines, judged against whichever it
     /// most resembles.
     ///
@@ -66,8 +58,6 @@ impl RecentLines {
     /// is still suppressed. Otherwise `New`.
     pub fn classify(&mut self, current: &str, now: Instant) -> LineChange {
         self.forget_stale(now);
-        let current = self.clip(current);
-        let current = current.as_str();
 
         let newest = self.entries.len().saturating_sub(1);
         let mut strongest = LineChange::New;
@@ -82,8 +72,8 @@ impl RecentLines {
             // happened to spell it. Older lines have to actually resemble the
             // read to count.
             let verdict = if position == newest {
-                crate::ocr_stability::classify(line, current)
-            } else if resembles(line, current) {
+                crate::ocr_stability::classify(line, current, self.max_chars)
+            } else if resembles(line, current, self.max_chars) {
                 LineChange::Repeat
             } else {
                 LineChange::New
@@ -115,8 +105,7 @@ impl RecentLines {
     /// Remember a line that was sent for translation.
     pub fn remember(&mut self, line: &str, now: Instant) {
         self.forget_stale(now);
-        let line = self.clip(line);
-        self.entries.push_back((line, now));
+        self.entries.push_back((line.to_string(), now));
         while self.entries.len() > REMEMBERED_LINES {
             self.entries.pop_front();
         }
@@ -152,10 +141,11 @@ impl RecentLines {
 /// Used for the lines *behind* the one on screen, where the containment rule
 /// does not apply. Deliberately the same threshold `ocr_stability` uses to call
 /// two reads the same line, because that is the claim being made.
-fn resembles(line: &str, current: &str) -> bool {
-    let remembered = crate::ocr_stability::normalize(line);
-    let read = crate::ocr_stability::normalize(current);
-    crate::ocr_stability::similarity(&remembered, &read) >= SAME_CUE_FLOOR
+fn resembles(line: &str, current: &str, max_chars: usize) -> bool {
+    use crate::ocr_stability::{leading, normalize, similarity};
+    let remembered = normalize(line);
+    let read = normalize(current);
+    similarity(leading(&remembered, max_chars), leading(&read, max_chars)) >= SAME_CUE_FLOOR
 }
 
 /// How much two reads must share before one is treated as a rendering of the
