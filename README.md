@@ -112,11 +112,11 @@ Module ownership is recorded in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 **On your machine:** Screen capture of the selected subtitle region; OCR and translation inference; overlay rendering
 
-**Uses the network for:** One-time download of the translation runtime and model during setup; update checks (once a day, or when you press **Check for updates**; nothing is downloaded until you start an update)
+**Uses the network for:** One-time download of the translation runtime and model during setup; update checks (when the app starts, at most once a day, or when you press **Check for updates**; nothing is downloaded until you start an update)
 
 **Never sent:** Captured subtitle text; translated subtitle text
 
-Production logs record support codes, timings, and counts — not captured or translated subtitle text.
+Production logs record support codes, timings, and counts — not captured or translated text.
 
 ## 📦 Installation
 
@@ -141,8 +141,8 @@ Download from [this repository's latest release](https://github.com/PeterShanxin
 | [SHA256SUMS.txt](https://github.com/PeterShanxin/Meowcal-Sub/releases/download/v0.7.0/SHA256SUMS.txt) | checksums for the installers |
 | [latest.json](https://github.com/PeterShanxin/Meowcal-Sub/releases/download/v0.7.0/latest.json) | release metadata |
 
-Installed copies check for updates automatically once a day, or immediately
-from **Settings → Updates → Check for updates**.
+Installed copies check for updates when they start, at most once a day, or
+immediately from **Settings → Updates → Check for updates**.
 
 ## Status
 

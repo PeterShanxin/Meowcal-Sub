@@ -817,7 +817,7 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
                     now.duration_since(last_attempt_at),
                 ) {
                     repeat_policy::RepeatAction::Skip(reason) => {
-                        debug!(source = %current_text, "[FILTER: {reason}] OCR text");
+                        debug!("[FILTER: {reason}] OCR text");
                         translation_manager.record_ocr_line(&current_text);
                         tokio::time::sleep(pacer.remaining_for(frame_started)).await;
                         continue;
@@ -857,7 +857,7 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
                 stop_rx.clone(),
             );
             if !taken {
-                debug!(source = %current_text, "[DEFER: translating] OCR text");
+                debug!("[DEFER: translating] OCR text");
                 tokio::time::sleep(pacer.remaining_for(frame_started)).await;
                 continue;
             }

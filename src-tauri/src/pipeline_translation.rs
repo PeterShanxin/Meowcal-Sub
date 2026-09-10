@@ -253,9 +253,13 @@ impl Translator {
 
         self.set_last_backend_was_mock(backend_used == BackendId::Mock);
 
-        // The pair, so a bad line can be blamed on OCR or on the model without
-        // reproducing the episode.
-        debug!(source = %frame.text, translated = %translated, "Translated");
+        // Lengths only. The text is whatever was on the viewer's screen, and
+        // session logs are kept for days.
+        debug!(
+            source_chars = frame.text.chars().count(),
+            translated_chars = translated.chars().count(),
+            "Translated"
+        );
 
         let overlay_started = Instant::now();
         let timestamp = SystemTime::now()

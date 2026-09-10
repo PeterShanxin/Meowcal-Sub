@@ -172,3 +172,48 @@ async fn a_rejected_output_fails_without_retry_and_keeps_the_quality_code() {
         Some("low_quality_output")
     );
 }
+
+// General text can run far past the source the prompt carries. The output has to
+// be judged against what the model was given, or a long page licenses a response
+// many times longer than anything it was asked to translate.
+#[tokio::test]
+async fn output_is_judged_against_the_clipped_source_the_model_saw() {
+    let page = "Your storage is almost full. ".repeat(40);
+    let rambling: String = (0..2000u32)
+        .filter_map(|offset| char::from_u32(0x4E00 + offset))
+        .collect();
+    let backend = ScriptedBackend::new(BackendId::FoundryLocal, vec![ScriptedStep::Ok(rambling)]);
+    let runner = TranslationAttemptRunner::new(
+        AttemptPolicy {
+            eligibility: crate::translation_eligibility::Eligibility::AnyText,
+            ..default_policy(1)
+        },
+        Arc::new(Mutex::new(TranslationDiagnosticsState::default())),
+    );
+    let request = AttemptRequest {
+        text: &page,
+        source_language: "en-US",
+        target_language: "zh-CN",
+        context_prompt: None,
+        context_used: false,
+    };
+    let mut warnings = Vec::new();
+
+    let outcome = runner
+        .run(
+            &backend,
+            &request,
+            &budget(10_000),
+            ReadyState::Ready,
+            &mut warnings,
+        )
+        .await;
+
+    let LlmError::TranslationError(message) = expect_failed(outcome) else {
+        panic!("expected a rejected translation");
+    };
+    assert_eq!(
+        message,
+        "Translation output rejected as corrupted (overlong output)."
+    );
+}
