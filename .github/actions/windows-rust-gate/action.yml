@@ -32,11 +32,19 @@ runs:
     #
     # Only `main` writes an entry. These five jobs hold 3.4 GB between them and
     # a repository gets 10 GB, so branches each writing their own set would
-    # evict one another. The key carries no branch, so a pull request restoring
-    # `main`'s entry gets the same exact hit it would otherwise have written.
-    # It is also what keeps fork and Dependabot code out of the entry `main`
-    # restores, because GitHub scopes a written entry to the ref that wrote it.
-    - uses: Swatinem/rust-cache@v2
+    # evict one another - sizes in docs/plans/2026-09-10-ci-gate-timing.md. The
+    # key carries no branch, so a pull request restoring `main`'s entry gets
+    # the same exact hit it would otherwise have written.
+    #
+    # What keeps fork and Dependabot code out of the entry `main` restores is
+    # separate and unconditional: GitHub scopes a written entry to the ref that
+    # wrote it, so a pull request's writes land on its own ref and `main` never
+    # reads them.
+    #
+    # Pinned to a commit rather than a tag: this is the only third-party action
+    # here, it runs in a job that executes contributor code, and on `main` it is
+    # the step that writes bytes every later job unpacks into src-tauri/target.
+    - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
       with:
         workspaces: src-tauri -> target
         save-if: ${{ github.ref == 'refs/heads/main' }}
@@ -46,8 +54,9 @@ runs:
       run: |
         # verify.ps1 serializes rustc whenever an ARM64 host meets a cold target
         # directory, which a CI checkout always is. That default exists for a
-        # local Snapdragon machine; a hosted runner has four cores and 16 GB and
-        # does not reproduce the STATUS_STACK_BUFFER_OVERRUN it guards against.
-        # verify.ps1 honours an explicit value over its own default.
+        # local Snapdragon machine, and the STATUS_STACK_BUFFER_OVERRUN it
+        # guards against does not reproduce on this four-core hosted image -
+        # measured in docs/plans/2026-09-10-ci-gate-timing.md. verify.ps1
+        # honours an explicit value over its own default.
         Write-Host "CARGO_BUILD_JOBS=$env:NUMBER_OF_PROCESSORS"
         "CARGO_BUILD_JOBS=$env:NUMBER_OF_PROCESSORS" >> $env:GITHUB_ENV

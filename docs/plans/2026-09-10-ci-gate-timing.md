@@ -129,3 +129,7 @@ set would evict one another, so only `main` writes: the key carries no branch,
 so a pull request restoring `main`'s entry gets the same exact hit it would
 otherwise have written. The first `main` run after this lands is therefore a
 cold one, and it is the run that populates the entries.
+
+That is a budget decision, not the isolation boundary. A pull request's writes
+land on its own ref either way - the five entries this branch wrote all carry
+`refs/pull/188/merge` - so `main` never restores what a fork wrote.

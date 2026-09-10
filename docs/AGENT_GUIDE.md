@@ -147,8 +147,10 @@ from the caller always wins. A bare `cargo test` still does neither.
 
 That default is for a local ARM64 machine. The hosted `windows-11-arm` gate sets
 `CARGO_BUILD_JOBS` to the runner's core count instead, because the failure does
-not reproduce there and a CI checkout is cold on every run - measured in
+not reproduce on that image - measured in
 [`docs/plans/2026-09-10-ci-gate-timing.md`](plans/2026-09-10-ci-gate-timing.md).
+It matters on a cache miss, which is when the gate compiles the dependency tree
+and the cold-directory default would otherwise serialize it.
 
 A fresh worktree also needs `scripts\prepare-validation-resources.ps1` before
 its first build, or the Tauri build script stops on a missing
@@ -196,9 +198,11 @@ DPI/window behavior.
   `HEAVY_RESULTS`, or it reports green for an architecture nothing verified.
 - Every Windows gate job shares `.github/actions/windows-rust-gate`: Node, the
   Rust toolchain for that job's one target, `Swatinem/rust-cache`, and the
-  build parallelism. Only `main` writes a cache entry - five jobs hold 3.4 GB
-  of a 10 GB budget - and a pull request restores it without writing, which is
-  also what keeps fork code out of the entry `main` restores.
+  build parallelism. Only `main` writes a cache entry, because five jobs hold
+  3.4 GB of a 10 GB budget and branches each writing their own set would evict
+  one another. What keeps fork code out of the entry `main` restores is
+  separate: GitHub scopes a written entry to the ref that wrote it. The
+  third-party cache action is pinned to a commit, not a tag.
 - Every job runs on a GitHub-hosted runner. `ubuntu-24.04`, `ubuntu-latest`,
   `windows-11-arm`, and `windows-2025` are the only runners a workflow may name;
   `windows-latest`, `windows-2022`, macOS, and any indirect value such as a

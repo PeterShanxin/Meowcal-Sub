@@ -269,6 +269,13 @@ jobs:
             false) expected=skipped ;;
             *) echo "::error::Unknown verification scope '$FULL'." ; exit 1 ;;
           esac
+          # An empty list would make the loop below pass by running zero times,
+          # which is the one shape in which a required check can go green with
+          # nothing behind it.
+          if [[ -z "${HEAVY_RESULTS// /}" ]]; then
+            echo "::error::$CHECK_NAME resolved no Windows job results."
+            exit 1
+          fi
           for result in $HEAVY_RESULTS; do
             if [[ "$result" != "$expected" ]]; then
               echo "::error::$CHECK_NAME expected every Windows job to be '$expected' (got: $HEAVY_RESULTS)."
@@ -301,6 +308,13 @@ jobs:
             false) expected=skipped ;;
             *) echo "::error::Unknown verification scope '$FULL'." ; exit 1 ;;
           esac
+          # An empty list would make the loop below pass by running zero times,
+          # which is the one shape in which a required check can go green with
+          # nothing behind it.
+          if [[ -z "${HEAVY_RESULTS// /}" ]]; then
+            echo "::error::$CHECK_NAME resolved no Windows job results."
+            exit 1
+          fi
           for result in $HEAVY_RESULTS; do
             if [[ "$result" != "$expected" ]]; then
               echo "::error::$CHECK_NAME expected every Windows job to be '$expected' (got: $HEAVY_RESULTS)."
@@ -333,6 +347,13 @@ jobs:
             false) expected=skipped ;;
             *) echo "::error::Unknown verification scope '$FULL'." ; exit 1 ;;
           esac
+          # An empty list would make the loop below pass by running zero times,
+          # which is the one shape in which a required check can go green with
+          # nothing behind it.
+          if [[ -z "${HEAVY_RESULTS// /}" ]]; then
+            echo "::error::$CHECK_NAME resolved no Windows job results."
+            exit 1
+          fi
           for result in $HEAVY_RESULTS; do
             if [[ "$result" != "$expected" ]]; then
               echo "::error::$CHECK_NAME expected every Windows job to be '$expected' (got: $HEAVY_RESULTS)."

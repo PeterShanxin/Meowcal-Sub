@@ -68,8 +68,13 @@ updates:
           - "patch"
 
   # Keep pinned third-party GitHub Actions current as workflows evolve.
+  # "/" covers .github/workflows only, so composite actions are listed too -
+  # the gate's third-party action lives in one of them and is pinned to a
+  # commit, which Dependabot bumps in place.
   - package-ecosystem: "github-actions"
-    directory: "/"
+    directories:
+      - "/"
+      - "/.github/actions/windows-rust-gate"
     schedule:
       interval: "monthly"
       time: "09:00"

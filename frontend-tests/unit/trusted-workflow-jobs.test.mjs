@@ -162,23 +162,34 @@ describe("hosted PR gate is the merge gate", () => {
     }
   });
 
-  it("gives every required wrapper the result of every job it stands for", () => {
-    // A wrapper that stops naming one of its Windows jobs reports green while
-    // that architecture is unverified, and the required check hides it.
-    const byName = Object.fromEntries(
-      splitWorkflowJobs(readWorkflow("test.yml")).map((job) => [job.name, job]),
+  it("leaves no Windows job outside a required wrapper", () => {
+    // Derived from the workflow rather than listed here. A hand-written list
+    // proves the wrappers named in it are wired up and says nothing about a
+    // sixth Windows job somebody adds, which is exactly the job whose failure
+    // would never reach a required check.
+    const jobs = splitWorkflowJobs(readWorkflow("test.yml"));
+    const windowsJobs = jobs
+      .filter((job) => (jobRunsOn(job) ?? "").startsWith("windows"))
+      .map((job) => job.name);
+    const wrappers = jobs.filter(
+      (job) => jobRunsOn(job) === "ubuntu-24.04" && jobText(job).includes("if: ${{ always() }}"),
     );
-    const covered = {
-      lint: ["lint_arm64", "lint_x64"],
-      test: ["test_arm64", "test_x64"],
-      frontend: ["frontend_windows"],
-    };
-    for (const [wrapper, heavy] of Object.entries(covered)) {
-      const text = jobText(byName[wrapper]);
-      expect(text, wrapper).toContain(`needs: [scope, ${heavy.join(", ")}]`);
-      for (const name of heavy) {
-        expect(text, `${wrapper} must resolve ${name}`).toContain(`needs.${name}.result`);
-      }
+
+    expect(windowsJobs.length, "the gate must still have Windows jobs").toBeGreaterThan(0);
+    expect(wrappers.map((job) => job.name)).toEqual(["lint", "test", "frontend"]);
+
+    for (const name of windowsJobs) {
+      const standIn = wrappers.filter((wrapper) => {
+        const text = jobText(wrapper);
+        return (
+          new RegExp(`^\\s*needs:.*\\b${name}\\b`, "m").test(text) &&
+          text.includes(`needs.${name}.result`)
+        );
+      });
+      expect(
+        standIn.map((wrapper) => wrapper.name),
+        `${name} must have exactly one wrapper`,
+      ).toHaveLength(1);
     }
   });
 
