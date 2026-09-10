@@ -12,7 +12,7 @@ permissions:
 
 jobs:
   route-review:
-    if: github.event.pull_request != null
+    if: github.event.pull_request != null && github.event.pull_request.user.login != 'PeterShanxin'
     runs-on: ubuntu-latest
     steps:
       - name: Route review request
@@ -28,15 +28,8 @@ jobs:
           EVENT_ACTION: ${{ github.event.action }}
           REVIEW_AUTHOR: ${{ github.event.review.user.login || '' }}
           REVIEW_BODY: ${{ github.event.review.body || '' }}
-          REVIEWER: PeterShanxin
         run: |
           set -euo pipefail
-
-          # GitHub rejects requests for the pull request author to review their own PR.
-          if [[ "$PR_AUTHOR" == "$REVIEWER" ]]; then
-            echo "Skipping review routing: ${REVIEWER} is the pull request author."
-            exit 0
-          fi
 
           api="https://api.github.com/repos/${REPOSITORY}/pulls/${PR_NUMBER}/requested_reviewers"
           headers=(
@@ -44,7 +37,7 @@ jobs:
             -H "Accept: application/vnd.github+json"
             -H "X-GitHub-Api-Version: 2022-11-28"
           )
-          payload="{\"reviewers\":[\"${REVIEWER}\"]}"
+          payload='{"reviewers":["PeterShanxin"]}'
 
           request_review() {
             curl --fail-with-body --silent --show-error "${headers[@]}" \
