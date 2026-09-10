@@ -230,20 +230,29 @@ function quotedLiteral(text) {
  * branches, so several are fine as long as each is allowed. A label list is a
  * conjunction: the runner must carry *every* label in it.
  *
- * An expression is read by its *value* positions rather than by every literal
- * in it, which is what lets the packaging workflow pick its image from the
- * architecture input and still be checked. GitHub's idiom is
- * `condition && valueA || valueB`, so each `||` alternative contributes the
- * last of its `&&` terms, and every one of those must be a quoted literal.
- * Reading literals anywhere in the expression instead would let one allowed
- * name vouch for an indirect operand beside it: `'ubuntu-latest' ||
- * vars.PACKAGE_RUNNER` would pass while resolving to whatever that variable
- * holds. Only the condition may name inputs, because it selects between values
- * rather than being one.
+ * An expression is matched against one permitted grammar rather than parsed as
+ * the general expression language:
  *
- * The expression must also be the entire value. `prefix-${{ 'windows-2025' }}`
- * resolves to `prefix-windows-2025`, so reading only the expression body would
- * report an allowed label for a job that asks for one nobody approved.
+ *     ${{ (condition && 'label' ||)* 'label' }}
+ *
+ * and it must be the whole value. Anything else is indirect. Recognising a
+ * shape is the point: every way this check has been evaded was a shape a
+ * general parser accepted and GitHub resolved differently.
+ *
+ * - Only the condition may name inputs, so one allowed literal cannot vouch
+ *   for an indirect operand beside it. `'ubuntu-latest' || vars.PACKAGE_RUNNER`
+ *   would otherwise pass while resolving to whatever that variable holds.
+ * - The last alternative carries no condition, because a trailing `&&` yields
+ *   `false` when its condition is false, and `runs-on: false` schedules
+ *   nothing. `${{ inputs.arm64 && 'windows-11-arm' }}` names a real runner and
+ *   still cannot run.
+ * - The expression spans the entire value, because GitHub substitutes it into
+ *   the surrounding scalar: `prefix-${{ 'windows-2025' }}` asks for
+ *   `prefix-windows-2025`, not for the label written inside.
+ *
+ * This is what lets the packaging workflow pick its image from the
+ * architecture input and still be checked, while leaving no room for a shape
+ * whose runtime value this file has not accounted for.
  */
 export function runnerSelection(value) {
   const trimmed = value.trim();
@@ -257,9 +266,16 @@ export function runnerSelection(value) {
       return null;
     }
 
+    const alternatives = splitTopLevel(body, "||");
     const labels = [];
-    for (const alternative of splitTopLevel(body, "||")) {
+    for (const [position, alternative] of alternatives.entries()) {
       const terms = splitTopLevel(alternative, "&&");
+      const isLast = position === alternatives.length - 1;
+      // Every alternative but the last may be guarded; the last may not, or the
+      // expression can resolve to `false` instead of to a runner.
+      if (isLast && terms.length !== 1) {
+        return null;
+      }
       const literal = quotedLiteral(terms[terms.length - 1]);
       if (literal === null) {
         return null;

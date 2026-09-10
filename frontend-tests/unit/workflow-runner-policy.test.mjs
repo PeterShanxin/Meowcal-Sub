@@ -93,6 +93,27 @@ describe("runner policy", () => {
     expect(check("    runs-on: [windows-2025]")).toEqual([]);
   });
 
+  // A trailing `&&` yields `false` when its condition is false, and
+  // `runs-on: false` schedules nothing - so the expression names a real runner
+  // and still cannot run.
+  it("rejects an expression whose last alternative is conditional", () => {
+    expect(check("    runs-on: ${{ inputs.arm64 && 'windows-11-arm' }}")).toEqual([
+      expect.stringContaining("does not name a runner"),
+    ]);
+    expect(
+      check("    runs-on: ${{ inputs.a && 'ubuntu-latest' || inputs.b && 'windows-2025' }}"),
+    ).toEqual([expect.stringContaining("does not name a runner")]);
+  });
+
+  it("accepts a longer chain that still ends in an unconditional label", () => {
+    expect(
+      check(
+        "    runs-on: ${{ inputs.a == 'x' && 'ubuntu-latest' " +
+          "|| inputs.a == 'y' && 'windows-11-arm' || 'windows-2025' }}",
+      ),
+    ).toEqual([]);
+  });
+
   it("rejects an indirect runner value even when a comment names valid labels", () => {
     const violations = check(
       "    # windows-2025 emergency override, see runbook\n" +
@@ -139,6 +160,18 @@ describe("runnerSelection", () => {
         "${{ inputs.a == 'arm64' && fromJSON('[\"self-hosted\"]') || 'windows-2025' }}",
       ),
     ).toBeNull();
+  });
+
+  it("requires the last alternative to carry no condition", () => {
+    expect(runnerSelection("${{ inputs.arm64 && 'windows-11-arm' }}")).toBeNull();
+    expect(
+      runnerSelection(
+        "${{ inputs.a == 'x' && 'ubuntu-latest' || inputs.a == 'y' && 'windows-11-arm' || 'windows-2025' }}",
+      ),
+    ).toEqual({
+      kind: "alternatives",
+      labels: ["ubuntu-latest", "windows-11-arm", "windows-2025"],
+    });
   });
 
   it("requires the expression to be the whole value", () => {
