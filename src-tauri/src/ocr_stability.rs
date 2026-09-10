@@ -165,8 +165,8 @@ pub(crate) fn similarity(a: &[char], b: &[char]) -> f32 {
     1.0 - (distance as f32 / longest as f32)
 }
 
-/// Levenshtein distance over two rows. Subtitle lines are short enough that the
-/// quadratic cost is irrelevant next to a single OCR pass.
+/// Levenshtein distance over two rows. `RecentLines` clips reads to the prompt's
+/// source length first, which keeps the quadratic cost small next to an OCR pass.
 fn edit_distance(a: &[char], b: &[char]) -> usize {
     let mut previous_row: Vec<usize> = (0..=b.len()).collect();
     let mut current_row = vec![0usize; b.len() + 1];

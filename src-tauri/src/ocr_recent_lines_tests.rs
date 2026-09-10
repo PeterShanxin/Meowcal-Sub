@@ -3,11 +3,28 @@ use crate::ocr_stability::LineChange;
 use std::time::{Duration, Instant};
 
 fn seen(lines: &[&str], now: Instant) -> RecentLines {
-    let mut recent = RecentLines::new();
+    let mut recent = RecentLines::new(300);
     for line in lines {
         recent.remember(line, now);
     }
     recent
+}
+
+// A page longer than the prompt is translated on its first `prompt_max_source_chars`
+// characters. Text further down changing - a list scrolling, a feed updating -
+// leaves that translation exactly as it was, so it must not send the same prompt
+// again.
+#[test]
+fn a_long_read_changing_only_past_the_translated_text_is_a_repeat() {
+    let now = Instant::now();
+    let translated_part = "The quick brown fox jumps over the lazy dog. ".repeat(7);
+    let before = format!("{translated_part}{}", "abcdefghij ".repeat(64));
+    let after = format!("{translated_part}{}", "klmnopqrst ".repeat(64));
+
+    let mut recent = RecentLines::new(300);
+    recent.remember(&before, now);
+
+    assert_eq!(recent.classify(&after, now), LineChange::Repeat);
 }
 
 // The failure this module exists for. OCR returns the top row on one frame and
@@ -136,7 +153,7 @@ fn a_short_reply_is_not_swallowed_by_the_lines_behind_it() {
 #[test]
 fn nothing_remembered_means_every_read_is_new() {
     let now = Instant::now();
-    let mut recent = RecentLines::new();
+    let mut recent = RecentLines::new(300);
 
     assert_eq!(
         recent.classify("Where are you going?", now),

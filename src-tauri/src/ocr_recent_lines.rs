@@ -22,7 +22,7 @@ use std::time::{Duration, Instant};
 /// A two-line cue alternates between two rows, and a cue change can leave one
 /// row of the old cue on screen beside one of the new, so four covers the
 /// observed alternations with room to spare. Longer costs an edit distance per
-/// entry per frame, against text that is a subtitle's length.
+/// entry per frame, against text no longer than the prompt carries.
 const REMEMBERED_LINES: usize = 4;
 
 /// How long a line stays worth comparing against.
@@ -33,14 +33,26 @@ const REMEMBERED_LINES: usize = 4;
 const WINDOW: Duration = Duration::from_secs(6);
 
 /// The lines translated recently, newest last.
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct RecentLines {
     entries: VecDeque<(String, Instant)>,
+    /// How much of a read is compared: `prompt_max_source_chars`. The model is
+    /// given no more than this, so text past it cannot change the translation,
+    /// and a long page would otherwise make every edit distance quadratic in the
+    /// whole page.
+    max_chars: usize,
 }
 
 impl RecentLines {
-    pub fn new() -> Self {
-        Self::default()
+    pub fn new(max_chars: usize) -> Self {
+        Self {
+            entries: VecDeque::new(),
+            max_chars,
+        }
+    }
+
+    fn clip(&self, text: &str) -> String {
+        text.chars().take(self.max_chars).collect()
     }
 
     /// How this read relates to the recent lines, judged against whichever it
@@ -51,6 +63,8 @@ impl RecentLines {
     /// is still suppressed. Otherwise `New`.
     pub fn classify(&mut self, current: &str, now: Instant) -> LineChange {
         self.forget_stale(now);
+        let current = self.clip(current);
+        let current = current.as_str();
 
         let newest = self.entries.len().saturating_sub(1);
         let mut strongest = LineChange::New;
@@ -98,7 +112,8 @@ impl RecentLines {
     /// Remember a line that was sent for translation.
     pub fn remember(&mut self, line: &str, now: Instant) {
         self.forget_stale(now);
-        self.entries.push_back((line.to_string(), now));
+        let line = self.clip(line);
+        self.entries.push_back((line, now));
         while self.entries.len() > REMEMBERED_LINES {
             self.entries.pop_front();
         }
