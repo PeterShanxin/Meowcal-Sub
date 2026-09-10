@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   findRunnerPolicyViolations,
-  runnerCandidates,
+  runnerSelection,
   splitWorkflowJobs,
   stripYamlComment,
 } from "../../scripts/workflow-runner-policy.mjs";
@@ -68,6 +68,31 @@ describe("runner policy", () => {
     ).toEqual([expect.stringContaining("does not name a runner")]);
   });
 
+  // GitHub substitutes the expression into the surrounding scalar, so reading
+  // only the expression body reports an allowed label for a job that asks for
+  // one nobody approved.
+  it("rejects an expression embedded in a larger value", () => {
+    expect(check("    runs-on: prefix-${{ 'windows-2025' }}")).toEqual([
+      expect.stringContaining("does not name a runner"),
+    ]);
+    expect(check("    runs-on: ${{ 'windows-2025' }}-extra")).toEqual([
+      expect.stringContaining("does not name a runner"),
+    ]);
+  });
+
+  // A runner must carry every label in a list, and each hosted image carries
+  // one, so this job would queue forever - the exact failure the hosted-only
+  // policy exists to prevent.
+  it("rejects a list of several hosted labels, however it is written", () => {
+    expect(check("    runs-on: [windows-2025, ubuntu-latest]")).toEqual([
+      expect.stringContaining("lists 2 labels"),
+    ]);
+    expect(check("    runs-on:\n      - windows-2025\n      - ubuntu-latest")).toEqual([
+      expect.stringContaining("lists 2 labels"),
+    ]);
+    expect(check("    runs-on: [windows-2025]")).toEqual([]);
+  });
+
   it("rejects an indirect runner value even when a comment names valid labels", () => {
     const violations = check(
       "    # windows-2025 emergency override, see runbook\n" +
@@ -94,34 +119,45 @@ describe("runner policy", () => {
   });
 });
 
-describe("runnerCandidates", () => {
+describe("runnerSelection", () => {
   it("takes the value position of each alternative, not every literal", () => {
     // The `'arm64'` is a condition operand, so it is not a candidate.
     expect(
-      runnerCandidates(
+      runnerSelection(
         "${{ inputs.architecture == 'arm64' && 'windows-11-arm' || 'windows-2025' }}",
       ),
-    ).toEqual(["windows-11-arm", "windows-2025"]);
+    ).toEqual({ kind: "alternatives", labels: ["windows-11-arm", "windows-2025"] });
   });
 
   it("reports an expression whose value position is not a literal as indirect", () => {
-    expect(runnerCandidates("${{ vars.RUNNER }}")).toBeNull();
+    expect(runnerSelection("${{ vars.RUNNER }}")).toBeNull();
     expect(
-      runnerCandidates("${{ github.event_name == 'push' && 'ubuntu-latest' || vars.RUNNER }}"),
+      runnerSelection("${{ github.event_name == 'push' && 'ubuntu-latest' || vars.RUNNER }}"),
     ).toBeNull();
     expect(
-      runnerCandidates(
+      runnerSelection(
         "${{ inputs.a == 'arm64' && fromJSON('[\"self-hosted\"]') || 'windows-2025' }}",
       ),
     ).toBeNull();
   });
 
-  it("splits a plain label list", () => {
-    expect(runnerCandidates("[self-hosted, Windows, meowcal-ci]")).toEqual([
-      "self-hosted",
-      "Windows",
-      "meowcal-ci",
-    ]);
+  it("requires the expression to be the whole value", () => {
+    // `prefix-${{ 'windows-2025' }}` resolves to `prefix-windows-2025`, which
+    // is not the label the expression names.
+    expect(runnerSelection("prefix-${{ 'windows-2025' }}")).toBeNull();
+    expect(runnerSelection("${{ 'windows-2025' }}-extra")).toBeNull();
+    expect(runnerSelection("${{ 'ubuntu-latest' }}")).toEqual({
+      kind: "alternatives",
+      labels: ["ubuntu-latest"],
+    });
+  });
+
+  it("reports a label list as a conjunction, not as alternatives", () => {
+    expect(runnerSelection("[self-hosted, Windows, meowcal-ci]")).toEqual({
+      kind: "labels",
+      labels: ["self-hosted", "Windows", "meowcal-ci"],
+    });
+    expect(runnerSelection("windows-2025")).toEqual({ kind: "labels", labels: ["windows-2025"] });
   });
 });
 

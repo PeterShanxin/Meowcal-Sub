@@ -133,6 +133,7 @@ function collectRunsOnValue(lines, index, indentWidth) {
   // more-indented lines. Gather them so the check sees the whole value, minus
   // any comments among them.
   const collected = [];
+  let everyLineIsListItem = true;
 
   for (let next = index + 1; next < lines.length; next += 1) {
     const line = stripYamlComment(lines[next]);
@@ -142,10 +143,16 @@ function collectRunsOnValue(lines, index, indentWidth) {
     if (/^\s*/.exec(line)[0].length <= indentWidth) {
       break;
     }
+    if (!/^\s*-\s+/.test(line)) {
+      everyLineIsListItem = false;
+    }
     collected.push(line.trim().replace(/^-\s*/, ""));
   }
 
-  return collected.join(" ");
+  // A block list is the same value as its flow form, so join it the way the
+  // flow form is written. Joining list entries with a space instead would hide
+  // a second label inside what then reads as one unrecognised name.
+  return collected.join(everyLineIsListItem ? ", " : " ");
 }
 
 /**
@@ -215,9 +222,13 @@ function quotedLiteral(text) {
 }
 
 /**
- * The runner labels a `runs-on` value can select, or null when it selects
- * something this file cannot see through - a repository variable, a matrix
- * key, anything else indirect.
+ * What a `runs-on` value selects, or null when it selects something this file
+ * cannot see through - a repository variable, a matrix key, anything indirect.
+ *
+ * `kind` distinguishes the two ways a value names more than one label, because
+ * GitHub reads them oppositely. An expression picks exactly one of its
+ * branches, so several are fine as long as each is allowed. A label list is a
+ * conjunction: the runner must carry *every* label in it.
  *
  * An expression is read by its *value* positions rather than by every literal
  * in it, which is what lets the packaging workflow pick its image from the
@@ -229,32 +240,41 @@ function quotedLiteral(text) {
  * vars.PACKAGE_RUNNER` would pass while resolving to whatever that variable
  * holds. Only the condition may name inputs, because it selects between values
  * rather than being one.
+ *
+ * The expression must also be the entire value. `prefix-${{ 'windows-2025' }}`
+ * resolves to `prefix-windows-2025`, so reading only the expression body would
+ * report an allowed label for a job that asks for one nobody approved.
  */
-export function runnerCandidates(value) {
-  const open = value.indexOf("${{");
-  if (open !== -1) {
-    const close = value.lastIndexOf("}}");
-    if (close < open) {
+export function runnerSelection(value) {
+  const trimmed = value.trim();
+
+  if (trimmed.includes("${{")) {
+    if (!trimmed.startsWith("${{") || !trimmed.endsWith("}}")) {
       return null;
     }
-    const candidates = [];
-    for (const alternative of splitTopLevel(value.slice(open + 3, close), "||")) {
+    const body = trimmed.slice(3, -2);
+    if (body.includes("${{")) {
+      return null;
+    }
+
+    const labels = [];
+    for (const alternative of splitTopLevel(body, "||")) {
       const terms = splitTopLevel(alternative, "&&");
       const literal = quotedLiteral(terms[terms.length - 1]);
       if (literal === null) {
         return null;
       }
-      candidates.push(literal);
+      labels.push(literal);
     }
-    return candidates.length > 0 ? candidates : null;
+    return labels.length > 0 ? { kind: "alternatives", labels } : null;
   }
 
-  const candidates = value
+  const labels = trimmed
     .replace(/^\[|\]$/g, "")
     .split(",")
     .map((entry) => entry.replaceAll('"', "").replaceAll("'", "").trim())
     .filter((entry) => entry !== "");
-  return candidates.length > 0 ? candidates : null;
+  return labels.length > 0 ? { kind: "labels", labels } : null;
 }
 
 function findRunsOnViolations(relativePath, lines) {
@@ -266,22 +286,34 @@ function findRunsOnViolations(relativePath, lines) {
       continue;
     }
 
-    const candidates = runnerCandidates(value);
-    if (candidates === null) {
+    const selection = runnerSelection(value);
+    if (selection === null) {
       violations.push(
         `${relativePath}:${index + 1}: runs-on '${value}' does not name a runner ` +
-          `directly. An indirect value such as a repository variable or a matrix ` +
-          `key can resolve to any runner, including a self-hosted one.`,
+          `directly. An indirect value such as a repository variable, a matrix ` +
+          `key, or an expression inside a larger string can resolve to any ` +
+          `runner, including a self-hosted one.`,
       );
       continue;
     }
 
-    for (const candidate of candidates) {
-      if (ALLOWED_RUNNERS.has(candidate)) {
+    // A hosted image carries one label, so a job asking for two waits for a
+    // runner carrying both and never gets one. That queues forever, which is
+    // the failure this policy exists to prevent.
+    if (selection.kind === "labels" && selection.labels.length !== 1) {
+      violations.push(
+        `${relativePath}:${index + 1}: runs-on '${value}' lists ` +
+          `${selection.labels.length} labels. GitHub requires a runner carrying ` +
+          `every label in the list, so name exactly one hosted runner.`,
+      );
+    }
+
+    for (const label of selection.labels) {
+      if (ALLOWED_RUNNERS.has(label)) {
         continue;
       }
       violations.push(
-        `${relativePath}:${index + 1}: runs-on '${value}' selects '${candidate}', ` +
+        `${relativePath}:${index + 1}: runs-on '${value}' selects '${label}', ` +
           `which is not an allowed GitHub-hosted runner ` +
           `(${[...ALLOWED_RUNNERS].join(", ")}).`,
       );
