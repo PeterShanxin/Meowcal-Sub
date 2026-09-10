@@ -22,7 +22,7 @@
   &nbsp;·&nbsp;
   <a href="https://github.com/PeterShanxin/Meowcal-Sub/releases">All releases</a>
   &nbsp;·&nbsp;
-  <a href="https://github.com/PeterShanxin/Meowcal-Sub/releases/tag/v0.6.10">Release notes</a>
+  <a href="https://github.com/PeterShanxin/Meowcal-Sub/releases/tag/v0.7.0">Release notes</a>
 </p>
 
 ---
@@ -112,7 +112,7 @@ Module ownership is recorded in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 **On your machine:** Screen capture of the selected subtitle region; OCR and translation inference; overlay rendering
 
-**Uses the network for:** One-time download of the translation runtime and model during setup; optional manual update checks (nothing runs until you press the button)
+**Uses the network for:** One-time download of the translation runtime and model during setup; update checks (once a day, or when you press **Check for updates**; nothing is downloaded until you start an update)
 
 **Never sent:** Captured subtitle text; translated subtitle text
 
@@ -130,16 +130,16 @@ Production logs record support codes, timings, and counts — not captured or tr
 - Installers are not Authenticode-signed; Windows SmartScreen may warn about an unknown publisher.
 - Verify downloads with `SHA256SUMS.txt` attached to each release.
 
-Download from [this repository's latest release](https://github.com/PeterShanxin/Meowcal-Sub/releases/latest). The current **v0.6.10** release includes:
+Download from [this repository's latest release](https://github.com/PeterShanxin/Meowcal-Sub/releases/latest). The current **v0.7.0** release includes:
 
 | File | Use |
 | --- | --- |
-| [Meowcal.Sub_0.6.10_x64-setup.exe](https://github.com/PeterShanxin/Meowcal-Sub/releases/download/v0.6.10/Meowcal.Sub_0.6.10_x64-setup.exe) | NSIS installer, Intel / AMD |
-| [Meowcal.Sub_0.6.10_arm64-setup.exe](https://github.com/PeterShanxin/Meowcal-Sub/releases/download/v0.6.10/Meowcal.Sub_0.6.10_arm64-setup.exe) | NSIS installer, ARM64 |
-| [Meowcal.Sub_0.6.10_x64_en-US.msi](https://github.com/PeterShanxin/Meowcal-Sub/releases/download/v0.6.10/Meowcal.Sub_0.6.10_x64_en-US.msi) | MSI installer, Intel / AMD |
-| [Meowcal.Sub_0.6.10_arm64_en-US.msi](https://github.com/PeterShanxin/Meowcal-Sub/releases/download/v0.6.10/Meowcal.Sub_0.6.10_arm64_en-US.msi) | MSI installer, ARM64 |
-| [SHA256SUMS.txt](https://github.com/PeterShanxin/Meowcal-Sub/releases/download/v0.6.10/SHA256SUMS.txt) | checksums for the installers |
-| [latest.json](https://github.com/PeterShanxin/Meowcal-Sub/releases/download/v0.6.10/latest.json) | release metadata |
+| [Meowcal.Sub_0.7.0_x64-setup.exe](https://github.com/PeterShanxin/Meowcal-Sub/releases/download/v0.7.0/Meowcal.Sub_0.7.0_x64-setup.exe) | NSIS installer, Intel / AMD |
+| [Meowcal.Sub_0.7.0_arm64-setup.exe](https://github.com/PeterShanxin/Meowcal-Sub/releases/download/v0.7.0/Meowcal.Sub_0.7.0_arm64-setup.exe) | NSIS installer, ARM64 |
+| [Meowcal.Sub_0.7.0_x64_en-US.msi](https://github.com/PeterShanxin/Meowcal-Sub/releases/download/v0.7.0/Meowcal.Sub_0.7.0_x64_en-US.msi) | MSI installer, Intel / AMD |
+| [Meowcal.Sub_0.7.0_arm64_en-US.msi](https://github.com/PeterShanxin/Meowcal-Sub/releases/download/v0.7.0/Meowcal.Sub_0.7.0_arm64_en-US.msi) | MSI installer, ARM64 |
+| [SHA256SUMS.txt](https://github.com/PeterShanxin/Meowcal-Sub/releases/download/v0.7.0/SHA256SUMS.txt) | checksums for the installers |
+| [latest.json](https://github.com/PeterShanxin/Meowcal-Sub/releases/download/v0.7.0/latest.json) | release metadata |
 
 Installed copies check for updates automatically once a day, or immediately
 from **Settings → Updates → Check for updates**.
@@ -148,7 +148,7 @@ from **Settings → Updates → Check for updates**.
 
 **Windows 11 public beta** — source is this repository.
 
-Current release: **v0.6.10**
+Current release: **v0.7.0**
 
 ## Development
 
@@ -192,4 +192,4 @@ See [CLA.md](CLA.md) for the contributor grant,
 
 ---
 
-<p align="center"><sub>Meowcal Sub · v0.6.10 · Windows 11 public beta</sub></p>
+<p align="center"><sub>Meowcal Sub · v0.7.0 · Windows 11 public beta</sub></p>
