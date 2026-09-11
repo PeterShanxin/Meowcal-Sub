@@ -4,6 +4,48 @@ use super::*;
 use std::path::Path;
 
 #[test]
+fn readiness_deadline_covers_server_budget_and_handshake() {
+    assert!(READY_TIMEOUT >= meowcal_core::protocol::READY_BUDGET + HELLO_TIMEOUT);
+}
+
+#[test]
+fn managed_backend_snapshots_do_not_wait_for_an_active_core_request() {
+    use crate::llm::{FoundryLocalBackend, ReadyState, TranslatorBackend};
+    let status = CoreStatus {
+        installed: true,
+        ready: true,
+        model: "test".into(),
+        version: CORE_VERSION.into(),
+        storage_root: PathBuf::new(),
+        managed_config: None,
+        install_paths: None,
+    };
+    *STATUS.lock().unwrap() = Some(status);
+    let config = crate::config::FoundryLocalConfig {
+        managed_runtime: Some(crate::config::ManagedLocalRuntimeConfig {
+            kind: "hy-mt".into(),
+            executable_path: "unused".into(),
+            model_path: "unused".into(),
+            port: 0,
+        }),
+        ..Default::default()
+    };
+    let backend = FoundryLocalBackend::new(config);
+    let active = TRANSLATION.get_or_init(|| Mutex::new(None)).lock().unwrap();
+    let (send, receive) = std::sync::mpsc::channel();
+    let reader = std::thread::spawn(move || {
+        let _ = send.send((backend.is_available(), backend.ready_state()));
+    });
+    let result = receive.recv_timeout(Duration::from_millis(200));
+    drop(active);
+    reader.join().unwrap();
+    assert_eq!(result.unwrap(), (true, ReadyState::Ready));
+    invalidate_readiness();
+    assert!(!cached_status().unwrap().ready);
+    *STATUS.lock().unwrap() = None;
+}
+
+#[test]
 fn production_path_uses_the_bundled_resource() {
     let path = resolve_executable("production", Path::new(r"C:\app"))
         .expect("production path should resolve");
@@ -82,9 +124,9 @@ fn waiting_status_timeout_does_not_interrupt_the_active_request() {
     assert!(active_completed.load(Ordering::SeqCst));
 }
 
-#[test]
+#[tokio::test]
 #[ignore = "requires MEOWCAL_CORE_EXECUTABLE pointing to a built Core"]
-fn real_core_handshake_status_and_shutdown() {
+async fn real_core_handshake_status_and_shutdown() {
     let storage = std::env::temp_dir().join(format!(
         "meowcal-sub-core-contract-{}-{}",
         std::process::id(),
@@ -95,7 +137,7 @@ fn real_core_handshake_status_and_shutdown() {
     ));
     register_headless(Some(storage.clone()), Vec::new()).expect("register real Core");
 
-    let status = status_blocking().expect("Core handshake and status");
+    let status = status().await.expect("Core handshake and status");
     assert_eq!(status.version, CORE_VERSION);
     assert!(!status.ready);
     assert!(owned_pid().is_some());
@@ -114,7 +156,7 @@ async fn real_core_active_completion_cancel_preserves_warm_process() {
     );
     register_headless(Some(storage), Vec::new()).expect("register real Core");
     let _shutdown = scopeguard::guard((), |_| shutdown_owned());
-    let status = ready(Duration::from_secs(90)).await.expect("ready Core");
+    let status = ready(READY_TIMEOUT).await.expect("ready Core");
     assert!(status.ready);
     let pid = owned_pid().expect("owned Core PID");
 

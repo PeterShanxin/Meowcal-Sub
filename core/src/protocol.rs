@@ -4,6 +4,7 @@ use serde_json::{json, Value};
 pub const API_VERSION: u32 = 1;
 pub const CORE_VERSION: &str = env!("CARGO_PKG_VERSION");
 pub const MAX_FRAME_BYTES: usize = 256 * 1024;
+pub const READY_BUDGET: std::time::Duration = std::time::Duration::from_secs(110);
 pub const CAPABILITIES: &[&str] = &[
     "status",
     "install",

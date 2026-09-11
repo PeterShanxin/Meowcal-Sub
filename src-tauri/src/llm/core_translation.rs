@@ -2,27 +2,26 @@ use super::chat_wire::{ChatCompletionRequest, ChatCompletionResponse};
 use super::{LlmError, ReadyState};
 
 pub(super) fn is_available() -> bool {
-    crate::core_client::status_blocking()
+    crate::core_client::cached_status()
         .map(|status| status.installed)
         .unwrap_or(false)
 }
 
 pub(super) fn ready_state() -> ReadyState {
-    match crate::core_client::status_blocking() {
-        Ok(status) if status.ready => ReadyState::Ready,
-        Ok(_) => ReadyState::NotReady,
-        Err(_) => ReadyState::Error,
+    match crate::core_client::cached_status() {
+        Some(status) if status.ready => ReadyState::Ready,
+        _ => ReadyState::NotReady,
     }
 }
 
 pub(super) fn notes() -> String {
-    match crate::core_client::status_blocking() {
-        Ok(status) if status.ready => "Local Translation Engine is ready.".to_string(),
-        Ok(status) if status.installed => {
+    match crate::core_client::cached_status() {
+        Some(status) if status.ready => "Local Translation Engine is ready.".to_string(),
+        Some(status) if status.installed => {
             "Local Translation Engine is installed but stopped.".to_string()
         }
-        Ok(_) => "Local Translation Engine is not installed.".to_string(),
-        Err(error) => format!("Local Translation Engine unavailable: {error}"),
+        Some(_) => "Local Translation Engine is not installed.".to_string(),
+        None => "Local Translation Engine has not been checked.".to_string(),
     }
 }
 
@@ -53,9 +52,9 @@ pub(super) async fn complete(
     let response = match crate::core_client::complete(request, timeout_ms).await {
         Ok(response) => response,
         Err(error) => {
-            if error.starts_with("CORE_NOT_READY:") {
+            if super::transport_errors::is_transient(&LlmError::ApiError(error.clone())) {
                 tokio::spawn(async {
-                    let _ = crate::core_client::ready(std::time::Duration::from_secs(90)).await;
+                    let _ = crate::core_client::ready(crate::core_client::READY_TIMEOUT).await;
                 });
             }
             return Err(LlmError::ApiError(error));

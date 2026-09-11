@@ -24,6 +24,7 @@ use types::{HelloResult, OcrInitializeResult, OcrLanguagesResult, Request};
 pub(super) const API_VERSION: u32 = meowcal_core::protocol::API_VERSION;
 const CORE_VERSION: &str = meowcal_core::protocol::CORE_VERSION;
 const HELLO_TIMEOUT: Duration = Duration::from_secs(5);
+pub const READY_TIMEOUT: Duration = Duration::from_secs(120);
 
 #[derive(Clone)]
 struct LaunchConfig {
@@ -38,6 +39,11 @@ static TRANSLATION: OnceLock<Mutex<Option<Transport>>> = OnceLock::new();
 static OCR: OnceLock<Mutex<Option<Transport>>> = OnceLock::new();
 static TRANSLATION_KILL: OnceLock<Mutex<Option<Arc<KillSwitch>>>> = OnceLock::new();
 static OCR_KILL: OnceLock<Mutex<Option<Arc<KillSwitch>>>> = OnceLock::new();
+static STATUS: Mutex<Option<CoreStatus>> = Mutex::new(None);
+
+pub fn cached_status() -> Option<CoreStatus> {
+    STATUS.lock().ok().and_then(|status| status.clone())
+}
 
 pub fn status_blocking() -> Result<CoreStatus, String> {
     call(
@@ -49,6 +55,14 @@ pub fn status_blocking() -> Result<CoreStatus, String> {
         None,
         false,
     )
+}
+
+fn invalidate_readiness() {
+    if let Ok(mut status) = STATUS.lock() {
+        if let Some(status) = status.as_mut() {
+            status.ready = false;
+        }
+    }
 }
 
 pub async fn status() -> Result<CoreStatus, String> {
@@ -158,6 +172,7 @@ pub fn owned_pid() -> Option<u32> {
 }
 
 pub fn shutdown_owned() {
+    invalidate_readiness();
     shutdown_slot(&TRANSLATION, &TRANSLATION_KILL);
     shutdown_slot(&OCR, &OCR_KILL);
 }
@@ -252,6 +267,9 @@ fn clear_process(
     guard: &mut Option<Transport>,
     kill_slot: &OnceLock<Mutex<Option<Arc<KillSwitch>>>>,
 ) {
+    if std::ptr::eq(kill_slot, &TRANSLATION_KILL) {
+        invalidate_readiness();
+    }
     if let Some(process) = guard.as_mut() {
         process.kill_and_wait();
     }

@@ -118,7 +118,12 @@ fn call_locked<T: DeserializeOwned>(
     let value = match response {
         Ok(value) => value,
         Err(Failure::Remote { code, message }) if !fatal_remote(&code) => {
-            return Err(format!("CORE_{code}: {message}"))
+            if std::ptr::eq(kill_slot, &super::TRANSLATION_KILL)
+                && matches!(code.as_str(), "NOT_READY" | "TRANSPORT_ERROR")
+            {
+                super::invalidate_readiness();
+            }
+            return Err(format!("CORE_{code}: {message}"));
         }
         Err(Failure::Remote { code, message }) => {
             clear_process(guard, kill_slot);
@@ -129,6 +134,15 @@ fn call_locked<T: DeserializeOwned>(
             return Err(message);
         }
     };
+    if std::ptr::eq(kill_slot, &super::TRANSLATION_KILL)
+        && matches!(method, "status" | "ready" | "install")
+    {
+        if let Ok(status) = serde_json::from_value::<super::CoreStatus>(value.clone()) {
+            if let Ok(mut cached) = super::STATUS.lock() {
+                *cached = Some(status);
+            }
+        }
+    }
     match serde_json::from_value(value) {
         Ok(result) => Ok(result),
         Err(error) => {

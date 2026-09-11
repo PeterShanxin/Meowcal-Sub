@@ -199,6 +199,8 @@ fn start_with_policy(
         *owned = None;
     }
 
+    #[cfg(target_os = "windows")]
+    crate::process_lifetime::reap_orphans(&executable);
     let selected_port = select_loopback_port(runtime.port)?;
     let log_dir = executable
         .parent()

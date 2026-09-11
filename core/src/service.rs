@@ -93,7 +93,8 @@ impl Service {
             }
             "ready" => {
                 empty_params(&request.params)?;
-                match tokio::time::timeout(Duration::from_secs(110), session.ready(progress)).await
+                match tokio::time::timeout(crate::protocol::READY_BUDGET, session.ready(progress))
+                    .await
                 {
                     Ok(Ok(())) => {}
                     Ok(Err(error)) => {
@@ -247,12 +248,15 @@ impl Session {
         }
     }
 
-    async fn status(&self) -> Value {
+    async fn status(&mut self) -> Value {
         let runtime = self.manifest.runtime_for_current_arch();
         let installed =
             runtime.is_ok_and(|runtime| self.paths.is_complete(&self.manifest, runtime));
         let config = self.paths.managed_config(&self.manifest);
         let ready = self.endpoint.is_some() && hy_mt_runtime::is_healthy(&config).await;
+        if self.endpoint.is_some() && !ready {
+            self.stop();
+        }
         json!({"installed":installed,"ready":ready,"model":self.manifest.model.id,"version":CORE_VERSION,
             "storageRoot":self.paths.root,"managedConfig":config,"installPaths":self.paths,
             "acceleration":hy_mt_runtime::owned_acceleration()})
@@ -267,5 +271,40 @@ fn empty_params(params: &serde_json::Map<String, Value>) -> Result<(), Error> {
             "INVALID_PARAMS",
             "Method does not accept parameters",
         ))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn unhealthy_status_releases_assets_for_another_consumer() {
+        let root = std::env::temp_dir().join(format!("core-stale-lease-{}", std::process::id()));
+        let mut service = Service::default();
+        service
+            .hello(
+                serde_json::from_value(json!({
+                    "client":"sub1", "profile":"development", "expectedVersion":CORE_VERSION,
+                    "storageRoot":root
+                }))
+                .unwrap(),
+            )
+            .unwrap();
+        let session = service.session.as_mut().unwrap();
+        session.lease = Some(
+            Lease::acquire(&session.paths.root, false, Duration::from_secs(1))
+                .await
+                .unwrap(),
+        );
+        session.endpoint = Some("http://127.0.0.1:1".into());
+        assert_eq!(session.status().await["ready"], false);
+        assert!(session.endpoint.is_none());
+        let repair = Lease::acquire(&session.paths.root, true, Duration::from_millis(100))
+            .await
+            .unwrap();
+        drop(repair);
+        drop(service);
+        std::fs::remove_dir_all(root).unwrap();
     }
 }

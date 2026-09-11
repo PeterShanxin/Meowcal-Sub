@@ -2,7 +2,7 @@
 
 **Date:** 2026-09-11
 
-**Status:** Proposed
+**Status:** Accepted
 
 **Decision owners:** Meowcal maintainers
 

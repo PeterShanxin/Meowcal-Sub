@@ -83,7 +83,7 @@ async fn managed_status(
     start_if_needed: bool,
 ) -> Result<EngineStatusSnapshot, String> {
     let status = if start_if_needed {
-        crate::core_client::ready(std::time::Duration::from_secs(90)).await?
+        crate::core_client::ready(crate::core_client::READY_TIMEOUT).await?
     } else {
         match crate::core_client::status_if_idle().await? {
             crate::core_client::StatusPoll::Status(status) => *status,

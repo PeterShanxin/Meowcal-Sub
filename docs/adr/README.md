@@ -75,7 +75,7 @@ exist for anyone who did not write it.
 | [0001](0001-curated-local-translation-stack.md)      | Accepted | Curated Tauri/Rust/Windows OCR and Tencent HY-MT product stack |
 | [0002](0002-shipped-engine-manifest-authenticity.md) | Accepted | Shipped engine manifest and application-release trust boundary |
 | [0003](0003-incremental-lit-frontend.md)             | Accepted | Incremental Vite, TypeScript, and Lit frontend architecture    |
-| [0004](0004-versioned-meowcal-core.md)               | Proposed | Independent, versioned Core runtime shared by Sub 1 and Sub 2  |
+| [0004](0004-versioned-meowcal-core.md)               | Accepted | Independent, versioned Core runtime shared by Sub 1 and Sub 2  |
 
 ## Superseded direction
 

@@ -61,6 +61,19 @@ pub(crate) fn is_transient(err: &LlmError) -> bool {
         return false;
     };
     let lower = message.to_ascii_lowercase();
+    let code = lower.split(':').next().unwrap_or_default();
+    if matches!(
+        code,
+        "core_transport_error"
+            | "core_not_ready"
+            | "core_stdin_write"
+            | "core_stdout_eof"
+            | "core_reader_stopped"
+            | "core_process_status"
+            | "core_request_timeout"
+    ) {
+        return true;
+    }
 
     // A missing or unpermissioned ep_cache_context will not resolve within a
     // frame budget, so retrying only adds latency.
@@ -105,6 +118,19 @@ mod tests {
 
     fn api(message: &str) -> LlmError {
         LlmError::ApiError(message.to_string())
+    }
+
+    #[test]
+    fn core_runtime_connection_failures_are_retried_but_contract_errors_are_not() {
+        assert!(is_transient(&api(
+            "CORE_TRANSPORT_ERROR: completion connection reset"
+        )));
+        assert!(is_transient(&api("CORE_NOT_READY: owned runtime exited")));
+        assert!(is_transient(&api("CORE_STDOUT_EOF")));
+        assert!(is_transient(&api("CORE_REQUEST_TIMEOUT: complete")));
+        assert!(!is_transient(&api(
+            "CORE_INVALID_COMPLETION: model mismatch"
+        )));
     }
 
     // The failure observed twice in a 45-minute session: a reused connection the

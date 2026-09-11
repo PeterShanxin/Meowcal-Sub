@@ -18,7 +18,7 @@ pub async fn is_healthy(_runtime: &ManagedLocalRuntimeConfig) -> bool {
 }
 
 pub fn start(_runtime: &ManagedLocalRuntimeConfig) -> Result<String, String> {
-    let status = crate::core_client::ready_blocking(Duration::from_secs(90))?;
+    let status = crate::core_client::ready_blocking(crate::core_client::READY_TIMEOUT)?;
     if !status.ready {
         return Err("ENGINE_NOT_READY".to_string());
     }
@@ -29,7 +29,7 @@ pub async fn ensure_ready(
     _runtime: &ManagedLocalRuntimeConfig,
     timeout: Duration,
 ) -> Result<String, String> {
-    let status = crate::core_client::ready(timeout).await?;
+    let status = crate::core_client::ready(timeout.max(crate::core_client::READY_TIMEOUT)).await?;
     if !status.ready {
         return Err("ENGINE_NOT_READY".to_string());
     }
@@ -49,7 +49,7 @@ pub fn start_configured(runtime: Option<ManagedLocalRuntimeConfig>) {
         return;
     }
     tauri::async_runtime::spawn(async move {
-        match crate::core_client::ready(Duration::from_secs(90)).await {
+        match crate::core_client::ready(crate::core_client::READY_TIMEOUT).await {
             Ok(status) if status.ready => info!("Local Translation Engine is ready"),
             Ok(_) => warn!("Local Translation Engine did not report ready"),
             Err(error) => warn!("Local Translation Engine startup failed: {error}"),
