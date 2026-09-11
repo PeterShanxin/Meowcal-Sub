@@ -147,6 +147,26 @@ fn pipe_fixture() {
         output.flush().unwrap();
         std::process::exit(0);
     }
+    if mode == "status" || mode == "status-timeout" {
+        let request: Value = serde_json::from_str(&header).unwrap();
+        assert_eq!(request["id"], 1);
+        assert_eq!(request["method"], "status");
+        assert_eq!(request["payloadBytes"], 0);
+        if mode == "status-timeout" {
+            std::thread::sleep(Duration::from_secs(30));
+        } else {
+            writeln!(
+                output,
+                "{}",
+                json!({"id":1,"result":{
+                "installed":true,"ready":true,"model":"owned-model","version":"0.1.0",
+                "storageRoot":"C:/core","managedConfig":null,"installPaths":null}})
+            )
+            .unwrap();
+            output.flush().unwrap();
+        }
+        std::process::exit(0);
+    }
     let header: Value = serde_json::from_str(&header).unwrap();
     assert_eq!(header["method"], "ocrRecognizeBgra");
     assert_eq!(header["payloadBytes"], 8);
@@ -209,5 +229,55 @@ fn stderr_is_drained_separately_and_reader_exits_with_core() -> Result<(), Strin
         process.diagnostics.is_none(),
         "stderr reader must be joined"
     );
+    Ok(())
+}
+
+#[test]
+fn status_poll_busy_sends_nothing_and_idle_poll_uses_the_owned_process() -> Result<(), String> {
+    use super::super::{request::poll_status, StatusPoll};
+    use std::sync::{Mutex, OnceLock};
+    let process = fixture("status")?;
+    let pid = process.pid();
+    let slot = Mutex::new(Some(process));
+    let kill_slot = OnceLock::new();
+    let mut active = slot.lock().unwrap();
+    let started = Instant::now();
+    assert!(matches!(
+        poll_status(&slot, &kill_slot, Duration::from_secs(2))?,
+        StatusPoll::Busy
+    ));
+    assert!(started.elapsed() < Duration::from_secs(1));
+    assert!(!active.as_mut().unwrap().has_exited()?);
+    assert_eq!(active.as_ref().unwrap().pid(), pid);
+    drop(active);
+    let StatusPoll::Status(status) = poll_status(&slot, &kill_slot, Duration::from_secs(2))? else {
+        panic!("idle status poll must send the first request");
+    };
+    assert!(status.installed && status.ready);
+    assert_eq!(status.model, "owned-model");
+    Ok(())
+}
+
+#[test]
+fn status_poll_response_deadline_is_an_error_and_reaps_the_process() -> Result<(), String> {
+    use super::super::request::poll_status;
+    use std::sync::{Mutex, OnceLock};
+    let slot = Mutex::new(Some(fixture("status-timeout")?));
+    let kill_slot = OnceLock::new();
+    let started = Instant::now();
+    let error = poll_status(&slot, &kill_slot, Duration::from_millis(150))
+        .expect_err("a request already sent must retain its transport deadline");
+    // The response reader and exact-process watchdog can observe the deadline
+    // in either order; neither outcome is a busy status snapshot.
+    assert!(
+        matches!(
+            error.as_str(),
+            "CORE_REQUEST_TIMEOUT: status" | "CORE_STDOUT_EOF" | "CORE_READER_STOPPED"
+        ),
+        "{error}"
+    );
+    assert!(started.elapsed() >= Duration::from_millis(100));
+    assert!(started.elapsed() < Duration::from_secs(2));
+    assert!(slot.lock().unwrap().is_none());
     Ok(())
 }

@@ -2,6 +2,8 @@
 mod async_call;
 #[path = "core_client_config.rs"]
 mod config;
+#[path = "core_client_request.rs"]
+mod request;
 #[path = "core_client_transport.rs"]
 mod transport;
 #[path = "core_client_types.rs"]
@@ -9,14 +11,14 @@ mod types;
 
 use async_call::call_async;
 pub use config::{configure_storage, register, register_headless, select_storage_root};
-use serde::de::DeserializeOwned;
+use request::call;
 use serde_json::{json, Value};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{Duration, Instant};
 use transport::{Failure, KillSwitch, Transport};
-pub use types::{CoreInstallPaths, CoreStatus, OcrRecognizeParams, OcrRecognizeResult};
+pub use types::{CoreInstallPaths, CoreStatus, OcrRecognizeParams, OcrRecognizeResult, StatusPoll};
 use types::{HelloResult, OcrInitializeResult, OcrLanguagesResult, Request};
 
 pub(super) const API_VERSION: u32 = meowcal_core::protocol::API_VERSION;
@@ -59,6 +61,18 @@ pub async fn status() -> Result<CoreStatus, String> {
         false,
     )
     .await
+}
+
+pub async fn status_if_idle() -> Result<StatusPoll, String> {
+    tokio::task::spawn_blocking(|| {
+        request::poll_status(
+            TRANSLATION.get_or_init(|| Mutex::new(None)),
+            &TRANSLATION_KILL,
+            Duration::from_secs(5),
+        )
+    })
+    .await
+    .map_err(|error| format!("CORE_TASK_FAILED: {error}"))?
 }
 
 pub async fn install(progress: Arc<dyn Fn(String) + Send + Sync>) -> Result<CoreStatus, String> {
@@ -148,98 +162,8 @@ pub fn shutdown_owned() {
     shutdown_slot(&OCR, &OCR_KILL);
 }
 
-fn call<T: DeserializeOwned>(
-    slot: &'static OnceLock<Mutex<Option<Transport>>>,
-    method: &str,
-    params: impl Into<Request>,
-    timeout: Duration,
-    progress: Option<&(dyn Fn(String) + Send + Sync)>,
-    cancelled: Option<&Arc<AtomicBool>>,
-    drain_active_on_drop: bool,
-) -> Result<T, String> {
-    let kill_slot = kill_slot_for(slot);
-    let mutex = slot.get_or_init(|| Mutex::new(None));
-    let deadline = Instant::now() + timeout;
-    let mut guard = acquire_slot(mutex, deadline, method, cancelled)?;
-    if cancelled.is_some_and(|flag| flag.load(Ordering::SeqCst)) {
-        return Err("CORE_REQUEST_CANCELLED".to_string());
-    }
-    if let Some(process) = guard.as_mut() {
-        match process.has_exited() {
-            Ok(true) => clear_process(&mut guard, kill_slot),
-            Ok(false) => {}
-            Err(error) => {
-                clear_process(&mut guard, kill_slot);
-                return Err(error);
-            }
-        }
-    }
-    if guard.is_none() {
-        *guard = Some(spawn_initialized(kill_slot, deadline, method, cancelled)?);
-    }
-    let request_timeout = remaining(deadline, method)?;
-    let process = guard
-        .as_mut()
-        .ok_or_else(|| "CORE_NOT_RUNNING".to_string())?;
-    if cancelled.is_some_and(|flag| flag.load(Ordering::SeqCst)) {
-        return Err("CORE_REQUEST_CANCELLED".to_string());
-    }
-    let request_cancelled = if drain_active_on_drop {
-        None
-    } else {
-        cancelled
-    };
-    let response = process.request(method, params, request_timeout, progress, request_cancelled);
-    let value = match response {
-        Ok(value) => value,
-        Err(Failure::Remote { code, message }) if !fatal_remote(&code) => {
-            return Err(format!("CORE_{code}: {message}"))
-        }
-        Err(Failure::Remote { code, message }) => {
-            clear_process(&mut guard, kill_slot);
-            return Err(format!("CORE_{code}: {message}"));
-        }
-        Err(Failure::Fatal(message)) => {
-            clear_process(&mut guard, kill_slot);
-            return Err(message);
-        }
-    };
-    match serde_json::from_value(value) {
-        Ok(result) => Ok(result),
-        Err(error) => {
-            clear_process(&mut guard, kill_slot);
-            Err(format!("CORE_RESULT_INVALID: {error}"))
-        }
-    }
-}
-
-fn acquire_slot<'a>(
-    mutex: &'a Mutex<Option<Transport>>,
-    deadline: Instant,
-    method: &str,
-    cancelled: Option<&Arc<AtomicBool>>,
-) -> Result<std::sync::MutexGuard<'a, Option<Transport>>, String> {
-    loop {
-        match mutex.try_lock() {
-            Ok(guard) => return Ok(guard),
-            Err(std::sync::TryLockError::Poisoned(_)) => {
-                return Err("CORE_PROCESS_LOCK_POISONED".to_string())
-            }
-            Err(std::sync::TryLockError::WouldBlock) => {
-                if cancelled.is_some_and(|flag| flag.load(Ordering::SeqCst)) {
-                    return Err("CORE_REQUEST_CANCELLED".to_string());
-                }
-                if Instant::now() >= deadline {
-                    return Err(format!("CORE_REQUEST_TIMEOUT: {method}"));
-                }
-                std::thread::sleep(Duration::from_millis(10));
-            }
-        }
-    }
-}
-
 fn spawn_initialized(
-    kill_slot: &'static OnceLock<Mutex<Option<Arc<KillSwitch>>>>,
+    kill_slot: &OnceLock<Mutex<Option<Arc<KillSwitch>>>>,
     deadline: Instant,
     method: &str,
     cancelled: Option<&Arc<AtomicBool>>,
@@ -309,7 +233,7 @@ fn remaining(deadline: Instant, method: &str) -> Result<Duration, String> {
 
 fn shutdown_slot(
     slot: &'static OnceLock<Mutex<Option<Transport>>>,
-    kill_slot: &'static OnceLock<Mutex<Option<Arc<KillSwitch>>>>,
+    kill_slot: &OnceLock<Mutex<Option<Arc<KillSwitch>>>>,
 ) {
     let Some(slot) = slot.get() else { return };
     let Ok(mut guard) = slot.try_lock() else {
@@ -326,7 +250,7 @@ fn shutdown_slot(
 
 fn clear_process(
     guard: &mut Option<Transport>,
-    kill_slot: &'static OnceLock<Mutex<Option<Arc<KillSwitch>>>>,
+    kill_slot: &OnceLock<Mutex<Option<Arc<KillSwitch>>>>,
 ) {
     if let Some(process) = guard.as_mut() {
         process.kill_and_wait();
@@ -359,7 +283,7 @@ fn failure_message(error: Failure) -> String {
     }
 }
 
-fn kill_current(slot: &'static OnceLock<Mutex<Option<Arc<KillSwitch>>>>) {
+fn kill_current(slot: &OnceLock<Mutex<Option<Arc<KillSwitch>>>>) {
     if let Some(kill) = slot
         .get()
         .and_then(|slot| slot.lock().ok())
@@ -369,7 +293,7 @@ fn kill_current(slot: &'static OnceLock<Mutex<Option<Arc<KillSwitch>>>>) {
     }
 }
 
-fn clear_kill(slot: &'static OnceLock<Mutex<Option<Arc<KillSwitch>>>>) {
+fn clear_kill(slot: &OnceLock<Mutex<Option<Arc<KillSwitch>>>>) {
     if let Some(slot) = slot.get() {
         if let Ok(mut slot) = slot.lock() {
             *slot = None;

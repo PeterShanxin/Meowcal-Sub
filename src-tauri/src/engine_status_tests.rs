@@ -62,3 +62,14 @@ fn steady_probe_timeout_clamps_like_both_adapters() {
     assert_eq!(clamp(10_000), 10_000.min(slow));
     assert_eq!(clamp(u64::MAX), slow);
 }
+
+#[test]
+fn busy_core_is_preparing_without_claiming_model_readiness() {
+    let snapshot = preparing_snapshot(&managed_config());
+    assert_eq!(snapshot.phase, FoundryLocalPhase::Preparing);
+    assert!(!snapshot.service_running);
+    assert!(snapshot.models.is_empty());
+    assert!(snapshot.selected_model.is_none());
+    assert!(snapshot.service_url.is_none());
+    assert_eq!(snapshot.configured_model.as_deref(), Some("legacy-model"));
+}

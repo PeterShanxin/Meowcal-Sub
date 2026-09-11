@@ -20,6 +20,7 @@ export class AppController {
   private overlaySaveId: number | null = null;
   private autoCheckTimer: number | null = null;
   private settingsLoaded = false;
+  private disposed = false;
   private snapshot: UiSnapshot = {
     screen: "home",
     busy: "loading",
@@ -46,6 +47,7 @@ export class AppController {
   }
 
   private publish(patch: Partial<UiSnapshot>): void {
+    if (this.disposed) return;
     this.snapshot = { ...this.snapshot, ...patch };
     this.subscriber(this.snapshot);
   }
@@ -76,6 +78,17 @@ export class AppController {
       await this.openSetup();
     }
     this.scheduleAutomaticUpdateCheck();
+    if (!browserMode) await this.finishEnginePreparation(engine);
+  }
+
+  private async finishEnginePreparation(engine: EngineStatus | undefined): Promise<void> {
+    if (this.disposed || engine?.phase !== "preparing") return;
+    try {
+      const ready = await window.TauriBridge.invoke<EngineStatus>("make_engine_ready");
+      this.publish({ engine: ready });
+    } catch (error) {
+      this.publish({ engine: { ...engine, phase: "error" }, error: errorMessage(error) });
+    }
   }
 
   private async safeInvoke<T>(command: string, fallback: T): Promise<T> {
@@ -108,6 +121,7 @@ export class AppController {
   }
 
   dispose(): void {
+    this.disposed = true;
     this.stopRegionPolling();
     if (this.overlaySaveId !== null) window.clearTimeout(this.overlaySaveId);
     if (this.autoCheckTimer !== null) window.clearTimeout(this.autoCheckTimer);
@@ -181,6 +195,7 @@ export class AppController {
       this.safeInvoke<CaptureRegion | null>("get_capture_region", this.snapshot.region),
     ]);
     this.publish({ engine, region, error: null });
+    await this.finishEnginePreparation(engine);
   }
 
   async start(): Promise<void> {

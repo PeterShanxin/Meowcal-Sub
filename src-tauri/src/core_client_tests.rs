@@ -1,4 +1,5 @@
 use super::config::{dedupe_paths, resolve_executable, validate_paths};
+use super::request::acquire_slot;
 use super::*;
 use std::path::Path;
 

@@ -161,6 +161,65 @@ describe("AppController settings persistence", () => {
     expect(invoke).not.toHaveBeenCalledWith("open_engine_wizard");
   });
 
+  it("updates a preparing engine when background startup finishes", async () => {
+    let ready!: (value: unknown) => void;
+    const pending = new Promise((resolve) => {
+      ready = resolve;
+    });
+    const invoke = vi.fn(async (command: string) => {
+      if (command === "get_engine_status") return { phase: "preparing" };
+      if (command === "make_engine_ready") return pending;
+      return undefined;
+    });
+    const { controller } = createController(invoke as TauriBridgeApi["invoke"], undefined, false);
+    const initialized = controller.initialize();
+    await vi.waitFor(() => expect(invoke).toHaveBeenCalledWith("make_engine_ready"));
+    expect(controller.current().engine?.phase).toBe("preparing");
+    ready({ phase: "ready" });
+    await initialized;
+    expect(controller.current().engine?.phase).toBe("ready");
+    controller.dispose();
+  });
+
+  it("reports a real background startup failure instead of staying preparing", async () => {
+    const invoke = vi.fn(async (command: string) => {
+      if (command === "get_engine_status") return { phase: "preparing" };
+      if (command === "make_engine_ready") throw new Error("Core readiness failed");
+      return undefined;
+    });
+    const { controller } = createController(invoke as TauriBridgeApi["invoke"], undefined, false);
+    await controller.initialize();
+    expect(controller.current()).toMatchObject({
+      engine: { phase: "error" },
+      error: "Core readiness failed",
+    });
+    controller.dispose();
+  });
+
+  it("ignores a readiness response after the controller is disposed", async () => {
+    let ready!: (value: unknown) => void;
+    const pending = new Promise((resolve) => {
+      ready = resolve;
+    });
+    const invoke = vi.fn(async (command: string) => {
+      if (command === "get_engine_status") return { phase: "preparing" };
+      if (command === "make_engine_ready") return pending;
+      return undefined;
+    });
+    const { controller, snapshots } = createController(
+      invoke as TauriBridgeApi["invoke"],
+      undefined,
+      false,
+    );
+    const initialized = controller.initialize();
+    await vi.waitFor(() => expect(invoke).toHaveBeenCalledWith("make_engine_ready"));
+    controller.dispose();
+    const count = snapshots.length;
+    ready({ phase: "ready" });
+    await initialized;
+    expect(snapshots).toHaveLength(count);
+  });
+
   it("marks onboarding complete only after a successful wizard close", async () => {
     const invoke = vi.fn().mockResolvedValue(undefined);
     const { controller, listeners, storage } = createController(invoke, undefined, false);

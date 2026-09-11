@@ -85,9 +85,27 @@ async fn managed_status(
     let status = if start_if_needed {
         crate::core_client::ready(std::time::Duration::from_secs(90)).await?
     } else {
-        crate::core_client::status().await?
+        match crate::core_client::status_if_idle().await? {
+            crate::core_client::StatusPoll::Status(status) => *status,
+            crate::core_client::StatusPoll::Busy => return Ok(preparing_snapshot(config)),
+        }
     };
     Ok(managed_snapshot(config, status))
+}
+
+fn preparing_snapshot(config: &FoundryLocalConfig) -> EngineStatusSnapshot {
+    EngineStatusSnapshot {
+        cli_available: config.managed_runtime.is_some(),
+        service_running: false,
+        service_url: None,
+        models: Vec::new(),
+        configured_model: config.model.clone(),
+        selected_model: None,
+        notes: "Local translation engine is busy. Please wait for the current operation."
+            .to_string(),
+        phase: FoundryLocalPhase::Preparing,
+        probe: None,
+    }
 }
 
 fn managed_snapshot(

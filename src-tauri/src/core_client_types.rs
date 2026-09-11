@@ -42,6 +42,12 @@ pub struct CoreStatus {
     pub install_paths: Option<CoreInstallPaths>,
 }
 
+#[derive(Debug)]
+pub enum StatusPoll {
+    Status(Box<CoreStatus>),
+    Busy,
+}
+
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct OcrRecognizeParams {
