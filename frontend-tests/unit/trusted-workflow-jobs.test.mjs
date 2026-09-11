@@ -89,7 +89,7 @@ describe("every job runs on GitHub-hosted infrastructure", () => {
 });
 
 describe("hosted PR gate is the merge gate", () => {
-  it("keeps required check names, pull_request, and contents: read on windows-11-arm", () => {
+  it("keeps required check names, pull_request, and contents: read on hosted Windows", () => {
     const contents = readWorkflow("test.yml");
     expect(contents).toMatch(/^permissions:\n {2}contents: read$/m);
     expect(contents).toMatch(/^ {2}pull-requests: read$/m);
@@ -99,8 +99,10 @@ describe("hosted PR gate is the merge gate", () => {
     const jobs = splitWorkflowJobs(contents);
     expect(jobs.map((job) => job.name)).toEqual([
       "scope",
-      "lint_windows",
-      "test_windows",
+      "lint_arm64",
+      "lint_x64",
+      "test_arm64",
+      "test_x64",
       "frontend_windows",
       "lint",
       "test",
@@ -114,17 +116,18 @@ describe("hosted PR gate is the merge gate", () => {
     });
     expect(displayNames).toEqual([
       "Classify verification scope",
-      "Lint & Format (Windows full)",
-      "Tests (Windows full)",
-      "Frontend & Browser (Windows full)",
+      "Lint & Format (ARM64)",
+      "Lint & Format (x64)",
+      "Tests (ARM64)",
+      "Tests (x64)",
+      "Frontend & Browser (Windows)",
       "Lint & Format",
       "Tests",
       "Frontend & Browser",
     ]);
 
-    for (const name of ["lint_windows", "test_windows", "frontend_windows"]) {
+    for (const name of ["lint_arm64", "lint_x64", "test_arm64", "test_x64", "frontend_windows"]) {
       const job = byName[name];
-      expect(jobRunsOn(job), name).toBe("windows-11-arm");
       expect(jobText(job), name).toContain("persist-credentials: false");
       expect(jobText(job), name).toContain("./scripts/verify.ps1");
       expect(jobText(job), name).not.toContain(TRUSTED_ACTOR_IF);
@@ -136,6 +139,57 @@ describe("hosted PR gate is the merge gate", () => {
       expect(jobRunsOn(job), name).toBe("ubuntu-24.04");
       expect(jobText(job), name).toContain("if: ${{ always() }}");
       expect(jobText(job), name).toContain("Changed-file classification failed.");
+    }
+  });
+
+  it("verifies each shipped architecture on its own hosted image", () => {
+    // The gate covers both architectures because the crate compiles different
+    // code for each. Emulating one of them on the other host would still pass
+    // this check, so the runner image is asserted alongside the target.
+    const byName = Object.fromEntries(
+      splitWorkflowJobs(readWorkflow("test.yml")).map((job) => [job.name, job]),
+    );
+    const expected = {
+      lint_arm64: ["windows-11-arm", "aarch64-pc-windows-msvc"],
+      test_arm64: ["windows-11-arm", "aarch64-pc-windows-msvc"],
+      lint_x64: ["windows-2025", "x86_64-pc-windows-msvc"],
+      test_x64: ["windows-2025", "x86_64-pc-windows-msvc"],
+      frontend_windows: ["windows-11-arm", "aarch64-pc-windows-msvc"],
+    };
+    for (const [name, [runner, target]] of Object.entries(expected)) {
+      expect(jobRunsOn(byName[name]), name).toBe(runner);
+      expect(jobText(byName[name]), name).toContain(target);
+    }
+  });
+
+  it("leaves no Windows job outside a required wrapper", () => {
+    // Derived from the workflow rather than listed here. A hand-written list
+    // proves the wrappers named in it are wired up and says nothing about a
+    // sixth Windows job somebody adds, which is exactly the job whose failure
+    // would never reach a required check.
+    const jobs = splitWorkflowJobs(readWorkflow("test.yml"));
+    const windowsJobs = jobs
+      .filter((job) => (jobRunsOn(job) ?? "").startsWith("windows"))
+      .map((job) => job.name);
+    const wrappers = jobs.filter(
+      (job) => jobRunsOn(job) === "ubuntu-24.04" && jobText(job).includes("if: ${{ always() }}"),
+    );
+
+    expect(windowsJobs.length, "the gate must still have Windows jobs").toBeGreaterThan(0);
+    expect(wrappers.map((job) => job.name)).toEqual(["lint", "test", "frontend"]);
+
+    for (const name of windowsJobs) {
+      const standIn = wrappers.filter((wrapper) => {
+        const text = jobText(wrapper);
+        return (
+          new RegExp(`^\\s*needs:.*\\b${name}\\b`, "m").test(text) &&
+          text.includes(`needs.${name}.result`)
+        );
+      });
+      expect(
+        standIn.map((wrapper) => wrapper.name),
+        `${name} must have exactly one wrapper`,
+      ).toHaveLength(1);
     }
   });
 

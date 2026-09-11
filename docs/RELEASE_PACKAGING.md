@@ -13,8 +13,8 @@ somebody has to keep online.
 | --- | --- |
 | `ubuntu-24.04` | Change Contract, the pull request scope classifier, the required-check wrappers |
 | `ubuntu-latest` | Release administration, release preflight asset validation, the legacy updater bridge |
-| `windows-11-arm` | The Stage 2 Windows verify gate, and ARM64 packaging |
-| `windows-2025` | x64 packaging |
+| `windows-11-arm` | The aarch64 and frontend jobs of the Stage 2 verify gate, and ARM64 packaging |
+| `windows-2025` | The x64 jobs of the Stage 2 verify gate, and x64 packaging |
 
 Anything else is a policy violation, including `windows-latest`, `windows-2022`,
 macOS, and any indirect value such as a repository variable or a matrix key. An
