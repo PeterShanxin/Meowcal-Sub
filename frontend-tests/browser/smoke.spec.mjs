@@ -1,5 +1,25 @@
 import { backendOrigin, expect, test } from "./fixtures.mjs";
 
+test("status notices do not intercept the primary action in a compact window", async ({ page }) => {
+  await page.setViewportSize({ width: 544, height: 400 });
+  await page.goto("/");
+  await page.waitForFunction(() => document.querySelector("meowcal-app")?.snapshot.busy === "idle");
+  await page.evaluate(() => {
+    const app = document.querySelector("meowcal-app");
+    app.snapshot = {
+      ...app.snapshot,
+      engine: { phase: "ready" },
+      ocrLanguages: new Set([app.snapshot.settings.sourceLanguage]),
+      region: { x: 10, y: 10, width: 200, height: 50 },
+      notice: "Subtitle area selected",
+    };
+  });
+  await expect(page.locator(".toast.notice")).toContainText("Subtitle area selected");
+  await page
+    .getByRole("button", { name: "Start translation", exact: true })
+    .click({ trial: true, timeout: 2000 });
+});
+
 test("browser bridge reads backend health, settings, and readiness", async ({ page, request }) => {
   const pageErrors = [];
   page.on("pageerror", (error) => pageErrors.push(error.message));
