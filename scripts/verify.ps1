@@ -32,9 +32,29 @@ $targetArguments = if ($Target -eq "host") { @() } else { @("--target", $Target)
 $repositoryRoot = Split-Path -Parent $PSScriptRoot
 $resourceScript = Join-Path $PSScriptRoot "prepare-validation-resources.ps1"
 $contractTest = Join-Path $PSScriptRoot "tests\verify.Tests.ps1"
+$corePackageTest = Join-Path $PSScriptRoot "tests\core-package.Tests.ps1"
 $engineSupportTest = Join-Path $PSScriptRoot "tests\engine-support.Tests.ps1"
 $devEnvironmentTest = Join-Path $PSScriptRoot "tests\dev-environment.Tests.ps1"
 $rustDirectory = Join-Path $repositoryRoot "src-tauri"
+$coreDirectory = Join-Path $repositoryRoot "core"
+$coreTargetDirectory = Join-Path $coreDirectory "target"
+$coreManifest = Get-Content -LiteralPath (Join-Path $coreDirectory "Cargo.toml") -Raw
+$coreVersionMatch = [regex]::Match(
+    $coreManifest,
+    '(?ms)^\[package\].*?^version\s*=\s*"(?<version>\d+\.\d+\.\d+)"'
+)
+if (-not $coreVersionMatch.Success) {
+    throw "core/Cargo.toml must declare a major.minor.patch package version."
+}
+$coreVersion = $coreVersionMatch.Groups["version"].Value
+$coreTarget = if ($Target -ne "host") {
+    $Target
+} elseif ($hostIsArm64) {
+    "aarch64-pc-windows-msvc"
+} else {
+    "x86_64-pc-windows-msvc"
+}
+$coreArchitecture = if ($coreTarget -eq "aarch64-pc-windows-msvc") { "arm64" } else { "x64" }
 
 # rustc is the host-architecture process no matter which target it emits, so the
 # ARM64 compiler-stack limit applies to cross-builds too: parallel rustc against a
@@ -102,6 +122,11 @@ if ($env:MEOWCAL_VERIFY_CONTRACT_ACTIVE -ne "1") {
     if ($LASTEXITCODE -ne 0) {
         exit $LASTEXITCODE
     }
+    Write-Host "==> Core package contract tests" -ForegroundColor Cyan
+    & pwsh -NoProfile -File $corePackageTest
+    if ($LASTEXITCODE -ne 0) {
+        exit $LASTEXITCODE
+    }
     Write-Host "==> Engine support contract tests" -ForegroundColor Cyan
     & pwsh -NoProfile -File $engineSupportTest
     if ($LASTEXITCODE -ne 0) {
@@ -115,6 +140,48 @@ if ($env:MEOWCAL_VERIFY_CONTRACT_ACTIVE -ne "1") {
 }
 
 & $resourceScript
+
+if ($Stage -in @("All", "Lint", "Test")) {
+    Push-Location $coreDirectory
+    try {
+        if ($Stage -in @("All", "Lint")) {
+            Invoke-CargoStep "Core Rust format" @("fmt", "--manifest-path", "Cargo.toml", "--", "--check")
+            Invoke-CargoStep "Core Rust clippy" @(
+                "clippy", "--manifest-path", "Cargo.toml", "--locked",
+                "--target", $coreTarget, "--target-dir", $coreTargetDirectory,
+                "--all-targets", "--", "-D", "warnings"
+            )
+        }
+        if ($Stage -in @("All", "Test")) {
+            Invoke-CargoStep "Core Rust tests" @(
+                "test", "--manifest-path", "Cargo.toml", "--locked",
+                "--target", $coreTarget, "--target-dir", $coreTargetDirectory,
+                "--all-targets"
+            )
+        }
+        Invoke-CargoStep "Core release executable" @(
+            "build", "--manifest-path", "Cargo.toml", "--locked",
+            "--target", $coreTarget, "--target-dir", $coreTargetDirectory,
+            "--bin", "meowcal-core", "--release"
+        )
+    } finally {
+        Pop-Location
+    }
+
+    if ($env:MEOWCAL_VERIFY_CONTRACT_ACTIVE -ne "1") {
+        $coreBinary = Join-Path $coreTargetDirectory "$coreTarget\release\meowcal-core.exe"
+        & (Join-Path $PSScriptRoot "test-core-executable.ps1") `
+            -BinaryPath $coreBinary `
+            -ExpectedVersion $coreVersion | Out-Null
+        & (Join-Path $PSScriptRoot "prepare-core-resource.ps1") `
+            -Architecture $coreArchitecture `
+            -Configuration Release `
+            -BinaryPath $coreBinary | Out-Null
+        if ($LASTEXITCODE -ne 0) {
+            exit $LASTEXITCODE
+        }
+    }
+}
 
 Push-Location $rustDirectory
 try {

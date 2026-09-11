@@ -50,6 +50,7 @@ yarn-error.log*
 dist/
 build/
 /core-release-assets/
+/src-tauri/resources/core/
 *.exe
 *.msi
 *.dmg

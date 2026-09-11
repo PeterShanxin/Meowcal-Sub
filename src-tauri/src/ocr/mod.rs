@@ -65,7 +65,7 @@ pub enum OcrError {
 /// which is why a capture region taller than one subtitle can only be handled
 /// by refusing it. Position is what tells two stacked subtitle positions apart
 /// from each other and from the page furniture between them.
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, serde::Deserialize)]
 pub struct LineBox {
     pub x: f32,
     pub y: f32,

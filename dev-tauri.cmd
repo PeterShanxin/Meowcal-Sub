@@ -51,7 +51,18 @@ set "PATH=%LOCALAPPDATA%\Microsoft\WindowsApps;%USERPROFILE%\.cargo\bin;%PATH%"
 
 pushd "%~dp0"
 
-REM Build OverlayHost for current architecture before starting Tauri
+REM Build Core and OverlayHost for current architecture before starting Tauri.
+REM Core keeps its own target directory because the development client resolves
+REM core\target\<triple>\release\meowcal-core.exe directly. Core's debug OCR
+REM path is too slow to represent the product's normal development behavior.
+echo Building Meowcal Core for current architecture...
+powershell -ExecutionPolicy Bypass -File scripts\prepare-core-resource.ps1 -Architecture auto -Configuration Release
+if %ERRORLEVEL% neq 0 (
+    echo ERROR: Meowcal Core build failed
+    popd
+    exit /b 1
+)
+
 echo Building OverlayHost for current architecture...
 powershell -ExecutionPolicy Bypass -File scripts\build-overlayhost.ps1 -Architecture auto
 if %ERRORLEVEL% neq 0 (

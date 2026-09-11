@@ -9,7 +9,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 $repositoryRoot = Split-Path -Parent $PSScriptRoot
-$manifestPath = Join-Path $repositoryRoot "config\engine-manifest.v1.json"
+$manifestPath = Join-Path $repositoryRoot "core\config\engine-manifest.v1.json"
 $manifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
 $engineRoot = Join-Path $CacheDirectory "meowcal-sub"
 
@@ -41,6 +41,19 @@ function Get-EnginePaths {
         Executable = Join-Path $runtimeRoot $Runtime.executable.relativePath
         ModelRoot = $modelRoot
         Model = Join-Path $modelRoot $manifest.model.artifact.fileName
+    }
+}
+
+function Get-CorePaths {
+    param($Runtime)
+    $target = if ($Runtime.architecture -eq "aarch64") {
+        "aarch64-pc-windows-msvc"
+    } else {
+        "x86_64-pc-windows-msvc"
+    }
+    return [pscustomobject]@{
+        DevelopmentExecutable = Join-Path $repositoryRoot "core\target\$target\release\meowcal-core.exe"
+        BundledExecutable = Join-Path $repositoryRoot "src-tauri\resources\core\meowcal-core.exe"
     }
 }
 
@@ -90,6 +103,7 @@ function Assert-Preflight {
 function Write-Diagnostics {
     $runtime = Get-Runtime
     $paths = Get-EnginePaths $runtime
+    $corePaths = Get-CorePaths $runtime
     $os = Get-CimInstance Win32_OperatingSystem
     $computer = Get-CimInstance Win32_ComputerSystem
     $diagnostics = [ordered]@{
@@ -101,6 +115,11 @@ function Write-Diagnostics {
         windowsBuild = [int]$os.BuildNumber
         totalRamBytes = [uint64]$computer.TotalPhysicalMemory
         engineRoot = $engineRoot
+        coreManifestPath = $manifestPath
+        coreDevelopmentExecutable = $corePaths.DevelopmentExecutable
+        coreDevelopmentExecutablePresent = Test-Path -LiteralPath $corePaths.DevelopmentExecutable -PathType Leaf
+        coreBundledExecutable = $corePaths.BundledExecutable
+        coreBundledExecutablePresent = Test-Path -LiteralPath $corePaths.BundledExecutable -PathType Leaf
         runtimeValid = Test-Artifact $paths.Executable $runtime.executable.sizeBytes $runtime.executable.sha256
         modelValid = Test-Artifact $paths.Model $manifest.model.artifact.sizeBytes $manifest.model.artifact.sha256
     }

@@ -19,11 +19,14 @@ Do not silently choose the more convenient interpretation.
 
 - Keep Tauri 2, Rust, and Windows OCR.
 - Tencent HY-MT is the only supported normal-mode translation engine.
-- The app owns engine installation, verification, lifecycle, health, repair,
-  rollback, and sample translation.
+- Meowcal Core owns engine installation, verification, lifecycle, health,
+  repair, rollback, sample inference, and native OCR. The app consumes a pinned
+  Core process through its versioned API; it owns session and UI policy.
 - Generic endpoints and arbitrary models may exist only in disabled-by-default,
   unsupported developer mode.
-- Do not implement the archived Python/OpenSubtitles MeoCoSub2 direction.
+- Do not replace Sub 1 with the archived Python/OpenSubtitles proposal. The
+  independent Meowcal Sub 2 product consumes Core through the same API; its
+  subtitle search, matching, BGE, gap-fill, and timeline logic stay in Sub 2.
 - The `feat/hymt-foundry` prototype branch no longer exists on the remote. Its
   retained material landed through the reviewed engine and translation lanes;
   the dated plans that discuss it are history, not work still to mine.
@@ -141,7 +144,7 @@ rustc exhausts its compiler stack and fails with `STATUS_STACK_BUFFER_OVERRUN`
 (`0xc0000409`) on several unrelated dependencies at once, which reads as a
 dependency problem and is not one. rustc is a host-architecture process whatever
 it targets, so a cross-build to x64 needs this too. `verify.ps1` now applies it
-itself when the host is ARM64 *and* the target directory is cold, and
+itself when the host is ARM64 _and_ the target directory is cold, and
 `build-package.ps1` applies it on any ARM64 host. An explicit `CARGO_BUILD_JOBS`
 from the caller always wins. A bare `cargo test` still does neither.
 
@@ -198,9 +201,9 @@ DPI/window behavior.
   `HEAVY_RESULTS`, or it reports green for an architecture nothing verified.
 - Every Windows gate job shares `.github/actions/windows-rust-gate`: Node, the
   Rust toolchain for that job's one target, `Swatinem/rust-cache`, and the
-  build parallelism. Only `main` writes a cache entry, because five jobs hold
-  3.4 GB of a 10 GB budget and branches each writing their own set would evict
-  one another. What keeps fork code out of the entry `main` restores is
+  build parallelism. The cache includes both `src-tauri` and `core` targets.
+  Only `main` writes cache entries, keeping branch builds from filling the
+  repository cache budget. What keeps fork code out of the entry `main` restores is
   separate: GitHub scopes a written entry to the ref that wrote it. The
   third-party cache action is pinned to a commit, not a tag.
 - Every job runs on a GitHub-hosted runner. `ubuntu-24.04`, `ubuntu-latest`,

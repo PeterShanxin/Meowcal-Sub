@@ -52,9 +52,38 @@ $bundleArgs = if ($Bundles -eq "all") { "nsis,msi" } else { $Bundles }
 
 Push-Location $repositoryRoot
 try {
+    & (Join-Path $repositoryRoot "scripts\fetch-meowcal-core.ps1") `
+        -Architecture $Architecture
+    if ($LASTEXITCODE -ne 0) {
+        throw "Pinned Meowcal Core preparation failed for $Architecture."
+    }
+
     & (Join-Path $repositoryRoot "scripts\build-overlayhost.ps1") -Architecture $Architecture
     if ($LASTEXITCODE -ne 0) {
         throw "OverlayHost build failed for $Architecture."
+    }
+
+    $coreExecutable = Join-Path $repositoryRoot "src-tauri\resources\core\meowcal-core.exe"
+    $previousCoreExecutable = $env:MEOWCAL_CORE_EXECUTABLE
+    try {
+        $env:MEOWCAL_CORE_EXECUTABLE = $coreExecutable
+        $handshakeOutput = @(cargo test `
+            --manifest-path src-tauri\Cargo.toml `
+            --locked `
+            --target $targetTriple `
+            --target-dir $CargoTargetDir `
+            --lib `
+            core_client::tests::real_core_handshake_status_and_shutdown `
+            -- --ignored --exact 2>&1)
+        $handshakeExitCode = $LASTEXITCODE
+        $handshakeOutput | ForEach-Object { Write-Host $_ }
+        $handshakeText = $handshakeOutput -join "`n"
+        if ($handshakeExitCode -ne 0 -or
+            $handshakeText -notmatch 'test result: ok\. 1 passed; 0 failed;') {
+            throw "The packaged Core failed the compiled Sub 1 handshake."
+        }
+    } finally {
+        $env:MEOWCAL_CORE_EXECUTABLE = $previousCoreExecutable
     }
 
     # The pinned CLI from package.json, never whatever npx would fetch. A CLI

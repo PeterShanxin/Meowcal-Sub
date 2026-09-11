@@ -37,6 +37,11 @@ Each architecture builds on its own hardware. No step depends on Windows x64
 emulation or on an MSVC cross-linker, so a packaging failure is a failure of the
 code rather than of the host it happened to land on.
 
+The standalone [Meowcal Core](../core/README.md) uses the same native runner
+mapping through `.github/workflows/core-package.yml`. Its Cargo version is
+independent of the application version. A Core release does not change the
+application package, application tag, updater manifest, or product version.
+
 An architecture the workflow does not recognize falls through to the x64 image
 and is then refused by the "Resolve package contract" step, before any toolchain
 work. That step also refuses to continue when the runner's own architecture does
@@ -61,12 +66,67 @@ minisign signature.
 The `.sig` files are not published. The updater reads the signature text out of
 `latest.json` and never fetches a separate file.
 
+## Standalone Core releases
+
+Core version `X.Y.Z` is published under tag `core-vX.Y.Z` with four assets:
+
+- `meowcal-core-vX.Y.Z-windows-x64.zip` and its `.zip.sha256` file
+- `meowcal-core-vX.Y.Z-windows-arm64.zip` and its `.zip.sha256` file
+
+Each ZIP contains only `meowcal-core.exe`, `meowcal-core.json`, and `LICENSE`.
+The metadata binds the Core version, API version, architecture, executable hash,
+and license hash. Packaging checks the PE machine type and runs the native
+binary's `--version-json` contract after the Core test suite passes.
+
+Use the Core preflight before publishing:
+
+```powershell
+gh workflow run core-release-preflight.yml --ref main
+```
+
+After it succeeds on both native runners, publish the matching Cargo version:
+
+```powershell
+gh workflow run core-release.yml --ref main -f version=0.1.0
+```
+
+`core-release.yml` accepts only `main`, reserves the immutable Core tag, and
+creates the GitHub release with `--latest=false`. Only the trusted release
+actors listed below can run these jobs. The application release remains the
+repository's latest release and its `latest.json` updater contract is untouched.
+
+Both applications pin the released ZIP digest, not the tag alone. Their product
+builds fetch that artifact and never rebuild Core from the current source tree.
+The fetch step verifies the ZIP digest before reading the archive, then verifies
+metadata, license, executable digest, PE architecture, and the native handshake.
+Development and source verification build an optimized candidate from `core/`.
+Product release builds require the reviewed release lock and its verified asset.
+
+Bootstrap a new Core version in this order:
+
+1. Merge and run `core-release-preflight.yml`, then publish the Core release.
+2. Download both published `.zip.sha256` files.
+3. Run `scripts/write-meowcal-core-lock.ps1` in this repository and in the Sub 2
+   checkout, using those two checksum files.
+4. Review and commit the identical version, API, asset names, and digests in
+   both `config/meowcal-core.lock.json` files.
+5. Run the application preflight workflows. They now consume the immutable Core
+   assets selected by those locks.
+
+Before step 4, product packaging fails closed because there is no reviewed lock.
+This ordering is required only when a Core version changes; ordinary application
+releases keep consuming their existing pin.
+
 ## Proving a change to the pipeline without spending a version
 
 `.github/workflows/release-preflight.yml` runs both package jobs, merges the
 artifacts, and runs the same asset verification, checksum, and manifest code the
 release runs — then stops. It reserves no tag, creates no release, and holds
 `contents: read` only.
+
+`.github/workflows/core-release-preflight.yml` applies the same rule to Core: it
+packages both architectures and runs `scripts/verify-core-release-assets.ps1`,
+but creates neither a tag nor a GitHub release.
 
 Both workflows call the same two scripts rather than each carrying a copy of the
 logic, because a preflight that validated assets differently from the release

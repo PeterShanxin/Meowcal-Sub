@@ -1,0 +1,105 @@
+name: Meowcal Core Windows Packages
+
+on:
+  workflow_dispatch:
+    inputs:
+      architecture:
+        description: Windows architecture to package
+        required: true
+        default: x64
+        type: choice
+        options:
+          - x64
+          - arm64
+  workflow_call:
+    inputs:
+      architecture:
+        description: Windows architecture to package
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    name: ${{ inputs.architecture || 'x64' }} Core package
+    if: >-
+      (github.actor == 'PeterShanxin' || github.actor == 'ianmeowmeow') &&
+      github.actor != 'dependabot[bot]'
+    runs-on: >-
+      ${{ inputs.architecture == 'arm64'
+      && 'windows-11-arm'
+      || 'windows-2025' }}
+    timeout-minutes: 120
+    steps:
+      - name: Require a trusted actor
+        shell: pwsh
+        run: |
+          $trusted = @('PeterShanxin', 'ianmeowmeow')
+          if ($trusted -notcontains $env:GITHUB_ACTOR) {
+            throw "Privileged job refused actor '$($env:GITHUB_ACTOR)'."
+          }
+
+      - name: Resolve Core package contract
+        id: package
+        shell: pwsh
+        env:
+          REQUESTED_ARCHITECTURE: ${{ inputs.architecture }}
+        run: |
+          $architecture = $env:REQUESTED_ARCHITECTURE
+          if ([string]::IsNullOrWhiteSpace($architecture)) {
+            $architecture = 'x64'
+          }
+          $targets = @{
+            x64 = 'x86_64-pc-windows-msvc'
+            arm64 = 'aarch64-pc-windows-msvc'
+          }
+          if (-not $targets.ContainsKey($architecture)) {
+            throw "Unsupported Core package architecture: $architecture"
+          }
+          $expectedHost = if ($architecture -eq 'arm64') { 'Arm64' } else { 'X64' }
+          $actualHost = [System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture
+          if ($actualHost -ne $expectedHost) {
+            throw "Core architecture '$architecture' expects a $expectedHost runner but this host is $actualHost."
+          }
+          "architecture=$architecture" >> $env:GITHUB_OUTPUT
+          "target=$($targets[$architecture])" >> $env:GITHUB_OUTPUT
+          "artifact=meowcal-core-$architecture" >> $env:GITHUB_OUTPUT
+
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Install Rust and the native target
+        shell: pwsh
+        run: |
+          rustup toolchain install stable --profile minimal
+          rustup target add ${{ steps.package.outputs.target }}
+          rustup default stable
+
+      - name: Build and package Core
+        shell: pwsh
+        env:
+          CORE_ARCHITECTURE: ${{ steps.package.outputs.architecture }}
+          CORE_TARGET: ${{ steps.package.outputs.target }}
+        run: |
+          if ($env:CORE_ARCHITECTURE -eq 'arm64') {
+            $env:CARGO_BUILD_JOBS = '1'
+          }
+          cargo test --manifest-path core/Cargo.toml --locked --target $env:CORE_TARGET `
+            --target-dir "$env:GITHUB_WORKSPACE/core-package-target" --all-targets
+          if ($LASTEXITCODE -ne 0) {
+            throw "Core tests failed for $env:CORE_ARCHITECTURE."
+          }
+          ./scripts/package-core.ps1 `
+            -Architecture $env:CORE_ARCHITECTURE `
+            -OutputDirectory "$env:GITHUB_WORKSPACE/core-release-assets" `
+            -CargoTargetDir "$env:GITHUB_WORKSPACE/core-package-target"
+
+      - name: Upload Core package
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ steps.package.outputs.artifact }}
+          path: core-release-assets/*
+          if-no-files-found: error

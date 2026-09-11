@@ -67,9 +67,11 @@ to 256 KiB. OCR timeouts are 1–30000 ms. An OCR timeout ends that process; the
 consumer must launch a replacement before sending another frame.
 
 Applications use a separate Core instance for OCR so model inference cannot
-occupy the recognition channel. Closing stdin, cancelling a request, or a broken
-protocol ends the owned session. Consumers must bound writes as well as reads
-and reap the exact process they launched.
+occupy the recognition channel. Cancelling an active completion discards its
+result while the consumer drains the response within the original deadline,
+preserving the loaded model. Queued cancellations send no request. Closing stdin,
+a transport timeout, or a broken protocol ends the owned session. Consumers must
+bound writes as well as reads and reap the exact process they launched.
 
 ## Installation and compatibility
 

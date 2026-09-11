@@ -8,19 +8,6 @@ use crate::llm::{
 };
 use tracing::{debug, info, warn};
 
-#[derive(Clone, Copy)]
-pub(super) enum JoinPolicy {
-    Hard,
-    SoftRefresh,
-    SoftPrepare,
-}
-
-#[derive(Clone, Copy)]
-pub(super) enum PrepareNotes {
-    Tauri,
-    Http,
-}
-
 pub(super) fn legacy_status_no_probe(config: FoundryLocalConfig) -> EngineStatusSnapshot {
     let configured_model = config.model.clone();
     let backend = FoundryLocalBackend::new(config);
@@ -48,10 +35,7 @@ pub(super) fn legacy_status_no_probe(config: FoundryLocalConfig) -> EngineStatus
     }
 }
 
-pub(super) async fn legacy_refresh(
-    config: FoundryLocalConfig,
-    join: JoinPolicy,
-) -> Result<EngineStatusSnapshot, String> {
+pub(super) async fn legacy_refresh(config: FoundryLocalConfig) -> EngineStatusSnapshot {
     let configured_model = config.model.clone();
     let snapshot = tokio::task::spawn_blocking({
         let config = config.clone();
@@ -61,27 +45,22 @@ pub(super) async fn legacy_refresh(
 
     let (backend, cli_available, service_url, service_running, models, notes) = match snapshot {
         Ok(parts) => parts,
-        Err(err) => match join {
-            JoinPolicy::Hard => {
-                return Err(format!("Engine status task failed: {err}"));
-            }
-            JoinPolicy::SoftRefresh | JoinPolicy::SoftPrepare => {
-                let backend = FoundryLocalBackend::new(config);
-                (
-                    backend,
-                    false,
-                    None,
-                    false,
-                    Vec::new(),
-                    "Engine refresh task failed".to_string(),
-                )
-            }
-        },
+        Err(_) => {
+            let backend = FoundryLocalBackend::new(config);
+            (
+                backend,
+                false,
+                None,
+                false,
+                Vec::new(),
+                "Engine refresh task failed".to_string(),
+            )
+        }
     };
 
     let phase = probe_phase_fast(&backend, service_running, &models).await;
 
-    Ok(EngineStatusSnapshot {
+    EngineStatusSnapshot {
         cli_available,
         service_running,
         service_url,
@@ -91,14 +70,10 @@ pub(super) async fn legacy_refresh(
         notes,
         phase,
         probe: backend.probe_snapshot(),
-    })
+    }
 }
 
-pub(super) async fn legacy_prepare(
-    config: FoundryLocalConfig,
-    join: JoinPolicy,
-    notes_policy: PrepareNotes,
-) -> Result<EngineStatusSnapshot, String> {
+pub(super) async fn legacy_prepare(config: FoundryLocalConfig) -> EngineStatusSnapshot {
     let configured_model = config.model.clone();
     let snapshot = tokio::task::spawn_blocking({
         let config = config.clone();
@@ -108,22 +83,17 @@ pub(super) async fn legacy_prepare(
 
     let (backend, cli_available, service_url, service_running, models, mut notes) = match snapshot {
         Ok(parts) => parts,
-        Err(err) => match join {
-            JoinPolicy::Hard => {
-                return Err(format!("Engine prepare task failed: {err}"));
-            }
-            JoinPolicy::SoftRefresh | JoinPolicy::SoftPrepare => {
-                let backend = FoundryLocalBackend::new(config);
-                (
-                    backend,
-                    false,
-                    None,
-                    false,
-                    Vec::new(),
-                    "Engine prepare task failed".to_string(),
-                )
-            }
-        },
+        Err(_) => {
+            let backend = FoundryLocalBackend::new(config);
+            (
+                backend,
+                false,
+                None,
+                false,
+                Vec::new(),
+                "Engine prepare task failed".to_string(),
+            )
+        }
     };
 
     let phase = if service_running && !models.is_empty() {
@@ -134,16 +104,10 @@ pub(super) async fn legacy_prepare(
         match backend.probe_chat_completions(SLOW_PROBE_TIMEOUT_MS).await {
             Ok(true) => {
                 info!("Foundry Local warmup probe succeeded");
-                if matches!(notes_policy, PrepareNotes::Tauri) {
-                    notes = format!("{notes} Warmup complete.");
-                }
                 FoundryLocalPhase::Ready
             }
             Ok(false) => {
                 info!("Foundry Local warmup probe timed out (model still warming up)");
-                if matches!(notes_policy, PrepareNotes::Tauri) {
-                    notes = format!("{notes} Model still warming up.");
-                }
                 FoundryLocalPhase::Preparing
             }
             Err(e) => {
@@ -156,7 +120,7 @@ pub(super) async fn legacy_prepare(
         backend.phase()
     };
 
-    Ok(EngineStatusSnapshot {
+    EngineStatusSnapshot {
         cli_available,
         service_running,
         service_url,
@@ -166,7 +130,7 @@ pub(super) async fn legacy_prepare(
         notes,
         phase,
         probe: backend.probe_snapshot(),
-    })
+    }
 }
 
 fn legacy_blocking_snapshot(

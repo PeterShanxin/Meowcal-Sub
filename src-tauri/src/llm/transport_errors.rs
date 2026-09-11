@@ -15,7 +15,9 @@
 // local model that was running fine put "temporarily unavailable" on screen.
 // =============================================================================
 
+use super::transport_http::TransportError;
 use crate::llm::LlmError;
+use tracing::warn;
 
 /// Describe a failed request, including why it failed.
 ///
@@ -29,6 +31,28 @@ pub(crate) fn describe_request_failure(error: &reqwest::Error) -> String {
         source = cause.source();
     }
     message
+}
+
+pub(crate) fn map_get_error(error: TransportError) -> LlmError {
+    match error {
+        TransportError::Timeout(error) | TransportError::Failed(error) => {
+            LlmError::ApiError(describe_request_failure(&error))
+        }
+        TransportError::ApiStatus(status) => LlmError::ApiError(format!("API error {status}")),
+    }
+}
+
+pub(crate) fn map_post_error(error: TransportError) -> LlmError {
+    match error {
+        TransportError::Timeout(error) | TransportError::Failed(error) => {
+            warn!("Foundry Local request failed: {}", error);
+            LlmError::ApiError(describe_request_failure(&error))
+        }
+        TransportError::ApiStatus(status) => {
+            warn!("Local translation endpoint returned HTTP {}", status);
+            LlmError::ApiError(format!("API error {status}"))
+        }
+    }
 }
 
 /// Whether an error is worth one more attempt inside a subtitle frame budget.

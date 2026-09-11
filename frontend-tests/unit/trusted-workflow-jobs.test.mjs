@@ -281,9 +281,48 @@ describe("release and preflight share one asset contract", () => {
   });
 });
 
+describe("Core release and preflight share one asset contract", () => {
+  it("builds both architectures through the native Core packager", () => {
+    const contents = readWorkflow("core-package.yml");
+    expect(contents).toContain("inputs.architecture == 'arm64'");
+    expect(contents).toContain("windows-11-arm");
+    expect(contents).toContain("windows-2025");
+    expect(contents).toContain("RuntimeInformation]::OSArchitecture");
+    expect(contents).toContain("$env:CARGO_BUILD_JOBS = '1'");
+    expect(contents).toContain("scripts/package-core.ps1");
+    expect(contents).toContain("cargo test --manifest-path core/Cargo.toml --locked");
+    expect(contents).not.toContain("SkipExecutableContractCheck");
+    expect(
+      readFileSync(path.join(repositoryRoot, "scripts/test-core-executable.ps1"), "utf8"),
+    ).toContain("--version-json");
+  });
+
+  it("uses the same release asset verifier and never writes latest.json", () => {
+    for (const name of ["core-release.yml", "core-release-preflight.yml"]) {
+      const contents = readWorkflow(name);
+      expect(contents, name).toContain("scripts/verify-core-release-assets.ps1");
+      expect(contents, name).not.toContain("latest.json");
+    }
+  });
+
+  it("keeps preflight read-only and release separate from the app latest release", () => {
+    const preflight = readWorkflow("core-release-preflight.yml");
+    expect(preflight).not.toMatch(/gh release create/);
+    expect(preflight).not.toMatch(/git tag/);
+    expect(preflight).not.toMatch(/contents: write/);
+
+    const release = readWorkflow("core-release.yml");
+    expect(release).toContain("core-v$env:CORE_VERSION");
+    expect(release).toContain("--latest=false");
+  });
+});
+
 describe("host trust is PeterShanxin and ianmeowmeow only", () => {
   it("gates every job that can reach a release credential on both trusted actors", () => {
     const expected = {
+      "core-package.yml": ["package"],
+      "core-release.yml": ["validate", "package-x64", "package-arm64", "release"],
+      "core-release-preflight.yml": ["package-x64", "package-arm64", "assets"],
       "package.yml": ["package"],
       "release.yml": ["validate", "package-x64", "package-arm64", "draft-release"],
       "release-preflight.yml": ["package-x64", "package-arm64", "assets"],
@@ -306,6 +345,9 @@ describe("host trust is PeterShanxin and ianmeowmeow only", () => {
 
   it("does not add pull_request to packaging or release workflows", () => {
     for (const name of [
+      "core-package.yml",
+      "core-release.yml",
+      "core-release-preflight.yml",
       "package.yml",
       "release.yml",
       "release-preflight.yml",

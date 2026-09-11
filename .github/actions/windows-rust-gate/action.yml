@@ -30,11 +30,9 @@ runs:
     # Without this every job compiles the whole dependency tree from source on
     # every run.
     #
-    # Only `main` writes an entry. These five jobs hold 3.4 GB between them and
-    # a repository gets 10 GB, so branches each writing their own set would
-    # evict one another - sizes in docs/plans/2026-09-10-ci-gate-timing.md. The
-    # key carries no branch, so a pull request restoring `main`'s entry gets
-    # the same exact hit it would otherwise have written.
+    # Only `main` writes an entry, so branches do not fill the repository cache
+    # with duplicate per-ref copies. A pull request can still restore the entry
+    # written by `main`.
     #
     # What keeps fork and Dependabot code out of the entry `main` restores is
     # separate and unconditional: GitHub scopes a written entry to the ref that
@@ -43,10 +41,12 @@ runs:
     #
     # Pinned to a commit rather than a tag: this is the only third-party action
     # here, it runs in a job that executes contributor code, and on `main` it is
-    # the step that writes bytes every later job unpacks into src-tauri/target.
+    # the step that writes bytes every later job unpacks into the Rust targets.
     - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
       with:
-        workspaces: src-tauri -> target
+        workspaces: |
+          src-tauri -> target
+          core -> target
         save-if: ${{ github.ref == 'refs/heads/main' }}
 
     - name: Build on every core the runner has

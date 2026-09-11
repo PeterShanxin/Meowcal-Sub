@@ -21,6 +21,7 @@
 # will download and execute.
 /config/                    @PeterShanxin
 /src-tauri/                 @PeterShanxin
+/core/                      @PeterShanxin
 
 # Decisions and the contracts that govern changes to them.
 /docs/adr/                  @PeterShanxin

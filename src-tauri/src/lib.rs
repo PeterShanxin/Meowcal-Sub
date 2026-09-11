@@ -83,13 +83,9 @@ pub mod config_store;
 
 /// Writing config.json without overwriting something better
 pub mod config_save;
-pub mod engine_artifact_io;
+pub mod core_client;
 pub mod engine_config;
-pub mod engine_gpu_gate;
-pub mod engine_install_transaction;
-pub mod engine_launch;
 pub mod engine_manifest;
-pub mod engine_preflight;
 
 /// Finding an engine that is installed but no longer registered
 pub mod engine_recovery;
@@ -107,12 +103,10 @@ pub mod http_port;
 pub mod http_server;
 pub mod hy_mt_installer;
 pub mod hy_mt_runtime;
-pub mod legacy_translate_locally;
-pub mod process_lifetime;
-pub mod process_ownership;
-
 /// IPC (Inter-Process Communication) with WinUI3 OverlayHost
 pub mod ipc;
+pub mod legacy_translate_locally;
+pub mod process_lifetime;
 
 /// Synchronization utilities - safe mutex/RwLock handling with poison recovery
 pub mod sync_utils;

@@ -8,7 +8,7 @@ import { findRatchetRegressions } from "./maintainability-ratchet.mjs";
 
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const baselinePath = path.join(repositoryRoot, "config", "maintainability-baseline.json");
-const productionRoots = ["src", "src-tauri/src"];
+const productionRoots = ["src", "src-tauri/src", "core/src"];
 const productionExtensions = new Set([".css", ".html", ".js", ".rs", ".ts"]);
 const execFileAsync = promisify(execFile);
 

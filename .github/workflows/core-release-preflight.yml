@@ -1,0 +1,80 @@
+name: Meowcal Core Release Preflight
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: core-release-preflight-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  package-x64:
+    name: Package Core x64
+    if: >-
+      (github.actor == 'PeterShanxin' || github.actor == 'ianmeowmeow') &&
+      github.actor != 'dependabot[bot]'
+    uses: ./.github/workflows/core-package.yml
+    with:
+      architecture: x64
+    permissions:
+      contents: read
+
+  package-arm64:
+    name: Package Core ARM64
+    if: >-
+      (github.actor == 'PeterShanxin' || github.actor == 'ianmeowmeow') &&
+      github.actor != 'dependabot[bot]'
+    uses: ./.github/workflows/core-package.yml
+    with:
+      architecture: arm64
+    permissions:
+      contents: read
+
+  assets:
+    name: Validate Core release assets
+    if: >-
+      (github.actor == 'PeterShanxin' || github.actor == 'ianmeowmeow') &&
+      github.actor != 'dependabot[bot]'
+    needs:
+      - package-x64
+      - package-arm64
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Require a trusted actor
+        shell: pwsh
+        run: |
+          $trusted = @('PeterShanxin', 'ianmeowmeow')
+          if ($trusted -notcontains $env:GITHUB_ACTOR) {
+            throw "Privileged job refused actor '$($env:GITHUB_ACTOR)'."
+          }
+
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Download Core packages
+        uses: actions/download-artifact@v8
+        with:
+          path: core-release-assets
+          merge-multiple: true
+
+      - name: Resolve Core version
+        id: version
+        shell: pwsh
+        run: |
+          $manifest = Get-Content -LiteralPath core/Cargo.toml -Raw
+          $match = [regex]::Match($manifest, '(?ms)^\[package\].*?^version\s*=\s*"(?<version>\d+\.\d+\.\d+)"')
+          if (-not $match.Success) { throw 'Core package version is missing.' }
+          "version=$($match.Groups['version'].Value)" >> $env:GITHUB_OUTPUT
+
+      - name: Verify Core release assets
+        shell: pwsh
+        run: >-
+          ./scripts/verify-core-release-assets.ps1
+          -Directory core-release-assets
+          -Version ${{ steps.version.outputs.version }}

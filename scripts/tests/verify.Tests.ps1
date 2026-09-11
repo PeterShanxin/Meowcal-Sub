@@ -5,6 +5,33 @@ $ErrorActionPreference = "Stop"
 
 $repositoryRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 $verifyScript = Join-Path $repositoryRoot "scripts\verify.ps1"
+$coreTargetDirectory = Join-Path $repositoryRoot "core\target"
+$hostCoreTarget = if (
+    [System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture -eq "Arm64"
+) {
+    "aarch64-pc-windows-msvc"
+} else {
+    "x86_64-pc-windows-msvc"
+}
+
+function Core-Commands {
+    param(
+        [Parameter(Mandatory)][string]$Target,
+        [switch]$Lint,
+        [switch]$Test
+    )
+
+    $commands = @()
+    if ($Lint) {
+        $commands += "fmt --manifest-path Cargo.toml -- --check"
+        $commands += "clippy --manifest-path Cargo.toml --locked --target $Target --target-dir $coreTargetDirectory --all-targets -- -D warnings"
+    }
+    if ($Test) {
+        $commands += "test --manifest-path Cargo.toml --locked --target $Target --target-dir $coreTargetDirectory --all-targets"
+    }
+    $commands += "build --manifest-path Cargo.toml --locked --target $Target --target-dir $coreTargetDirectory --bin meowcal-core --release"
+    return $commands
+}
 $temporaryDirectory = Join-Path ([System.IO.Path]::GetTempPath()) (
     "meowcal-verify-tests-" + [guid]::NewGuid().ToString("N")
 )
@@ -118,19 +145,23 @@ exit /b 0
 
     $lint = Invoke-VerifyUnderTest -Stage Lint
     Assert-Equal 0 $lint.ExitCode "Lint stage exit code."
-    Assert-Lines @(
+    Assert-Lines (@(
+        Core-Commands -Target $hostCoreTarget -Lint
+    ) + @(
         "fmt --check",
         "clippy --locked -- -D warnings"
-    ) $lint.CargoCommands "Lint stage"
+    )) $lint.CargoCommands "Lint stage"
     Assert-Lines @() $lint.NpmCommands "Lint stage npm"
 
     $test = Invoke-VerifyUnderTest -Stage Test
     Assert-Equal 0 $test.ExitCode "Test stage exit code."
-    Assert-Lines @(
+    Assert-Lines (@(
+        Core-Commands -Target $hostCoreTarget -Test
+    ) + @(
         "test --locked --lib",
         "test --locked --test integration_ipc",
         "test --locked --test command_contracts"
-    ) $test.CargoCommands "Test stage"
+    )) $test.CargoCommands "Test stage"
     Assert-Lines @() $test.NpmCommands "Test stage npm"
 
     # Rust coverage here is "which targets run", not a line percentage: no
@@ -178,13 +209,15 @@ exit /b 0
 
     $all = Invoke-VerifyUnderTest -Stage All
     Assert-Equal 0 $all.ExitCode "All stage exit code."
-    Assert-Lines @(
+    Assert-Lines (@(
+        Core-Commands -Target $hostCoreTarget -Lint -Test
+    ) + @(
         "fmt --check",
         "clippy --locked -- -D warnings",
         "test --locked --lib",
         "test --locked --test integration_ipc",
         "test --locked --test command_contracts"
-    ) $all.CargoCommands "All stage cargo"
+    )) $all.CargoCommands "All stage cargo"
     Assert-Lines @(
         "ci --ignore-scripts",
         "run version:check",
@@ -205,34 +238,40 @@ exit /b 0
     # while only an ARM64 host can execute ARM64 ones.
     $crossLint = Invoke-VerifyUnderTest -Stage Lint -Target "x86_64-pc-windows-msvc"
     Assert-Equal 0 $crossLint.ExitCode "Cross lint stage exit code."
-    Assert-Lines @(
+    Assert-Lines (@(
+        Core-Commands -Target "x86_64-pc-windows-msvc" -Lint
+    ) + @(
         "fmt --check",
         "clippy --locked --target x86_64-pc-windows-msvc -- -D warnings"
-    ) $crossLint.CargoCommands "Cross lint stage"
+    )) $crossLint.CargoCommands "Cross lint stage"
 
     $crossTest = Invoke-VerifyUnderTest -Stage Test -Target "x86_64-pc-windows-msvc"
     Assert-Equal 0 $crossTest.ExitCode "Cross test stage exit code."
-    Assert-Lines @(
+    Assert-Lines (@(
+        Core-Commands -Target "x86_64-pc-windows-msvc" -Test
+    ) + @(
         "test --locked --target x86_64-pc-windows-msvc --lib",
         "test --locked --target x86_64-pc-windows-msvc --test integration_ipc",
         "test --locked --target x86_64-pc-windows-msvc --test command_contracts"
-    ) $crossTest.CargoCommands "Cross test stage"
+    )) $crossTest.CargoCommands "Cross test stage"
 
     # "host" must stay byte-identical to passing nothing, or the local gate and
     # CI stop being the same contract.
     $explicitHost = Invoke-VerifyUnderTest -Stage Test -Target "host"
     Assert-Equal 0 $explicitHost.ExitCode "Explicit host target exit code."
-    Assert-Lines @(
+    Assert-Lines (@(
+        Core-Commands -Target $hostCoreTarget -Test
+    ) + @(
         "test --locked --lib",
         "test --locked --test integration_ipc",
         "test --locked --test command_contracts"
-    ) $explicitHost.CargoCommands "Explicit host target"
+    )) $explicitHost.CargoCommands "Explicit host target"
 
     $failure = Invoke-VerifyUnderTest -Stage All -CargoFailOn "clippy"
     Assert-Equal 23 $failure.ExitCode "Failure propagation."
     Assert-Lines @(
-        "fmt --check",
-        "clippy --locked -- -D warnings"
+        "fmt --manifest-path Cargo.toml -- --check",
+        "clippy --manifest-path Cargo.toml --locked --target $hostCoreTarget --target-dir $coreTargetDirectory --all-targets -- -D warnings"
     ) $failure.CargoCommands "Failure short-circuit"
     Assert-Lines @() $failure.NpmCommands "Cargo failure prevents npm"
 

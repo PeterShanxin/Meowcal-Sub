@@ -108,7 +108,14 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
-    "resources": ["resources/OverlayHost.exe", "resources/*.dll", "resources/*.pri"],
+    "resources": [
+      "resources/OverlayHost.exe",
+      "resources/*.dll",
+      "resources/*.pri",
+      "resources/core/meowcal-core.exe",
+      "resources/core/meowcal-core.json",
+      "resources/core/LICENSE"
+    ],
     "windows": {
       "certificateThumbprint": null,
       "digestAlgorithm": "sha256",
