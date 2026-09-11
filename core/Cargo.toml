@@ -13,7 +13,6 @@ name = "meowcal-core"
 path = "src/main.rs"
 
 [dependencies]
-base64 = "0.23"
 fs2 = "0.4"
 reqwest = { version = "0.13", default-features = false, features = ["native-tls", "json", "stream"] }
 serde = { version = "1", features = ["derive"] }
@@ -45,3 +44,4 @@ windows = { version = "0.61", features = [
     "Win32_System_WinRT",
 ] }
 windows-version = "0.1"
+windows-future = "0.2"

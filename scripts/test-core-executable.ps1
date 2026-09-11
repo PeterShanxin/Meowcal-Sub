@@ -22,7 +22,7 @@ try {
 }
 $requiredCapabilities = @(
     "status", "install", "ready", "complete", "shutdown", "ocrInitialize",
-    "ocrLanguages", "ocrRecognize"
+    "ocrLanguages", "ocrRecognizeBgra"
 )
 if ($versionInfo.version -isnot [string] -or
     $versionInfo.version -ne $ExpectedVersion -or

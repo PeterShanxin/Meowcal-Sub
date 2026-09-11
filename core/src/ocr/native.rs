@@ -1,5 +1,6 @@
 use super::{frame_bytes, geometry, NativeResult, OcrError};
-use std::time::{Duration, Instant};
+use std::sync::mpsc::{self, Receiver, RecvTimeoutError};
+use std::time::Duration;
 use windows::Globalization::Language;
 use windows::Graphics::Imaging::{BitmapAlphaMode, BitmapPixelFormat, SoftwareBitmap};
 use windows::Media::Ocr::OcrEngine;
@@ -104,18 +105,19 @@ impl NativeOcr {
             .engine
             .RecognizeAsync(&bitmap)
             .map_err(|e| OcrError::Recognition(e.to_string()))?;
-        if let Err(error) = wait_for_completion(
-            timeout,
-            || {
-                operation
-                    .Status()
-                    .map(|status| status.0 != 0)
-                    .map_err(|e| OcrError::Recognition(e.to_string()))
-            },
-            || {
-                let _ = operation.Cancel();
-            },
-        ) {
+        let (completed, completion) = mpsc::sync_channel(1);
+        let handler = windows_future::AsyncOperationCompletedHandler::new(move |_, _| {
+            let _ = completed.try_send(());
+            Ok(())
+        });
+        if let Err(error) = operation.SetCompleted(&handler) {
+            let _ = operation.Cancel();
+            self.timed_out = true;
+            return Err(OcrError::Recognition(error.to_string()));
+        }
+        if let Err(error) = wait_for_completion(timeout, &completion, || {
+            let _ = operation.Cancel();
+        }) {
             // Cancellation is best effort. Poison the engine so another call
             // cannot stack an operation behind native work that ignored it.
             self.timed_out = true;
@@ -140,21 +142,19 @@ impl NativeOcr {
 
 fn wait_for_completion(
     timeout: Duration,
-    mut complete: impl FnMut() -> Result<bool, OcrError>,
+    complete: &Receiver<()>,
     cancel: impl FnOnce(),
 ) -> Result<(), OcrError> {
-    let deadline = Instant::now() + timeout;
-    loop {
-        match complete() {
-            Ok(true) => return Ok(()),
-            Ok(false) if Instant::now() < deadline => std::thread::sleep(Duration::from_millis(2)),
-            status => {
-                cancel();
-                return match status {
-                    Err(error) => Err(error),
-                    _ => Err(OcrError::Timeout),
-                };
-            }
+    match complete.recv_timeout(timeout) {
+        Ok(()) => Ok(()),
+        Err(error) => {
+            cancel();
+            Err(match error {
+                RecvTimeoutError::Timeout => OcrError::Timeout,
+                RecvTimeoutError::Disconnected => {
+                    OcrError::Recognition("Native completion notification was lost".into())
+                }
+            })
         }
     }
 }
@@ -167,11 +167,10 @@ mod tests {
     #[test]
     fn a_native_operation_ignoring_cancel_still_releases_the_caller() {
         let cancels = Cell::new(0);
-        let result = wait_for_completion(
-            Duration::ZERO,
-            || Ok(false),
-            || cancels.set(cancels.get() + 1),
-        );
+        let (_sender, completion) = mpsc::sync_channel(1);
+        let result = wait_for_completion(Duration::ZERO, &completion, || {
+            cancels.set(cancels.get() + 1)
+        });
         assert!(matches!(result, Err(OcrError::Timeout)));
         assert_eq!(cancels.get(), 1);
     }
@@ -179,18 +178,18 @@ mod tests {
     #[test]
     fn completion_is_checked_before_the_deadline_without_cancel() {
         let cancels = Cell::new(0);
-        assert!(wait_for_completion(Duration::ZERO, || Ok(true), || cancels.set(1)).is_ok());
+        let (sender, completion) = mpsc::sync_channel(1);
+        sender.send(()).unwrap();
+        assert!(wait_for_completion(Duration::ZERO, &completion, || cancels.set(1)).is_ok());
         assert_eq!(cancels.get(), 0);
     }
 
     #[test]
-    fn unavailable_status_requests_cancellation() {
+    fn lost_completion_notification_requests_cancellation() {
         let cancels = Cell::new(0);
-        let result = wait_for_completion(
-            Duration::ZERO,
-            || Err(OcrError::Recognition("status failed".into())),
-            || cancels.set(1),
-        );
+        let (sender, completion) = mpsc::sync_channel(1);
+        drop(sender);
+        let result = wait_for_completion(Duration::ZERO, &completion, || cancels.set(1));
         assert!(matches!(result, Err(OcrError::Recognition(_))));
         assert_eq!(cancels.get(), 1);
     }

@@ -40,6 +40,7 @@ fn storage_paths_must_be_absolute_and_are_deduplicated() {
 #[test]
 fn timeout_errors_that_exit_core_are_fatal() {
     assert!(fatal_remote("OCR_TIMEOUT"));
+    assert!(fatal_remote("OCR_PROCESS_UNUSABLE"));
     assert!(fatal_remote("INSTALL_TIMEOUT"));
     assert!(fatal_remote("READY_TIMEOUT"));
     assert!(!fatal_remote("ASSETS_UNVERIFIED"));
@@ -150,4 +151,46 @@ fn completion_request(model: &str) -> Value {
         "max_tokens": 120,
         "stream": false
     })
+}
+
+#[test]
+fn binary_ocr_validates_dimensions_stride_size_and_timeout() {
+    let valid = OcrRecognizeParams {
+        language: None,
+        width: 1,
+        height: 1,
+        stride: 4,
+        timeout_ms: 30_000,
+    };
+    assert!(Request::ocr(valid.clone(), vec![0; 4]).is_ok());
+    assert!(Request::ocr(valid.clone(), vec![0; 3]).is_err());
+    for params in [
+        OcrRecognizeParams {
+            width: 0,
+            ..valid.clone()
+        },
+        OcrRecognizeParams {
+            width: 4097,
+            ..valid.clone()
+        },
+        OcrRecognizeParams {
+            height: 4097,
+            ..valid.clone()
+        },
+        OcrRecognizeParams {
+            stride: 8,
+            ..valid.clone()
+        },
+        OcrRecognizeParams {
+            timeout_ms: 0,
+            ..valid.clone()
+        },
+        OcrRecognizeParams {
+            timeout_ms: 30_001,
+            ..valid.clone()
+        },
+    ] {
+        assert!(Request::ocr(params, vec![0; 4]).is_err());
+    }
+    assert_eq!(meowcal_core::ocr::MAX_FRAME_BYTES, 64 * 1024 * 1024);
 }

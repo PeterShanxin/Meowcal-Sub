@@ -26,8 +26,11 @@ Rust crate and Windows executable, with no Tauri or Sub 1 application dependency
 It has its own semantic version, lockfile, API major version, tests, and ARM64/x64
 runtime artifacts. Application product versions do not determine Core versions.
 
-Applications launch their pinned Core executable and communicate over bounded
-JSON messages on inherited standard input/output. The first request negotiates
+Applications launch their pinned Core executable and communicate over inherited
+standard input/output. Controls and responses use bounded JSON headers; OCR
+requests append a length-delimited, tightly packed BGRA8 payload directly after
+the header. Image bytes never pass through Base64 or JSON serialization. The
+first request negotiates
 the expected Core version, API major, and capabilities. An incompatible or
 missing runtime is an explicit failure; consumers do not select a global
 `latest` installation or fall back to another application's executable.
@@ -99,6 +102,22 @@ applications, and is outside this decision.
 Preserving product preprocessing and translation policies avoids changing
 recognition or translation quality as a side effect of extraction. Future policy
 consolidation requires comparable datasets and latency/quality evidence.
+
+The process boundary isolates native OCR hangs without requiring a Python/Rust
+binding. Binary image transport avoids text encoding, repeated parsing, and
+large intermediate strings. One outstanding image and bounded transfer/native
+deadlines limit memory and stale work. Shared memory is deferred: the native
+bitmap still copies pixels, while mapping introduces handle and reuse lifetimes
+that must justify themselves through measured savings over the binary pipe.
+
+Performance acceptance compares each application's complete preprocessing and
+recognition policy against its pre-extraction baseline on identical fixtures.
+Median latency may increase by at most the greater of 10 ms or 15%; P95 by the
+greater of 15 ms or 20%. The proportion of reads exceeding the 250 ms capture
+interval may increase by at most one percentage point. These are acceptance
+budgets, not measured guarantees: cold starts, all samples, text/geometry
+equivalence, and the tested hardware must also be reported. Screen capture and
+native presentation require separate end-to-end evidence.
 
 ## Relationship to prior decisions
 

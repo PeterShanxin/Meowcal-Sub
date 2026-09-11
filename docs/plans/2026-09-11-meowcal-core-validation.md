@@ -1,5 +1,10 @@
 # Meowcal Core Windows validation — 2026-09-11
 
+This record describes the initial extraction candidate. Its OCR timings and
+artifact hashes predate the binary transport and persistent OCR engine changes;
+see [the subsequent OCR comparison](2026-09-11-core-ocr-performance.md) for those
+measurements. The native playback and release gates below remain outstanding.
+
 ## Scope and environment
 
 Core 0.1.0, API 1, tested on Windows build 26200, ARM64, Qualcomm Adreno

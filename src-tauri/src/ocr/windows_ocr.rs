@@ -1,6 +1,5 @@
 use super::{preprocess_image, OcrError, OcrResult, PreprocessingConfig};
 use crate::core_client::{self, OcrRecognizeParams};
-use base64::Engine;
 use tracing::{debug, info, warn};
 
 pub struct WindowsOcr {
@@ -51,7 +50,8 @@ impl WindowsOcr {
         validate_frame(image_data, width, height)?;
         let (image_data, width, height) =
             super::frame_budget::fit_frame(image_data, width, height, self.capture_scale);
-        self.recognize_raw(&image_data, width, height).await
+        self.recognize_raw(image_data.into_owned(), width, height)
+            .await
     }
 
     pub async fn recognize_with_preprocessing(
@@ -65,23 +65,25 @@ impl WindowsOcr {
         let (image_data, width, height) =
             super::frame_budget::fit_frame(image_data, width, height, self.capture_scale);
         let processed = preprocess_image(&image_data, width, height, preprocessing);
-        self.recognize_raw(&processed, width, height).await
+        self.recognize_raw(processed, width, height).await
     }
 
     async fn recognize_raw(
         &self,
-        image_data: &[u8],
+        image_data: Vec<u8>,
         width: u32,
         height: u32,
     ) -> Result<OcrResult, OcrError> {
-        let result = core_client::ocr_recognize(OcrRecognizeParams {
-            language: self.language.clone(),
-            width,
-            height,
-            stride: width * 4,
-            bgra_base64: base64::prelude::BASE64_STANDARD.encode(image_data),
-            timeout_ms: 30_000,
-        })
+        let result = core_client::ocr_recognize(
+            OcrRecognizeParams {
+                language: self.language.clone(),
+                width,
+                height,
+                stride: width * 4,
+                timeout_ms: 30_000,
+            },
+            image_data,
+        )
         .await
         .map_err(OcrError::RecognitionError)?;
         let (lines, boxes) = super::line_geometry::clean_lines(result.lines, result.boxes);

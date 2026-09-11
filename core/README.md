@@ -23,7 +23,8 @@ Node dependencies. Release packaging builds x64 and ARM64 separately.
 ## API 1
 
 Run `meowcal-core.exe` with inherited stdin/stdout pipes. Messages are UTF-8 JSON
-objects terminated by a newline. Only one request may be outstanding. Logs never
+objects terminated by a newline, with binary bodies for OCR requests. Only one
+request may be outstanding. Logs never
 share stdout with protocol frames.
 
 The first request pins the version and client profile:
@@ -47,24 +48,42 @@ Replies are `{"id":1,"result":{...}}` or
 `{"id":1,"event":"progress","message":"..."}` before the final reply.
 Consumers verify version, API, required capabilities, IDs, and reply shape.
 
-| Method          | Parameters                                                       | Result                                                                                     |
-| --------------- | ---------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
-| `hello`         | Client, profile, expected version, optional storage/import roots | Version, API, capabilities, model, storage root                                            |
-| `status`        | `{}`                                                             | Installed/ready state and installation paths; no installation or launch                    |
-| `install`       | `{}`                                                             | Verified installation state; progress frames precede the result                            |
-| `ready`         | `{}`                                                             | Ready state after verified launch; may import matching local artifacts without downloading |
-| `complete`      | `request`: bounded chat-completion payload; `timeoutMs`: 1–90000 | Chat-completion response from the owned HY-MT runtime                                      |
-| `ocrLanguages`  | `{}`                                                             | Installed Windows OCR language tags                                                        |
-| `ocrInitialize` | Optional `language` tag; null selects user-profile languages     | Resolved OCR language                                                                      |
-| `ocrRecognize`  | Language, width, height, stride, BGRA base64, timeout            | Raw native text, lines, line boxes, frame width                                            |
-| `shutdown`      | `{}`                                                             | Acknowledgement, then process exit                                                         |
+| Method             | Parameters                                                       | Result                                                                                     |
+| ------------------ | ---------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| `hello`            | Client, profile, expected version, optional storage/import roots | Version, API, capabilities, model, storage root                                            |
+| `status`           | `{}`                                                             | Installed/ready state and installation paths; no installation or launch                    |
+| `install`          | `{}`                                                             | Verified installation state; progress frames precede the result                            |
+| `ready`            | `{}`                                                             | Ready state after verified launch; may import matching local artifacts without downloading |
+| `complete`         | `request`: bounded chat-completion payload; `timeoutMs`: 1–90000 | Chat-completion response from the owned HY-MT runtime                                      |
+| `ocrLanguages`     | `{}`                                                             | Installed Windows OCR language tags                                                        |
+| `ocrInitialize`    | Optional `language` tag; null selects user-profile languages     | Resolved OCR language                                                                      |
+| `ocrRecognizeBgra` | Language, width, height, stride, timeout; raw BGRA body          | Raw native text, lines, line boxes, frame width                                            |
+| `shutdown`         | `{}`                                                             | Acknowledgement, then process exit                                                         |
 
 OCR pixels are packed BGRA8, `stride = width * 4`; alpha is ignored. Dimensions
 must fit Windows OCR's native limit and the Core limit of 4096 per axis and
-64 MiB decoded pixels. No rescaling or thresholding occurs in this API. OCR
-requests allow up to 96 MiB of JSON; other requests and all responses are limited
-to 256 KiB. OCR timeouts are 1–30000 ms. An OCR timeout ends that process; the
-consumer must launch a replacement before sending another frame.
+64 MiB of pixels. No rescaling or thresholding occurs in this API. All JSON
+headers and responses are limited to 256 KiB. OCR timeouts are 1–30000 ms.
+
+`ocrRecognizeBgra` requires top-level `payloadBytes = width * height * 4` and
+parameters `language`, `width`, `height`, `stride`, and `timeoutMs`. Exactly that
+many raw BGRA bytes follow the header's newline, with no trailing delimiter.
+The next JSON header begins immediately after the body. Other methods permit
+only an absent or zero `payloadBytes`. Consumers require the `ocrRecognizeBgra`
+capability; there is no Base64 transport.
+
+Native recognition waits for WinRT's completion notification instead of polling.
+An expired native deadline returns `OCR_TIMEOUT`; loss of the completion channel
+returns `OCR_PROCESS_UNUSABLE`. Both close the session, and consumers discard the
+owned process before accepting another image. Cancellation remains best effort
+inside WinRT; process termination is the final bound on unresponsive native work.
+
+Core validates the binary envelope, geometry and timeout before allocating or
+reading pixels. Invalid binary headers, truncated bodies and bodies incomplete
+five seconds after header validation close the session without resynchronization.
+Only one binary body can be resident across reading, queuing and execution;
+concurrent binary requests close the session. An OCR timeout ends that process;
+the consumer must launch a replacement before sending another frame.
 
 Applications use a separate Core instance for OCR so model inference cannot
 occupy the recognition channel. Cancelling an active completion discards its

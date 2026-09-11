@@ -17,7 +17,7 @@ use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{Duration, Instant};
 use transport::{Failure, KillSwitch, Transport};
 pub use types::{CoreInstallPaths, CoreStatus, OcrRecognizeParams, OcrRecognizeResult};
-use types::{HelloResult, OcrInitializeResult, OcrLanguagesResult};
+use types::{HelloResult, OcrInitializeResult, OcrLanguagesResult, Request};
 
 pub(super) const API_VERSION: u32 = meowcal_core::protocol::API_VERSION;
 const CORE_VERSION: &str = meowcal_core::protocol::CORE_VERSION;
@@ -120,9 +120,20 @@ pub fn ocr_initialize_blocking(language: Option<String>) -> Result<String, Strin
     .map(|result| result.resolved_language)
 }
 
-pub async fn ocr_recognize(params: OcrRecognizeParams) -> Result<OcrRecognizeResult, String> {
-    let timeout = Duration::from_millis(params.timeout_ms.clamp(1, 90_000) + 2_000);
-    call_async(&OCR, "ocrRecognize", json!(params), timeout, None, false).await
+pub async fn ocr_recognize(
+    params: OcrRecognizeParams,
+    payload: Vec<u8>,
+) -> Result<OcrRecognizeResult, String> {
+    let timeout = Duration::from_millis(params.timeout_ms.min(30_000) + 2_000);
+    call_async(
+        &OCR,
+        "ocrRecognizeBgra",
+        Request::ocr(params, payload)?,
+        timeout,
+        None,
+        false,
+    )
+    .await
 }
 
 pub fn owned_pid() -> Option<u32> {
@@ -140,7 +151,7 @@ pub fn shutdown_owned() {
 fn call<T: DeserializeOwned>(
     slot: &'static OnceLock<Mutex<Option<Transport>>>,
     method: &str,
-    params: Value,
+    params: impl Into<Request>,
     timeout: Duration,
     progress: Option<&(dyn Fn(String) + Send + Sync)>,
     cancelled: Option<&Arc<AtomicBool>>,
@@ -335,7 +346,10 @@ fn kill_slot_for(
 }
 
 fn fatal_remote(code: &str) -> bool {
-    matches!(code, "OCR_TIMEOUT" | "INSTALL_TIMEOUT" | "READY_TIMEOUT")
+    matches!(
+        code,
+        "OCR_TIMEOUT" | "INSTALL_TIMEOUT" | "READY_TIMEOUT" | "OCR_PROCESS_UNUSABLE"
+    )
 }
 
 fn failure_message(error: Failure) -> String {

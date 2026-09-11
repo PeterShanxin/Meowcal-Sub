@@ -30,6 +30,7 @@ struct Session {
 #[derive(Default)]
 pub struct Service {
     session: Option<Session>,
+    ocr: crate::ocr_service::OcrService,
 }
 
 impl Service {
@@ -40,6 +41,14 @@ impl Service {
     ) -> Result<Value, Error> {
         if request.api != API_VERSION {
             return Err(Error::new("API_MISMATCH", "Unsupported Core API version"));
+        }
+        if request.payload_bytes != request.payload.len() as u64
+            || (request.method != "ocrRecognizeBgra" && !request.payload.is_empty())
+        {
+            return Err(Error::new(
+                "INVALID_REQUEST",
+                "Unexpected or incomplete request body",
+            ));
         }
         if request.method == "hello" {
             return self.hello(request.params);
@@ -121,8 +130,10 @@ impl Service {
                     .ok_or_else(|| Error::new("NOT_READY", "Call ready before completion"))?;
                 completion::execute(endpoint, &params).await
             }
-            "ocrLanguages" | "ocrInitialize" | "ocrRecognize" => {
-                crate::ocr_service::dispatch(&request.method, &request.params).await
+            "ocrLanguages" | "ocrInitialize" | "ocrRecognizeBgra" => {
+                self.ocr
+                    .dispatch(&request.method, &request.params, request.payload)
+                    .await
             }
             _ => Err(Error::new("UNKNOWN_METHOD", "Unknown Core method")),
         }

@@ -123,7 +123,7 @@ async fn initialization_is_versioned_and_status_never_installs_or_starts() {
     assert!(result["capabilities"]
         .as_array()
         .unwrap()
-        .contains(&json!("ocrRecognize")));
+        .contains(&json!("ocrRecognizeBgra")));
     let status = service
         .handle(request("status", json!({})), &|_| {})
         .await
@@ -352,3 +352,6 @@ async fn interrupted_import_cleans_only_owned_staging_under_exclusive_lease() {
     drop(lease);
     std::fs::remove_dir_all(root).unwrap();
 }
+
+#[path = "service_contracts/binary.rs"]
+mod binary;

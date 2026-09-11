@@ -26,45 +26,33 @@ fn reader_rejects_unterminated_and_oversized_frames() {
 
 #[test]
 fn deadline_unblocks_a_writer_when_core_does_not_read() -> Result<(), String> {
-    let powershell = Path::new(r"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe");
-    let mut command = crate::windowless_command::std_command(powershell);
-    command.args([
-        "-NoLogo",
-        "-NoProfile",
-        "-NonInteractive",
-        "-Command",
-        "Start-Sleep -Seconds 10",
-    ]);
-    let mut process = Transport::spawn_command(command)?;
+    let mut process = fixture("stall")?;
     let started = Instant::now();
     let error = process
         .request(
-            "hello",
-            json!({"blob":"x".repeat(2 * 1024 * 1024)}),
+            "ocrRecognizeBgra",
+            super::super::Request {
+                params: json!({}),
+                payload: vec![0; 2 * 1024 * 1024],
+            },
             Duration::from_millis(150),
             None,
             None,
         )
-        .expect_err("an interactive shell is not a Core server");
+        .expect_err("the fixture never reads the binary payload");
     process.kill_and_wait();
     assert!(started.elapsed() < Duration::from_secs(2));
-    assert!(matches!(error, Failure::Fatal(_)));
+    assert!(
+        matches!(&error, Failure::Fatal(message) if message.starts_with("CORE_STDIN_WRITE:")),
+        "blocked payload writer returned {error:?}"
+    );
     assert!(process.has_exited()?);
     Ok(())
 }
 
 #[test]
 fn cancellation_kills_the_owned_request() -> Result<(), String> {
-    let powershell = Path::new(r"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe");
-    let mut command = crate::windowless_command::std_command(powershell);
-    command.args([
-        "-NoLogo",
-        "-NoProfile",
-        "-NonInteractive",
-        "-Command",
-        "Start-Sleep -Seconds 10",
-    ]);
-    let mut process = Transport::spawn_command(command)?;
+    let mut process = fixture("stall")?;
     let cancelled = Arc::new(AtomicBool::new(true));
     let error = process
         .request(
@@ -83,23 +71,114 @@ fn cancellation_kills_the_owned_request() -> Result<(), String> {
 
 #[test]
 fn malformed_handshake_frame_is_a_fatal_protocol_error() -> Result<(), String> {
-    let powershell = Path::new(r"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe");
-    let mut command = crate::windowless_command::std_command(powershell);
-    command.args([
-        "-NoLogo",
-        "-NoProfile",
-        "-NonInteractive",
-        "-Command",
-        "[Console]::Out.WriteLine('not-json'); Start-Sleep -Seconds 10",
-    ]);
-    let mut process = Transport::spawn_command(command)?;
+    let mut process = fixture("malformed")?;
     let error = process
         .request("hello", json!({}), Duration::from_secs(2), None, None)
         .expect_err("malformed handshake must fail");
     process.kill_and_wait();
     assert!(
-        matches!(error, Failure::Fatal(message) if message.starts_with("CORE_PROTOCOL_INVALID_JSON:"))
+        matches!(&error, Failure::Fatal(message) if message.starts_with("CORE_PROTOCOL_INVALID_JSON:")),
+        "expected malformed JSON protocol error, received {error:?}"
     );
     assert!(process.has_exited()?);
+    Ok(())
+}
+
+fn fixture(mode: &str) -> Result<Transport, String> {
+    let executable = std::env::current_exe().map_err(|error| error.to_string())?;
+    let mut command = crate::windowless_command::std_command(executable);
+    command.args([
+        "--exact",
+        "core_client::transport::tests::pipe_fixture",
+        "--nocapture",
+    ]);
+    command.env("MEOWCAL_SUB1_PIPE_FIXTURE", mode);
+    let mut process = Transport::spawn_command(command)?;
+    let deadline = Instant::now() + Duration::from_secs(15);
+    loop {
+        match process
+            .frames
+            .recv_timeout(deadline.saturating_duration_since(Instant::now()))
+        {
+            Ok(ReaderEvent::Frame(frame)) if frame == "fixture-ready" => return Ok(process),
+            Ok(ReaderEvent::Frame(_)) => continue,
+            event => {
+                let status = process.child.try_wait();
+                return Err(format!(
+                    "pipe fixture {mode} failed before request: {event:?}; child={status:?}"
+                ));
+            }
+        }
+    }
+}
+
+#[test]
+fn pipe_fixture() {
+    use std::io::Read;
+    let Ok(mode) = std::env::var("MEOWCAL_SUB1_PIPE_FIXTURE") else {
+        return;
+    };
+    let mut output = std::io::stdout().lock();
+    writeln!(output, "\nfixture-ready").unwrap();
+    output.flush().unwrap();
+    if mode == "stall" {
+        std::thread::sleep(Duration::from_secs(30));
+        std::process::exit(0);
+    }
+    let mut input = BufReader::new(std::io::stdin().lock());
+    let mut header = String::new();
+    input.read_line(&mut header).unwrap();
+    if mode == "malformed" {
+        writeln!(output, "not-json").unwrap();
+        output.flush().unwrap();
+        std::thread::sleep(Duration::from_secs(30));
+        std::process::exit(0);
+    }
+    let header: Value = serde_json::from_str(&header).unwrap();
+    assert_eq!(header["method"], "ocrRecognizeBgra");
+    assert_eq!(header["payloadBytes"], 8);
+    assert_eq!(
+        header["params"],
+        json!({"language":null,"width":2,"height":1,"stride":8,"timeoutMs":1000})
+    );
+    let mut payload = [0; 8];
+    input.read_exact(&mut payload).unwrap();
+    assert_eq!(payload, [0, 10, 13, 255, 123, 34, 0, 128]);
+    writeln!(output, "{{\"id\":1,\"result\":{{}}}}").unwrap();
+    output.flush().unwrap();
+    let mut next = String::new();
+    input.read_line(&mut next).unwrap();
+    let next: Value = serde_json::from_str(&next).unwrap();
+    assert_eq!(next["method"], "status");
+    assert_eq!(next["payloadBytes"], 0);
+    writeln!(output, "{{\"id\":2,\"result\":{{\"aligned\":true}}}}").unwrap();
+    output.flush().unwrap();
+    std::process::exit(0);
+}
+
+#[test]
+fn binary_payload_preserves_bytes_and_next_request_alignment() -> Result<(), String> {
+    let mut process = fixture("binary")?;
+    let params = super::super::OcrRecognizeParams {
+        language: None,
+        width: 2,
+        height: 1,
+        stride: 8,
+        timeout_ms: 1000,
+    };
+    let request = super::super::Request::ocr(params, vec![0, 10, 13, 255, 123, 34, 0, 128])?;
+    process
+        .request(
+            "ocrRecognizeBgra",
+            request,
+            Duration::from_secs(2),
+            None,
+            None,
+        )
+        .map_err(|error| format!("binary request failed: {error:?}"))?;
+    let result = process
+        .request("status", json!({}), Duration::from_secs(2), None, None)
+        .map_err(|error| format!("following control failed: {error:?}"))?;
+    assert_eq!(result, json!({"aligned":true}));
     Ok(())
 }

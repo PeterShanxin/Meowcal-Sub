@@ -4,7 +4,6 @@ use serde_json::{json, Value};
 pub const API_VERSION: u32 = 1;
 pub const CORE_VERSION: &str = env!("CARGO_PKG_VERSION");
 pub const MAX_FRAME_BYTES: usize = 256 * 1024;
-pub const MAX_OCR_FRAME_BYTES: usize = 96 * 1024 * 1024;
 pub const CAPABILITIES: &[&str] = &[
     "status",
     "install",
@@ -13,7 +12,7 @@ pub const CAPABILITIES: &[&str] = &[
     "shutdown",
     "ocrLanguages",
     "ocrInitialize",
-    "ocrRecognize",
+    "ocrRecognizeBgra",
 ];
 
 #[derive(Debug, Deserialize)]
@@ -23,6 +22,10 @@ pub struct Request {
     pub api: u32,
     pub method: String,
     pub params: serde_json::Map<String, Value>,
+    #[serde(default, rename = "payloadBytes")]
+    pub payload_bytes: u64,
+    #[serde(skip)]
+    pub payload: Vec<u8>,
 }
 
 #[derive(Debug, Serialize)]
@@ -58,7 +61,7 @@ impl From<String> for Error {
 }
 
 pub fn decode(bytes: &[u8]) -> Result<Request, Error> {
-    if bytes.len() > MAX_OCR_FRAME_BYTES {
+    if bytes.len() > MAX_FRAME_BYTES {
         return Err(Error::new(
             "FRAME_TOO_LARGE",
             "Request exceeds the frame limit",
@@ -66,12 +69,6 @@ pub fn decode(bytes: &[u8]) -> Result<Request, Error> {
     }
     let request: Request = serde_json::from_slice(bytes)
         .map_err(|_| Error::new("INVALID_REQUEST", "Expected a Core request object"))?;
-    if bytes.len() > MAX_FRAME_BYTES && request.method != "ocrRecognize" {
-        return Err(Error::new(
-            "FRAME_TOO_LARGE",
-            "Request exceeds the method frame limit",
-        ));
-    }
     if request.api != API_VERSION {
         return Err(Error::new("API_MISMATCH", "Unsupported Core API version"));
     }

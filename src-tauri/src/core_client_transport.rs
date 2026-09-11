@@ -6,14 +6,16 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{mpsc, Arc};
 use std::time::{Duration, Instant};
 
-const MAX_REQUEST_BYTES: usize = meowcal_core::protocol::MAX_OCR_FRAME_BYTES;
+const MAX_REQUEST_BYTES: usize = meowcal_core::protocol::MAX_FRAME_BYTES;
 const MAX_RESPONSE_BYTES: usize = meowcal_core::protocol::MAX_FRAME_BYTES;
 
+#[derive(Debug)]
 pub(super) enum Failure {
     Remote { code: String, message: String },
     Fatal(String),
 }
 
+#[derive(Debug)]
 enum ReaderEvent {
     Frame(String),
     Failed(String),
@@ -137,18 +139,21 @@ impl Transport {
     pub(super) fn request(
         &mut self,
         method: &str,
-        params: Value,
+        params: impl Into<super::Request>,
         timeout: Duration,
         progress: Option<&(dyn Fn(String) + Send + Sync)>,
         cancelled: Option<&Arc<AtomicBool>>,
     ) -> Result<Value, Failure> {
+        let request = params.into();
         let id = self.next_id;
         self.next_id += 1;
         let frame = serde_json::to_vec(
-            &json!({"id":id,"api":super::API_VERSION,"method":method,"params":params}),
+            &json!({"id":id,"api":super::API_VERSION,"method":method,"params":request.params,"payloadBytes":request.payload.len()}),
         )
         .map_err(|error| Failure::Fatal(format!("CORE_REQUEST_INVALID: {error}")))?;
-        if frame.len() > MAX_REQUEST_BYTES {
+        if frame.len() + 1 > MAX_REQUEST_BYTES
+            || request.payload.len() > meowcal_core::ocr::MAX_FRAME_BYTES
+        {
             return Err(Failure::Fatal("CORE_REQUEST_TOO_LARGE".to_string()));
         }
         let deadline = Instant::now() + timeout;
@@ -177,6 +182,7 @@ impl Transport {
         self.stdin
             .write_all(&frame)
             .and_then(|_| self.stdin.write_all(b"\n"))
+            .and_then(|_| self.stdin.write_all(&request.payload))
             .and_then(|_| self.stdin.flush())
             .map_err(|error| Failure::Fatal(format!("CORE_STDIN_WRITE: {error}")))?;
         loop {

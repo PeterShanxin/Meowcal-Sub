@@ -2708,7 +2708,6 @@ dependencies = [
 name = "meowcal-core"
 version = "0.1.0"
 dependencies = [
- "base64 0.23.1",
  "fs2",
  "reqwest",
  "serde",
@@ -2718,6 +2717,7 @@ dependencies = [
  "tokio",
  "tracing",
  "windows",
+ "windows-future",
  "windows-version",
  "zip 2.4.2",
 ]
