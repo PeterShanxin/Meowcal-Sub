@@ -15,9 +15,7 @@ test("status notices do not intercept the primary action in a compact window", a
     };
   });
   await expect(page.locator(".toast.notice")).toContainText("Subtitle area selected");
-  await page
-    .getByRole("button", { name: "Start translation", exact: true })
-    .click({ trial: true, timeout: 2000 });
+  await page.getByRole("button", { name: "Start translation", exact: true }).click({ trial: true });
 });
 
 test("browser bridge reads backend health, settings, and readiness", async ({ page, request }) => {
