@@ -1,13 +1,14 @@
 use crate::config::ManagedLocalRuntimeConfig;
 use crate::engine_manifest::{EngineManifest, RuntimeSpec};
 use reqwest::Client;
+use std::io::Write;
 use std::net::{Ipv4Addr, SocketAddrV4, TcpListener};
 use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
 use std::sync::{Mutex, OnceLock};
 use std::time::Duration;
 use tokio::time::{sleep, timeout_at, Instant};
-use tracing::{info, warn};
+use tracing::info;
 
 pub use crate::hy_mt_paths::HyMtInstallPaths;
 
@@ -209,7 +210,8 @@ fn start_with_policy(
         .args(launch_arguments(runtime, manifest, policy, &port))
         .stdin(Stdio::null())
         .stdout(Stdio::null())
-        .stderr(Stdio::null());
+        // Runtime diagnostics must never enter the protocol's stdout pipe.
+        .stderr(Stdio::inherit());
 
     #[cfg(target_os = "windows")]
     {
@@ -342,9 +344,11 @@ async fn ensure_ready_with_policy(
     }
     if policy.gpu_active {
         let gpu_window = attempt_deadline.saturating_duration_since(attempt_started);
-        warn!(
-            "HY-MT GPU engine did not become ready within {} seconds; retrying on CPU",
-            gpu_window.as_secs()
+        let _ = writeln!(
+            std::io::stderr().lock(),
+            "HY-MT GPU engine did not become ready within {} seconds; retrying on CPU ({} seconds remaining)",
+            gpu_window.as_secs(),
+            deadline.saturating_duration_since(Instant::now()).as_secs()
         );
         shutdown_owned();
         return Box::pin(ensure_ready_with_policy(runtime, deadline, timeout, true)).await;

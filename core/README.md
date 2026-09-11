@@ -24,8 +24,10 @@ Node dependencies. Release packaging builds x64 and ARM64 separately.
 
 Run `meowcal-core.exe` with inherited stdin/stdout pipes. Messages are UTF-8 JSON
 objects terminated by a newline, with binary bodies for OCR requests. Only one
-request may be outstanding. Logs never
-share stdout with protocol frames.
+request may be outstanding. Logs never share stdout with protocol frames.
+Core stderr includes native runtime diagnostics and GPU fallback warnings;
+consumers must drain it continuously with bounded storage. Runtime diagnostics
+must not be parsed as API responses.
 
 The first request pins the version and client profile:
 

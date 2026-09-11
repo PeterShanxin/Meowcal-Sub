@@ -134,6 +134,19 @@ fn pipe_fixture() {
         std::thread::sleep(Duration::from_secs(30));
         std::process::exit(0);
     }
+    if mode == "stderr" {
+        let mut stderr = std::io::stderr().lock();
+        stderr.write_all(&vec![b'x'; 128 * 1024]).unwrap();
+        stderr.write_all(b"\nGPU failed; using CPU\n").unwrap();
+        stderr.flush().unwrap();
+        writeln!(
+            output,
+            "{{\"id\":1,\"result\":{{\"diagnosticsDrained\":true}}}}"
+        )
+        .unwrap();
+        output.flush().unwrap();
+        std::process::exit(0);
+    }
     let header: Value = serde_json::from_str(&header).unwrap();
     assert_eq!(header["method"], "ocrRecognizeBgra");
     assert_eq!(header["payloadBytes"], 8);
@@ -180,5 +193,21 @@ fn binary_payload_preserves_bytes_and_next_request_alignment() -> Result<(), Str
         .request("status", json!({}), Duration::from_secs(2), None, None)
         .map_err(|error| format!("following control failed: {error:?}"))?;
     assert_eq!(result, json!({"aligned":true}));
+    Ok(())
+}
+
+#[test]
+fn stderr_is_drained_separately_and_reader_exits_with_core() -> Result<(), String> {
+    let mut process = fixture("stderr")?;
+    let result = process
+        .request("hello", json!({}), Duration::from_secs(2), None, None)
+        .map_err(|error| format!("stderr blocked protocol response: {error:?}"))?;
+    assert_eq!(result, json!({"diagnosticsDrained":true}));
+    process.kill_and_wait();
+    assert!(process.has_exited()?);
+    assert!(
+        process.diagnostics.is_none(),
+        "stderr reader must be joined"
+    );
     Ok(())
 }

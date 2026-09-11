@@ -1,3 +1,6 @@
+#[path = "core_client_stderr.rs"]
+mod diagnostics;
+
 use serde_json::{json, Value};
 use std::io::{BufRead, BufReader, Write};
 use std::path::Path;
@@ -28,6 +31,7 @@ pub(super) struct Transport {
     frames: mpsc::Receiver<ReaderEvent>,
     next_id: u64,
     kill_switch: Arc<KillSwitch>,
+    diagnostics: Option<std::thread::JoinHandle<()>>,
 }
 
 pub(super) struct KillSwitch {
@@ -92,7 +96,7 @@ impl Transport {
         command
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
-            .stderr(Stdio::null());
+            .stderr(Stdio::piped());
         let mut child = command
             .spawn()
             .map_err(|error| format!("CORE_START_FAILED: {error}"))?;
@@ -127,12 +131,17 @@ impl Transport {
             terminate_child(&mut child);
             return Err(format!("CORE_READER_START: {error}"));
         }
+        let diagnostics = diagnostics::spawn(&mut child).inspect_err(|_| {
+            kill_switch.kill();
+            terminate_child(&mut child);
+        })?;
         Ok(Self {
             child,
             stdin,
             frames,
             next_id: 1,
             kill_switch,
+            diagnostics: Some(diagnostics),
         })
     }
 
@@ -267,6 +276,11 @@ impl Transport {
     pub(super) fn kill_and_wait(&mut self) {
         self.kill_switch.kill();
         terminate_child(&mut self.child);
+        if let Some(reader) = self.diagnostics.take() {
+            if reader.join().is_err() {
+                tracing::warn!(core_pid = self.pid(), "Core stderr reader panicked");
+            }
+        }
     }
 
     pub(super) fn pid(&self) -> u32 {
@@ -276,8 +290,7 @@ impl Transport {
 
 impl Drop for Transport {
     fn drop(&mut self) {
-        self.kill_switch.kill();
-        terminate_child(&mut self.child);
+        self.kill_and_wait();
     }
 }
 
