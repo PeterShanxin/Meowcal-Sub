@@ -13,15 +13,9 @@ mod engine_status_legacy;
 mod engine_status_make_ready;
 
 use crate::config::FoundryLocalConfig;
-use crate::hy_mt_runtime;
 use crate::llm::{FoundryLocalPhase, FoundryProbeSnapshot};
-use engine_status_legacy::{
-    legacy_prepare, legacy_refresh, legacy_status_no_probe, JoinPolicy, PrepareNotes,
-};
-use engine_status_make_ready::{make_ready_legacy_http, make_ready_legacy_tauri};
-use std::path::PathBuf;
-use std::time::Duration;
-use tracing::warn;
+use engine_status_legacy::{legacy_prepare, legacy_refresh, legacy_status_no_probe};
+use engine_status_make_ready::make_ready_legacy_http;
 
 /// Domain snapshot of engine readiness. Not a public IPC/HTTP wire DTO.
 #[derive(Debug, Clone)]
@@ -42,39 +36,21 @@ pub struct EngineStatusSnapshot {
 // ---------------------------------------------------------------------------
 
 pub async fn get_status_tauri(config: FoundryLocalConfig) -> Result<EngineStatusSnapshot, String> {
-    if let Some(status) = managed_status(&config, false).await {
-        return Ok(status);
-    }
-    tokio::task::spawn_blocking(move || legacy_status_no_probe(config))
-        .await
-        .map_err(|err| {
-            let message = format!("Engine status task failed: {err}");
-            warn!("{}", message);
-            message
-        })
+    managed_status(&config, false).await
 }
 
 pub async fn refresh_status_tauri(
     config: FoundryLocalConfig,
 ) -> Result<EngineStatusSnapshot, String> {
-    if let Some(status) = managed_status(&config, false).await {
-        return Ok(status);
-    }
-    legacy_refresh(config, JoinPolicy::Hard).await
+    managed_status(&config, false).await
 }
 
 pub async fn prepare_tauri(config: FoundryLocalConfig) -> Result<EngineStatusSnapshot, String> {
-    if let Some(status) = managed_status(&config, true).await {
-        return Ok(status);
-    }
-    legacy_prepare(config, JoinPolicy::Hard, PrepareNotes::Tauri).await
+    managed_status(&config, true).await
 }
 
 pub async fn make_ready_tauri(config: FoundryLocalConfig) -> Result<EngineStatusSnapshot, String> {
-    if let Some(status) = managed_status(&config, true).await {
-        return Ok(status);
-    }
-    make_ready_legacy_tauri(config).await
+    managed_status(&config, true).await
 }
 
 // ---------------------------------------------------------------------------
@@ -87,17 +63,11 @@ pub async fn get_status_http(config: FoundryLocalConfig) -> EngineStatusSnapshot
 }
 
 pub async fn refresh_status_http(config: FoundryLocalConfig) -> EngineStatusSnapshot {
-    match legacy_refresh(config, JoinPolicy::SoftRefresh).await {
-        Ok(status) => status,
-        Err(_) => unreachable!("soft refresh never returns Err"),
-    }
+    legacy_refresh(config).await
 }
 
 pub async fn prepare_http(config: FoundryLocalConfig) -> EngineStatusSnapshot {
-    match legacy_prepare(config, JoinPolicy::SoftPrepare, PrepareNotes::Http).await {
-        Ok(status) => status,
-        Err(_) => unreachable!("soft prepare never returns Err"),
-    }
+    legacy_prepare(config).await
 }
 
 pub async fn make_ready_http(config: FoundryLocalConfig) -> EngineStatusSnapshot {
@@ -111,60 +81,66 @@ pub async fn make_ready_http(config: FoundryLocalConfig) -> EngineStatusSnapshot
 async fn managed_status(
     config: &FoundryLocalConfig,
     start_if_needed: bool,
-) -> Option<EngineStatusSnapshot> {
-    let runtime = config.managed_runtime.as_ref()?;
-    let executable_ready = PathBuf::from(&runtime.executable_path).is_file();
-    let expected_model_size = crate::engine_manifest::EngineManifest::shipped()
-        .map(|manifest| manifest.model.artifact.size_bytes)
-        .unwrap_or_default();
-    let model_ready = PathBuf::from(&runtime.model_path)
-        .metadata()
-        .map(|metadata| expected_model_size > 0 && metadata.len() == expected_model_size)
-        .unwrap_or(false);
-    let service_running = if executable_ready && model_ready {
-        if start_if_needed {
-            hy_mt_runtime::ensure_ready(runtime, Duration::from_secs(90))
-                .await
-                .is_ok()
-        } else {
-            hy_mt_runtime::is_healthy(runtime).await
+) -> Result<EngineStatusSnapshot, String> {
+    let status = if start_if_needed {
+        crate::core_client::ready(crate::core_client::READY_TIMEOUT).await?
+    } else {
+        match crate::core_client::status_if_idle().await? {
+            crate::core_client::StatusPoll::Status(status) => *status,
+            crate::core_client::StatusPoll::Busy => return Ok(preparing_snapshot(config)),
         }
-    } else {
-        false
     };
-    let phase = if !executable_ready {
-        FoundryLocalPhase::NotInstalled
-    } else if !model_ready {
-        FoundryLocalPhase::NoModels
-    } else if service_running {
+    Ok(managed_snapshot(config, status))
+}
+
+fn preparing_snapshot(config: &FoundryLocalConfig) -> EngineStatusSnapshot {
+    EngineStatusSnapshot {
+        cli_available: config.managed_runtime.is_some(),
+        service_running: false,
+        service_url: None,
+        models: Vec::new(),
+        configured_model: config.model.clone(),
+        selected_model: None,
+        notes: "Local translation engine is busy. Please wait for the current operation."
+            .to_string(),
+        phase: FoundryLocalPhase::Preparing,
+        probe: None,
+    }
+}
+
+fn managed_snapshot(
+    config: &FoundryLocalConfig,
+    status: crate::core_client::CoreStatus,
+) -> EngineStatusSnapshot {
+    let phase = if status.ready {
         FoundryLocalPhase::Ready
-    } else {
+    } else if status.installed {
         FoundryLocalPhase::NotRunning
+    } else {
+        FoundryLocalPhase::NotInstalled
     };
     let notes = match phase {
         FoundryLocalPhase::Ready => "Local Translation Engine is ready.".to_string(),
         FoundryLocalPhase::NotInstalled => "Translation runtime is missing.".to_string(),
-        FoundryLocalPhase::NoModels => "HY-MT model is missing or incomplete.".to_string(),
         FoundryLocalPhase::NotRunning => "Translation engine is installed but stopped.".to_string(),
         _ => "Local Translation Engine is configured.".to_string(),
     };
 
-    Some(EngineStatusSnapshot {
-        cli_available: executable_ready,
-        service_running,
-        service_url: Some(hy_mt_runtime::endpoint_url(runtime)),
-        models: config
-            .model
-            .clone()
+    EngineStatusSnapshot {
+        cli_available: status.installed,
+        service_running: status.ready,
+        service_url: None,
+        models: status
+            .installed
+            .then_some(status.model.clone())
             .into_iter()
-            .filter(|_| model_ready)
             .collect(),
         configured_model: config.model.clone(),
-        selected_model: config.model.clone(),
+        selected_model: status.installed.then_some(status.model),
         notes,
         phase,
         probe: None,
-    })
+    }
 }
 
 #[cfg(test)]

@@ -51,6 +51,13 @@ async fn run() -> Result<(), String> {
     let mut app_config: AppConfig = serde_json::from_str(&config_json)
         .map_err(|error| format!("Invalid app config: {error}"))?;
     app_config.normalize();
+    let legacy_root =
+        meowcal_sub::engine_recovery::install_cache_root(&app_config.translation.foundry_local)
+            .map(PathBuf::from);
+    meowcal_sub::core_client::register_headless(
+        legacy_root.clone(),
+        legacy_root.into_iter().collect(),
+    )?;
     let mut backend_config = app_config.translation.foundry_local;
     let manifest = meowcal_sub::engine_manifest::EngineManifest::shipped()
         .map_err(|error| error.to_string())?;

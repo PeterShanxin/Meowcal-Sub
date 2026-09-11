@@ -150,7 +150,7 @@ Name and logo use is separate from the code license. See
 The Tencent HY-MT model the app can download is under Tencent's community
 license, not AGPL. Redistribution review of that upstream license remains
 open (`distributionReview: requiredBeforeRelease` in
-[`config/engine-manifest.v1.json`](config/engine-manifest.v1.json)). Do not
+[`core/config/engine-manifest.v1.json`](core/config/engine-manifest.v1.json)). Do not
 treat this repository going public as completing that gate.
 
 ## Continuous integration

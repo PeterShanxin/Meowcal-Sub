@@ -23,6 +23,11 @@ try {
         "runtimeId",
         "windowsBuild",
         "totalRamBytes",
+        "coreManifestPath",
+        "coreDevelopmentExecutable",
+        "coreDevelopmentExecutablePresent",
+        "coreBundledExecutable",
+        "coreBundledExecutablePresent",
         "runtimeValid",
         "modelValid"
     )) {
@@ -32,6 +37,17 @@ try {
     }
     if ($diagnostics.runtimeValid -or $diagnostics.modelValid) {
         throw "Empty test cache must not be reported as installed."
+    }
+    $target = if ($diagnostics.architecture -eq "aarch64") {
+        "aarch64-pc-windows-msvc"
+    } else {
+        "x86_64-pc-windows-msvc"
+    }
+    $expectedDevelopmentSuffix = "core\target\$target\release\meowcal-core.exe"
+    if (-not $diagnostics.coreManifestPath.EndsWith("core\config\engine-manifest.v1.json") -or
+        -not $diagnostics.coreDevelopmentExecutable.EndsWith($expectedDevelopmentSuffix) -or
+        -not $diagnostics.coreBundledExecutable.EndsWith("src-tauri\resources\core\meowcal-core.exe")) {
+        throw "Diagnostics output does not report the canonical Core paths."
     }
     Write-Host "Engine support script contract passed." -ForegroundColor Green
 } finally {

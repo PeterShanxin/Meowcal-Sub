@@ -25,7 +25,7 @@ pub async fn run(
         .await
         .map_err(|error| format!("ENGINE_PREFLIGHT_PATH: {error}"))?;
     let install_root = install_root.to_path_buf();
-    let snapshot = tauri::async_runtime::spawn_blocking(move || snapshot(&install_root))
+    let snapshot = tokio::task::spawn_blocking(move || snapshot(&install_root))
         .await
         .map_err(|error| format!("ENGINE_PREFLIGHT_TASK: {error}"))??;
     validate(snapshot, requirements, disk_space_needed)

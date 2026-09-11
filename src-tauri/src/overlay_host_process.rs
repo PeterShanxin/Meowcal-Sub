@@ -80,11 +80,17 @@ pub fn spawn_and_manage<M: Manager<tauri::Wry>>(manager: &M) {
 
     info!("🚀 Spawning OverlayHost from: {:?}", path);
     match Command::new(path).spawn() {
-        Ok(child) => {
+        Ok(mut child) => {
             info!("✅ OverlayHost spawned (PID: {})", child.id());
             // Tied to this process, so a crash cannot leave it holding its own
             // image file open inside the install directory.
-            crate::process_lifetime::attach_to_app_lifetime(&child);
+            if let Err(error) = crate::process_lifetime::attach_to_app_lifetime(&child) {
+                warn!("⚠️ OverlayHost lifetime attachment failed: {error}");
+                let _ = child.kill();
+                let _ = child.wait();
+                manager.manage(OverlayHostProcess::new(None));
+                return;
+            }
             manager.manage(OverlayHostProcess::new(Some(child)));
         }
         Err(error) => {

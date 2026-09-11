@@ -10,6 +10,7 @@
 mod chat_wire;
 mod context;
 mod context_summarization;
+mod core_translation;
 mod foundry_local;
 mod manager;
 mod mock;

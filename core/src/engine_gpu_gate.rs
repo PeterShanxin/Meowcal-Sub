@@ -1,6 +1,3 @@
-// =============================================================================
-// ENGINE_GPU_GATE.RS - which machines may run the Adreno GPU launch policy
-// =============================================================================
 // The aarch64 manifest runtime enables full-layer Adreno OpenCL offload
 // (`-ngl 99 --no-kv-offload`). The evidence for that policy
 // (docs/plans/2026-08-09-adreno-gpu-benchmark.md) was measured on exactly one
@@ -13,7 +10,6 @@
 //
 // Every failure direction is CPU: any enumeration error, a non-Windows host,
 // or no matching adapter means "not validated".
-// =============================================================================
 
 /// The validated machine's DXGI adapter description is
 /// `Qualcomm(R) Adreno(TM) X1-85 GPU`; the `(TM)` sits between the words, so

@@ -1,0 +1,239 @@
+use super::config::{dedupe_paths, resolve_executable, validate_paths};
+use super::request::acquire_slot;
+use super::*;
+use std::path::Path;
+
+#[test]
+fn readiness_deadline_covers_server_budget_and_handshake() {
+    assert!(READY_TIMEOUT >= meowcal_core::protocol::READY_BUDGET + HELLO_TIMEOUT);
+}
+
+#[test]
+fn managed_backend_snapshots_do_not_wait_for_an_active_core_request() {
+    use crate::llm::{FoundryLocalBackend, ReadyState, TranslatorBackend};
+    let status = CoreStatus {
+        installed: true,
+        ready: true,
+        model: "test".into(),
+        version: CORE_VERSION.into(),
+        storage_root: PathBuf::new(),
+        managed_config: None,
+        install_paths: None,
+    };
+    *STATUS.lock().unwrap() = Some(status);
+    let config = crate::config::FoundryLocalConfig {
+        managed_runtime: Some(crate::config::ManagedLocalRuntimeConfig {
+            kind: "hy-mt".into(),
+            executable_path: "unused".into(),
+            model_path: "unused".into(),
+            port: 0,
+        }),
+        ..Default::default()
+    };
+    let backend = FoundryLocalBackend::new(config);
+    let active = TRANSLATION.get_or_init(|| Mutex::new(None)).lock().unwrap();
+    let (send, receive) = std::sync::mpsc::channel();
+    let reader = std::thread::spawn(move || {
+        let _ = send.send((backend.is_available(), backend.ready_state()));
+    });
+    let result = receive.recv_timeout(Duration::from_millis(200));
+    drop(active);
+    reader.join().unwrap();
+    assert_eq!(result.unwrap(), (true, ReadyState::Ready));
+    invalidate_readiness();
+    assert!(!cached_status().unwrap().ready);
+    *STATUS.lock().unwrap() = None;
+}
+
+#[test]
+fn production_path_uses_the_bundled_resource() {
+    let path = resolve_executable("production", Path::new(r"C:\app"))
+        .expect("production path should resolve");
+    assert_eq!(
+        path,
+        PathBuf::from(r"C:\app\resources\core\meowcal-core.exe")
+    );
+}
+
+#[test]
+fn development_path_uses_the_target_release_binary() {
+    if std::env::var_os("MEOWCAL_CORE_EXECUTABLE").is_some() {
+        return;
+    }
+    let path =
+        resolve_executable("development", Path::new("")).expect("development path should resolve");
+    assert!(path.ends_with(Path::new("release/meowcal-core.exe")));
+    assert!(path.is_absolute());
+}
+
+#[test]
+fn packaged_core_contract_is_pinned_to_api_one_version_0_1_0() {
+    assert_eq!(API_VERSION, 1);
+    assert_eq!(CORE_VERSION, "0.1.0");
+    assert_eq!(CORE_VERSION, meowcal_core::protocol::CORE_VERSION);
+}
+
+#[test]
+fn storage_paths_must_be_absolute_and_are_deduplicated() {
+    assert!(validate_paths(Some(&PathBuf::from("relative")), &[]).is_err());
+    let root = PathBuf::from(r"C:\models");
+    assert_eq!(dedupe_paths(vec![root.clone(), root.clone()]), vec![root]);
+}
+
+#[test]
+fn timeout_errors_that_exit_core_are_fatal() {
+    assert!(fatal_remote("OCR_TIMEOUT"));
+    assert!(fatal_remote("OCR_PROCESS_UNUSABLE"));
+    assert!(fatal_remote("INSTALL_TIMEOUT"));
+    assert!(fatal_remote("READY_TIMEOUT"));
+    assert!(!fatal_remote("ASSETS_UNVERIFIED"));
+}
+
+#[test]
+fn waiting_status_timeout_does_not_interrupt_the_active_request() {
+    let slot = Arc::new(Mutex::new(None));
+    let active_completed = Arc::new(AtomicBool::new(false));
+    let owner_slot = slot.clone();
+    let owner_completed = active_completed.clone();
+    let (locked, wait_until_locked) = std::sync::mpsc::channel();
+    let owner = std::thread::spawn(move || {
+        let _guard = owner_slot.lock().expect("active request owns its slot");
+        locked.send(()).expect("signal acquired slot");
+        std::thread::sleep(Duration::from_millis(150));
+        owner_completed.store(true, Ordering::SeqCst);
+    });
+    wait_until_locked
+        .recv()
+        .expect("active request acquired slot");
+
+    let error = match acquire_slot(
+        &slot,
+        Instant::now() + Duration::from_millis(30),
+        "status",
+        None,
+    ) {
+        Ok(_) => panic!("status should time out behind the active request"),
+        Err(error) => error,
+    };
+
+    assert_eq!(error, "CORE_REQUEST_TIMEOUT: status");
+    assert!(!active_completed.load(Ordering::SeqCst));
+    owner
+        .join()
+        .expect("active request should continue normally");
+    assert!(active_completed.load(Ordering::SeqCst));
+}
+
+#[tokio::test]
+#[ignore = "requires MEOWCAL_CORE_EXECUTABLE pointing to a built Core"]
+async fn real_core_handshake_status_and_shutdown() {
+    let storage = std::env::temp_dir().join(format!(
+        "meowcal-sub-core-contract-{}-{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .expect("system clock")
+            .as_nanos()
+    ));
+    register_headless(Some(storage.clone()), Vec::new()).expect("register real Core");
+
+    let status = status().await.expect("Core handshake and status");
+    assert_eq!(status.version, CORE_VERSION);
+    assert!(!status.ready);
+    assert!(owned_pid().is_some());
+
+    shutdown_owned();
+    assert!(owned_pid().is_none());
+    let _ = std::fs::remove_dir_all(storage);
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[ignore = "requires MEOWCAL_CORE_EXECUTABLE and MEOWCAL_CORE_TEST_STORAGE with an installed model"]
+async fn real_core_active_completion_cancel_preserves_warm_process() {
+    let storage = PathBuf::from(
+        std::env::var_os("MEOWCAL_CORE_TEST_STORAGE")
+            .expect("MEOWCAL_CORE_TEST_STORAGE must name the installed storage base"),
+    );
+    register_headless(Some(storage), Vec::new()).expect("register real Core");
+    let _shutdown = scopeguard::guard((), |_| shutdown_owned());
+    let status = ready(READY_TIMEOUT).await.expect("ready Core");
+    assert!(status.ready);
+    let pid = owned_pid().expect("owned Core PID");
+
+    let first = tokio::spawn(complete(completion_request(&status.model), 90_000));
+    tokio::time::sleep(Duration::from_millis(250)).await;
+    assert!(!first.is_finished(), "first completion must be active");
+    first.abort();
+    assert!(first.await.expect_err("caller cancellation").is_cancelled());
+
+    let response = complete(completion_request(&status.model), 90_000)
+        .await
+        .expect("next completion should reuse the warm Core");
+    assert_eq!(owned_pid(), Some(pid));
+    let text = response
+        .pointer("/choices/0/message/content")
+        .and_then(Value::as_str)
+        .expect("OpenAI completion text")
+        .to_ascii_lowercase();
+    assert!(text.contains("clock") && text.contains("tower"));
+    shutdown_owned();
+    assert!(owned_pid().is_none());
+}
+
+fn completion_request(model: &str) -> Value {
+    json!({
+        "model": model,
+        "messages": [{
+            "role": "user",
+            "content": "Translate the following segment into English, without additional explanation.\n\n先不提时钟塔"
+        }],
+        "temperature": 0.7,
+        "top_k": 20,
+        "top_p": 0.6,
+        "repeat_penalty": 1.05,
+        "max_tokens": 120,
+        "stream": false
+    })
+}
+
+#[test]
+fn binary_ocr_validates_dimensions_stride_size_and_timeout() {
+    let valid = OcrRecognizeParams {
+        language: None,
+        width: 1,
+        height: 1,
+        stride: 4,
+        timeout_ms: 30_000,
+    };
+    assert!(Request::ocr(valid.clone(), vec![0; 4]).is_ok());
+    assert!(Request::ocr(valid.clone(), vec![0; 3]).is_err());
+    for params in [
+        OcrRecognizeParams {
+            width: 0,
+            ..valid.clone()
+        },
+        OcrRecognizeParams {
+            width: 4097,
+            ..valid.clone()
+        },
+        OcrRecognizeParams {
+            height: 4097,
+            ..valid.clone()
+        },
+        OcrRecognizeParams {
+            stride: 8,
+            ..valid.clone()
+        },
+        OcrRecognizeParams {
+            timeout_ms: 0,
+            ..valid.clone()
+        },
+        OcrRecognizeParams {
+            timeout_ms: 30_001,
+            ..valid.clone()
+        },
+    ] {
+        assert!(Request::ocr(params, vec![0; 4]).is_err());
+    }
+    assert_eq!(meowcal_core::ocr::MAX_FRAME_BYTES, 64 * 1024 * 1024);
+}

@@ -10,9 +10,9 @@ Measured on 2026-08-16, after #35 closed the decomposition programme by widening
 the measured coverage scope (#31 lifecycle, #32 engine/pipeline, #33 main/setup,
 #34 selector/overlay):
 
-- production files under `src/` and `src-tauri/src/`;
+- production files under `src/`, `src-tauri/src/`, and `core/src/`;
 - 400 lines maximum for a new `.rs`, `.js`, `.ts`, `.html`, or `.css` production file;
-- 14 explicit legacy files above that ceiling;
+- 13 explicit legacy files above that ceiling;
 - 1 existing ESLint warning, with zero allowed errors;
 - frontend coverage floors of 83% statements, 77% branches, 84% functions, and
   86% lines, over a named 31-module scope.

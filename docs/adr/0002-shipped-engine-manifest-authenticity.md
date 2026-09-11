@@ -4,6 +4,10 @@
 **Status:** Accepted  
 **Decision owners:** Meowcal Sub maintainers
 
+[ADR-0004](0004-versioned-meowcal-core.md) specifies the Core release boundary
+that replaces application ownership of this manifest. Its single embedded
+authority and prohibition on unsigned remote refresh remain unchanged.
+
 ## Context
 
 Meowcal Sub installs a model and architecture-specific executable runtime. A
@@ -18,9 +22,9 @@ rollback, requirement, support-code, and licensing contract.
 
 ## Decision
 
-The first curated engine manifest is tracked as
-`config/engine-manifest.v1.json` and embedded into the application binary at
-compile time. The typed Rust parser rejects unknown schemas, architectures,
+The curated engine manifest is embedded at compile time. Its canonical source
+is now `core/config/engine-manifest.v1.json`; ADR-0004 moves the original
+application release boundary into Core. The typed Rust parser rejects unknown schemas, architectures,
 unsafe paths, missing hashes, non-HTTPS artifacts, incomplete license
 references, unsafe host policy, and incomplete rollback metadata.
 

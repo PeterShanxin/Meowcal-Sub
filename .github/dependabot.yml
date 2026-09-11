@@ -45,6 +45,21 @@ updates:
           - "minor"
           - "patch"
 
+  - package-ecosystem: "cargo"
+    directory: "/core"
+    schedule:
+      interval: "monthly"
+      time: "09:00"
+      timezone: "Asia/Singapore"
+    open-pull-requests-limit: 10
+    groups:
+      core-minor-patch:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
+
   # WinUI 3 OverlayHost dependencies.
   - package-ecosystem: "nuget"
     directory: "/src-winui3/OverlayHost"

@@ -45,11 +45,10 @@ pub fn get_system_info() -> SystemInfo {
 // OCR LANGUAGE MANAGEMENT
 // =============================================================================
 
-/// List OCR language packs installed on this system.
-/// Returns BCP-47 tags (e.g. ["en-US", "zh-CN"]).
 #[tauri::command]
-pub async fn get_ocr_languages() -> Vec<String> {
-    crate::ocr_language_packs::available().await
+pub async fn get_ocr_languages(state: State<'_, AppState>) -> Result<Vec<String>, String> {
+    state.startup_gate.wait_until_ready().await?;
+    Ok(crate::ocr_language_packs::available().await)
 }
 
 /// Install an OCR language pack via an elevated PowerShell window.

@@ -3,9 +3,10 @@ use crate::llm::chat_wire::{
     generation_rate, ChatCompletionRequest, ChatCompletionResponse, ChatMessage,
 };
 use crate::llm::{
-    build_subtitle_translation_prompt, subtitle_output::sanitize_subtitle_translation_output,
-    transport_errors::describe_request_failure, BackendId, FoundryLocalPhase, LlmError,
-    PromptRouterOptions, ReadyState, TranslatorBackend,
+    build_subtitle_translation_prompt,
+    subtitle_output::sanitize_subtitle_translation_output,
+    transport_errors::{map_get_error, map_post_error},
+    BackendId, FoundryLocalPhase, LlmError, PromptRouterOptions, ReadyState, TranslatorBackend,
 };
 use crate::sync_utils::{read_or_recover, write_or_recover};
 use async_trait::async_trait;
@@ -17,7 +18,8 @@ use std::sync::{OnceLock, RwLock};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tracing::{debug, info, warn};
 
-use super::transport_http::{HttpTransport, ModelsProbeOutcome, TransportError};
+use super::core_translation;
+use super::transport_http::{HttpTransport, ModelsProbeOutcome};
 
 /// Every `foundry` spawn goes through here: these run on a timer while the
 /// viewer is watching, and four of the five once drew a console window (#67).
@@ -164,8 +166,11 @@ pub struct FoundryLocalBackend {
 impl FoundryLocalBackend {
     pub fn new(config: FoundryLocalConfig) -> Self {
         let transport = HttpTransport::new(config.timeout_ms as u64);
-        let configured_url = config.effective_endpoint_url();
-        let has_configured_url = configured_url.is_some();
+        let managed = config.managed_runtime.is_some();
+        let configured_url = (!managed)
+            .then(|| config.effective_endpoint_url())
+            .flatten();
+        let has_configured_url = configured_url.is_some() || managed;
         let configured_model = config.model.clone();
 
         Self {
@@ -740,6 +745,9 @@ impl FoundryLocalBackend {
     }
 
     fn configured_endpoint_url(&self) -> Option<String> {
+        if self.config.managed_runtime.is_some() {
+            return None;
+        }
         self.config.effective_endpoint_url()
     }
 
@@ -758,6 +766,9 @@ impl FoundryLocalBackend {
 
     /// List available models from the service
     pub async fn list_models(&self) -> Result<Vec<String>, LlmError> {
+        if self.config.managed_runtime.is_some() {
+            return core_translation::models().await;
+        }
         // If service isn't running, fall back to CLI-based discovery.
         // This allows the model dropdown to populate even when the service is stopped.
         let base_url = match self.get_service_url() {
@@ -867,6 +878,9 @@ impl FoundryLocalBackend {
 
     /// Check if service is healthy by probing the models endpoint
     pub async fn check_health(&self) -> bool {
+        if self.config.managed_runtime.is_some() {
+            return core_translation::is_ready().await.unwrap_or(false);
+        }
         if let Some(url) = self.get_service_url() {
             self.transport.check_health(&url).await
         } else {
@@ -1070,6 +1084,9 @@ impl FoundryLocalBackend {
     ///
     /// Returns Ok(true) on success, Ok(false) on timeout, Err on other errors.
     pub async fn probe_chat_completions(&self, timeout_ms: u64) -> Result<bool, LlmError> {
+        if self.config.managed_runtime.is_some() {
+            return core_translation::is_ready().await;
+        }
         let base_url = match self.get_service_url() {
             Some(url) => url,
             None => {
@@ -1208,9 +1225,14 @@ impl FoundryLocalBackend {
             return Ok(String::new());
         }
 
-        let base_url = self
-            .get_service_url()
-            .ok_or_else(|| LlmError::ApiError("Foundry Local service not running".to_string()))?;
+        let managed = self.config.managed_runtime.is_some();
+        let base_url = if managed {
+            None
+        } else {
+            Some(self.get_service_url().ok_or_else(|| {
+                LlmError::ApiError("Foundry Local service not running".to_string())
+            })?)
+        };
 
         let model = self
             .get_model()
@@ -1254,14 +1276,21 @@ impl FoundryLocalBackend {
 
         debug!("Sending summarization request to Foundry Local");
 
-        let response = self
-            .post_with_namespace_fallback(&base_url, "chat/completions", &request)
-            .await?;
-
-        let completion: ChatCompletionResponse = response
-            .json()
-            .await
-            .map_err(|e| LlmError::ApiError(format!("Failed to parse response: {}", e)))?;
+        let completion = if managed {
+            core_translation::complete(&request, self.config.timeout_ms as u64).await?
+        } else {
+            let response = self
+                .post_with_namespace_fallback(
+                    base_url.as_deref().unwrap_or_default(),
+                    "chat/completions",
+                    &request,
+                )
+                .await?;
+            response
+                .json::<ChatCompletionResponse>()
+                .await
+                .map_err(|e| LlmError::ApiError(format!("Failed to parse response: {e}")))?
+        };
 
         let summary = completion
             .choices
@@ -1285,6 +1314,9 @@ impl TranslatorBackend for FoundryLocalBackend {
     }
 
     fn is_available(&self) -> bool {
+        if self.config.managed_runtime.is_some() {
+            return core_translation::is_available();
+        }
         // Refresh status if currently unavailable
         if !self.service_available.load(Ordering::SeqCst) {
             self.refresh_service_status();
@@ -1293,6 +1325,9 @@ impl TranslatorBackend for FoundryLocalBackend {
     }
 
     fn ready_state(&self) -> ReadyState {
+        if self.config.managed_runtime.is_some() {
+            return core_translation::ready_state();
+        }
         if !self.is_available() {
             return ReadyState::NotReady;
         }
@@ -1318,6 +1353,9 @@ impl TranslatorBackend for FoundryLocalBackend {
     }
 
     fn notes(&self) -> String {
+        if self.config.managed_runtime.is_some() {
+            return core_translation::notes();
+        }
         if let Some(url) = self.get_service_url() {
             let models = read_or_recover(&self.cached_models);
 
@@ -1389,13 +1427,18 @@ impl TranslatorBackend for FoundryLocalBackend {
             return Ok(String::new());
         }
 
-        let base_url = match self.get_service_url() {
-            Some(url) => url,
-            None => {
-                self.refresh_service_status();
-                self.get_service_url().ok_or_else(|| {
-                    LlmError::ApiError("Foundry Local service not running".to_string())
-                })?
+        let managed = self.config.managed_runtime.is_some();
+        let base_url = if managed {
+            String::new()
+        } else {
+            match self.get_service_url() {
+                Some(url) => url,
+                None => {
+                    self.refresh_service_status();
+                    self.get_service_url().ok_or_else(|| {
+                        LlmError::ApiError("Foundry Local service not running".to_string())
+                    })?
+                }
             }
         };
 
@@ -1437,9 +1480,12 @@ impl TranslatorBackend for FoundryLocalBackend {
             max_tokens: 120,
         };
 
-        let url = self
-            .transport
-            .endpoint_url_for(&base_url, "chat/completions");
+        let url = if managed {
+            "core://local-engine".to_string()
+        } else {
+            self.transport
+                .endpoint_url_for(&base_url, "chat/completions")
+        };
         let request_started = std::time::Instant::now();
         debug!("Sending translation request to Foundry Local: {}", url);
         info!(
@@ -1451,44 +1497,35 @@ impl TranslatorBackend for FoundryLocalBackend {
             "Translation request"
         );
 
-        let response = match self.send_chat_completion(&base_url, &request).await {
-            Ok(resp) => resp,
-            Err(err) => {
-                // Foundry Local's port can change when the service restarts. If we see a request
-                // failure, clear the cached URL and refresh from CLI once, then retry.
-                self.mark_service_unavailable();
-                self.refresh_service_status();
-
-                if let Some(refreshed_url) = self.get_service_url() {
-                    if refreshed_url != base_url {
-                        let retry_url = self
-                            .transport
-                            .endpoint_url_for(&refreshed_url, "chat/completions");
-                        debug!(
-                            "Retrying Foundry Local request after refreshing service URL: {}",
-                            retry_url
-                        );
-                    }
-
-                    self.send_chat_completion(&refreshed_url, &request)
-                        .await
-                        .map_err(|retry_err| {
-                            warn!(
-                                "Foundry Local request failed after service refresh: {}",
+        let completion = if managed {
+            core_translation::complete(&request, self.config.timeout_ms as u64).await?
+        } else {
+            let response = match self.send_chat_completion(&base_url, &request).await {
+                Ok(resp) => resp,
+                Err(err) => {
+                    // Developer endpoints can move after a service restart.
+                    self.mark_service_unavailable();
+                    self.refresh_service_status();
+                    if let Some(refreshed_url) = self.get_service_url() {
+                        self.send_chat_completion(&refreshed_url, &request)
+                            .await
+                            .map_err(|retry_err| {
+                                warn!(
+                                    "Foundry Local request failed after service refresh: {}",
+                                    retry_err
+                                );
                                 retry_err
-                            );
-                            retry_err
-                        })?
-                } else {
-                    return Err(err);
+                            })?
+                    } else {
+                        return Err(err);
+                    }
                 }
-            }
+            };
+            response
+                .json::<ChatCompletionResponse>()
+                .await
+                .map_err(|e| LlmError::ApiError(format!("Failed to parse response: {e}")))?
         };
-
-        let completion: ChatCompletionResponse = response
-            .json()
-            .await
-            .map_err(|e| LlmError::ApiError(format!("Failed to parse response: {}", e)))?;
 
         let translated = completion
             .choices
@@ -1516,46 +1553,5 @@ impl TranslatorBackend for FoundryLocalBackend {
         );
 
         Ok(translated)
-    }
-}
-
-/// Map a GET transport failure to the app-level error with the historical
-/// message and (absent) logging behavior: no warn, `API error {status}` for a
-/// non-success status, full failure description otherwise.
-fn map_get_error(error: TransportError) -> LlmError {
-    match error {
-        TransportError::Timeout(error) | TransportError::Failed(error) => {
-            LlmError::ApiError(describe_request_failure(&error))
-        }
-        TransportError::ApiStatus(status) => LlmError::ApiError(format!("API error {status}")),
-    }
-}
-
-/// Map a POST transport failure to the app-level error with the historical
-/// message and logging behavior: warns before returning `API error {status}` /
-/// the full failure description.
-fn map_post_error(error: TransportError) -> LlmError {
-    match error {
-        TransportError::Timeout(error) | TransportError::Failed(error) => {
-            warn!("Foundry Local request failed: {}", error);
-            LlmError::ApiError(describe_request_failure(&error))
-        }
-        TransportError::ApiStatus(status) => {
-            warn!("Local translation endpoint returned HTTP {}", status);
-            LlmError::ApiError(format!("API error {status}"))
-        }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_parse_service_url() {
-        // This would require mocking the CLI output
-        // For now, just verify the struct can be created
-        let config = FoundryLocalConfig::default();
-        let _backend = FoundryLocalBackend::new(config);
     }
 }

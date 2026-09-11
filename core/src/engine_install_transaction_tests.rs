@@ -162,11 +162,16 @@ async fn installed_record(
         runtime_archive: PathBuf::from("runtime").join(format!("{version}.zip")),
         executable: executable_path,
         executable_size: executable.len() as u64,
-        executable_sha256: sha256_file(&root.join("runtime").join(version).join("server.exe"))
-            .unwrap(),
+        executable_sha256: crate::sha256::digest_file_hex(
+            &root.join("runtime").join(version).join("server.exe"),
+        )
+        .unwrap(),
         model_dir,
         model: model_path,
         model_size: model.len() as u64,
-        model_sha256: sha256_file(&root.join("models").join(version).join("model.gguf")).unwrap(),
+        model_sha256: crate::sha256::digest_file_hex(
+            &root.join("models").join(version).join("model.gguf"),
+        )
+        .unwrap(),
     }
 }

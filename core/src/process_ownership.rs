@@ -1,11 +1,5 @@
-// =============================================================================
-// PROCESS OWNERSHIP - which engine processes are ours to end
-// =============================================================================
-// The decision half of `process_lifetime`, kept away from the Win32 calls that
-// gather the evidence and act on it. Deciding whether to terminate a process is
-// the part that has to be right, and here it is a pure function over a list -
-// testable without a process table, a job object, or Windows.
-// =============================================================================
+// Process identity and parentage decide which managed engines are safe to end.
+// Keeping that rule pure makes it testable without Win32 process mutation.
 
 use std::path::{Path, PathBuf};
 

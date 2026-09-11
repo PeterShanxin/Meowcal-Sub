@@ -16,6 +16,8 @@ id_ed25519
 
 # --- Rust / Cargo ---
 /target/
+/core/target/
+/core/dist/
 src-tauri/target/
 D:/cargo-build/
 **/*.rs.bk
@@ -47,6 +49,8 @@ yarn-error.log*
 # --- Build outputs ---
 dist/
 build/
+/core-release-assets/
+/src-tauri/resources/core/
 *.exe
 *.msi
 *.dmg

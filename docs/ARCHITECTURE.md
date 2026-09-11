@@ -3,8 +3,9 @@
 This document describes the live Meowcal Sub architecture and the reviewed
 boundaries for its staged redesign.
 [ADR-0001](adr/0001-curated-local-translation-stack.md) owns the product
-decision: Tauri 2, Rust, Windows OCR, and one app-managed Tencent HY-MT engine
-in normal mode. [`adr/README.md`](adr/README.md) says which decisions belong in
+decision: Tauri 2, Rust, Windows OCR, and Tencent HY-MT in normal mode.
+[ADR-0004](adr/0004-versioned-meowcal-core.md) defines the independent Core
+runtime shared with Meowcal Sub 2. [`adr/README.md`](adr/README.md) says which decisions belong in
 an ADR and which belong here.
 
 ## Runtime shape
@@ -19,15 +20,34 @@ calls to a loopback-only Rust HTTP adapter.
 main/setup UI ─┐
 selector UI ───┼─ TauriBridge ─ commands / HTTP adapters ─ application services
 overlay UI ────┤                                      │
-wizard UI ─────┘                                      ├─ capture + Windows OCR
+wizard UI ─────┘                                      ├─ capture + OCR policy
                                                       ├─ translation pipeline
-                                                      ├─ curated engine lifecycle
+                                                      ├─ Core process adapters
                                                       ├─ persisted config
                                                       └─ native windows + IPC
 ```
 
 Browser mode is an adapter-contract test surface. It does not implement or
 prove Windows capture, OCR, native windows, tray behavior, or installation.
+
+## Meowcal Core
+
+`core/` builds independently of the Tauri application. Its versioned Windows
+executable owns HY-MT artifacts, installation/recovery, execution policy, model
+requests, and native OCR. Both applications use the same JSON API over inherited
+standard input/output. They pin a Core version and reject an incompatible
+handshake. The Rust and Python consumers are transport adapters, not alternative
+engine implementations.
+
+OCR runs in a separate Core process from inference. Each application retains
+its capture and preprocessing pipeline, including Sub 1's frame budgets and
+line geometry and Sub 2's corroborated white-text pass. Core does not select a
+subtitle band, match a subtitle file, or decide which text belongs on screen.
+
+Core storage is partitioned by profile, version, and architecture. Cross-process
+leases prevent installation from replacing files in use. Legacy import copies
+verified archives and models; it leaves the previous application installation
+available for rollback. Neither application's update changes the other's pin.
 
 ## Live pipeline
 
@@ -45,9 +65,10 @@ owns backend selection, fallback, context storage, and diagnostics;
 attempt; `llm/translation_attempt.rs` owns the single-backend attempt/transient-retry
 state machine (request, validation invocation, typed outcome, attempt-level
 diagnostics). `FoundryLocalBackend` combines CLI discovery, service lifecycle,
-and the compatibility façade; its HTTP request execution and API-namespace
-discovery live in `llm/transport_http.rs` (`HttpTransport`). These are
-recorded legacy boundaries, not the target design.
+and the compatibility façade. Managed HY-MT requests use
+`llm/core_translation.rs` and the Core process adapter. Compatibility HTTP
+execution and API-namespace discovery remain in `llm/transport_http.rs`
+(`HttpTransport`).
 
 The target path keeps the stages explicit. Every result carries a typed state:
 translated, source-only, rejected, transient failure, cancelled, or stale.
@@ -55,34 +76,34 @@ Source OCR is never represented as successful translation.
 
 ## Ownership boundaries
 
-| Boundary                | Current owner                                     | Target owner and rule                                                                  |
-| ----------------------- | ------------------------------------------------- | -------------------------------------------------------------------------------------- |
-| Tauri commands          | `src-tauri/src/commands.rs`                       | Thin adapters only; application services own behavior                                  |
-| Browser routes          | `src-tauri/src/http_server.rs`, `http_port.rs`    | Adapter parity with supported Tauri contracts; explicit `501` for native-only behavior. `http_port.rs` owns the listening port so verification can take a free one instead of requiring 3001 |
-| Application state       | `src-tauri/src/app_state.rs`                      | One owner for shared session state and the region/scale invariants                     |
-| App/window lifecycle    | `src-tauri/src/main.rs` (composition root), `window_lifecycle.rs`, `tray.rs`, `app_logging.rs`, `selector_window.rs`, `wizard_window.rs` | One lifecycle service owns restore/show ordering, tray, and shutdown |
-| Persisted configuration | `src-tauri/src/config.rs`, `capture_region.rs`, `settings_service.rs` | One versioned config service owns defaults, validation, migration, and writes          |
-| Capture and OCR         | `capture/`, `ocr/`, `ocr_language_packs.rs`, session code in `commands.rs` | Separate capture/OCR services; pipeline orchestrator owns sequencing  |
-| Translation eligibility | `translation_eligibility.rs`                      | One owner for whether the pipeline judges subtitle shape; `ocr::BandFilter` and `ocr_gate` read it, neither decides it |
-| Translation             | `llm/manager.rs` (selection/fallback/context storage), `llm/translation_planner.rs` (context-tier progression), `llm/translation_attempt.rs` (attempt/retry state machine) | Pipeline service owns attempts and typed outcomes; validators do not own transport |
-| Translation transport   | `llm/transport_http.rs` (`HttpTransport`)        | Namespace discovery, endpoint URL assembly, and GET/POST dispatch with 404 fallback; no retry/context/validation policy |
-| Engine runtime          | `engine_status` (readiness orchestration), `hy_mt_runtime` / `engine_*` (managed install/process), `llm/foundry_local.rs` (legacy CLI/compatibility façade) | Curated engine service owns manifest, install, process, health, repair, rollback; adapters stay thin |
-| Compatibility downloads | `legacy_translate_locally.rs`                    | Kept outside normal-mode adapters; legacy/developer compatibility only                  |
-| Native overlay IPC      | `ipc/` (protocol, server, handler), `overlay/`, `commands.rs` | `ipc/protocol.rs` owns payload schema; adapters do not redefine it |
-| In-app update           | `update_handoff.rs`, `ui/update-controller.ts`    | Handoff owns what must stop before the installer runs; the manifest is generated, never hand-written |
-| Main/setup UI           | Lit components and TypeScript controllers         | One reactive snapshot drives Home/setup/settings presentation; bridge adapters stay thin |
-| Overlay/selector geometry | `region-geometry.js` (capture-region move/resize, shared), `overlay-geometry.js` (frame DPI tokens, subtitle placement, clip rounding), `selector-geometry.js` (selection rectangle, dim segments, persisted payload) | One owner per rule, pure and testable without a WebView; no window owns a private copy |
-| Overlay presentation state | `overlay-appearance.js` (font/colour/toggle defaults, hydrate and patch), `overlay-timers.js` (named-slot owner for the click-through poll, frame fade, and hide cleanup) | One rule per concern; a timer scoped to overlay state is cancelled by the state change, not by the page ending |
-| Overlay/selector UI     | `overlay.js`, `selector.js`                       | Adapters only: DOM, Tauri IPC, and interaction state on top of the geometry and state owners |
+| Boundary                   | Current owner                                                                                                                                                                                                         | Target owner and rule                                                                                                                                                                        |
+| -------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Tauri commands             | `src-tauri/src/commands.rs`                                                                                                                                                                                           | Thin adapters only; application services own behavior                                                                                                                                        |
+| Browser routes             | `src-tauri/src/http_server.rs`, `http_port.rs`                                                                                                                                                                        | Adapter parity with supported Tauri contracts; explicit `501` for native-only behavior. `http_port.rs` owns the listening port so verification can take a free one instead of requiring 3001 |
+| Application state          | `src-tauri/src/app_state.rs`                                                                                                                                                                                          | One owner for shared session state and the region/scale invariants                                                                                                                           |
+| App/window lifecycle       | `src-tauri/src/main.rs` (composition root), `window_lifecycle.rs`, `tray.rs`, `app_logging.rs`, `selector_window.rs`, `wizard_window.rs`                                                                              | One lifecycle service owns restore/show ordering, tray, and shutdown                                                                                                                         |
+| Persisted configuration    | `src-tauri/src/config.rs`, `capture_region.rs`, `settings_service.rs`                                                                                                                                                 | One versioned config service owns defaults, validation, migration, and writes                                                                                                                |
+| Capture and OCR            | `capture/`, `ocr/` (product policy), `core/src/ocr/` (native recognition), `ocr_language_packs.rs` (Windows pack setup)                                                                                                                                            | Separate capture/OCR services; pipeline orchestrator owns sequencing                                                                                                                         |
+| Translation eligibility    | `translation_eligibility.rs`                                                                                                                                                                                          | One owner for whether the pipeline judges subtitle shape; `ocr::BandFilter` and `ocr_gate` read it, neither decides it                                                                       |
+| Translation                | `llm/manager.rs` (selection/fallback/context storage), `llm/translation_planner.rs` (context-tier progression), `llm/translation_attempt.rs` (attempt/retry state machine)                                            | Pipeline service owns attempts and typed outcomes; validators do not own transport                                                                                                           |
+| Translation transport      | `core_client` and `llm/core_translation.rs` (managed HY-MT); `llm/transport_http.rs` (compatibility endpoints)                                                                                                                                                                             | Namespace discovery, endpoint URL assembly, and GET/POST dispatch with 404 fallback; no retry/context/validation policy                                                                      |
+| Engine runtime             | `core/src/` (manifest/install/process/recovery), `core_client` and `engine_status` (app adapters), `llm/foundry_local.rs` (compatibility façade)                                                           | Curated engine service owns manifest, install, process, health, repair, rollback; adapters stay thin                                                                                         |
+| Compatibility downloads    | `legacy_translate_locally.rs`                                                                                                                                                                                         | Kept outside normal-mode adapters; legacy/developer compatibility only                                                                                                                       |
+| Native overlay IPC         | `ipc/` (protocol, server, handler), `overlay/`, `commands.rs`                                                                                                                                                         | `ipc/protocol.rs` owns payload schema; adapters do not redefine it                                                                                                                           |
+| In-app update              | `update_handoff.rs`, `ui/update-controller.ts`                                                                                                                                                                        | Handoff owns what must stop before the installer runs; the manifest is generated, never hand-written                                                                                         |
+| Main/setup UI              | Lit components and TypeScript controllers                                                                                                                                                                             | One reactive snapshot drives Home/setup/settings presentation; bridge adapters stay thin                                                                                                     |
+| Overlay/selector geometry  | `region-geometry.js` (capture-region move/resize, shared), `overlay-geometry.js` (frame DPI tokens, subtitle placement, clip rounding), `selector-geometry.js` (selection rectangle, dim segments, persisted payload) | One owner per rule, pure and testable without a WebView; no window owns a private copy                                                                                                       |
+| Overlay presentation state | `overlay-appearance.js` (font/colour/toggle defaults, hydrate and patch), `overlay-timers.js` (named-slot owner for the click-through poll, frame fade, and hide cleanup)                                             | One rule per concern; a timer scoped to overlay state is cancelled by the state change, not by the page ending                                                                               |
+| Overlay/selector UI        | `overlay.js`, `selector.js`                                                                                                                                                                                           | Adapters only: DOM, Tauri IPC, and interaction state on top of the geometry and state owners                                                                                                 |
 
 ## Shared contracts
 
 Shared contracts have one owner before parallel decomposition begins:
 
-- Engine package metadata: `config/engine-manifest.v1.json` is embedded into
-  the application and interpreted only by `engine_manifest.rs`. Remote refresh
-  is disabled; [ADR-0002](adr/0002-shipped-engine-manifest-authenticity.md) owns
-  the authenticity and update policy.
+- Engine package metadata: `core/config/engine-manifest.v1.json` is embedded into
+  Core and interpreted by `core/src/engine_manifest.rs`. Remote refresh is
+  disabled. ADR-0002 defines manifest authenticity; ADR-0004 transfers the
+  release and implementation boundary to Core.
 - Configuration: Rust `config` is canonical. Frontend code may present or
   submit settings but cannot invent defaults, migrations, or readiness rules.
 - Commands and events: Rust payload types and `ipc/protocol.rs` are canonical.
@@ -93,9 +114,9 @@ Shared contracts have one owner before parallel decomposition begins:
   outside `src/`, so it keeps passing unchanged while implementations move
   between modules. `get_system_info` is deliberately snake_case there; the rest
   of the surface is camelCase.
-- Engine install state: `engine_install_transaction.rs` owns the versioned
+- Engine install state: `core/src/engine_install_transaction.rs` owns the versioned
   active/last-known-good record, candidate promotion, interrupted-install
-  recovery, and rollback. `engine_preflight.rs` owns Windows, RAM, and storage
+  recovery, and rollback. `core/src/engine_preflight.rs` owns Windows, RAM, and storage
   compatibility checks. UI modules never infer readiness from process names,
   ports, or model IDs.
 - Engine execution policy: the embedded manifest selects acceleration per

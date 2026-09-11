@@ -120,8 +120,14 @@ fn main() {
         .setup(move |app| {
             info!("Setting up system tray...");
 
-            // Persisted settings, re-adopting an installed-but-unregistered engine (#65)
-            let loaded_config = meowcal_sub::engine_recovery::load_with_engine(app.handle());
+            // Register the shared Core before reading migration settings or starting it.
+            meowcal_sub::core_client::register(app.handle())
+                .map_err(std::io::Error::other)?;
+
+            // Preserve old install locations so Core can verify and import them.
+            let mut loaded_config = meowcal_sub::engine_recovery::load_with_engine(app.handle());
+            meowcal_sub::engine_recovery::configure_core(app.handle(), &mut loaded_config)
+                .map_err(std::io::Error::other)?;
 
             {
                 let state = app.state::<AppState>();

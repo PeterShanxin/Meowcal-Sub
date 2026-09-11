@@ -82,13 +82,13 @@ fn unknown_runtime_fields_are_rejected() {
     ));
 }
 // llama.cpp honors the last occurrence of a repeated flag and per-runtime
-// args are appended after every app-owned argument, so a runtime arg naming
+// args are appended after every Core-owned argument, so a runtime arg naming
 // launcher-owned configuration would silently override it. Every form -
 // separate value and `=`-joined, short and long alias - must be rejected.
 // Each case keeps `--no-kv-offload` so rejection is attributable to the
 // conflict rule, not the Adreno KV constraint.
 #[test]
-fn runtime_launch_args_cannot_override_app_owned_configuration() {
+fn runtime_launch_args_cannot_override_core_owned_configuration() {
     for conflicting in [
         "[\"--no-kv-offload\", \"-m\", \"other.gguf\"]",
         "[\"--no-kv-offload\", \"--model\", \"other.gguf\"]",
@@ -127,7 +127,7 @@ fn runtime_launch_args_cannot_override_app_owned_configuration() {
 // slot policy these args own, and a pinned thread count is detected and
 // honored by `engine_launch::launch_args` as a deliberate choice.
 #[test]
-fn shared_extra_args_cannot_override_app_owned_configuration() {
+fn shared_extra_args_cannot_override_core_owned_configuration() {
     let conflict = SHIPPED_MANIFEST.replacen(
         "\"extraArgs\": [\"--jinja\", \"--no-webui\", \"--parallel\", \"1\"]",
         "\"extraArgs\": [\"--jinja\", \"--no-webui\", \"--host\", \"0.0.0.0\"]",

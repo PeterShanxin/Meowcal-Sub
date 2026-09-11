@@ -1,8 +1,7 @@
 use crate::engine_manifest::{EngineManifest, RuntimeSpec};
 use crate::hy_mt_runtime::HyMtInstallPaths;
+use crate::sha256::digest_file_hex;
 use serde::{Deserialize, Serialize};
-use sha2::{Digest, Sha256};
-use std::io::Read;
 use std::path::{Component, Path, PathBuf};
 use tokio::fs;
 
@@ -268,25 +267,11 @@ async fn file_matches(path: &Path, size: u64, expected_hash: &str) -> bool {
         return false;
     }
     let path = path.to_path_buf();
-    tauri::async_runtime::spawn_blocking(move || sha256_file(&path))
+    tokio::task::spawn_blocking(move || digest_file_hex(&path))
         .await
         .ok()
         .and_then(Result::ok)
         .is_some_and(|hash| hash.eq_ignore_ascii_case(expected_hash))
-}
-
-fn sha256_file(path: &Path) -> Result<String, String> {
-    let mut file = std::fs::File::open(path).map_err(|error| error.to_string())?;
-    let mut hasher = Sha256::new();
-    let mut buffer = [0u8; 1024 * 1024];
-    loop {
-        let count = file.read(&mut buffer).map_err(|error| error.to_string())?;
-        if count == 0 {
-            break;
-        }
-        hasher.update(&buffer[..count]);
-    }
-    Ok(format!("{:x}", hasher.finalize()))
 }
 
 fn relative_to_root(root: &Path, path: &Path) -> Result<PathBuf, String> {

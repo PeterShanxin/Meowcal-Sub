@@ -13,4 +13,22 @@ if (!backendOrigin) {
   );
 }
 
-export { expect, test } from "@playwright/test";
+import { expect, test as base } from "@playwright/test";
+
+export { expect };
+export const test = base.extend({
+  page: async ({ page }, use, testInfo) => {
+    const failures = [];
+    page.on("requestfailed", (request) => {
+      failures.push({ url: request.url(), error: request.failure()?.errorText });
+    });
+    page.on("pageerror", (error) => failures.push({ error: error.message }));
+    await use(page);
+    if (testInfo.status !== testInfo.expectedStatus && failures.length) {
+      await testInfo.attach("browser-load-failures", {
+        body: JSON.stringify(failures, null, 2),
+        contentType: "application/json",
+      });
+    }
+  },
+});

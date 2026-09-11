@@ -1,21 +1,14 @@
-// =============================================================================
-// ENGINE_LAUNCH.RS - how many cores the translation engine is allowed to take
-// =============================================================================
 // The engine is not the only thing running while a subtitle is on screen.
 // Capture, preprocessing, Windows OCR and the WebView overlay all run four
 // times a second on the same cores. On ARM64 the model layers run on the
 // Adreno GPU with the KV cache pinned to the CPU, so the engine's CPU draw is
-// smaller but not zero - see the execution policy in `docs/ARCHITECTURE.md`.
+// smaller but not zero.
 //
 // llama.cpp left to itself takes what it wants, and measurement showed that is
 // the wrong amount in both directions: its unset default was the slowest
 // configuration tested, and every core was slower than most of a core. The
 // value belongs here rather than in the manifest because it depends on the host
 // and the manifest is one embedded document shipped to every machine.
-//
-// Kept apart from `hy_mt_runtime` so the arithmetic is testable without
-// spawning a process, and so the measurement behind it has somewhere to live.
-// =============================================================================
 
 /// Fewest worker threads worth handing the engine.
 ///
@@ -133,7 +126,7 @@ pub(crate) fn shared_extra_arg_overrides_launcher(argument: &str) -> bool {
     LAUNCHER_OWNED_LAUNCH_FLAGS.contains(&launch_flag_name(argument))
 }
 
-/// Whether a per-runtime `launch_args` entry silently overrides app-owned
+/// Whether a per-runtime `launch_args` entry silently overrides Core-owned
 /// launch configuration: launcher-owned flags, the thread count, or the slot
 /// count. Per-runtime args are appended last with no honouring check, so the
 /// exemptions that shared extra args enjoy do not apply.
@@ -145,7 +138,7 @@ pub(crate) fn runtime_arg_overrides_owned_policy(argument: &str) -> bool {
 /// The whole per-runtime launch policy contract, checked against the
 /// effective launch behaviour rather than descriptive metadata:
 ///
-/// - no empty arguments and no silent overrides of app-owned flags (above);
+/// - no empty arguments and no silent overrides of Core-owned flags (above);
 /// - `acceleration` is one of the supported labels and agrees with
 ///   `gpu_layers`, because the launcher applies `-ngl gpu_layers` whatever the
 ///   label says: "cpu" means zero layers, "gpu"/"vulkan" mean at least one;
@@ -170,7 +163,7 @@ pub(crate) fn validate_runtime_launch_policy(
         .iter()
         .any(|argument| runtime_arg_overrides_owned_policy(argument))
     {
-        return Err("runtime launch policy overrides app-owned launch configuration".to_string());
+        return Err("runtime launch policy overrides Core-owned launch configuration".to_string());
     }
     let acceleration_uses_gpu = match runtime.acceleration.as_str() {
         "cpu" => false,

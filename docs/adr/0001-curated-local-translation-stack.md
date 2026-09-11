@@ -4,6 +4,10 @@
 **Status:** Accepted
 **Decision owners:** Meowcal Sub maintainers
 
+The shared runtime boundary is specified in
+[ADR-0004](0004-versioned-meowcal-core.md). It transfers engine implementation
+ownership to Core while retaining this application's Rust/Tauri product stack.
+
 ## Context
 
 Meowcal Sub was built as a screen capture, Windows OCR, generic local-LLM translation, and overlay application. Its UI and backend expose Foundry Local concepts, model selection, endpoint configuration, fallback ordering, and context tuning.
