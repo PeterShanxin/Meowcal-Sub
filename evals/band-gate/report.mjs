@@ -37,9 +37,7 @@ function cueText(segment) {
 }
 
 function segmentAt(scenario, seconds) {
-  return scenario.segments.find(segment =>
-    seconds >= segment.onset && seconds < segment.onset + segment.duration,
-  );
+  return (scenario.segments || []).find(segment => seconds >= segment.onset && seconds < segment.onset + segment.duration);
 }
 
 function isAdmitted(decision) {
@@ -78,6 +76,19 @@ function frameText(frame) {
     .join(' '));
 }
 
+function admittedText(frame) {
+  if (!Array.isArray(frame.admitted_texts)) return null;
+  return normalizeText(frame.admitted_texts.filter(text => typeof text === 'string').join(' '));
+}
+
+function finiteNumber(value) {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+
+function newCycleStats() {
+  return { frames: 0, admittedFrames: 0, nonemptyFrames: 0, firstUtcMs: null, lastUtcMs: null, firstNonemptyUtcMs: null };
+}
+
 function translationEventList(input) {
   if (!input) return [];
   if (Array.isArray(input)) return input;
@@ -89,24 +100,43 @@ function compareTranslations(events, scenario, startUtcMs) {
   const trueTranslatedCueIDs = new Set();
   const rejectedNonempty = [];
   const unmatched = [];
+  const unmatchedNonempty = [];
+  const latencySamples = [];
+  let timingEvidencePartial = false;
   for (const event of events) {
     const receivedRaw = event.receivedAt ?? event.received_at ?? event.utc_ms;
-    const receivedAt = receivedRaw === null || receivedRaw === undefined || receivedRaw === '' ? NaN : Number(receivedRaw);
+    const receivedAt = finiteNumber(receivedRaw);
     const payload = event.payload || event;
-    if (!Number.isFinite(receivedAt)) {
+    const original = payload.original ?? payload.source ?? payload.sourceText;
+    const translated = payload.translated ?? payload.target ?? payload.targetText;
+    const nonemptyPayload = normalizeText(original) !== '' || normalizeText(translated) !== '';
+    const payloadTimestamp = finiteNumber(payload.timestamp);
+    const totalMs = finiteNumber(payload.totalMs ?? payload.total_ms);
+    const captureAt = payloadTimestamp !== null && totalMs !== null && totalMs >= 0 ? payloadTimestamp - totalMs : null;
+    if (captureAt === null && nonemptyPayload) timingEvidencePartial = true;
+    if (receivedAt === null && captureAt === null) {
       unmatched.push({ reason: 'missing_receivedAt', event });
       continue;
     }
-    const segment = segmentAt(scenario, (receivedAt - startUtcMs) / 1000);
-    const original = payload.original ?? payload.source ?? payload.sourceText;
-    const translated = payload.translated ?? payload.target ?? payload.targetText;
+    if (captureAt === null && nonemptyPayload) {
+      const fallbackSegment = receivedAt === null ? null : segmentAt(scenario, (receivedAt - startUtcMs) / 1000);
+      unmatched.push({ receivedAt, reason: 'missing_capture_time', original });
+      if (fallbackSegment?.expected === 'subtitle') unmatchedNonempty.push({ receivedAt, reason: 'missing_capture_time', original });
+      continue;
+    }
+    const matchAt = captureAt ?? receivedAt;
+    const segment = matchAt === null ? null : segmentAt(scenario, (matchAt - startUtcMs) / 1000);
     const displayState = payload.displayState ?? payload.display_state;
     if (!segment || segment.expected !== 'subtitle' || normalizeText(original) !== cueText(segment)) {
-      unmatched.push({ receivedAt, reason: 'original_not_matched', original });
+      unmatched.push({ receivedAt, captureAt, reason: 'original_not_matched', original });
+      if (nonemptyPayload && segment?.expected === 'subtitle') {
+        unmatchedNonempty.push({ receivedAt, captureAt, reason: 'original_not_matched', original });
+      }
       continue;
     }
     if (displayState === 'translated' && normalizeText(translated)) {
       trueTranslatedCueIDs.add(segment.id);
+      if (totalMs !== null && totalMs >= 0) latencySamples.push(totalMs);
     } else if (normalizeText(translated)) {
       rejectedNonempty.push({ cueId: segment.id, receivedAt, displayState });
     }
@@ -116,6 +146,9 @@ function compareTranslations(events, scenario, startUtcMs) {
     trueTranslatedCueIDs: [...trueTranslatedCueIDs],
     rejectedNonempty,
     unmatchedCount: unmatched.length,
+    unmatchedNonemptyCount: unmatchedNonempty.length,
+    timingEvidencePartial,
+    latencyMs: { samples: latencySamples, p50: percentile(latencySamples, 0.5), p95: percentile(latencySamples, 0.95) },
   };
 }
 
@@ -130,8 +163,9 @@ export function compareFixture({ scenario, fixtureState, gateFrames, translation
     Math.abs((event.observedAtMs - timebase.runStartedAtMs) / 1000 - event.onset) > EPSILON_SECONDS,
   )) warnings.push('fixture onset timing drift exceeds 250ms; report is partial');
   if (!frames.length) fatal.push('gate log contains no gate frames');
-  const cueMetrics = new Map(scenario.segments
-    .filter(segment => segment.expected === 'subtitle')
+  const subtitleSegments = (scenario.segments || []).filter(segment => segment.expected === 'subtitle');
+  const negativeSegments = (scenario.segments || []).filter(segment => segment.expected === 'negative');
+  const cueMetrics = new Map(subtitleSegments
     .map(segment => [segment.id, {
       cueId: segment.id,
       firstCorrectOcrUtcMs: null,
@@ -143,8 +177,7 @@ export function compareFixture({ scenario, fixtureState, gateFrames, translation
   const gateAdmittedCueIDs = new Set();
   const correctlyAdmittedCueIDs = new Set();
   const missedOCRcueIDs = new Set(cueMetrics.keys());
-  const negativeStats = new Map(scenario.segments
-    .filter(segment => segment.expected === 'negative')
+  const negativeStats = new Map(negativeSegments
     .map(segment => [segment.id, {
       segmentId: segment.id,
       durationSeconds: segment.duration,
@@ -152,8 +185,10 @@ export function compareFixture({ scenario, fixtureState, gateFrames, translation
       firstOcrUtcMs: null,
       postWarmupFrames: 0,
       postWarmupAdmittedFrames: 0,
+      nonemptyPostWarmupFrames: 0,
       cycles: {},
     }]));
+  let admissionEvidenceMissing = false;
   const relativeFrames = [];
 
   if (timebase) {
@@ -164,14 +199,18 @@ export function compareFixture({ scenario, fixtureState, gateFrames, translation
         continue;
       }
       const seconds = (utcMs - timebase.startUtcMs) / 1000;
-      if (seconds < -EPSILON_SECONDS || seconds > scenario.durationSeconds + EPSILON_SECONDS) continue;
+      if (seconds < 0 || seconds >= scenario.durationSeconds) continue;
       const cycle = Math.max(0, Math.floor(seconds / scenario.durationSeconds));
       const scenarioSeconds = seconds - cycle * scenario.durationSeconds;
       const segment = segmentAt(scenario, scenarioSeconds);
       const admitted = (Array.isArray(frame.decisions) ? frame.decisions : []).some(isAdmitted);
       const text = frameText(frame);
-      relativeFrames.push({ utcMs, seconds, scenarioSeconds, cycle, segmentId: segment?.id || null, admitted, text });
+      const forwardedText = admittedText(frame);
+      relativeFrames.push({ utcMs, seconds, scenarioSeconds, cycle, segmentId: segment?.id || null, admitted, text, forwardedText });
       if (!segment) continue;
+      if (forwardedText === null && (segment.expected === 'subtitle' || segment.expected === 'negative')) {
+        admissionEvidenceMissing = true;
+      }
       if (segment.expected === 'subtitle') {
         const metric = cueMetrics.get(segment.id);
         const correctOCR = text === cueText(segment);
@@ -180,7 +219,7 @@ export function compareFixture({ scenario, fixtureState, gateFrames, translation
           missedOCRcueIDs.delete(segment.id);
           metric.correctOcrFrames += 1;
           if (metric.firstCorrectOcrUtcMs === null) metric.firstCorrectOcrUtcMs = utcMs;
-          if (admitted) {
+          if (admitted && forwardedText === cueText(segment)) {
             gateAdmittedCueIDs.add(segment.id);
             correctlyAdmittedCueIDs.add(segment.id);
             metric.correctAdmissionFrames += 1;
@@ -189,21 +228,30 @@ export function compareFixture({ scenario, fixtureState, gateFrames, translation
         }
       } else if (segment.expected === 'negative') {
         const stat = negativeStats.get(segment.id);
+        if (!stat) continue;
+        const cycleStats = stat.cycles[cycle] || newCycleStats();
         if (text && stat.firstOcrUtcMs === null) stat.firstOcrUtcMs = utcMs;
-        const firstObserved = stat.firstOcrUtcMs === null
-          ? segment.onset
-          : (stat.firstOcrUtcMs - timebase.startUtcMs) / 1000;
-        const warmupEnd = firstObserved + (segment.warmupSeconds || 0);
+        if (text && cycleStats.firstNonemptyUtcMs === null) cycleStats.firstNonemptyUtcMs = utcMs;
+        const firstObserved = cycleStats.firstNonemptyUtcMs === null
+          ? utcMs
+          : cycleStats.firstNonemptyUtcMs;
+        const warmupEnd = (firstObserved - timebase.startUtcMs) / 1000 + (segment.warmupSeconds || 0);
         if (scenarioSeconds >= warmupEnd) {
           stat.postWarmupFrames += 1;
-          if (admitted) stat.postWarmupAdmittedFrames += 1;
-          const cycleStats = stat.cycles[cycle] || { frames: 0, admittedFrames: 0, firstUtcMs: null, lastUtcMs: null };
           cycleStats.frames += 1;
-          cycleStats.firstUtcMs ??= utcMs;
-          cycleStats.lastUtcMs = utcMs;
-          if (admitted) cycleStats.admittedFrames += 1;
-          stat.cycles[cycle] = cycleStats;
+          if (text) {
+            stat.nonemptyPostWarmupFrames += 1;
+            cycleStats.nonemptyFrames += 1;
+            cycleStats.firstNonemptyUtcMs ??= utcMs;
+            cycleStats.firstUtcMs ??= utcMs;
+            cycleStats.lastUtcMs = utcMs;
+            if (admitted && forwardedText) {
+              stat.postWarmupAdmittedFrames += 1;
+              cycleStats.admittedFrames += 1;
+            }
+          }
         }
+        stat.cycles[cycle] = cycleStats;
       }
     }
   }
@@ -220,7 +268,7 @@ export function compareFixture({ scenario, fixtureState, gateFrames, translation
   const negativeCoverage = [];
   for (const stat of negativeStats.values()) {
     for (const cycle of [...observedNegativeCycles].sort((a, b) => a - b)) {
-      const cycleStats = stat.cycles[cycle] || { frames: 0, admittedFrames: 0, firstUtcMs: null, lastUtcMs: null };
+      const cycleStats = stat.cycles[cycle] || newCycleStats();
       const expectedSeconds = Math.max(0, stat.durationSeconds - stat.warmupSeconds);
       const spanSeconds = cycleStats.firstUtcMs === null ? 0 : Math.max(0, (cycleStats.lastUtcMs - cycleStats.firstUtcMs) / 1000);
       const coverageFraction = expectedSeconds === 0 ? 1 : spanSeconds / expectedSeconds;
@@ -228,11 +276,11 @@ export function compareFixture({ scenario, fixtureState, gateFrames, translation
         segmentId: stat.segmentId,
         cycle,
         expectedPostWarmupSeconds: expectedSeconds,
-        observedPostWarmupFrames: cycleStats.frames,
+        observedPostWarmupFrames: cycleStats.nonemptyFrames,
         observedSpanSeconds: spanSeconds,
         coverageFraction,
-        missing: cycleStats.frames === 0,
-        sufficient: cycleStats.frames >= 2 && coverageFraction >= 0.5,
+        missing: cycleStats.nonemptyFrames === 0,
+        sufficient: cycleStats.nonemptyFrames >= 2 && coverageFraction >= 0.5,
       });
     }
   }
@@ -247,6 +295,7 @@ export function compareFixture({ scenario, fixtureState, gateFrames, translation
   if (fixtureState.pauseCount > 0 || fixtureState.paused === true) warnings.push('fixture run was paused; report is partial');
   if (fixtureState.speed !== undefined && Number(fixtureState.speed) !== 1) warnings.push('fixture state was not recorded at 1x live speed');
   if (fixtureState.completed !== true) warnings.push('fixture-state.json does not prove a completed run with Repeat disabled');
+  if (admissionEvidenceMissing) warnings.push('gate log is missing admitted_texts evidence for an authored segment');
   if (Number(fixtureState.elapsedSeconds) + EPSILON_SECONDS < scenario.durationSeconds) warnings.push('fixture elapsedSeconds is shorter than the authored scenario');
   if (!frames.every(frame => frameUtcMs(frame) !== null)) warnings.push('some gate frames have no UTC timestamp');
   if (relativeFrames.length && !relativeFrames.some(frame => frame.segmentId)) warnings.push('gate frames do not overlap an authored segment');
@@ -262,9 +311,11 @@ export function compareFixture({ scenario, fixtureState, gateFrames, translation
   if (translation) {
     const authoredIDs = [...cueMetrics.keys()];
     translation.missedTranslationCueIDs = authoredIDs.filter(id => !translation.trueTranslatedCueIDs.includes(id));
-    translation.ok = translation.missedTranslationCueIDs.length === 0 && translation.rejectedNonempty.length === 0;
+    translation.ok = translation.missedTranslationCueIDs.length === 0 && translation.rejectedNonempty.length === 0
+      && translation.unmatchedNonemptyCount === 0 && !translation.timingEvidencePartial;
+    if (translation.timingEvidencePartial) warnings.push('translation timing evidence is partial; capture origin was not proven');
   }
-  const partial = warnings.some(warning => /paused|completed|shorter|1x live|UTC timestamp|timing drift/.test(warning));
+  const partial = warnings.some(warning => /paused|completed|shorter|1x live|UTC timestamp|timing drift|admitted_texts|translation timing/.test(warning));
   const gateOk = fatal.length === 0
     && !partial
     && missedOCRcueIDs.size === 0

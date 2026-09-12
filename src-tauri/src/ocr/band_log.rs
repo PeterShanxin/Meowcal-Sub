@@ -13,6 +13,7 @@ pub(super) fn record_gate(
     result: &super::OcrResult,
     at_ms: u64,
     decisions: &[super::banding::BandDecision],
+    admitted_texts: &[String],
 ) {
     let Some(path) = target() else {
         return;
@@ -44,12 +45,15 @@ pub(super) fn record_gate(
             })
         })
         .collect();
-    let entry = serde_json::json!({
+    let mut entry = serde_json::json!({
         "kind": "gate", "ms": at_ms,
         "utc_ms": SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_millis(),
         "frame_width": result.frame_width,
         "lines": lines, "decisions": decisions
     });
+    if include_text {
+        entry["admitted_texts"] = serde_json::json!(admitted_texts);
+    }
     if let Ok(mut file) = std::fs::OpenOptions::new()
         .create(true)
         .append(true)

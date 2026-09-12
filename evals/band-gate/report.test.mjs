@@ -29,6 +29,7 @@ const state = scenario => ({
 const frame = (seconds, text, admitted = true, extra = {}) => ({
   utc_ms: timeOriginMs + seconds * 1000,
   lines: [{ text, x: 120, y: 560, w: 720, h: 48 }],
+  admitted_texts: admitted && text ? [text] : [],
   decisions: [{ cue_id: extra.cueId || 'native-band', admitted }],
 });
 
@@ -77,6 +78,32 @@ test('wrong OCR cannot establish a cue or distort gate delay p95', () => {
   assert.equal(normalizeText('Wait, here.'), normalizeText('WAIT HERE'));
 });
 
+test('partial forwarded lines cannot admit a multi-line cue', () => {
+  const cue = equalScenario.segments.find(segment => segment.id === 'ew-05');
+  const gateFrames = [
+    ...oneFramePerCue(equalScenario, cue.id),
+    {
+      ...frame(cue.onset + 2, cue.lines.join(' '), true),
+      admitted_texts: [cue.lines[0]],
+    },
+  ];
+  const result = compareFixture({ scenario: equalScenario, fixtureState: state(equalScenario), gateFrames });
+  assert.ok(result.gate.missedAdmissionCueIDs.includes(cue.id));
+  assert.equal(result.gate.gateDelayMs.samples.length, equalScenario.segments.length - 1);
+  assert.equal(result.ok, false);
+});
+
+test('legacy gate logs without forwarded text evidence are explicitly partial', () => {
+  const result = compareFixture({
+    scenario: equalScenario,
+    fixtureState: state(equalScenario),
+    gateFrames: oneFramePerCue(equalScenario).map(({ admitted_texts, ...legacy }) => legacy),
+  });
+  assert.equal(result.partial, true);
+  assert.equal(result.ok, false);
+  assert.ok(result.warnings.some(warning => warning.includes('admitted_texts')));
+});
+
 test('a partial run reports post-warmup negative admission and cannot pass', () => {
   const fixtureState = { ...state(negativeScenario), completed: false, elapsedSeconds: 52, paused: true, pauseCount: 1 };
   const result = compareFixture({
@@ -98,6 +125,36 @@ test('a partial run reports post-warmup negative admission and cannot pass', () 
   assert.ok(result.warnings.some(warning => warning.includes('paused')));
 });
 
+test('an empty OCR frame after the first negative read cannot prove coverage', () => {
+  const result = compareFixture({
+    scenario: negativeScenario,
+    fixtureState: { ...state(negativeScenario), completed: false, elapsedSeconds: 8 },
+    gateFrames: [
+      frame(0, 'MEOWCAL LAB / DEMO', false),
+      frame(7, '', false),
+      frame(39, '', false),
+    ],
+  });
+  const watermark = result.gate.negativeCoverage.find(entry => entry.segmentId === 'nb-watermark-band' && entry.cycle === 0);
+  assert.equal(watermark.observedPostWarmupFrames, 0);
+  assert.ok(result.gate.negativeCoverageMissing.some(entry => entry.segmentId === 'nb-watermark-band'));
+  assert.equal(result.gate.negativeCoverageOk, false);
+});
+
+test('post-completion frames cannot fabricate another negative cycle', () => {
+  const gateFrames = oneFramePerCue(negativeScenario);
+  for (const segment of negativeScenario.segments.filter(item => item.expected === 'negative')) {
+    for (const offset of [0, segment.warmupSeconds + 1, segment.duration - 1]) {
+      gateFrames.push(frame(segment.onset + offset, segment.text || 'negative text', false));
+    }
+  }
+  gateFrames.push(frame(negativeScenario.durationSeconds + 0.1, 'last dialogue', true));
+  const result = compareFixture({ scenario: negativeScenario, fixtureState: state(negativeScenario), gateFrames });
+  assert.equal(result.gate.negativeCoverage.length, 3);
+  assert.equal(result.gate.negativeCoverageOk, true);
+  assert.equal(result.ok, true);
+});
+
 
 test('interleaved non-gate log entries are ignored and incomplete translation fails end to end', () => {
   const frames = [
@@ -112,7 +169,7 @@ test('interleaved non-gate log entries are ignored and incomplete translation fa
     gateFrames: frames,
     translationEvents: [{
       receivedAt: timeOriginMs + 1_000,
-      payload: { original: first.lines[0], translated: 'We should leave before sunrise.', displayState: 'translated' },
+      payload: { original: first.lines[0], translated: 'We should leave before sunrise.', displayState: 'translated', timestamp: timeOriginMs + 1_000, totalMs: 1_000 },
     }],
   });
   assert.equal(result.gate.inputFrameCount, equalScenario.segments.length + 2);
@@ -125,12 +182,82 @@ test('interleaved non-gate log entries are ignored and incomplete translation fa
   assert.ok(result.translation.missedTranslationCueIDs.includes('ew-30'));
 });
 
+test('late translation completion is assigned using capture timestamp', () => {
+  const first = equalScenario.segments[0];
+  const next = equalScenario.segments[1];
+  const receivedAt = timeOriginMs + (next.onset + 0.2) * 1000;
+  const result = compareFixture({
+    scenario: equalScenario,
+    fixtureState: state(equalScenario),
+    gateFrames: oneFramePerCue(equalScenario),
+    translationEvents: [{
+      receivedAt,
+      payload: {
+        original: first.lines[0],
+        translated: 'translation',
+        displayState: 'translated',
+        timestamp: receivedAt,
+        totalMs: 4_000,
+      },
+    }],
+  });
+  assert.ok(result.translation.trueTranslatedCueIDs.includes(first.id));
+  assert.ok(!result.translation.trueTranslatedCueIDs.includes(next.id));
+  assert.equal(result.translation.unmatchedNonemptyCount, 0);
+  assert.deepEqual(result.translation.latencyMs.samples, [4_000]);
+});
+
+test('malformed translation timing is reported as partial instead of reassigned', () => {
+  const first = equalScenario.segments[0];
+  const result = compareFixture({
+    scenario: equalScenario,
+    fixtureState: state(equalScenario),
+    gateFrames: oneFramePerCue(equalScenario),
+    translationEvents: [{
+      receivedAt: timeOriginMs + 4_200,
+      payload: {
+        original: first.lines[0],
+        translated: 'translation',
+        displayState: 'translated',
+        timestamp: 'invalid',
+        totalMs: 4_500,
+      },
+    }],
+  });
+  assert.equal(result.translation.timingEvidencePartial, true);
+  assert.equal(result.translation.unmatchedNonemptyCount, 1);
+  assert.equal(result.endToEndOk, false);
+});
+
+test('boolean capture timestamps are rejected instead of coerced', () => {
+  const first = equalScenario.segments[0];
+  const result = compareFixture({
+    scenario: equalScenario,
+    fixtureState: state(equalScenario),
+    gateFrames: oneFramePerCue(equalScenario),
+    translationEvents: [{
+      receivedAt: timeOriginMs + 4_200,
+      payload: {
+        original: first.lines[0],
+        translated: 'translation',
+        displayState: 'translated',
+        timestamp: true,
+        totalMs: 4_500,
+      },
+    }],
+  });
+  assert.equal(result.translation.timingEvidencePartial, true);
+  assert.equal(result.translation.unmatchedNonemptyCount, 1);
+  assert.equal(result.translation.latencyMs.samples.length, 0);
+  assert.equal(result.endToEndOk, false);
+});
+
 test('end-to-end status cannot pass when the OCR gate fails', () => {
   const translations = negativeScenario.segments
     .filter(segment => segment.expected === 'subtitle')
     .map(segment => ({
       receivedAt: timeOriginMs + (segment.onset + 1) * 1000,
-      payload: { original: segment.lines[0], translated: 'translated', displayState: 'translated' },
+      payload: { original: segment.lines[0], translated: 'translated', displayState: 'translated', timestamp: timeOriginMs + (segment.onset + 1) * 1000, totalMs: 0 },
     }));
   const result = compareFixture({
     scenario: negativeScenario,

@@ -11,7 +11,6 @@ pub(super) struct Cue {
     pending: String,
     pending_since: u64,
     pending_observed_ms: u64,
-    started: u64,
     started_observed_ms: u64,
     observed_ms: u64,
     last_at: Option<u64>,
@@ -84,7 +83,6 @@ impl Cue {
                 0
             };
             self.anchor = std::mem::take(&mut self.pending);
-            self.started = self.pending_since;
             self.started_observed_ms = self.pending_observed_ms;
             self.id += 1;
             self.absent = false;
@@ -113,12 +111,12 @@ impl Cue {
         self.last_text.clear();
     }
 
-    pub(super) fn verdict(&self, at_ms: u64) -> super::band_verdict::Verdict {
+    pub(super) fn verdict(&self) -> super::band_verdict::Verdict {
         use super::band_verdict::Verdict;
         if !self.confirmed || self.id == 0 {
             return Verdict::Glimpsed;
         }
-        let age = at_ms.saturating_sub(self.started);
+        let age = self.observed_ms.saturating_sub(self.started_observed_ms);
         if age >= STATIC_MS {
             Verdict::Static
         } else if self.numeric_changes >= 2 || (self.fast_change && age < MIN_CUE_MS) {

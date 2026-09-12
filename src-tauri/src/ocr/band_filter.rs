@@ -86,7 +86,7 @@ impl BandFilter {
             if let Some(tracker) = &mut self.tracker {
                 tracker.observe(&[], &[], at_ms);
             }
-            super::band_log::record_gate(&result, at_ms, &[]);
+            super::band_log::record_gate(&result, at_ms, &[], &[]);
             return result;
         }
         if result.boxes.len() != result.lines.len() {
@@ -102,7 +102,6 @@ impl BandFilter {
         let tracker = self.tracker.as_mut().expect("just stored");
 
         let banding = tracker.observe(&result.lines, &result.boxes, at_ms);
-        super::band_log::record_gate(&result, at_ms, &banding.decisions);
         for decision in banding.decisions.iter().filter(|decision| decision.changed) {
             debug!(
                 "[BAND decision] ms={} band={} cue={} raw={:?} settled={:?} new={} recovered={} reason={}",
@@ -132,6 +131,7 @@ impl BandFilter {
                 boxes.push(result.boxes[*index]);
             }
         }
+        super::band_log::record_gate(&result, at_ms, &banding.decisions, &lines);
         OcrResult::with_boxes(lines, boxes, width)
     }
 }

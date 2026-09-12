@@ -11,34 +11,41 @@ reproduction page and the [offline moving-scene fixture](../../evals/band-gate/R
 - HY-MT1.5-1.8B Q4_K_M with the local GPU engine.
 - Isolated development profile; installed application instances were preserved.
 - Tested executable SHA-256:
-  `7E83818665D5D225AA2ED7AF8EF6E9B9BE9C89C2EC6CB00CDEDC52E2C0820C90`.
+  `ED182CDECA1D41E508DAADA6A44D4C7737CB221DC3A40E6AD93517BA97C25A5B`.
 
 ## Native results
 
 | Input | Duration | Result |
 | --- | --- | --- |
-| Existing reproduction page | Two eight-cue cycles, 64 seconds | 16/16 source cues produced true translated events |
+| Existing reproduction page | Two eight-cue cycles, 64 seconds | 16/16 source cues reached translation; 10 translated, 6 local-engine timeouts |
 | Equal-width moving scene, 1x | 120 seconds | 30/30 correctly recognized, admitted, and translated |
-| Negative-band recovery, 1x | 120 seconds | 0 admissions across 325 post-warmup negative frames; all 5 recovery cues translated |
+| Negative-band recovery, 1x | 120 seconds | 0 admissions across 309 non-empty post-warmup negative frames; all 5 recovery cues translated |
 
 Equal-width gate delay, measured from the first correct OCR observation to
-admission, was p50 256.5ms and p95 266.55ms. These are gate delays, not total
-translation latency. Negative coverage comprised 129 watermark, 131 timer,
+admission, was p50 256.5ms and p95 268.55ms. These are gate delays, not total
+translation latency. Negative coverage comprised 129 watermark, 115 timer,
 and 65 credits frames. Warmup starts at the first non-empty OCR observation:
 six seconds for watermark/timer and three seconds for credits.
 
 Both fixture reports passed their gate and end-to-end checks without partial
 coverage. Translation evidence required matching source text, a non-empty
-target, and `displayState: translated`. Source-only events did not count.
+target, and `displayState: translated`, matched by capture time rather than
+receipt time. Admission required the actual forwarded text, not a frame-level
+boolean. Source-only events and empty OCR frames did not count.
 
-![Native source and Chinese overlay](../../evals/band-gate/evidence/native-arm64.png)
+The original-page run exposed a separate local-engine latency limit: six cues
+returned `temporarilyUnavailable` after retries at roughly 4.7 seconds. Every
+source cue reached the translation stage, so these were not band-gate holds.
+The two moving-scene reports establish the gate regression result; this run
+does not establish reliable end-to-end translation for the longer original cues.
 
 ## Automated validation and limits
 
 The full `scripts/verify.ps1` gate passed, including Rust checks, frontend
 coverage, five browser smoke tests, and dependency audit. The focused gate
-harness passed 51 tests; `node --test evals/band-gate/report.test.mjs` passed
-seven report checks.
+harness passed 52 tests; `node --test evals/band-gate/report.test.mjs` passed
+14 report checks, including OCR outages, partial line admission, capture-time
+matching, empty negative coverage, and post-completion frame exclusion.
 
 An isolated replay against the pre-change production gate admitted 2/30
 four-second cues, compared with 30/30 after the change. That comparison uses

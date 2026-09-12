@@ -216,6 +216,18 @@ fn empty_ocr_frames_do_not_restart_an_established_counter() {
 }
 
 #[test]
+fn an_ocr_outage_does_not_age_a_briefly_observed_subtitle_into_static_text() {
+    let mut tracker = BandTracker::new(1832.0, 250);
+    assert!(!read(&mut tracker, DIALOGUE[0], 0));
+    assert!(read(&mut tracker, DIALOGUE[0], 250));
+    assert!(read(&mut tracker, DIALOGUE[0], 10_000));
+    for at in (10_250..15_750).step_by(250) {
+        assert!(read(&mut tracker, DIALOGUE[0], at));
+    }
+    assert!(!read(&mut tracker, DIALOGUE[0], 15_750));
+}
+
+#[test]
 fn an_ocr_outage_cannot_confirm_a_candidate_or_hide_fast_turnover() {
     let mut tracker = BandTracker::new(1832.0, 250);
     read(&mut tracker, DIALOGUE[0], 0);

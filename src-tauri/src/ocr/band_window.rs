@@ -48,7 +48,7 @@ impl TrackedBand {
     }
 
     pub(super) fn settle(&mut self, raw: Verdict, at_ms: u64) -> Verdict {
-        let content = self.cue.verdict(at_ms);
+        let content = self.cue.verdict();
         let verdict = if raw == Verdict::Scattered {
             let since = *self.scattered_since.get_or_insert(at_ms);
             if self.settled == Some(Verdict::Subtitle)

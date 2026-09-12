@@ -178,8 +178,8 @@ a new candidate when both differ from the old anchor. Short text, numbers and
 negations remain distinct when confirmed.
 `band_window.rs` owns admission: a newly confirmed cue can recover from old
 `Static` evidence; rapid confirmed changes must hold long enough to recover
-from `Churning`. Both use elapsed time, with no periodic reset of rejected
-bands. Repeated numeric-only updates at roughly two seconds or faster are held
+from `Churning`. Both use observed time, excluding capture outages, with no
+periodic reset of rejected bands. Repeated numeric-only updates at roughly two seconds or faster are held
 as counters after the second change. Slower numeric dialogue and a single
 changed number remain admissible. Rapid numeric-only dialogue lists remain
 indistinguishable from counters at this boundary.
