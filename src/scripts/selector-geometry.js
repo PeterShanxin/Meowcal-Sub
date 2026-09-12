@@ -153,14 +153,39 @@
     return Math.max(gap, box.top - gap - barHeight);
   }
 
+  // Keyboard adjustments stay on the selector's screen: a box carried past an
+  // edge can no longer be seen or adjusted, and saving it collapses the capture
+  // area to a sliver. `viewport` is in screen coordinates.
+  function containRegion(region, viewport) {
+    const width = Math.min(region.width, viewport.width);
+    const height = Math.min(region.height, viewport.height);
+    return {
+      x: Math.min(Math.max(region.x, viewport.x), viewport.x + viewport.width - width),
+      y: Math.min(Math.max(region.y, viewport.y), viewport.y + viewport.height - height),
+      width,
+      height,
+    };
+  }
+
+  function regionFits(region, viewport) {
+    return (
+      region.x >= viewport.x &&
+      region.y >= viewport.y &&
+      region.x + region.width <= viewport.x + viewport.width &&
+      region.y + region.height <= viewport.y + viewport.height
+    );
+  }
+
   return {
     actionBarTop,
     arrowDelta,
     buildCaptureRegionPayload,
     buildDimOverlaySegments,
     clampSelectionHole,
+    containRegion,
     defaultSelectionRect,
     meetsMinimumSelection,
+    regionFits,
     screenRectToClientRect,
     selectionRectFromPoints,
   };

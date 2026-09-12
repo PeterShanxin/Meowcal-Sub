@@ -15,8 +15,10 @@ const {
     arrowDelta,
     buildCaptureRegionPayload,
     buildDimOverlaySegments,
+    containRegion,
     defaultSelectionRect,
     meetsMinimumSelection,
+    regionFits,
     screenRectToClientRect,
     selectionRectFromPoints,
 } = window.SelectorGeometry;
@@ -386,6 +388,7 @@ function handleKeyDown(e) {
         return;
     }
 
+    const viewport = { x: window.screenX, y: window.screenY, width: window.innerWidth, height: window.innerHeight };
     if (e.key === 'Enter') {
         // A focused button acts on Enter itself - Redraw must not confirm.
         if (e.target instanceof Element && e.target.closest('button')) return;
@@ -393,12 +396,7 @@ function handleKeyDown(e) {
         if (state.hasSelection) {
             confirmSelection();
         } else if (!state.isSelecting) {
-            showSelection(defaultSelectionRect({
-                x: window.screenX,
-                y: window.screenY,
-                width: window.innerWidth,
-                height: window.innerHeight,
-            }));
+            showSelection(defaultSelectionRect(viewport));
         }
         return;
     }
@@ -408,12 +406,13 @@ function handleKeyDown(e) {
     e.preventDefault();
 
     // A focused handle resizes from its own edge; Shift resizes from the
-    // bottom-right corner; otherwise the whole box moves.
+    // bottom-right corner; otherwise the whole box moves. Neither leaves the screen.
     const handle = e.target instanceof HTMLElement ? e.target.dataset.position : undefined;
     if (handle || e.shiftKey) {
-        setRegion(resizeRegion(state.region, handle || 'se', delta.dx, delta.dy, MIN_RESIZE_SIZE));
+        const resized = resizeRegion(state.region, handle || 'se', delta.dx, delta.dy, MIN_RESIZE_SIZE);
+        if (regionFits(resized, viewport)) setRegion(resized);
     } else {
-        setRegion(moveRegion(state.region, delta.dx, delta.dy));
+        setRegion(containRegion(moveRegion(state.region, delta.dx, delta.dy), viewport));
     }
     setPhase('adjust');
     updateSelectionBox();

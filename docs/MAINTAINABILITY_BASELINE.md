@@ -89,7 +89,7 @@ decomposition-owned hotspots are:
 | `src/scripts/overlay.js`             |   1,046 | #34               |
 | `src-tauri/src/llm/context.rs`       |     732 | #32               |
 | `src-tauri/src/llm/manager.rs`       |     726 | #32               |
-| `src/scripts/selector.js`            |     637 | #34               |
+| `src/scripts/selector.js`            |     636 | #34               |
 | `src-tauri/src/config.rs`            |     595 | #31               |
 
 `main.rs` left the legacy list in the #31 lifecycle wave. `http_server.rs`

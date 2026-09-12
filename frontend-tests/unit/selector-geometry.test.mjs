@@ -8,8 +8,10 @@ const {
   buildCaptureRegionPayload,
   buildDimOverlaySegments,
   clampSelectionHole,
+  containRegion,
   defaultSelectionRect,
   meetsMinimumSelection,
+  regionFits,
   screenRectToClientRect,
   selectionRectFromPoints,
 } = require("../../src/scripts/selector-geometry.js");
@@ -124,5 +126,44 @@ describe("selector geometry", () => {
         1.5,
       ),
     ).toEqual({ x: 0, y: 0, width: 1, height: 1, scaleFactor: 1.5 });
+  });
+});
+
+describe("selector keyboard bounds", () => {
+  // A secondary monitor to the left of the primary one.
+  const viewport = { x: -1920, y: 0, width: 1920, height: 1080 };
+
+  // Held arrow keys used to carry the box off screen, where a confirmed save
+  // collapsed it to a one-pixel capture area.
+  it("stops a moved box at the screen edge instead of letting it leave", () => {
+    expect(containRegion({ x: -40, y: 1050, width: 400, height: 60 }, viewport)).toEqual({
+      x: -400,
+      y: 1020,
+      width: 400,
+      height: 60,
+    });
+    expect(containRegion({ x: -2000, y: -5, width: 400, height: 60 }, viewport)).toEqual({
+      x: -1920,
+      y: 0,
+      width: 400,
+      height: 60,
+    });
+  });
+
+  it("leaves a box that fits alone and shrinks one larger than the screen", () => {
+    const fits = { x: -1000, y: 900, width: 600, height: 80 };
+    expect(containRegion(fits, viewport)).toEqual(fits);
+    expect(containRegion({ x: -1900, y: 10, width: 2400, height: 90 }, viewport)).toEqual({
+      x: -1920,
+      y: 10,
+      width: 1920,
+      height: 90,
+    });
+  });
+
+  it("reports whether a resized box still fits on screen", () => {
+    expect(regionFits({ x: -1920, y: 0, width: 1920, height: 1080 }, viewport)).toBe(true);
+    expect(regionFits({ x: -1921, y: 0, width: 100, height: 100 }, viewport)).toBe(false);
+    expect(regionFits({ x: -100, y: 1000, width: 101, height: 80 }, viewport)).toBe(false);
   });
 });
