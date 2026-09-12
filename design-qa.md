@@ -2,7 +2,8 @@
 
 ## Visual source
 
-- Direction source: the seven 1448 x 1086 references in `D:\Downloads\ref`.
+- Direction source: the seven 1448 x 1086 references in
+  `docs/design/curated-redesign/reference/`.
 - Selected direction: the restrained dark cinematic shell, compact bottom navigation, guided
   four-step setup, and an app-managed private translation engine.
 - Real app assets are used for the Meowcal icon and cinematic preview background. The interface

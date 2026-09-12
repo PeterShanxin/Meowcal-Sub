@@ -14,8 +14,8 @@ understand Foundry, llama.cpp, GGUF files, endpoints, ports, or command lines.
 
 ## Selected visual and frontend direction
 
-- Use the seven approved reference screens under `D:\Downloads\ref` as the
-  visual baseline.
+- Use the seven approved reference screens under
+  `docs/design/curated-redesign/reference/` as the visual baseline.
 - Preserve the calm deep-navy cinematic atmosphere, restrained glass, thin
   luminous borders, and subtle cat identity.
 - Improve the references by tightening oversized headings, excess glow,
@@ -95,8 +95,9 @@ incremental Lit implementation. Do not restart concept generation.
 1. Finish native Tauri visual QA for Home ready/setup/starting/running/repair,
    the four setup steps, Overlay appearance, and Settings at realistic Windows
    sizes and high-DPI scaling.
-2. Compare each implementation state with the approved `D:\Downloads\ref`
-   source in one same-viewport comparison; fix every visible P0-P2 issue.
+2. Compare each implementation state with the approved
+   `docs/design/curated-redesign/reference/` source in one same-viewport
+   comparison; fix every visible P0-P2 issue.
 3. Preserve the compact Home contract: readiness, language pair, selected area,
    one contextual primary action, and one quiet local-processing line.
 4. Keep normal mode free of Foundry, model names, endpoint URLs, ports, runtime
