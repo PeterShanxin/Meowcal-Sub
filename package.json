@@ -18,7 +18,8 @@
     "typecheck": "tsc --noEmit",
     "prepare:validation": "pwsh -NoProfile -File scripts/prepare-validation-resources.ps1",
     "prepare:core": "pwsh -NoProfile -File scripts/prepare-core-resource.ps1 -Configuration Release",
-    "dev:backend": "npm run prepare:validation && npm run prepare:core && cd src-tauri && cargo run --locked -- --http-only",
+    "dev:backend": "pwsh -NoProfile -File scripts/start-browser-backend.ps1",
+    "dev:backend:source-candidate": "pwsh -NoProfile -File scripts/start-browser-backend.ps1 -CoreSourceCandidate",
     "format:check": "prettier --check \"src/**/*.{js,ts,css,html}\" \"frontend-tests/**/*.{js,mjs,ts}\" \"scripts/*.mjs\" \"config/**/*.json\" \"*.{js,json,mjs,ts}\"",
     "lint": "node scripts/run-eslint.mjs",
     "maintainability": "node scripts/check-maintainability.mjs",
@@ -27,7 +28,7 @@
     "test:browser": "playwright test",
     "frontend:check": "npm run version:check && npm run runners:check && npm run docs:check && npm run format:check && npm run lint && npm run typecheck && npm run build:web && npm run test:frontend && npm run test:browser",
     "tauri": "tauri",
-    "tauri:dev": "tauri dev --config src-tauri/tauri.dev.conf.json",
+    "tauri:dev": "tauri dev --features core-source-candidate --config src-tauri/tauri.dev.conf.json",
     "tauri:build": "tauri build"
   },
   "devDependencies": {

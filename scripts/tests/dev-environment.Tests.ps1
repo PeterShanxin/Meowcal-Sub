@@ -214,13 +214,22 @@ foreach ($name in @("MEOWCAL_RESOLVED_CARGO_TARGET_DIR", "MEOWCAL_RESOLVED_VSDEV
 
 # The documented overrides must still reach the helper. Emitting under separate
 # names must not break the inputs a developer sets.
+$previousCargoTargetDir = $env:CARGO_TARGET_DIR
 $env:MEOWCAL_CARGO_TARGET_DIR = $fakeOverride
 try {
+    # This assertion exercises MEOWCAL_CARGO_TARGET_DIR. An externally supplied
+    # CARGO_TARGET_DIR deliberately wins, so it cannot be present for this case.
+    Remove-Item Env:\CARGO_TARGET_DIR -ErrorAction SilentlyContinue
     $overridden = & (Join-Path $scriptsDirectory "dev-environment.ps1") -Emit CargoTargetDir
     Assert-Equal "MEOWCAL_RESOLVED_CARGO_TARGET_DIR=$fakeOverride" ($overridden | Select-Object -First 1) `
         "MEOWCAL_CARGO_TARGET_DIR must still override the build directory."
 } finally {
     Remove-Item Env:\MEOWCAL_CARGO_TARGET_DIR -ErrorAction SilentlyContinue
+    if ([string]::IsNullOrWhiteSpace($previousCargoTargetDir)) {
+        Remove-Item Env:\CARGO_TARGET_DIR -ErrorAction SilentlyContinue
+    } else {
+        $env:CARGO_TARGET_DIR = $previousCargoTargetDir
+    }
     Remove-Item -LiteralPath $fakeOverride -Recurse -Force -ErrorAction SilentlyContinue
 }
 

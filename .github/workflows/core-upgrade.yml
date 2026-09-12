@@ -60,12 +60,41 @@ jobs:
           draft: true
           add-paths: |
             config/meowcal-core.lock.json
-          title: chore(core): update Meowcal Core to v${{ steps.update.outputs.version }}
-          commit-message: chore(core): update Meowcal Core to v${{ steps.update.outputs.version }}
+          title: "chore(core): update Meowcal Core to v${{ steps.update.outputs.version }}"
+          commit-message: "chore(core): update Meowcal Core to v${{ steps.update.outputs.version }}"
           body: |
-            Update the reviewed Meowcal Core lock to `${{ steps.update.outputs.tag }}`.
+            ## Intent
 
-            The updater verified both published ZIPs, their SHA-256 files, package metadata, PE architecture, and the x64 `--version-json` API/capability contract before writing the lock. The pull request's required Windows CI must pass before review; this workflow never merges it.
+            Update the reviewed Meowcal Core pin to `${{ steps.update.outputs.tag }}`.
+
+            ## Changes
+
+            Replace both architecture digests in `config/meowcal-core.lock.json` with the verified published release.
+
+            ## Non-goals
+
+            This pull request does not publish, promote, or merge a Core release.
+
+            ## Validation
+
+            - `.\scripts\verify.ps1` — pending on this pull request.
+            - CI — pending on this pull request.
+
+            ## Manual Windows validation
+
+            Outstanding: this runtime upgrade requires fresh native Windows validation after CI passes.
+
+            ## Risk and rollback
+
+            An incorrect pin prevents Core startup. Revert this lock update to restore the prior reviewed release.
+
+            ## Issues
+
+            Routine Core dependency update.
+
+            ---
+
+            <sub>By submitting this pull request, you agree to the <a href="https://github.com/PeterShanxin/Meowcal-Sub/blob/main/CLA.md">Contributor License Agreement</a>.</sub>
 
       - name: Explain why no PR was created
         if: steps.update.outputs.changed == 'true' && steps.token.outputs.configured != 'true'

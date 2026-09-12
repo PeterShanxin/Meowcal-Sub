@@ -1,7 +1,10 @@
-use super::config::{dedupe_paths, resolve_executable, validate_paths};
+use super::config::{dedupe_paths, resolve_executable, validate_paths, validate_reviewed_resource};
 use super::request::acquire_slot;
 use super::*;
 use std::path::Path;
+
+#[path = "../build_support/core_version.rs"]
+mod core_version;
 
 #[test]
 fn readiness_deadline_covers_server_budget_and_handshake() {
@@ -56,21 +59,71 @@ fn production_path_uses_the_bundled_resource() {
 }
 
 #[test]
-fn development_path_uses_the_target_release_binary() {
+fn development_path_matches_the_compiled_runtime_selection() {
     if std::env::var_os("MEOWCAL_CORE_EXECUTABLE").is_some() {
         return;
     }
     let path =
         resolve_executable("development", Path::new("")).expect("development path should resolve");
-    assert!(path.ends_with(Path::new("release/meowcal-core.exe")));
-    assert!(path.is_absolute());
+    if CORE_SOURCE_CANDIDATE {
+        assert!(path.ends_with(Path::new("release/meowcal-core.exe")));
+        assert!(path.is_absolute());
+    } else {
+        assert_eq!(path, PathBuf::from("resources/core/meowcal-core.exe"));
+    }
 }
 
 #[test]
-fn packaged_core_contract_is_pinned_to_api_one_version_0_1_0() {
+fn compiled_core_contract_has_a_supported_api_and_semantic_version() {
     assert_eq!(API_VERSION, 1);
-    assert_eq!(CORE_VERSION, "0.1.0");
-    assert_eq!(CORE_VERSION, meowcal_core::protocol::CORE_VERSION);
+    assert_eq!(CORE_VERSION.split('.').count(), 3);
+    assert!(CORE_VERSION
+        .split('.')
+        .all(|segment| !segment.is_empty() && segment.bytes().all(|byte| byte.is_ascii_digit())));
+}
+
+#[test]
+fn release_pin_handshake_requires_its_exact_version() {
+    let hello = HelloResult {
+        version: "0.1.1".into(),
+        api: API_VERSION,
+        capabilities: meowcal_core::protocol::CAPABILITIES
+            .iter()
+            .map(|capability| (*capability).to_string())
+            .collect(),
+    };
+    assert!(hello_is_compatible(&hello, "0.1.1"));
+    assert!(!hello_is_compatible(&hello, "0.1.0"));
+}
+
+#[test]
+fn reviewed_runtime_requires_matching_metadata_and_digests() {
+    let root =
+        std::env::temp_dir().join(format!("meowcal-reviewed-resource-{}", std::process::id()));
+    std::fs::create_dir_all(&root).expect("create reviewed resource directory");
+    let executable = root.join("meowcal-core.exe");
+    let license = root.join("LICENSE");
+    std::fs::write(&executable, b"reviewed core").expect("write executable");
+    std::fs::write(&license, b"license").expect("write license");
+    let metadata = serde_json::json!({
+        "schemaVersion": 1,
+        "coreVersion": CORE_VERSION,
+        "apiVersion": API_VERSION,
+        "os": "windows",
+        "architecture": if cfg!(target_arch = "aarch64") { "arm64" } else { "x64" },
+        "executable": "meowcal-core.exe",
+        "executableSha256": super::config::sha256_file(&executable).expect("hash executable"),
+        "license": "LICENSE",
+        "licenseSha256": super::config::sha256_file(&license).expect("hash license")
+    });
+    std::fs::write(root.join("meowcal-core.json"), format!("{metadata}\n"))
+        .expect("write metadata");
+    validate_reviewed_resource(&executable).expect("reviewed resource is valid");
+    std::fs::remove_file(root.join("meowcal-core.json")).expect("remove metadata");
+    assert!(validate_reviewed_resource(&executable)
+        .expect_err("missing metadata must reject the reviewed pin")
+        .starts_with("CORE_RELEASE_METADATA_MISSING"));
+    let _ = std::fs::remove_dir_all(root);
 }
 
 #[test]

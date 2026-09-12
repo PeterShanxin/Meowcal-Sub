@@ -29,6 +29,9 @@ wizard UI ─────┘                                      ├─ capture
 
 Browser mode is an adapter-contract test surface. It does not implement or
 prove Windows capture, OCR, native windows, tray behavior, or installation.
+When a reviewed Core lock exists, its browser backend fetches that release and
+builds without the source-candidate feature. `npm run dev:backend:source-candidate`
+is the explicit local-Core path.
 
 ## Meowcal Core
 

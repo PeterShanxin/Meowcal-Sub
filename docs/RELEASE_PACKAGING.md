@@ -99,11 +99,11 @@ Both applications pin the released ZIP digest, not the tag alone. Their product
 builds fetch that artifact and never rebuild Core from the current source tree.
 The fetch step verifies the ZIP digest before reading the archive, then verifies
 metadata, license, executable digest, PE architecture, and the native handshake.
-Product verification uses the reviewed lock when it exists, then runs the
-consumer handshake against that downloaded executable. Development and explicit
+Product verification compiles the lock's version into the consumer and runs its
+handshake against that downloaded executable. Development and explicit
 source-candidate verification (`scripts/verify.ps1 -CoreSourceCandidate`) build
-an optimized candidate from `core/`. Product release builds require the
-reviewed release lock and its verified asset.
+an optimized candidate from `core/` and compile the source version instead.
+Product release builds require the reviewed release lock and its verified asset.
 
 Bootstrap a new Core version in this order:
 

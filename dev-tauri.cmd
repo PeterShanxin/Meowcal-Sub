@@ -73,7 +73,7 @@ if %ERRORLEVEL% neq 0 (
 
 echo.
 echo Starting Tauri development server...
-npx tauri dev --config src-tauri/tauri.dev.conf.json
+npx tauri dev --features core-source-candidate --config src-tauri/tauri.dev.conf.json
 
 popd
 endlocal

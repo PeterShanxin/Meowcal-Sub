@@ -71,7 +71,8 @@ function Invoke-VerifyUnderTest {
         [string]$Stage,
         [string]$CargoFailOn = "",
         [string]$NpmFailOn = "",
-        [string]$Target = ""
+        [string]$Target = "",
+        [switch]$CoreSourceCandidate
     )
 
     Remove-Item -LiteralPath $cargoLog -Force -ErrorAction SilentlyContinue
@@ -90,8 +91,10 @@ function Invoke-VerifyUnderTest {
         $env:FAKE_NPM_LOG = $npmLog
         $env:FAKE_NPM_FAIL_ON = $NpmFailOn
         $env:MEOWCAL_VERIFY_CONTRACT_ACTIVE = "1"
-        if ([string]::IsNullOrEmpty($Target)) {
+        if ([string]::IsNullOrEmpty($Target) -and -not $CoreSourceCandidate) {
             & pwsh -NoProfile -File $verifyScript -Stage $Stage
+        } elseif ([string]::IsNullOrEmpty($Target)) {
+            & pwsh -NoProfile -File $verifyScript -Stage $Stage -CoreSourceCandidate
         } else {
             & pwsh -NoProfile -File $verifyScript -Stage $Stage -Target $Target
         }
@@ -163,6 +166,16 @@ exit /b 0
         "test --locked --test command_contracts"
     )) $test.CargoCommands "Test stage"
     Assert-Lines @() $test.NpmCommands "Test stage npm"
+
+    $sourceCandidate = Invoke-VerifyUnderTest -Stage Test -CoreSourceCandidate
+    Assert-Equal 0 $sourceCandidate.ExitCode "Source candidate test stage exit code."
+    Assert-Lines (@(
+        Core-Commands -Target $hostCoreTarget -Test
+    ) + @(
+        "test --locked --features core-source-candidate --lib",
+        "test --locked --features core-source-candidate --test integration_ipc",
+        "test --locked --features core-source-candidate --test command_contracts"
+    )) $sourceCandidate.CargoCommands "Source candidate test stage"
 
     # Rust coverage here is "which targets run", not a line percentage: no
     # coverage instrumentation is installed on the toolchain, and the gate names

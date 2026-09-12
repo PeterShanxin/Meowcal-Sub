@@ -127,11 +127,11 @@ try {
     }
 
     $release = Join-Path $temporaryDirectory "release.json"
-    New-ReleaseFixture -Path $release -Version "0.2.0" -AssetDirectory $assets
+    New-ReleaseFixture -Path $release -Version "0.1.0" -AssetDirectory $assets
     $updated = Invoke-Updater -ReleasePath $release -AssetDirectory $assets -LockPath $lock -ResultPath $result
     if ($updated.status -ne "updated" -or -not $updated.changed) { throw "A valid stable release must update the lock." }
     $lockObject = Get-Content -LiteralPath $lock -Raw | ConvertFrom-Json
-    if ($lockObject.tag -ne "core-v0.2.0" -or
+    if ($lockObject.tag -ne "core-v0.1.0" -or
         $lockObject.architectures.x64.sha256 -notmatch '^[0-9a-f]{64}$' -or
         $lockObject.architectures.arm64.sha256 -notmatch '^[0-9a-f]{64}$') {
         throw "The generated lock must contain exact release asset digests."
@@ -142,31 +142,42 @@ try {
         throw "Repeating the same release must be idempotent."
     }
 
-    $x64Checksum = Join-Path $assets "meowcal-core-v0.2.0-windows-x64.zip.sha256"
-    [IO.File]::WriteAllText($x64Checksum, ("a" * 64) + "  meowcal-core-v0.2.0-windows-x64.zip`n")
+    $x64Checksum = Join-Path $assets "meowcal-core-v0.1.0-windows-x64.zip.sha256"
+    [IO.File]::WriteAllText($x64Checksum, ("a" * 64) + "  meowcal-core-v0.1.0-windows-x64.zip`n")
     Assert-Throws { Invoke-Updater -ReleasePath $release -AssetDirectory $assets `
         -LockPath (Join-Path $temporaryDirectory "hash-fail.json") -ResultPath $result } "SHA-256 mismatch"
+
+    Assert-Throws { Invoke-Updater -ReleasePath $release -AssetDirectory $assets `
+        -LockPath $lock -ResultPath $result } "digests different from the existing lock"
 
     $badApiAssets = Join-Path $temporaryDirectory "bad-api-assets"
     New-Item -ItemType Directory -Path $badApiAssets | Out-Null
     $badApiRelease = Join-Path $temporaryDirectory "bad-api.json"
-    New-ReleaseFixture -Path $badApiRelease -Version "0.3.0" -AssetDirectory $badApiAssets -ApiVersion 2
+    New-ReleaseFixture -Path $badApiRelease -Version "0.1.0" -AssetDirectory $badApiAssets -ApiVersion 2
     Assert-Throws { Invoke-Updater -ReleasePath $badApiRelease -AssetDirectory $badApiAssets `
         -LockPath (Join-Path $temporaryDirectory "api-fail.json") -ResultPath $result } "API version"
 
     $olderAssets = Join-Path $temporaryDirectory "older-assets"
     New-Item -ItemType Directory -Path $olderAssets | Out-Null
     $olderRelease = Join-Path $temporaryDirectory "older.json"
-    New-ReleaseFixture -Path $olderRelease -Version "0.1.0" -AssetDirectory $olderAssets
+    New-ReleaseFixture -Path $olderRelease -Version "0.0.9" -AssetDirectory $olderAssets
     $olderResult = Invoke-Updater -ReleasePath $olderRelease -AssetDirectory $olderAssets `
         -LockPath $lock -ResultPath $result
     if ($olderResult.status -ne "unchanged") { throw "The updater must refuse to downgrade a newer lock." }
+
+    $updaterSource = Get-Content -LiteralPath $updater -Raw
+    if ($updaterSource -match 'Get-ConsumerCoreVersion|does not match consumer Core version') {
+        throw "Core upgrade discovery must not require the release pin to equal the source candidate version."
+    }
 
     $workflow = Get-Content -LiteralPath (Join-Path $repositoryRoot ".github\workflows\core-upgrade.yml") -Raw
     foreach ($requirement in @(
         'schedule:', 'workflow_dispatch:', 'CORE_UPGRADE_TOKEN',
         'peter-evans/create-pull-request@22a9089034f40e5a961c8808d113e2c98fb63676',
-        'draft: true', 'config/meowcal-core.lock.json', 'RUNNER_TEMP'
+        'draft: true', 'config/meowcal-core.lock.json', 'RUNNER_TEMP',
+        '## Intent', '## Changes', '## Non-goals', '## Validation',
+        '## Manual Windows validation', '## Risk and rollback', '## Issues',
+        'Routine Core dependency update.', 'Contributor License Agreement'
     )) {
         if ($workflow -notmatch [regex]::Escape($requirement)) {
             throw "Core upgrade workflow is missing $requirement."

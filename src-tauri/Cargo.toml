@@ -23,6 +23,8 @@ license = "AGPL-3.0-only"
 [features]
 # Enable Windows-specific E2E tests
 test-windows = []
+# Explicitly bind development commands to the locally built Core candidate.
+core-source-candidate = []
 
 # =============================================================================
 # DEPENDENCIES
@@ -171,6 +173,7 @@ tower-http = { version = "0.6", features = ["cors"] }
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
+serde_json = "1"
 
 # =============================================================================
 # TEST DEPENDENCIES

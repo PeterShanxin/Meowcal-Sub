@@ -55,15 +55,6 @@ if ($lock.coreVersion -notmatch '^\d+\.\d+\.\d+$' -or
     throw "Core release lock version and tag do not match."
 }
 
-$manifest = Get-Content -LiteralPath (Join-Path $repositoryRoot "core\Cargo.toml") -Raw
-$manifestVersion = [regex]::Match(
-    $manifest,
-    '(?ms)^\[package\].*?^version\s*=\s*"(?<version>\d+\.\d+\.\d+)"'
-).Groups["version"].Value
-if (-not $manifestVersion -or $lock.coreVersion -ne $manifestVersion) {
-    throw "Core release lock version must match core/Cargo.toml."
-}
-
 $lockedArchitectureNames = @($lock.architectures.PSObject.Properties.Name)
 if ($lockedArchitectureNames.Count -ne 2 -or
     @($lockedArchitectureNames | Where-Object { $_ -notin @("x64", "arm64") }).Count -ne 0) {
