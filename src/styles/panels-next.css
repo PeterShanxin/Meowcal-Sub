@@ -73,14 +73,14 @@
 /* Painted like the live overlay plate: opaque, wrapping, with the same two schemes. */
 .subtitle-plate {
   max-width: 100%;
-  padding: 4px 16px 6px;
+  padding: 8px 20px 10px;
   color: #ffffff;
   background: var(--plate-dark);
   border: 1px solid rgba(255, 255, 255, 0.09);
   border-radius: var(--radius-lg);
   box-shadow: var(--inset-highlight);
   font-weight: 500;
-  line-height: 1.35;
+  line-height: 1.4;
   text-align: center;
   text-wrap: balance;
 }

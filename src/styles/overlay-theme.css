@@ -6,25 +6,25 @@
    because WebView2 transparency does not hold here that alpha composited
    against the window's opaque white backing - which is why a plate configured
    as 75% black arrived on screen looking washed-out white.
+
+   The light scheme is a light plate with dark text. White text on a light
+   scene is the case it exists for, so it never keeps white text (#75).
    ============================================================================= */
 
-.subtitle-container {
-  background: #0b0b0b;
-}
-
 .subtitle-container.light {
-  background: #f2f2f2;
-  border-color: rgba(0, 0, 0, 0.16);
+  background: var(--plate-light);
+  border-color: rgba(0, 0, 0, 0.08);
+  box-shadow: none;
 }
 
 .subtitle-container.light #subtitle-text {
-  color: #101010;
+  color: var(--plate-light-ink);
 }
 
 .subtitle-container.light .subtitle-hint {
-  color: rgba(0, 0, 0, 0.72);
-  background: rgba(0, 0, 0, 0.08);
-  border-color: rgba(0, 0, 0, 0.16);
+  color: rgba(16, 24, 32, 0.78);
+  background: rgba(16, 24, 32, 0.06);
+  border-color: rgba(16, 24, 32, 0.14);
 }
 
 /* The diagnostics panel reports state, latency and the raw OCR line on

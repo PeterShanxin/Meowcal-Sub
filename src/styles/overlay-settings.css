@@ -13,12 +13,11 @@
   height: 18px;
   padding: 0;
 
-  background: rgba(80, 80, 80, 0.95);
-  border: 2px solid rgba(255, 255, 255, 0.9);
-  border-radius: 50%; /* Circular like resize handles */
+  color: var(--accent);
+  background: #10141d;
+  border: 1px solid rgba(232, 238, 247, 0.6);
+  border-radius: 50%;
   cursor: pointer;
-
-  color: rgba(255, 255, 255, 0.9);
 
   display: flex;
   align-items: center;
@@ -34,7 +33,6 @@
   transform: scale(0.5);
   pointer-events: auto;
   z-index: 100;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25);
 }
 
 /* Show button when hovering capture frame (like resize handles) */
@@ -53,13 +51,8 @@
 }
 
 .settings-button:hover {
-  background: rgba(255, 255, 255, 1);
-  transform: scale(1.2);
-}
-
-.settings-button:active {
-  background: rgba(255, 159, 67, 1);
-  transform: scale(0.95);
+  color: #10141d;
+  background: var(--accent);
 }
 
 .settings-button svg {
@@ -69,7 +62,7 @@
 }
 
 /* =============================================================================
-   SETTINGS MENU - Popup menu for settings
+   SETTINGS MENU - Quick subtitle style popup
    ============================================================================= */
 
 .settings-menu {
@@ -78,18 +71,17 @@
   left: 50%;
   transform: translate(-50%, -50%);
 
-  min-width: 280px;
-  padding: 16px;
+  width: 260px;
+  padding: 10px 12px 12px;
 
-  /* No backdrop-filter: WebView2 renders it as flat grey on a transparent
-     window. See the same note on .subtitle-container. */
-  background: rgba(30, 30, 30, 0.97);
-  border-radius: 12px;
+  /* Opaque, with no backdrop-filter: WebView2 renders translucency on this
+     transparent window as flat grey. See the note on .subtitle-container. */
+  color: var(--text-1);
+  background: var(--surface-menu);
+  border-radius: var(--radius-lg);
   border: 1px solid rgba(255, 255, 255, 0.1);
-
-  box-shadow:
-    0 8px 32px rgba(0, 0, 0, 0.4),
-    0 0 0 1px rgba(255, 255, 255, 0.05);
+  box-shadow: 0 16px 36px -12px rgba(0, 0, 0, 0.75);
+  font-size: 13px;
 
   z-index: 10000;
 
@@ -115,161 +107,100 @@
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-
-  font-size: 14px;
+  margin-bottom: 10px;
   font-weight: 600;
-  color: #ffffff;
-  margin-bottom: 16px;
-  padding-bottom: 8px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 /* The overlay window is click-through outside its clipped surfaces, so the
    popup needs its own close control - a click on the desktop never reaches it. */
 .settings-close {
+  display: grid;
   flex: 0 0 auto;
+  place-items: center;
   width: 24px;
   height: 24px;
   padding: 0;
-
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  border-radius: 50%;
+  color: var(--text-2);
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-sm);
   cursor: pointer;
-
-  color: rgba(255, 255, 255, 0.85);
-  font-size: 16px;
-  line-height: 1;
-
-  transition:
-    background 0.2s ease,
-    color 0.2s ease;
 }
 
 .settings-close:hover {
-  background: rgba(255, 255, 255, 0.18);
-  color: #ffffff;
+  color: var(--text-1);
+  background: rgba(255, 255, 255, 0.08);
 }
 
-.settings-close:focus-visible {
-  outline: 2px solid var(--accent, #ff9f43);
-  outline-offset: 2px;
+.settings-close svg {
+  width: 14px;
+  height: 14px;
 }
 
-.settings-item {
-  margin-bottom: 12px;
+.settings-item + .settings-item {
+  margin-top: 12px;
 }
 
-.settings-item:last-child {
-  margin-bottom: 0;
-}
-
-.settings-item label {
-  display: block;
-  font-size: 12px;
-  color: rgba(255, 255, 255, 0.7);
-  margin-bottom: 8px;
-}
-
-.settings-slider-row {
+.settings-label-row,
+.settings-label {
   display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.settings-slider {
-  flex: 1;
-  height: 4px;
-  background: rgba(255, 255, 255, 0.2);
-  border-radius: 2px;
-  appearance: none;
-  -webkit-appearance: none;
-  cursor: pointer;
-}
-
-.settings-slider::-webkit-slider-thumb {
-  appearance: none;
-  -webkit-appearance: none;
-  width: 16px;
-  height: 16px;
-  background: #8ab4f8;
-  border-radius: 50%;
-  cursor: pointer;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
-  transition: transform 0.1s ease;
-}
-
-.settings-slider::-webkit-slider-thumb:hover {
-  transform: scale(1.1);
-}
-
-.settings-slider::-webkit-slider-thumb:active {
-  transform: scale(0.95);
+  justify-content: space-between;
+  margin-bottom: 6px;
+  color: var(--text-2);
+  font-size: var(--type-caption);
 }
 
 .settings-value {
-  min-width: 40px;
-  font-size: 12px;
-  color: rgba(255, 255, 255, 0.9);
-  text-align: right;
-  font-family: "Consolas", monospace;
+  font-variant-numeric: tabular-nums;
 }
 
-/* Toggle switch item - label and toggle side by side */
-.settings-toggle-item {
+.settings-menu .slider {
+  width: 100%;
+}
+
+.plate-choice {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding-top: 8px;
-  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  gap: 2px;
+  padding: 2px;
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid var(--line-control);
+  border-radius: var(--radius-md);
 }
 
-.settings-toggle-item > label:first-child {
-  margin-bottom: 0;
+.plate-choice label {
+  flex: 1;
 }
 
-/* Toggle switch */
-.settings-toggle {
-  position: relative;
-  display: inline-block;
-  width: 40px;
-  height: 22px;
+.plate-choice input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.plate-choice span {
+  display: block;
+  height: 26px;
+  color: var(--text-2);
+  border-radius: var(--radius-sm);
+  font-size: var(--type-caption);
+  line-height: 26px;
+  text-align: center;
   cursor: pointer;
 }
 
-.settings-toggle input {
-  opacity: 0;
-  width: 0;
-  height: 0;
+.plate-choice input:checked + span {
+  color: var(--text-1);
+  background: rgba(232, 238, 247, 0.16);
 }
 
-.settings-toggle-slider {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(255, 255, 255, 0.2);
-  border-radius: 22px;
-  transition: background 0.2s ease;
+.plate-choice input:focus-visible + span {
+  outline: 2px solid var(--focus);
+  outline-offset: 1px;
 }
 
-.settings-toggle-slider::before {
-  position: absolute;
-  content: "";
-  height: 16px;
-  width: 16px;
-  left: 3px;
-  bottom: 3px;
-  background: white;
-  border-radius: 50%;
-  transition: transform 0.2s ease;
-}
-
-.settings-toggle input:checked + .settings-toggle-slider {
-  background: #8ab4f8;
-}
-
-.settings-toggle input:checked + .settings-toggle-slider::before {
-  transform: translateX(18px);
+@media (prefers-reduced-motion: reduce) {
+  .settings-button,
+  .settings-menu {
+    transition-duration: 0.01ms;
+  }
 }

@@ -86,7 +86,7 @@ decomposition-owned hotspots are:
 | ------------------------------------ | ------: | ----------------- |
 | `src-tauri/src/llm/foundry_local.rs` |   1,561 | #32               |
 | `src-tauri/src/commands.rs`          |   1,090 | #31 / #32 surface |
-| `src/scripts/overlay.js`             |   1,062 | #34               |
+| `src/scripts/overlay.js`             |   1,046 | #34               |
 | `src-tauri/src/llm/context.rs`       |     732 | #32               |
 | `src-tauri/src/llm/manager.rs`       |     726 | #32               |
 | `src/scripts/selector.js`            |     721 | #34               |
