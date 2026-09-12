@@ -1,7 +1,9 @@
 /* =============================================================================
    SELECTOR.CSS - Area Selection Overlay Styles
    =============================================================================
-   Styles for the fullscreen transparent overlay used to select the capture area.
+   Styles for the fullscreen window used to select the capture area. It uses the
+   main window's tokens and controls: an ice-white frame and no glow, so the
+   video being selected stays the brightest thing on screen.
    ============================================================================= */
 
 /* --- Base Styles --- */
@@ -16,12 +18,21 @@ body {
     width: 100%;
     height: 100%;
     overflow: hidden;
-    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    color: var(--text-1);
+    font-size: 14px;
     /* Transparent background - the window itself is transparent */
     background: transparent;
     cursor: crosshair;
     user-select: none;
     -webkit-user-select: none;
+}
+
+body:focus {
+    outline: none;
+}
+
+button {
+    font: inherit;
 }
 
 /* --- Desktop snapshot background (selector transparency workaround) --- */
@@ -41,99 +52,93 @@ body {
 /* --- Dim overlay segments (creates a "hole" around selection) --- */
 .overlay-segment {
     position: fixed;
-    background: rgba(0, 0, 0, 0.45);
+    background: rgba(0, 0, 0, 0.5);
     pointer-events: none;
     z-index: 1;
     will-change: top, left, width, height;
 }
 
-/* --- Instructions Banner --- */
+/* --- Hint bar: one phase at a time --- */
 .instructions {
     position: fixed;
-    top: 40px;
+    top: 24px;
     left: 50%;
     transform: translateX(-50%);
     display: flex;
     align-items: center;
-    gap: 16px;
-    padding: 16px 24px;
-    background: rgba(15, 15, 15, 0.95);
-    border: 1px solid rgba(255, 159, 67, 0.5);
-    border-radius: 12px;
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+    gap: 12px;
+    height: 40px;
+    padding: 0 5px 0 16px;
+    background: var(--surface-menu);
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    box-shadow: 0 8px 22px -10px rgba(0, 0, 0, 0.7);
+    white-space: nowrap;
+    cursor: default;
     z-index: 100;
-    animation: slideDown 0.3s ease-out;
 }
 
-@keyframes slideDown {
-    from {
-        opacity: 0;
-        transform: translateX(-50%) translateY(-20px);
-    }
-
-    to {
-        opacity: 1;
-        transform: translateX(-50%) translateY(0);
-    }
-}
-
-.instructions .icon {
-    font-size: 24px;
-}
-
-.instructions .text {
-    font-size: 16px;
-    font-weight: 500;
-    color: #ffffff;
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-}
-
-.instructions .hint {
-    font-size: 12px;
-    font-weight: 500;
-    color: rgba(255, 255, 255, 0.7);
-}
-
-/* Cancel button in header */
-.cancel-btn {
-    display: flex;
+.hint {
+    display: none;
     align-items: center;
-    gap: 6px;
-    padding: 8px 16px;
-    background: rgba(239, 68, 68, 0.2);
-    border: 1px solid rgba(239, 68, 68, 0.5);
-    border-radius: 8px;
-    color: #ef4444;
-    font-family: inherit;
-    font-size: 14px;
-    font-weight: 500;
+    gap: 8px;
+    font-size: 13px;
+}
+
+body[data-phase="draw"] .hint-draw,
+body[data-phase="adjust"] .hint-adjust,
+body[data-phase="error"] .hint-error {
+    display: inline-flex;
+}
+
+.hint .icon {
+    color: var(--accent);
+}
+
+.hint-error .icon {
+    color: var(--danger);
+}
+
+.hint-sep {
+    color: var(--text-3);
+}
+
+kbd {
+    padding: 0 6px;
+    color: var(--text-1);
+    border: 1px solid var(--line-control);
+    border-radius: 4px;
+    font: 600 11.5px/18px "Segoe UI", sans-serif;
+}
+
+.cancel-btn {
+    height: 30px;
+    padding: 0 12px;
+    color: var(--text-2);
+    background: transparent;
+    border: 0;
+    border-radius: 999px;
+    font: inherit;
+    font-size: 13px;
     cursor: pointer;
-    transition: all 0.15s ease;
 }
 
 .cancel-btn:hover {
-    background: rgba(239, 68, 68, 0.3);
-    border-color: #ef4444;
-    transform: scale(1.02);
-}
-
-.cancel-btn:active {
-    transform: scale(0.98);
+    color: var(--text-1);
+    background: var(--surface-hover);
 }
 
 /* --- Selection Box --- */
 .selection-box {
     position: fixed;
     display: none;
-    border: 2px solid #ff9f43;
-    background: rgba(255, 159, 67, 0.04);
+    border: 1px solid rgba(232, 238, 247, 0.7);
     z-index: 50;
     pointer-events: none;
-    box-shadow:
-        0 0 0 1px rgba(0, 0, 0, 0.3),
-        0 0 20px rgba(255, 159, 67, 0.3);
+}
+
+.selection-box.active {
+    display: block;
 }
 
 /* Allow pointer events after selection for drag/resize */
@@ -142,266 +147,113 @@ body {
     cursor: move;
 }
 
-.selection-box.active {
-    display: block;
-    animation: pulse-border 1.5s ease-in-out infinite;
-}
-
-@keyframes pulse-border {
-
-    0%,
-    100% {
-        border-color: #ff9f43;
-        box-shadow:
-            0 0 0 1px rgba(0, 0, 0, 0.3),
-            0 0 20px rgba(255, 159, 67, 0.3);
-    }
-
-    50% {
-        border-color: #ffb366;
-        box-shadow:
-            0 0 0 1px rgba(0, 0, 0, 0.3),
-            0 0 30px rgba(255, 159, 67, 0.5);
-    }
-}
-
-/* --- Dimensions Display --- */
-.dimensions {
+.selection-box .corner {
     position: absolute;
-    bottom: -36px;
-    left: 50%;
-    transform: translateX(-50%);
-    padding: 6px 14px;
-    background: rgba(15, 15, 15, 0.95);
-    border: 1px solid rgba(255, 159, 67, 0.5);
-    border-radius: 6px;
-    font-size: 15px;
-    font-weight: 600;
-    font-family: 'Consolas', 'Monaco', monospace;
-    color: #ff9f43;
-    white-space: nowrap;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+    width: 12px;
+    height: 12px;
+    border: 0 solid var(--accent);
+    pointer-events: none;
 }
 
-/* If box is near bottom, show dimensions above */
-.selection-box.near-bottom .dimensions {
-    bottom: auto;
-    top: -36px;
+.corner.top-left {
+    top: -2px;
+    left: -2px;
+    border-width: 2px 0 0 2px;
+}
+
+.corner.top-right {
+    top: -2px;
+    right: -2px;
+    border-width: 2px 2px 0 0;
+}
+
+.corner.bottom-left {
+    bottom: -2px;
+    left: -2px;
+    border-width: 0 0 2px 2px;
+}
+
+.corner.bottom-right {
+    right: -2px;
+    bottom: -2px;
+    border-width: 0 2px 2px 0;
 }
 
 /* --- Resize Handles --- */
+/* A 24px pointer and keyboard target around a 7px visible square. */
 .resize-handle {
     position: absolute;
-    width: 14px;
-    height: 14px;
-    background: #ff9f43;
-    border: 2px solid rgba(255, 255, 255, 0.9);
-    border-radius: 50%;
+    width: 24px;
+    height: 24px;
+    margin: -12px 0 0 -12px;
     pointer-events: auto;
-    cursor: pointer;
-
-    /* Hidden by default, shown when selection is complete */
     opacity: 0;
-    transform: scale(0.5);
-    transition: opacity 0.2s ease, transform 0.2s ease, background 0.15s ease;
+    transition: opacity 0.15s ease;
+}
 
-    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
-    z-index: 60;
+.resize-handle::after {
+    content: "";
+    position: absolute;
+    top: 8.5px;
+    left: 8.5px;
+    width: 7px;
+    height: 7px;
+    background: var(--accent);
+    border-radius: 1.5px;
+    box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.55);
+    transition: transform 0.15s ease;
+}
+
+.resize-handle:hover::after {
+    transform: scale(1.4);
+}
+
+.resize-handle:focus-visible {
+    outline: none;
+}
+
+.resize-handle:focus-visible::after {
+    transform: scale(1.4);
+    box-shadow:
+        0 0 0 1px rgba(0, 0, 0, 0.55),
+        0 0 0 3px var(--focus);
 }
 
 /* Show handles after selection is complete */
 .selection-box.has-selection .resize-handle {
     opacity: 1;
-    transform: scale(1);
 }
 
-.resize-handle:hover {
-    background: rgba(255, 255, 255, 1);
-    transform: scale(1.2);
-}
-
-/* Position each handle */
-.resize-handle[data-position="nw"] {
-    top: -7px;
-    left: -7px;
-    cursor: nwse-resize;
-}
-
-.resize-handle[data-position="n"] {
-    top: -7px;
-    left: 50%;
-    transform: translateX(-50%) scale(0.5);
-    cursor: ns-resize;
-}
-
-.selection-box.has-selection .resize-handle[data-position="n"] {
-    transform: translateX(-50%) scale(1);
-}
-
-.resize-handle[data-position="n"]:hover {
-    transform: translateX(-50%) scale(1.2);
-}
-
-.resize-handle[data-position="ne"] {
-    top: -7px;
-    right: -7px;
-    cursor: nesw-resize;
-}
-
-.resize-handle[data-position="w"] {
-    top: 50%;
-    left: -7px;
-    transform: translateY(-50%) scale(0.5);
-    cursor: ew-resize;
-}
-
-.selection-box.has-selection .resize-handle[data-position="w"] {
-    transform: translateY(-50%) scale(1);
-}
-
-.resize-handle[data-position="w"]:hover {
-    transform: translateY(-50%) scale(1.2);
-}
-
-.resize-handle[data-position="e"] {
-    top: 50%;
-    right: -7px;
-    transform: translateY(-50%) scale(0.5);
-    cursor: ew-resize;
-}
-
-.selection-box.has-selection .resize-handle[data-position="e"] {
-    transform: translateY(-50%) scale(1);
-}
-
-.resize-handle[data-position="e"]:hover {
-    transform: translateY(-50%) scale(1.2);
-}
-
-.resize-handle[data-position="sw"] {
-    bottom: -7px;
-    left: -7px;
-    cursor: nesw-resize;
-}
-
-.resize-handle[data-position="s"] {
-    bottom: -7px;
-    left: 50%;
-    transform: translateX(-50%) scale(0.5);
-    cursor: ns-resize;
-}
-
-.selection-box.has-selection .resize-handle[data-position="s"] {
-    transform: translateX(-50%) scale(1);
-}
-
-.resize-handle[data-position="s"]:hover {
-    transform: translateX(-50%) scale(1.2);
-}
-
-.resize-handle[data-position="se"] {
-    bottom: -7px;
-    right: -7px;
-    cursor: nwse-resize;
-}
+.resize-handle[data-position="nw"] { top: 0; left: 0; cursor: nwse-resize; }
+.resize-handle[data-position="n"] { top: 0; left: 50%; cursor: ns-resize; }
+.resize-handle[data-position="ne"] { top: 0; left: 100%; cursor: nesw-resize; }
+.resize-handle[data-position="w"] { top: 50%; left: 0; cursor: ew-resize; }
+.resize-handle[data-position="e"] { top: 50%; left: 100%; cursor: ew-resize; }
+.resize-handle[data-position="sw"] { top: 100%; left: 0; cursor: nesw-resize; }
+.resize-handle[data-position="s"] { top: 100%; left: 50%; cursor: ns-resize; }
+.resize-handle[data-position="se"] { top: 100%; left: 100%; cursor: nwse-resize; }
 
 /* --- Action Buttons --- */
+/* `top` is set beside the selection by selector.js. */
 .action-buttons {
     position: fixed;
-    bottom: 60px;
     left: 50%;
     transform: translateX(-50%);
     display: none;
-    gap: 16px;
+    gap: 8px;
+    cursor: default;
     z-index: 200;
-    animation: slideUp 0.3s ease-out;
 }
 
 .action-buttons.visible {
     display: flex;
 }
 
-@keyframes slideUp {
-    from {
-        opacity: 0;
-        transform: translateX(-50%) translateY(20px);
-    }
-
-    to {
-        opacity: 1;
-        transform: translateX(-50%) translateY(0);
-    }
-}
-
-.action-buttons .btn {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 14px 28px;
-    border: none;
-    border-radius: 12px;
-    font-family: inherit;
-    font-size: 16px;
-    font-weight: 600;
-    cursor: pointer;
-    transition: all 0.15s ease;
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
-}
-
-.action-buttons .btn-icon {
-    font-size: 20px;
-}
-
-/* Confirm button */
-.confirm-btn {
-    background: linear-gradient(135deg, #10b981, #059669);
-    color: white;
-}
-
-.confirm-btn:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 6px 24px rgba(16, 185, 129, 0.4);
-}
-
-.confirm-btn:active {
-    transform: translateY(0);
-}
-
-/* Retry button */
-.retry-btn {
-    background: rgba(30, 30, 30, 0.95);
-    color: #a0a0a0;
-    border: 1px solid rgba(255, 255, 255, 0.2);
-}
-
-.retry-btn:hover {
-    background: rgba(45, 45, 45, 0.95);
-    color: white;
-    transform: translateY(-2px);
-}
-
-.retry-btn:active {
-    transform: translateY(0);
-}
-
-/* --- Selection Complete Animation --- */
-.selection-box.complete {
-    animation: flash 0.3s ease-out;
-}
-
-@keyframes flash {
-    0% {
-        background: rgba(255, 159, 67, 0.1);
-    }
-
-    50% {
-        background: rgba(16, 185, 129, 0.3);
-        border-color: #10b981;
-    }
-
-    100% {
-        background: rgba(255, 159, 67, 0.1);
-    }
+.action-buttons .secondary-button {
+    height: 36px;
+    padding: 0 14px;
+    background: var(--surface-menu);
+    font-size: 14px;
 }
 
 /* --- Ready state (after selection, waiting for confirm) --- */
@@ -409,6 +261,9 @@ body.selection-ready {
     cursor: default;
 }
 
-body.selection-ready .overlay-segment {
-    background: rgba(0, 0, 0, 0.55);
+@media (prefers-reduced-motion: reduce) {
+    .resize-handle,
+    .resize-handle::after {
+        transition: none;
+    }
 }

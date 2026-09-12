@@ -3,13 +3,51 @@ import { describe, expect, it } from "vitest";
 
 const require = createRequire(import.meta.url);
 const {
+  actionBarTop,
+  arrowDelta,
   buildCaptureRegionPayload,
   buildDimOverlaySegments,
   clampSelectionHole,
+  defaultSelectionRect,
   meetsMinimumSelection,
   screenRectToClientRect,
   selectionRectFromPoints,
 } = require("../../src/scripts/selector-geometry.js");
+
+describe("selector keyboard geometry", () => {
+  it("moves one pixel per arrow press and ten with Ctrl", () => {
+    expect(arrowDelta("ArrowLeft", false)).toEqual({ dx: -1, dy: 0 });
+    expect(arrowDelta("ArrowDown", true)).toEqual({ dx: 0, dy: 10 });
+    expect(arrowDelta("Enter", false)).toBeNull();
+  });
+
+  it("places a keyboard user's first box across the lower screen in screen coordinates", () => {
+    expect(defaultSelectionRect({ x: -1920, y: 0, width: 1920, height: 1080 })).toEqual({
+      x: -1920 + 384,
+      y: 810,
+      width: 1152,
+      height: 108,
+    });
+  });
+
+  it("keeps that box tall enough for one line on a short screen", () => {
+    expect(defaultSelectionRect({ x: 0, y: 0, width: 800, height: 300 }).height).toBe(40);
+  });
+});
+
+describe("selector action bar placement", () => {
+  it("puts the buttons under the box when they fit", () => {
+    expect(actionBarTop({ top: 100, height: 60 }, 1080, 36, 12)).toBe(172);
+  });
+
+  it("puts them above a box near the bottom edge", () => {
+    expect(actionBarTop({ top: 980, height: 80 }, 1080, 36, 12)).toBe(932);
+  });
+
+  it("never pushes them past the top edge", () => {
+    expect(actionBarTop({ top: 10, height: 1060 }, 1080, 36, 12)).toBe(12);
+  });
+});
 
 describe("selector geometry", () => {
   it("normalizes forward and reverse screen drags", () => {

@@ -116,10 +116,50 @@
     return region.width >= minWidth && region.height >= minHeight;
   }
 
+  const ARROW_DIRECTIONS = {
+    ArrowLeft: [-1, 0],
+    ArrowRight: [1, 0],
+    ArrowUp: [0, -1],
+    ArrowDown: [0, 1],
+  };
+
+  // One pixel per press, or ten with Ctrl, so the keyboard can both line a box
+  // up exactly and cross a screen without hundreds of presses.
+  function arrowDelta(key, fast) {
+    const direction = ARROW_DIRECTIONS[key];
+    if (!direction) return null;
+    const step = fast ? 10 : 1;
+    return { dx: direction[0] * step, dy: direction[1] * step };
+  }
+
+  // The box a keyboard user starts from: centred across the lower part of the
+  // screen, where subtitles usually sit. `viewport` is in screen coordinates.
+  function defaultSelectionRect(viewport) {
+    const width = Math.round(viewport.width * 0.6);
+    const height = Math.max(40, Math.round(viewport.height * 0.1));
+    return {
+      x: viewport.x + Math.round((viewport.width - width) / 2),
+      y: viewport.y + Math.round(viewport.height * 0.8 - height / 2),
+      width,
+      height,
+    };
+  }
+
+  // Below the box when the buttons fit under it, otherwise above it, and never
+  // past the top edge. Subtitle boxes sit low on screen, so "above" is common.
+  function actionBarTop(box, viewportHeight, barHeight, gap) {
+    const below = box.top + box.height + gap;
+    if (below + barHeight <= viewportHeight) return below;
+    return Math.max(gap, box.top - gap - barHeight);
+  }
+
   return {
+    actionBarTop,
+    arrowDelta,
     buildCaptureRegionPayload,
     buildDimOverlaySegments,
     clampSelectionHole,
+    defaultSelectionRect,
     meetsMinimumSelection,
     screenRectToClientRect,
     selectionRectFromPoints,

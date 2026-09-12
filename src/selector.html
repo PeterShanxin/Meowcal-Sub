@@ -5,15 +5,12 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Select Area</title>
+    <link rel="stylesheet" href="styles/tokens.css">
+    <link rel="stylesheet" href="styles/controls.css">
     <link rel="stylesheet" href="styles/selector.css">
-
-    <!-- Google Font to match main app -->
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
 </head>
 
-<body>
+<body data-phase="draw">
     <!-- Desktop snapshot background (workaround for WebView2 transparency regressions) -->
     <img class="desktop-snapshot" id="desktop-snapshot" alt="" />
 
@@ -23,40 +20,55 @@
     <div class="overlay-segment overlay-right" id="overlay-right"></div>
     <div class="overlay-segment overlay-bottom" id="overlay-bottom"></div>
 
-    <!-- Instruction banner at the top -->
-    <div class="instructions" id="instructions">
-        <span class="icon">📐</span>
-        <span class="text">
-            Drag to select the subtitle area
-            <span class="hint">Enter to confirm · Esc/right-click to cancel · Drag/resize to adjust</span>
+    <!-- Hint bar: shows only the hint for the current phase -->
+    <div class="instructions" id="instructions" role="status" aria-live="polite">
+        <span class="hint hint-draw">
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="6.5" width="17" height="11" rx="1.5" stroke-dasharray="3 2.4"/></svg>
+            Drag across one line of subtitles
+            <span class="hint-sep">·</span>
+            <kbd>Enter</kbd> Place a box
         </span>
-        <button class="cancel-btn" id="cancel-btn" title="Cancel (ESC)">✕ Cancel</button>
+        <span class="hint hint-adjust">
+            <kbd>Enter</kbd> Use this area
+            <span class="hint-sep">·</span>
+            Arrow keys move
+            <span class="hint-sep">·</span>
+            <kbd>Shift</kbd> + arrows resize
+        </span>
+        <span class="hint hint-error">
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7.5v5.5M12 16.4v.1"/></svg>
+            <span id="selector-error"></span>
+        </span>
+        <button class="cancel-btn" id="cancel-btn" type="button" title="Cancel (Esc)" aria-keyshortcuts="Escape">Cancel</button>
     </div>
 
-    <!-- Selection rectangle (shown during drag) -->
+    <!-- Selection rectangle -->
     <div class="selection-box" id="selection-box">
-        <div class="dimensions" id="dimensions">0 × 0</div>
+        <span class="corner top-left"></span>
+        <span class="corner top-right"></span>
+        <span class="corner bottom-left"></span>
+        <span class="corner bottom-right"></span>
 
-        <!-- Resize handles (8 positions like overlay) -->
-        <div class="resize-handle" data-position="nw"></div>
-        <div class="resize-handle" data-position="n"></div>
-        <div class="resize-handle" data-position="ne"></div>
-        <div class="resize-handle" data-position="w"></div>
-        <div class="resize-handle" data-position="e"></div>
-        <div class="resize-handle" data-position="sw"></div>
-        <div class="resize-handle" data-position="s"></div>
-        <div class="resize-handle" data-position="se"></div>
+        <!-- Resize handles: focus one and use the arrow keys to resize from it -->
+        <div class="resize-handle" data-position="nw" role="button" tabindex="0" aria-label="Resize from top-left corner"></div>
+        <div class="resize-handle" data-position="n" role="button" tabindex="0" aria-label="Resize from top edge"></div>
+        <div class="resize-handle" data-position="ne" role="button" tabindex="0" aria-label="Resize from top-right corner"></div>
+        <div class="resize-handle" data-position="w" role="button" tabindex="0" aria-label="Resize from left edge"></div>
+        <div class="resize-handle" data-position="e" role="button" tabindex="0" aria-label="Resize from right edge"></div>
+        <div class="resize-handle" data-position="sw" role="button" tabindex="0" aria-label="Resize from bottom-left corner"></div>
+        <div class="resize-handle" data-position="s" role="button" tabindex="0" aria-label="Resize from bottom edge"></div>
+        <div class="resize-handle" data-position="se" role="button" tabindex="0" aria-label="Resize from bottom-right corner"></div>
     </div>
 
-    <!-- Action buttons (shown after selection) -->
+    <!-- Actions, placed beside the selection once there is one -->
     <div class="action-buttons" id="action-buttons">
-        <button class="btn confirm-btn" id="confirm-btn">
-            <span class="btn-icon">✓</span>
-            <span class="btn-text">Confirm Selection</span>
+        <button class="primary-button compact" id="confirm-btn" type="button">
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>
+            Use this area
         </button>
-        <button class="btn retry-btn" id="retry-btn">
-            <span class="btn-icon">↺</span>
-            <span class="btn-text">Redraw</span>
+        <button class="secondary-button" id="retry-btn" type="button">
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4.5 12a7.5 7.5 0 1 0 2.2-5.3M4.5 4v4.5H9"/></svg>
+            Redraw
         </button>
     </div>
 
