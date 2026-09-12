@@ -193,7 +193,6 @@ export function compareFixture({ scenario, fixtureState, gateFrames, translation
     for (const frame of frames) {
       const utcMs = frameUtcMs(frame);
       if (utcMs === null) {
-        warnings.push('gate frame missing capture UTC timestamp; frame ignored');
         continue;
       }
       const seconds = (utcMs - timebase.startUtcMs) / 1000;

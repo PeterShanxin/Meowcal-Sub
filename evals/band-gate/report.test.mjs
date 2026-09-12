@@ -68,6 +68,7 @@ test('legacy processing timestamps cannot stand in for capture evidence', () => 
   const result = compareFixture({ scenario: equalScenario, fixtureState: state(equalScenario), gateFrames });
   assert.equal(result.partial, true);
   assert.equal(result.gateOk, false);
+  assert.equal(result.warnings.filter(warning => warning.includes('UTC timestamp')).length, 1);
 });
 
 function oneFramePerCue(scenario, omitId = null) {
