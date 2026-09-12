@@ -91,6 +91,7 @@ export class AppController {
       busy: "idle",
       ...(await this.updates.initialState()),
     });
+    this.hideDiagnosticsOutsideDeveloperMode();
     await this.setupEvents();
     if (!browserMode && localStorage.getItem(ONBOARDING_SEEN_KEY) !== "true") {
       await this.openSetup();
@@ -375,8 +376,13 @@ export class AppController {
   setDeveloperMode(enabled: boolean): void {
     localStorage.setItem("meowcal.developerMode", String(enabled));
     this.publish({ developerMode: enabled });
-    // Diagnostics show raw recognition text, which normal mode never shows.
-    if (!enabled && this.snapshot.settings.overlay.showDiagnostics) {
+    this.hideDiagnosticsOutsideDeveloperMode();
+  }
+
+  // Diagnostics show raw recognition text, which normal mode never shows. The
+  // setting can predate Developer options, so startup applies this rule too.
+  private hideDiagnosticsOutsideDeveloperMode(): void {
+    if (!this.snapshot.developerMode && this.snapshot.settings.overlay.showDiagnostics) {
       void this.updateOverlay({ showDiagnostics: false });
     }
   }

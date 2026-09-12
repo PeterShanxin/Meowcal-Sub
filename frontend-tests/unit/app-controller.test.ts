@@ -317,6 +317,40 @@ describe("AppController settings persistence", () => {
     controller.dispose();
   });
 
+  // Diagnostics could be switched on from the overlay's own menu before they
+  // moved under Developer options, and they show raw recognition text.
+  it("turns persisted overlay diagnostics off at startup outside developer mode", async () => {
+    const emit = vi.fn().mockResolvedValue(undefined);
+    const invoke = vi.fn(async (command: string) =>
+      command === "get_settings" ? { overlay: { showDiagnostics: true } } : undefined,
+    );
+    const { controller } = createController(invoke as TauriBridgeApi["invoke"], emit);
+
+    await controller.initialize();
+
+    expect(controller.current().settings.overlay.showDiagnostics).toBe(false);
+    expect(emit).toHaveBeenCalledWith(
+      "overlay-settings-updated",
+      expect.objectContaining({ showDiagnostics: false }),
+    );
+    controller.dispose();
+  });
+
+  it("keeps persisted overlay diagnostics in developer mode", async () => {
+    const emit = vi.fn().mockResolvedValue(undefined);
+    const invoke = vi.fn(async (command: string) =>
+      command === "get_settings" ? { overlay: { showDiagnostics: true } } : undefined,
+    );
+    const { controller } = createController(invoke as TauriBridgeApi["invoke"], emit);
+    controller.setDeveloperMode(true);
+
+    await controller.initialize();
+
+    expect(controller.current().settings.overlay.showDiagnostics).toBe(true);
+    expect(emit).not.toHaveBeenCalled();
+    controller.dispose();
+  });
+
   it("turns overlay diagnostics off with developer mode", async () => {
     const emit = vi.fn().mockResolvedValue(undefined);
     const invoke = vi.fn().mockResolvedValue(undefined);
