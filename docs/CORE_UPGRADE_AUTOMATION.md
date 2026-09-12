@@ -6,6 +6,8 @@ accepts a published, non-draft, non-prerelease `core-vX.Y.Z` release. The
 updater downloads both Windows archives and checksum files, verifies the exact
 SHA-256 values, archive contents, package metadata, PE architecture, and the
 x64 API/capability contract, then writes `config/meowcal-core.lock.json`.
+Discovery authenticates only the canonical GitHub API with the job's read-only
+token. The executable probe receives no GitHub token.
 
 The workflow does nothing when no stable Core release exists or when the lock
 already covers the newest release. It never merges a pull request. A generated

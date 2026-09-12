@@ -55,11 +55,15 @@ function Get-ReleaseList {
         return @(Get-Content -LiteralPath $ReleaseJsonPath -Raw | ConvertFrom-Json)
     }
 
+    $headers = @{ Accept = "application/vnd.github+json"; "User-Agent" = "Meowcal-Core-Updater" }
+    if (-not [string]::IsNullOrWhiteSpace($env:GITHUB_TOKEN)) {
+        $headers.Authorization = "Bearer $env:GITHUB_TOKEN"
+    }
     $releases = [System.Collections.Generic.List[object]]::new()
     for ($page = 1; $page -le 100; $page++) {
         try {
             $pageReleases = @(Invoke-RestMethod `
-                -Headers @{ Accept = "application/vnd.github+json"; "User-Agent" = "Meowcal-Core-Updater" } `
+                -Headers $headers `
                 -Uri "https://api.github.com/repos/$repository/releases?per_page=100&page=$page" `
                 -TimeoutSec 30)
         } catch {

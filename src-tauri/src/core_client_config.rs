@@ -35,7 +35,11 @@ fn set_launch(executable: PathBuf, profile: &'static str) -> Result<(), String> 
         return Err(format!("CORE_EXECUTABLE_MISSING: {}", executable.display()));
     }
     if !super::CORE_SOURCE_CANDIDATE {
-        validate_reviewed_resource(&executable)?;
+        validate_reviewed_resource(
+            &executable,
+            env!("MEOWCAL_EXPECTED_CORE_EXECUTABLE_SHA256"),
+            env!("MEOWCAL_EXPECTED_CORE_LICENSE_SHA256"),
+        )?;
     }
     let mut config = super::CONFIG
         .get_or_init(|| Mutex::new(None))
@@ -162,7 +166,11 @@ struct ReviewedCoreMetadata {
     license_sha256: String,
 }
 
-pub(super) fn validate_reviewed_resource(executable: &Path) -> Result<(), String> {
+pub(super) fn validate_reviewed_resource(
+    executable: &Path,
+    expected_executable_hash: &str,
+    expected_license_hash: &str,
+) -> Result<(), String> {
     let resource_directory = executable.parent().ok_or_else(|| {
         "CORE_RELEASE_METADATA_MISSING: executable has no parent directory".to_string()
     })?;
@@ -185,6 +193,8 @@ pub(super) fn validate_reviewed_resource(executable: &Path) -> Result<(), String
         || metadata.license != "LICENSE"
         || !is_sha256(&metadata.executable_sha256)
         || !is_sha256(&metadata.license_sha256)
+        || metadata.executable_sha256 != expected_executable_hash
+        || metadata.license_sha256 != expected_license_hash
     {
         return Err(
             "CORE_RELEASE_METADATA_INVALID: reviewed Core resource does not match the compiled pin"

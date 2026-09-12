@@ -41,6 +41,58 @@ pub fn resolve(
     })
 }
 
+pub fn prepare_reviewed_resource(
+    repository_root: &Path,
+    target_architecture: &str,
+    archive: Option<&Path>,
+) -> Result<(String, String), String> {
+    let architecture = match target_architecture {
+        "aarch64" => "arm64",
+        "x86_64" => "x64",
+        other => return Err(format!("unsupported Core target architecture: {other}")),
+    };
+    let mut command = std::process::Command::new("pwsh");
+    command
+        .args(["-NoProfile", "-NonInteractive", "-File"])
+        .arg(repository_root.join("scripts/fetch-meowcal-core.ps1"))
+        .arg("-LockPath")
+        .arg(repository_root.join("config/meowcal-core.lock.json"))
+        .args([
+            "-Architecture",
+            architecture,
+            "-SkipExecutableContractCheck",
+        ])
+        .stdin(std::process::Stdio::null());
+    if let Some(archive) = archive {
+        command.arg("-ArchivePath").arg(archive);
+    }
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        command.creation_flags(0x0800_0000);
+    }
+    let status = command
+        .status()
+        .map_err(|error| format!("could not run pinned Core preparation: {error}"))?;
+    if !status.success() {
+        return Err(format!("pinned Core preparation failed with {status}"));
+    }
+    let metadata_path = repository_root.join("src-tauri/resources/core/meowcal-core.json");
+    let contents = fs::read_to_string(&metadata_path)
+        .map_err(|error| format!("could not read verified Core metadata: {error}"))?;
+    let metadata: Value = serde_json::from_str(&contents)
+        .map_err(|error| format!("verified Core metadata is invalid: {error}"))?;
+    let digest = |name: &str| {
+        metadata
+            .get(name)
+            .and_then(Value::as_str)
+            .filter(|value| is_sha256(value))
+            .map(str::to_owned)
+            .ok_or_else(|| format!("verified Core metadata {name} is invalid"))
+    };
+    Ok((digest("executableSha256")?, digest("licenseSha256")?))
+}
+
 fn source_version(repository_root: &Path) -> Result<String, String> {
     let manifest_path = repository_root.join("core/Cargo.toml");
     let manifest = fs::read_to_string(&manifest_path)
@@ -226,6 +278,85 @@ mod tests {
         let explicit_source = resolve(&root, true).expect("explicit source candidate");
         assert_eq!(explicit_source.expected_version, "0.1.0");
         assert!(explicit_source.source_candidate);
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn reviewed_build_replaces_same_version_candidate_from_the_locked_archive() {
+        use sha2::{Digest, Sha256};
+        let root = fixture_root();
+        write_lock(&root, "0.1.1");
+        fs::create_dir_all(root.join("scripts")).expect("create fixture scripts");
+        let repository_root = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .expect("repository");
+        for name in ["fetch-meowcal-core.ps1", "verify-core-package.ps1"] {
+            fs::copy(
+                repository_root.join("scripts").join(name),
+                root.join("scripts").join(name),
+            )
+            .expect("copy real package preparation");
+        }
+        let setup = root.join("fixture.ps1");
+        fs::write(&setup, r#"
+param([string]$Root)
+$ErrorActionPreference = 'Stop'
+$staging = Join-Path $Root 'staging'
+New-Item -ItemType Directory -Path $staging | Out-Null
+$bytes = [byte[]]::new(512)
+$bytes[0] = 0x4D; $bytes[1] = 0x5A
+[BitConverter]::GetBytes([uint32]0x80).CopyTo($bytes, 0x3C)
+[BitConverter]::GetBytes([uint32]0x00004550).CopyTo($bytes, 0x80)
+[BitConverter]::GetBytes([uint16]0x8664).CopyTo($bytes, 0x84)
+$binary = Join-Path $staging 'meowcal-core.exe'
+[IO.File]::WriteAllBytes($binary, $bytes)
+$license = Join-Path $staging 'LICENSE'
+[IO.File]::WriteAllText($license, 'reviewed license')
+$metadata = @{
+    schemaVersion = 1; coreVersion = '0.1.1'; apiVersion = 1
+    os = 'windows'; architecture = 'x64'; executable = 'meowcal-core.exe'
+    executableSha256 = (Get-FileHash $binary -Algorithm SHA256).Hash.ToLowerInvariant()
+    license = 'LICENSE'; licenseSha256 = (Get-FileHash $license -Algorithm SHA256).Hash.ToLowerInvariant()
+}
+$metadata | ConvertTo-Json | Set-Content (Join-Path $staging 'meowcal-core.json')
+$archive = Join-Path $Root 'core.zip'
+Compress-Archive -Path (Join-Path $staging '*') -DestinationPath $archive
+$lockPath = Join-Path $Root 'config/meowcal-core.lock.json'
+$lock = Get-Content $lockPath -Raw | ConvertFrom-Json
+$lock.architectures.x64.sha256 = (Get-FileHash $archive -Algorithm SHA256).Hash.ToLowerInvariant()
+$lock | ConvertTo-Json -Depth 5 | Set-Content $lockPath
+$resource = Join-Path $Root 'src-tauri/resources/core'
+New-Item -ItemType Directory -Path $resource -Force | Out-Null
+$replacement = Join-Path $resource 'meowcal-core.exe'
+[IO.File]::WriteAllText($replacement, 'unreviewed same-version core')
+$metadata.executableSha256 = (Get-FileHash $replacement -Algorithm SHA256).Hash.ToLowerInvariant()
+$metadata | ConvertTo-Json | Set-Content (Join-Path $resource 'meowcal-core.json')
+Copy-Item $license (Join-Path $resource 'LICENSE')
+"#).expect("write package fixture");
+        let status = std::process::Command::new("pwsh")
+            .args(["-NoProfile", "-NonInteractive", "-File"])
+            .arg(&setup)
+            .arg(&root)
+            .stdin(std::process::Stdio::null())
+            .status()
+            .expect("prepare package fixture");
+        assert!(status.success());
+        let archive = root.join("core.zip");
+        let (executable_hash, license_hash) =
+            prepare_reviewed_resource(&root, "x86_64", Some(&archive)).expect("verified release");
+        let expected = fs::read(root.join("staging/meowcal-core.exe")).expect("reviewed bytes");
+        assert_eq!(
+            fs::read(root.join("src-tauri/resources/core/meowcal-core.exe"))
+                .expect("prepared bytes"),
+            expected
+        );
+        assert_eq!(executable_hash, format!("{:x}", Sha256::digest(&expected)));
+        assert_eq!(
+            license_hash,
+            format!("{:x}", Sha256::digest(b"reviewed license"))
+        );
+        fs::write(&archive, b"replaced archive").expect("corrupt locked archive");
+        assert!(prepare_reviewed_resource(&root, "x86_64", Some(&archive)).is_err());
         let _ = fs::remove_dir_all(root);
     }
 }

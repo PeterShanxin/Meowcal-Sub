@@ -27,6 +27,8 @@ jobs:
       - name: Resolve, verify, and prepare the lock
         id: update
         shell: pwsh
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
         run: |
           $resultPath = Join-Path $env:RUNNER_TEMP 'core-upgrade-result.json'
           .\scripts\update-meowcal-core.ps1 -ResultPath $resultPath

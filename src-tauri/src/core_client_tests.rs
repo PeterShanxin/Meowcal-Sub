@@ -118,11 +118,31 @@ fn reviewed_runtime_requires_matching_metadata_and_digests() {
     });
     std::fs::write(root.join("meowcal-core.json"), format!("{metadata}\n"))
         .expect("write metadata");
-    validate_reviewed_resource(&executable).expect("reviewed resource is valid");
+    let executable_hash = metadata["executableSha256"]
+        .as_str()
+        .expect("trusted executable hash");
+    let license_hash = metadata["licenseSha256"]
+        .as_str()
+        .expect("trusted license hash");
+    validate_reviewed_resource(&executable, executable_hash, license_hash)
+        .expect("reviewed resource is valid");
+    std::fs::write(&executable, b"unreviewed same-version core").expect("replace executable");
+    let mut replacement_metadata = metadata.clone();
+    replacement_metadata["executableSha256"] = super::config::sha256_file(&executable)
+        .expect("hash replacement")
+        .into();
+    std::fs::write(
+        root.join("meowcal-core.json"),
+        format!("{replacement_metadata}\n"),
+    )
+    .expect("replace adjacent metadata");
+    assert!(validate_reviewed_resource(&executable, executable_hash, license_hash).is_err());
     std::fs::remove_file(root.join("meowcal-core.json")).expect("remove metadata");
-    assert!(validate_reviewed_resource(&executable)
-        .expect_err("missing metadata must reject the reviewed pin")
-        .starts_with("CORE_RELEASE_METADATA_MISSING"));
+    assert!(
+        validate_reviewed_resource(&executable, executable_hash, license_hash)
+            .expect_err("missing metadata must reject the reviewed pin")
+            .starts_with("CORE_RELEASE_METADATA_MISSING")
+    );
     let _ = std::fs::remove_dir_all(root);
 }
 

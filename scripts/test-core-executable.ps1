@@ -14,15 +14,18 @@ if (-not (Test-Path -LiteralPath $BinaryPath -PathType Leaf)) {
 $probeDirectory = Join-Path ([IO.Path]::GetTempPath()) (
     "meowcal-core-version-probe-" + [guid]::NewGuid().ToString("N")
 )
+$process = $null
 try {
     New-Item -ItemType Directory -Path $probeDirectory | Out-Null
     $stdoutPath = Join-Path $probeDirectory "stdout.txt"
     $stderrPath = Join-Path $probeDirectory "stderr.txt"
+    $stdinPath = Join-Path $probeDirectory "stdin.txt"
+    [IO.File]::WriteAllText($stdinPath, '')
     $process = Start-Process -FilePath $BinaryPath -ArgumentList "--version-json" `
-        -RedirectStandardOutput $stdoutPath -RedirectStandardError $stderrPath `
+        -RedirectStandardInput $stdinPath -RedirectStandardOutput $stdoutPath -RedirectStandardError $stderrPath `
+        -Environment @{ GITHUB_TOKEN = ''; GH_TOKEN = ''; CORE_UPGRADE_TOKEN = '' } `
         -WindowStyle Hidden -PassThru
     if (-not $process.WaitForExit(15000)) {
-        Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
         throw "Core executable timed out while answering --version-json."
     }
     if ($process.ExitCode -ne 0) {
@@ -30,8 +33,13 @@ try {
     }
     $versionJson = Get-Content -LiteralPath $stdoutPath -Raw
 } finally {
-    if ($null -ne $process -and -not $process.HasExited) {
-        Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
+    if ($null -ne $process) {
+        try {
+            if (-not $process.HasExited) { $process.Kill($true) }
+            if (-not $process.WaitForExit(5000)) {
+                throw "Core executable did not exit after the version probe."
+            }
+        } finally { $process.Dispose() }
     }
     Remove-Item -LiteralPath $probeDirectory -Recurse -Force -ErrorAction SilentlyContinue
 }

@@ -97,6 +97,10 @@ repository's latest release and its `latest.json` updater contract is untouched.
 
 Both applications pin the released ZIP digest, not the tag alone. Their product
 builds fetch that artifact and never rebuild Core from the current source tree.
+With a release lock present, the Rust build script fetches and verifies its
+architecture's archive before compiling, including direct Tauri/Cargo builds.
+The verified executable and license digests are compiled into the consumer;
+replacing the resource and its adjacent metadata cannot redefine that pin.
 The fetch step verifies the ZIP digest before reading the archive, then verifies
 metadata, license, executable digest, PE architecture, and the native handshake.
 Product verification compiles the lock's version into the consumer and runs its

@@ -103,6 +103,22 @@ function Invoke-Updater {
 
 New-Item -ItemType Directory -Path $temporaryDirectory | Out-Null
 try {
+    $previousToken = $env:GITHUB_TOKEN
+    try {
+        $env:GITHUB_TOKEN = 'read-only-discovery-fixture'
+        function Invoke-RestMethod {
+            param($Headers, $Uri, $TimeoutSec)
+            if ($Uri -notlike 'https://api.github.com/repos/PeterShanxin/Meowcal-Sub/releases?*' -or
+                $Headers.Authorization -ne 'Bearer read-only-discovery-fixture') {
+                throw 'Release discovery must authenticate only the canonical GitHub API.'
+            }
+            return @()
+        }
+        & $updater -OutputPath (Join-Path $temporaryDirectory 'discovery-lock.json') | Out-Null
+    } finally {
+        Remove-Item Function:Invoke-RestMethod
+        $env:GITHUB_TOKEN = $previousToken
+    }
     $assets = Join-Path $temporaryDirectory "assets"
     $noRelease = Join-Path $temporaryDirectory "no-release.json"
     $emptyRelease = Join-Path $temporaryDirectory "empty-release.json"
@@ -187,7 +203,7 @@ try {
     if ($consumerCi -notmatch '(?m)^\s*pull_request:\s*$') {
         throw "Consumer CI must retain a pull_request trigger for generated upgrade PRs."
     }
-    if ($workflow -match 'token:\s*\$\{\{\s*github\.token') {
+    if ($workflow -match '(?m)^\s+token:\s*\$\{\{\s*github\.token') {
         throw "Core upgrade PR creation must use an explicitly configured token so pull_request CI is emitted."
     }
     if ($workflow -match '(?ms)^\s{4}env:\s*\r?\n\s+CORE_UPGRADE_TOKEN:') {
