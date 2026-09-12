@@ -12,10 +12,42 @@ For a native pass:
 
 1. Open `index.html` and select a scenario.
 2. Select the application capture region over the marked subtitle band. Keep the full subtitle card in the region and avoid relying on the page event log as OCR input.
-3. Start the fixture at `1x live`, then run the application’s native OCR/band gate. Record the tested architecture, Windows build, scenario, capture dimensions, and the application band log.
+3. Wait for the application engine to be ready, start capture, then start the fixture at `1x live`. Record the tested architecture, Windows build, scenario, capture dimensions, and the application band log.
 4. Compare application decisions with `scenarios.json`: subtitle IDs should remain readable through slow cues, line-count transitions, Chinese cues, blanks, and reappearance; negative IDs should not be admitted as subtitles.
 
-The page’s `data-role`, `data-expected`, `data-cue-id`, `data-onset`, and `data-duration` attributes make the current authored state inspectable without changing the visible scene. The event log is an operator aid only. This fixture demonstrates the visual input and authored expectation; it does not by itself prove Windows capture, Windows OCR, native overlay, or application-level translation.
+Enable local gate evidence before launching the development application:
+
+```powershell
+New-Item -ItemType Directory -Path .local -Force | Out-Null
+$env:MEOWCAL_BAND_LOG = Join-Path (Get-Location) '.local/band-gate.jsonl'
+$env:MEOWCAL_BAND_LOG_TEXT = '1'
+.\dev-tauri.cmd
+```
+
+Use a new log filename for each application launch. Select the matching source
+language, keep **Translate any text** off, and wait for **Engine ready** before
+starting each translation session. In the fixture's browser console, save
+`JSON.stringify(window.fixture.readState(), null, 2)` after completion.
+Check `scenarioId` against the selected scenario before comparing results.
+
+To record translation evidence, run this once in the development application's
+main-window developer console before starting capture, then save
+`JSON.stringify(window.bandGateTranslations, null, 2)` after completion:
+
+```javascript
+window.bandGateTranslations = [];
+await window.__TAURI__.event.listen('translation-update', event => {
+  window.bandGateTranslations.push({ receivedAt: Date.now(), payload: event.payload });
+});
+```
+
+These logs contain source and target text. Keep them outside version control;
+publish aggregate results and screenshots of the authored fixture only.
+
+The page's `data-role`, `data-expected`, `data-cue-id`, `data-onset`, and
+`data-duration` attributes expose authored state for inspection. The event log
+is an operator aid; it does not prove Windows capture, OCR, native overlay, or
+application-level translation.
 
 
 ## Offline gate report
@@ -27,6 +59,11 @@ node .\evals\band-gate\report.mjs .\gate-log.jsonl .\fixture-state.json .\transl
 ```
 
 The report reads only `kind: "gate"` entries from a mixed JSONL log, compares normalized OCR source text per authored cue, records missed and correctly admitted cue IDs, and never counts an admitted frame whose OCR text is wrong. It computes first-correct-OCR to first-admission p50/p95 delays and counts negative admissions after each segment's warmup allowance. A negative segment also needs post-warmup frame coverage spanning at least half of its remaining authored interval; a zero-frame or one-frame negative sample cannot prove sustained exclusion. Optional translation events count as `trueTranslated` only when the original source matches an authored cue and `displayState` is exactly `translated` with a non-empty target. When translation events are supplied, every authored subtitle cue must have true translated evidence for `endToEndOk`; the OCR gate result remains separately visible as `gateOk`. A non-empty target in any other state is recorded as rejected evidence. Paused, incomplete, missing-timebase, or non-1x runs are reported as partial and cannot pass the gate.
+
+Warmup starts at the first non-empty OCR observation of a negative segment.
+This separates capture startup latency from the gate's hold duration. Fixture
+onset drift beyond 250ms makes the report partial, since nominal timestamps
+can no longer reliably identify the visible cue.
 
 The small deterministic report checks run with:
 

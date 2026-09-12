@@ -261,7 +261,9 @@
       }
 
       function setScenario(id) {
-        scenario = data.scenarios.find(item => item.id === id) || data.scenarios[0];
+        const selected = data.scenarios.find(item => item.id === id);
+        if (!selected) throw new Error(`Unknown scenario: ${id}`);
+        scenario = selected;
         elapsed = 0;
         running = false;
         lastFrame = 0;
@@ -286,7 +288,7 @@
           logSummary.textContent = '0 events';
         }
         running = true;
-        lastFrame = 0;
+        lastFrame = performance.now();
         cancelAnimationFrame(raf);
         raf = requestAnimationFrame(tick);
         render();

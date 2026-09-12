@@ -183,6 +183,9 @@ bands. Repeated numeric-only updates at roughly two seconds or faster are held
 as counters after the second change. Slower numeric dialogue and a single
 changed number remain admissible. Rapid numeric-only dialogue lists remain
 indistinguishable from counters at this boundary.
+Counter evidence survives empty OCR observations; a held numeric reading
+recovers after roughly 2.2 seconds of observed stability, or a different text
+pattern establishes a new cue.
 Empty observations end cue presence, so a repeated cue can reappear. Sampling
 gaps longer than two seconds or twice the capture interval do not confirm
 candidates or count toward observed cue duration.

@@ -45,6 +45,9 @@ impl Cue {
         if !self.absent && text == self.anchor {
             self.pending.clear();
             self.confirmed = true;
+            if self.observed_ms.saturating_sub(self.started_observed_ms) >= 2 * MIN_CUE_MS {
+                self.numeric_changes = 0;
+            }
         } else if (text == self.pending
             || text == self.last_text
             || (similar(&self.pending, &text)
@@ -67,12 +70,14 @@ impl Cue {
                     .pending_observed_ms
                     .saturating_sub(self.started_observed_ms)
                     < MIN_CUE_MS;
-            self.numeric_changes = if !self.absent
-                && numeric_template(&self.anchor) == numeric_template(&self.pending)
-                && self
-                    .pending_observed_ms
-                    .saturating_sub(self.started_observed_ms)
-                    <= 2 * MIN_CUE_MS
+            self.numeric_changes = if numeric_template(&self.anchor)
+                == numeric_template(&self.pending)
+                && (self.numeric_changes >= 2
+                    || (!self.absent
+                        && self
+                            .pending_observed_ms
+                            .saturating_sub(self.started_observed_ms)
+                            <= 2 * MIN_CUE_MS))
             {
                 self.numeric_changes + 1
             } else {

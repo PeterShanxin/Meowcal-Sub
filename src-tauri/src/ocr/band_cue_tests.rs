@@ -194,6 +194,28 @@ fn consecutive_numeric_dialogue_is_admitted_at_normal_reading_speed() {
 }
 
 #[test]
+fn empty_ocr_frames_do_not_restart_an_established_counter() {
+    let mut tracker = BandTracker::new(1832.0, 250);
+    for at in (0..5_000).step_by(250) {
+        read(&mut tracker, &format!("01:{:02}", at / 1_000), at);
+    }
+    for at in (5_000..7_500).step_by(250) {
+        tracker.observe(&[], &[], at);
+    }
+    for at in (7_500..8_500).step_by(250) {
+        assert!(!read(&mut tracker, "01:07", at));
+    }
+    // A genuinely held numeric reading can recover on observed stability.
+    let mut recovered = false;
+    for at in (8_500..11_500).step_by(250) {
+        recovered |= read(&mut tracker, "01:08", at);
+    }
+    assert!(recovered);
+    assert!(!read(&mut tracker, DIALOGUE[0], 11_500));
+    assert!(read(&mut tracker, DIALOGUE[0], 11_750));
+}
+
+#[test]
 fn an_ocr_outage_cannot_confirm_a_candidate_or_hide_fast_turnover() {
     let mut tracker = BandTracker::new(1832.0, 250);
     read(&mut tracker, DIALOGUE[0], 0);

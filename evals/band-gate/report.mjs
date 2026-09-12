@@ -126,6 +126,9 @@ export function compareFixture({ scenario, fixtureState, gateFrames, translation
   const ignoredFrameCount = gateFrames.length - frames.length;
   const timebase = stateTimebase(fixtureState);
   if (!timebase) fatal.push('fixture-state.json must include numeric timeOriginMs and runStartedAtMs');
+  if (timebase && Array.isArray(fixtureState.events) && fixtureState.events.some(event =>
+    Math.abs((event.observedAtMs - timebase.runStartedAtMs) / 1000 - event.onset) > EPSILON_SECONDS,
+  )) warnings.push('fixture onset timing drift exceeds 250ms; report is partial');
   if (!frames.length) fatal.push('gate log contains no gate frames');
   const cueMetrics = new Map(scenario.segments
     .filter(segment => segment.expected === 'subtitle')
@@ -146,6 +149,7 @@ export function compareFixture({ scenario, fixtureState, gateFrames, translation
       segmentId: segment.id,
       durationSeconds: segment.duration,
       warmupSeconds: segment.warmupSeconds || 0,
+      firstOcrUtcMs: null,
       postWarmupFrames: 0,
       postWarmupAdmittedFrames: 0,
       cycles: {},
@@ -185,7 +189,11 @@ export function compareFixture({ scenario, fixtureState, gateFrames, translation
         }
       } else if (segment.expected === 'negative') {
         const stat = negativeStats.get(segment.id);
-        const warmupEnd = segment.onset + (segment.warmupSeconds || 0);
+        if (text && stat.firstOcrUtcMs === null) stat.firstOcrUtcMs = utcMs;
+        const firstObserved = stat.firstOcrUtcMs === null
+          ? segment.onset
+          : (stat.firstOcrUtcMs - timebase.startUtcMs) / 1000;
+        const warmupEnd = firstObserved + (segment.warmupSeconds || 0);
         if (scenarioSeconds >= warmupEnd) {
           stat.postWarmupFrames += 1;
           if (admitted) stat.postWarmupAdmittedFrames += 1;
@@ -256,7 +264,7 @@ export function compareFixture({ scenario, fixtureState, gateFrames, translation
     translation.missedTranslationCueIDs = authoredIDs.filter(id => !translation.trueTranslatedCueIDs.includes(id));
     translation.ok = translation.missedTranslationCueIDs.length === 0 && translation.rejectedNonempty.length === 0;
   }
-  const partial = warnings.some(warning => /paused|completed|shorter|1x live|UTC timestamp/.test(warning));
+  const partial = warnings.some(warning => /paused|completed|shorter|1x live|UTC timestamp|timing drift/.test(warning));
   const gateOk = fatal.length === 0
     && !partial
     && missedOCRcueIDs.size === 0

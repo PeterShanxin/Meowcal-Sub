@@ -7,6 +7,13 @@ const data = JSON.parse(fs.readFileSync(new URL('./scenarios.json', import.meta.
 const equalScenario = data.scenarios.find(scenario => scenario.id === 'equal-width-120s');
 const negativeScenario = data.scenarios.find(scenario => scenario.id === 'negative-band-recovery-120s');
 const timeOriginMs = 1_700_000_000_000;
+test('the offline page and report use the same authored timeline', () => {
+  const html = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
+  const embedded = html.match(/<script type="application\/json" id="scenario-data">([\s\S]*?)<\/script>/);
+  assert.ok(embedded, 'the offline page must embed its scenario data');
+  assert.deepEqual(JSON.parse(embedded[1]), data);
+});
+
 const state = scenario => ({
   scenarioId: scenario.id,
   timeOriginMs,
@@ -43,6 +50,16 @@ test('a cue with no correct OCR frame is reported as missed', () => {
   assert.equal(result.ok, false);
 });
 
+test('a stalled fixture clock cannot claim a passing native run', () => {
+  const result = compareFixture({
+    scenario: equalScenario,
+    fixtureState: { ...state(equalScenario), events: [{ onset: 4, observedAtMs: 11_000 }] },
+    gateFrames: oneFramePerCue(equalScenario),
+  });
+  assert.equal(result.partial, true);
+  assert.equal(result.ok, false);
+});
+
 test('wrong OCR cannot establish a cue or distort gate delay p95', () => {
   const gateFrames = [];
   for (const segment of equalScenario.segments.filter(item => item.expected === 'subtitle')) {
@@ -66,7 +83,9 @@ test('a partial run reports post-warmup negative admission and cannot pass', () 
     scenario: negativeScenario,
     fixtureState,
     gateFrames: [
+      frame(0, 'MEOWCAL LAB / DEMO', false),
       frame(7, 'MEOWCAL LAB / DEMO', false),
+      frame(40, '00:40', false),
       frame(46, '00:46', true),
     ],
   });
