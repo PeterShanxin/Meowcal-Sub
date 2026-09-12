@@ -52,11 +52,10 @@ $bundleArgs = if ($Bundles -eq "all") { "nsis,msi" } else { $Bundles }
 
 Push-Location $repositoryRoot
 try {
+    # A PowerShell script reports failure by throwing; it never sets
+    # $LASTEXITCODE, which is still null here in a fresh CI session.
     & (Join-Path $repositoryRoot "scripts\fetch-meowcal-core.ps1") `
         -Architecture $Architecture
-    if ($LASTEXITCODE -ne 0) {
-        throw "Pinned Meowcal Core preparation failed for $Architecture."
-    }
 
     & (Join-Path $repositoryRoot "scripts\build-overlayhost.ps1") -Architecture $Architecture
     if ($LASTEXITCODE -ne 0) {
