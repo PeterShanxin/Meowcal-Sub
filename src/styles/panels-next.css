@@ -71,9 +71,12 @@
   font-size: 11.5px;
 }
 
-/* Painted like the live overlay plate: opaque, wrapping, with the same two schemes. */
+/* Painted like the live overlay plate: a solid colour in one of the same two
+   schemes, seen through the overlay window's fixed alpha of 200/255
+   (OVERLAY_ALPHA in src-tauri/src/overlay/window_alpha.rs). */
 .subtitle-plate {
   max-width: 100%;
+  opacity: 0.784;
   padding: 8px 20px 10px;
   color: #ffffff;
   background: var(--plate-dark);
