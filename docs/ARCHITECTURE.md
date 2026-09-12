@@ -168,6 +168,33 @@ Shared contracts have one owner before parallel decomposition begins:
   owners listed above, and deliberately left `overlay.js` and `selector.js` as
   adapters rather than migrating them to Lit.
 
+## Subtitle band admission
+
+Subtitle bands use geometry only to track a screen position. `ocr/band_cue.rs`
+confirms text changes across separate observations against a fixed content
+anchor. Spacing and punctuation are normalized; a single transient wrong glyph
+in a long reading does not advance that anchor. Two nearby readings can confirm
+a new candidate when both differ from the old anchor. Short text, numbers and
+negations remain distinct when confirmed.
+`band_window.rs` owns admission: a newly confirmed cue can recover from old
+`Static` evidence; rapid confirmed changes must hold long enough to recover
+from `Churning`. Both use elapsed time, with no periodic reset of rejected
+bands. Repeated numeric-only updates at roughly two seconds or faster are held
+as counters after the second change. Slower numeric dialogue and a single
+changed number remain admissible. Rapid numeric-only dialogue lists remain
+indistinguishable from counters at this boundary.
+Empty observations end cue presence, so a repeated cue can reappear. Sampling
+gaps longer than two seconds or twice the capture interval do not confirm
+candidates or count toward observed cue duration.
+Spatial scatter still rejects wandering scene text. `Translate any text`
+bypasses and resets this history. Neither policy belongs to Core.
+
+Band diagnostics report time, band/cue IDs, raw and settled verdicts, reasons,
+and recovery without screen text. `MEOWCAL_BAND_LOG` enables local JSONL
+diagnostics; adding `MEOWCAL_BAND_LOG_TEXT=1` explicitly includes OCR text for
+replay. Keep such files private and outside version control. Historical logs
+containing only character counts cannot validate content-aware admission.
+
 ## Dependency direction
 
 Native and HTTP adapters depend on application services; services depend on

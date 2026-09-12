@@ -1,29 +1,63 @@
-// =============================================================================
-// BAND_LOG.RS - measurement scaffolding for subtitle band selection
-// =============================================================================
-// Temporary, and off unless asked for. Set MEOWCAL_BAND_LOG to a file path and
-// every recognition appends one JSON line describing where text was found.
-//
-//   $env:MEOWCAL_BAND_LOG = "D:\tmp\bands.jsonl"
-//
-// The question it exists to answer: inside one tall capture region, can the
-// subtitle be picked out from the page furniture around it by position and
-// change alone? Grouping lines into bands is easy; choosing which band is the
-// subtitle is the part that can be wrong, and guessing at it from first
-// principles is how the last OCR hypothesis got shipped and turned out false.
-//
-// Recorded per line: its rectangle, how many characters it held, and a digest
-// of the text. Never the text. `docs/evidence/README.md` excludes OCR source
-// text from anything written to disk, and the digest answers the only question
-// the analysis asks of it - did this band change since the last frame - without
-// keeping what it said.
-// =============================================================================
-
+//! Opt-in local band diagnostics. MEOWCAL_BAND_LOG records geometry, identity
+//! digests, and gate decisions. MEOWCAL_BAND_LOG_TEXT=1 additionally stores OCR
+//! text for content-aware replay; these local files must never be published.
 use super::LineBox;
 use std::hash::{Hash, Hasher};
 use std::io::Write;
 use std::sync::OnceLock;
-use std::time::Instant;
+use std::time::{Instant, SystemTime, UNIX_EPOCH};
+
+/// Gate frames use the filter's clock and include empty observations. Text is
+/// retained only with the additional explicit local-diagnostic opt-in.
+pub(super) fn record_gate(
+    result: &super::OcrResult,
+    at_ms: u64,
+    decisions: &[super::banding::BandDecision],
+) {
+    let Some(path) = target() else {
+        return;
+    };
+    let include_text = std::env::var("MEOWCAL_BAND_LOG_TEXT").as_deref() == Ok("1");
+    let lines: Vec<_> = result
+        .lines
+        .iter()
+        .zip(&result.boxes)
+        .map(|(text, area)| {
+            let mut line = serde_json::json!({
+                "x": area.x, "y": area.y, "w": area.width, "h": area.height,
+                "chars": text.chars().count(), "digest": format!("{:016x}", digest(text))
+            });
+            if include_text {
+                line["text"] = serde_json::json!(text);
+            }
+            line
+        })
+        .collect();
+    let decisions: Vec<_> = decisions
+        .iter()
+        .map(|d| {
+            serde_json::json!({
+                "band_id": d.band_id, "cue_id": d.cue_id,
+                "raw": format!("{:?}", d.raw), "settled": format!("{:?}", d.settled),
+                "cue_changed": d.cue_changed, "recovered": d.recovered,
+                "reason": d.settled.reason(), "admitted": d.settled.is_included()
+            })
+        })
+        .collect();
+    let entry = serde_json::json!({
+        "kind": "gate", "ms": at_ms,
+        "utc_ms": SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_millis(),
+        "frame_width": result.frame_width,
+        "lines": lines, "decisions": decisions
+    });
+    if let Ok(mut file) = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(path)
+    {
+        let _ = writeln!(file, "{entry}");
+    }
+}
 
 /// Resolved once. `None` means the instrument is off, which is the normal case.
 static TARGET: OnceLock<Option<String>> = OnceLock::new();
@@ -53,7 +87,7 @@ pub fn record(lines: &[String], boxes: &[LineBox]) {
     }
 
     let elapsed = START.get_or_init(Instant::now).elapsed().as_millis();
-    let mut entry = format!("{{\"ms\":{elapsed},\"lines\":[");
+    let mut entry = format!("{{\"kind\":\"line_geometry\",\"ms\":{elapsed},\"lines\":[");
     for (index, line) in lines.iter().enumerate() {
         if index > 0 {
             entry.push(',');

@@ -1,0 +1,344 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Native subtitle band gate fixture</title>
+  <style>
+    :root { color-scheme: dark; font: 15px/1.4 "Segoe UI", system-ui, sans-serif; background: #0d1117; color: #e6edf3; }
+    * { box-sizing: border-box; }
+    body { margin: 0; min-width: 960px; background: #0d1117; }
+    header, main { width: min(1440px, calc(100vw - 48px)); margin: 0 auto; }
+    header { padding: 22px 0 14px; display: flex; justify-content: space-between; gap: 24px; align-items: end; }
+    h1 { margin: 0; font-size: 20px; font-weight: 650; letter-spacing: .01em; }
+    header p { margin: 4px 0 0; color: #8b949e; }
+    .mode { color: #7ee787; font-size: 12px; white-space: nowrap; }
+    main { display: grid; grid-template-columns: minmax(700px, 1fr) 310px; gap: 18px; padding-bottom: 28px; }
+    .panel { border: 1px solid #30363d; border-radius: 10px; background: #161b22; overflow: hidden; }
+    .stage-wrap { padding: 12px; }
+    .stage { position: relative; aspect-ratio: 16 / 9; overflow: hidden; border-radius: 7px; background: #15223b; isolation: isolate; }
+    .sky { position: absolute; inset: -18%; background: linear-gradient(118deg, #172554, #0f766e 38%, #6b21a8 74%, #1e3a8a); background-size: 180% 180%; animation: sky-drift 22s ease-in-out infinite alternate; }
+    .grid { position: absolute; inset: -25%; opacity: .22; background-image: linear-gradient(90deg, transparent 0 48px, #dbeafe 49px 50px), linear-gradient(0deg, transparent 0 48px, #dbeafe 49px 50px); background-size: 50px 50px; transform: perspective(420px) rotateX(62deg) translateY(38%); animation: grid-drift 18s linear infinite; }
+    .orb { position: absolute; width: 23%; aspect-ratio: 1; border-radius: 50%; filter: blur(1px); opacity: .62; background: radial-gradient(circle at 32% 28%, #bae6fd, #38bdf8 28%, #312e81 72%, transparent 73%); animation: orb-drift 17s ease-in-out infinite alternate; }
+    .orb.one { left: 7%; top: 13%; }
+    .orb.two { width: 31%; right: 3%; bottom: 23%; animation-duration: 25s; animation-delay: -8s; background: radial-gradient(circle at 35% 25%, #f5d0fe, #c084fc 25%, #581c87 70%, transparent 71%); }
+    .shade { position: absolute; inset: 0; background: linear-gradient(180deg, rgba(3,7,18,.1), rgba(3,7,18,.16) 46%, rgba(3,7,18,.68)); pointer-events: none; }
+    .watermark, .timer, .scene-copy, .credits { position: absolute; z-index: 2; color: rgba(226,232,240,.74); text-shadow: 0 1px 3px #020617; }
+    .watermark { top: 16px; right: 18px; font: 600 11px/1.2 ui-monospace, monospace; letter-spacing: .12em; opacity: .76; }
+    .timer { top: 16px; left: 18px; font: 600 13px/1.2 ui-monospace, monospace; letter-spacing: .08em; }
+    .scene-copy { top: 30%; left: 50%; transform: translateX(-50%); min-width: 310px; text-align: center; font: 600 15px/1.2 ui-monospace, monospace; letter-spacing: .16em; opacity: 0; transition: opacity .35s ease; }
+    .scene-copy.is-active { opacity: .78; }
+    .credits { top: 42%; left: 50%; width: 100%; text-align: center; font: 500 12px/1.8 ui-monospace, monospace; letter-spacing: .13em; opacity: 0; transform: translate(-50%, 22px); transition: opacity .35s ease, transform .35s ease; }
+    .credits.is-active { opacity: .76; transform: translate(-50%, 0); }
+    .subtitle-region { position: absolute; z-index: 3; left: 50%; bottom: 9%; width: min(84%, 760px); min-height: 19%; transform: translateX(-50%); display: grid; place-items: center; }
+    .subtitle-card { width: min(720px, 100%); min-height: 76px; padding: 13px 22px; display: grid; align-content: center; gap: 3px; border-radius: 5px; background: rgba(0,0,0,.74); box-shadow: 0 2px 18px rgba(0,0,0,.35); color: #fff; text-align: center; font: 600 clamp(21px, 2.15vw, 31px)/1.18 "Segoe UI", "Microsoft YaHei", sans-serif; letter-spacing: .01em; opacity: 1; transition: opacity .18s ease, transform .18s ease; }
+    .subtitle-card.is-blank { opacity: 0; transform: translateY(5px); }
+    .subtitle-card div { min-height: 1.18em; }
+    .band-marker { position: absolute; inset: 0; border: 1px dashed rgba(126,231,135,.3); border-radius: 5px; pointer-events: none; }
+    .stage-label { position: absolute; left: 12px; bottom: 10px; z-index: 4; color: rgba(226,232,240,.48); font-size: 10px; letter-spacing: .08em; text-transform: uppercase; }
+    .controls { display: flex; flex-wrap: wrap; align-items: center; gap: 9px; padding: 12px 2px 0; }
+    button, select, input { border: 1px solid #484f58; border-radius: 6px; background: #21262d; color: #e6edf3; font: inherit; }
+    button { padding: 7px 12px; cursor: pointer; }
+    button:hover { border-color: #8b949e; }
+    button.primary { border-color: #238636; background: #238636; color: #fff; }
+    button:focus-visible, select:focus-visible, input:focus-visible { outline: 2px solid #58a6ff; outline-offset: 2px; }
+    select, input { padding: 7px 9px; }
+    label { color: #8b949e; font-size: 13px; }
+    .readout { margin-left: auto; color: #8b949e; font: 12px ui-monospace, monospace; }
+    .hint { margin: 9px 2px 0; color: #8b949e; font-size: 12px; }
+    aside { display: flex; flex-direction: column; min-height: 0; }
+    .side-head { padding: 13px 15px 11px; border-bottom: 1px solid #30363d; display: flex; justify-content: space-between; align-items: baseline; }
+    .side-head strong { font-size: 13px; }
+    .side-head span { color: #8b949e; font-size: 11px; }
+    #event-log { list-style: none; overflow: auto; flex: 1; margin: 0; padding: 8px 13px 12px; max-height: 638px; }
+    #event-log li { padding: 8px 2px; border-bottom: 1px solid #21262d; color: #c9d1d9; font-size: 12px; }
+    #event-log li:last-child { border-bottom: 0; }
+    .event-time { display: inline-block; width: 48px; color: #8b949e; font: 11px ui-monospace, monospace; }
+    .event-kind { color: #7ee787; }
+    .event-kind.negative { color: #d2a8ff; }
+    .event-kind.blank { color: #8b949e; }
+    .legend { padding: 10px 15px 12px; border-top: 1px solid #30363d; color: #8b949e; font-size: 11px; }
+    .legend span { margin-right: 10px; }
+    .dot { display: inline-block; width: 7px; height: 7px; margin-right: 4px; border-radius: 50%; background: #7ee787; }
+    .dot.negative { background: #d2a8ff; }
+    .dot.blank { background: #8b949e; }
+    @keyframes sky-drift { from { background-position: 0% 50%; } to { background-position: 100% 48%; } }
+    @keyframes grid-drift { from { transform: perspective(420px) rotateX(62deg) translate3d(-1%, 38%, 0); } to { transform: perspective(420px) rotateX(62deg) translate3d(7%, 35%, 0); } }
+    @keyframes orb-drift { from { transform: translate3d(-5%, -3%, 0) scale(.92); } to { transform: translate3d(24%, 14%, 0) scale(1.08); } }
+    @media (prefers-reduced-motion: reduce) { .sky, .grid, .orb { animation-play-state: paused; } }
+  </style>
+</head>
+<body>
+  <header>
+    <div>
+      <h1>Native subtitle band gate fixture</h1>
+      <p>Offline scene for checking subtitle continuity against moving visual noise.</p>
+    </div>
+    <div class="mode">No network or media files required</div>
+  </header>
+  <main>
+    <section class="panel stage-wrap">
+      <div id="stage" class="stage" data-role="fixture-stage" data-expected="idle">
+        <div class="sky" aria-hidden="true"></div>
+        <div class="grid" aria-hidden="true"></div>
+        <div class="orb one" aria-hidden="true"></div>
+        <div class="orb two" aria-hidden="true"></div>
+        <div class="shade" aria-hidden="true"></div>
+        <div id="watermark" class="watermark" data-role="negative" data-kind="static-watermark">MEOWCAL LAB / DEMO</div>
+        <div id="timer" class="timer" data-role="negative" data-kind="timer">00:00</div>
+        <div id="scene-copy" class="scene-copy" data-role="negative" data-kind="scene-text"></div>
+        <div id="credits" class="credits" data-role="negative" data-kind="credits"></div>
+        <div id="subtitle-region" class="subtitle-region" data-role="subtitle-band" data-band-top="536" data-band-height="132">
+          <div id="subtitle-card" class="subtitle-card is-blank" data-role="subtitle" data-expected="blank" data-cue-id="blank" data-onset="0" data-duration="0"></div>
+          <div class="band-marker" aria-hidden="true"></div>
+        </div>
+        <div class="stage-label">capture band reference</div>
+      </div>
+      <div class="controls" aria-label="Fixture controls">
+        <label for="scenario">Scenario</label>
+        <select id="scenario"></select>
+        <label for="speed">Speed</label>
+        <select id="speed">
+          <option value="1">1x live</option>
+          <option value="2">2x review</option>
+          <option value="10">10x smoke</option>
+        </select>
+        <button id="start" class="primary" type="button">Start</button>
+        <button id="pause" type="button">Pause</button>
+        <button id="reset" type="button">Reset</button>
+        <span id="readout" class="readout">ready</span>
+      </div>
+      <p class="hint">Use 1x for native capture. The 120-second run is a focused equal-width check; the sustained run covers 3–5 minute continuity.</p>
+    </section>
+    <aside class="panel">
+      <div class="side-head"><strong>Expected event log</strong><span id="log-summary">0 events</span></div>
+      <ol id="event-log" aria-live="polite"></ol>
+      <div class="legend"><span><i class="dot"></i>subtitle</span><span><i class="dot negative"></i>negative</span><span><i class="dot blank"></i>blank</span></div>
+    </aside>
+  </main>
+  <script type="application/json" id="scenario-data">{"schemaVersion":1,"fixtureId":"meowcal-content-aware-band-gate","description":"Offline visual fixture for native OCR band-gate validation.","viewport":{"width":1280,"height":720,"subtitleBandTop":536,"subtitleBandHeight":132},"scenarios":[{"id":"equal-width-120s","label":"120-second equal-width check","durationSeconds":120,"repeatable":true,"notes":"Thirty authored English cues run for four seconds each. The 720px card stays fixed while rendered text widths remain similar, not padded to an exact OCR width; two-line transitions are authored explicitly.","segments":[{"id":"ew-01","onset":0,"duration":4,"expected":"subtitle","lines":["We should leave before sunrise."]},{"id":"ew-02","onset":4,"duration":4,"expected":"subtitle","lines":["The harbor lights are fading."]},{"id":"ew-03","onset":8,"duration":4,"expected":"subtitle","lines":["We have ten minutes."]},{"id":"ew-04","onset":12,"duration":4,"expected":"subtitle","lines":["Please wait by the red door."]},{"id":"ew-05","onset":16,"duration":4,"expected":"subtitle","lines":["I can explain what happened.","Stay close and follow me."]},{"id":"ew-06","onset":20,"duration":4,"expected":"subtitle","lines":["The signal is back again."]},{"id":"ew-07","onset":24,"duration":4,"expected":"subtitle","lines":["We are almost there."]},{"id":"ew-08","onset":28,"duration":4,"expected":"subtitle","lines":["The door is open now."]},{"id":"ew-09","onset":32,"duration":4,"expected":"subtitle","lines":["We should leave before sunrise."]},{"id":"ew-10","onset":36,"duration":4,"expected":"subtitle","lines":["The harbor lights are fading."]},{"id":"ew-11","onset":40,"duration":4,"expected":"subtitle","lines":["We have ten minutes."]},{"id":"ew-12","onset":44,"duration":4,"expected":"subtitle","lines":["Please wait by the red door."]},{"id":"ew-13","onset":48,"duration":4,"expected":"subtitle","lines":["I can explain what happened.","Stay close and follow me."]},{"id":"ew-14","onset":52,"duration":4,"expected":"subtitle","lines":["The signal is back again."]},{"id":"ew-15","onset":56,"duration":4,"expected":"subtitle","lines":["We are almost there."]},{"id":"ew-16","onset":60,"duration":4,"expected":"subtitle","lines":["The door is open now."]},{"id":"ew-17","onset":64,"duration":4,"expected":"subtitle","lines":["We should leave before sunrise."]},{"id":"ew-18","onset":68,"duration":4,"expected":"subtitle","lines":["The harbor lights are fading."]},{"id":"ew-19","onset":72,"duration":4,"expected":"subtitle","lines":["We have ten minutes."]},{"id":"ew-20","onset":76,"duration":4,"expected":"subtitle","lines":["Please wait by the red door."]},{"id":"ew-21","onset":80,"duration":4,"expected":"subtitle","lines":["I can explain what happened.","Stay close and follow me."]},{"id":"ew-22","onset":84,"duration":4,"expected":"subtitle","lines":["The signal is back again."]},{"id":"ew-23","onset":88,"duration":4,"expected":"subtitle","lines":["We are almost there."]},{"id":"ew-24","onset":92,"duration":4,"expected":"subtitle","lines":["The door is open now."]},{"id":"ew-25","onset":96,"duration":4,"expected":"subtitle","lines":["We should leave before sunrise."]},{"id":"ew-26","onset":100,"duration":4,"expected":"subtitle","lines":["The harbor lights are fading."]},{"id":"ew-27","onset":104,"duration":4,"expected":"subtitle","lines":["We have ten minutes."]},{"id":"ew-28","onset":108,"duration":4,"expected":"subtitle","lines":["Please wait by the red door."]},{"id":"ew-29","onset":112,"duration":4,"expected":"subtitle","lines":["I can explain what happened.","Stay close and follow me."]},{"id":"ew-30","onset":116,"duration":4,"expected":"subtitle","lines":["The signal is back again."]}],"negativeSegments":[{"id":"ew-watermark","onset":0,"duration":120,"expected":"negative","kind":"static-watermark","text":"MEOWCAL LAB / DEMO"},{"id":"ew-timer","onset":0,"duration":120,"expected":"negative","kind":"timer","text":"00:00"},{"id":"ew-scene-text","onset":12,"duration":18,"expected":"negative","kind":"scene-text","text":"NORTH PIER  /  PLATFORM 3"},{"id":"ew-credits","onset":96,"duration":24,"expected":"negative","kind":"credits","text":"FIELD RECORDING  /  UNIT 04"}],"similarSubtitleCardWidthPx":720},{"id":"negative-band-recovery-120s","label":"120-second negative-band recovery","durationSeconds":120,"repeatable":true,"similarSubtitleCardWidthPx":720,"notes":"The same subtitle card shows a static watermark (0-40s), an updating timer (40-80s), changing credits (80-100s), then five stable four-second English cues (100-120s). Each negative block has a short cycle-0 warmup allowance.","segments":[{"id":"nb-watermark-band","onset":0,"duration":40,"expected":"negative","kind":"static-watermark","text":"MEOWCAL LAB / DEMO","allowInitialWarmup":true,"warmupSeconds":6},{"id":"nb-timer-band","onset":40,"duration":40,"expected":"negative","kind":"timer","text":"timer","allowInitialWarmup":true,"warmupSeconds":6},{"id":"nb-credits-band","onset":80,"duration":20,"expected":"negative","kind":"credits","text":"LENA PARK","variants":["LENA PARK","MARCUS LEE","PRIYA SHAH","NOAH KIM"],"changeInterval":0.5,"allowInitialWarmup":true,"warmupSeconds":3},{"id":"nb-dialogue-01","onset":100,"duration":4,"expected":"subtitle","lines":["Keep the door closed."]},{"id":"nb-dialogue-02","onset":104,"duration":4,"expected":"subtitle","lines":["Wait by the red door."]},{"id":"nb-dialogue-03","onset":108,"duration":4,"expected":"subtitle","lines":["We have ten minutes."]},{"id":"nb-dialogue-04","onset":112,"duration":4,"expected":"subtitle","lines":["The signal is back."]},{"id":"nb-dialogue-05","onset":116,"duration":4,"expected":"subtitle","lines":["Stay close and follow me."]}],"negativeSegments":[{"id":"nb-watermark","onset":0,"duration":120,"expected":"negative","kind":"static-watermark","text":"MEOWCAL LAB / DEMO"},{"id":"nb-timer","onset":0,"duration":120,"expected":"negative","kind":"timer","text":"00:00"},{"id":"nb-credits","onset":80,"duration":20,"expected":"negative","kind":"credits","text":"LENA PARK","variants":["LENA PARK","MARCUS LEE","PRIYA SHAH","NOAH KIM"],"changeInterval":0.5}]},{"id":"sustained-300s","label":"300-second sustained check","durationSeconds":300,"repeatable":true,"notes":"Five-minute repeatable run with slow cues, blanks, reappearance, and changing non-subtitle text.","segments":[{"id":"st-01","onset":0,"duration":14,"expected":"subtitle","lines":["Keep the door closed."]},{"id":"st-02","onset":14,"duration":16,"expected":"subtitle","lines":["The next train leaves at 06:40."]},{"id":"st-blank-01","onset":30,"duration":5,"expected":"blank","lines":[]},{"id":"st-03","onset":35,"duration":18,"expected":"subtitle","lines":["If you hear the bell, wait here.","Do not follow the lights."]},{"id":"st-04","onset":53,"duration":12,"expected":"subtitle","lines":["No."]},{"id":"st-05","onset":65,"duration":17,"expected":"subtitle","lines":["我们还不能走。"]},{"id":"st-blank-02","onset":82,"duration":7,"expected":"blank","lines":[]},{"id":"st-06","onset":89,"duration":21,"expected":"subtitle","lines":["I thought you knew the way back."]},{"id":"st-07","onset":110,"duration":15,"expected":"subtitle","lines":["Room 12 is empty."]},{"id":"st-08","onset":125,"duration":19,"expected":"subtitle","lines":["别担心。","我会回来的。"]},{"id":"st-blank-03","onset":144,"duration":11,"expected":"blank","lines":[]},{"id":"st-09","onset":155,"duration":20,"expected":"subtitle","lines":["We only have one chance to get this right."]},{"id":"st-10","onset":175,"duration":14,"expected":"subtitle","lines":["Not yet."]},{"id":"st-11","onset":189,"duration":23,"expected":"subtitle","lines":["The water is rising below us."]},{"id":"st-blank-04","onset":212,"duration":9,"expected":"blank","lines":[]},{"id":"st-12","onset":221,"duration":18,"expected":"subtitle","lines":["我们到了。"]},{"id":"st-13","onset":239,"duration":21,"expected":"subtitle","lines":["Leave the radio on.","Someone may still be listening."]},{"id":"st-14","onset":260,"duration":16,"expected":"subtitle","lines":["12 minutes until the lights return."]},{"id":"st-blank-05","onset":276,"duration":8,"expected":"blank","lines":[]},{"id":"st-15","onset":284,"duration":16,"expected":"subtitle","lines":["The signal is back."]}],"negativeSegments":[{"id":"st-watermark","onset":0,"duration":300,"expected":"negative","kind":"static-watermark","text":"MEOWCAL LAB / DEMO"},{"id":"st-timer","onset":0,"duration":300,"expected":"negative","kind":"timer","text":"00:00"},{"id":"st-scene-text-01","onset":26,"duration":34,"expected":"negative","kind":"scene-text","text":"NORTH PIER  /  PLATFORM 3"},{"id":"st-scene-text-02","onset":126,"duration":45,"expected":"negative","kind":"scene-text","text":"AUTHORIZED CREW ONLY"},{"id":"st-credits","onset":210,"duration":90,"expected":"negative","kind":"credits","text":"FIELD RECORDING  /  UNIT 04  /  2026"}],"similarSubtitleCardWidthPx":720}]}</script>
+  <script>
+    (() => {
+      const data = JSON.parse(document.getElementById('scenario-data').textContent);
+      const stage = document.getElementById('stage');
+      const scenarioSelect = document.getElementById('scenario');
+      const speedSelect = document.getElementById('speed');
+      const startButton = document.getElementById('start');
+      const pauseButton = document.getElementById('pause');
+      const resetButton = document.getElementById('reset');
+      const readout = document.getElementById('readout');
+      const log = document.getElementById('event-log');
+      const logSummary = document.getElementById('log-summary');
+      const card = document.getElementById('subtitle-card');
+      const timer = document.getElementById('timer');
+      const sceneCopy = document.getElementById('scene-copy');
+      const credits = document.getElementById('credits');
+      let scenario = data.scenarios[0];
+      let elapsed = 0;
+      let running = false;
+      let lastFrame = 0;
+      let lastEventKey = '';
+      let raf = 0;
+      let events = [];
+      let runStartedAt = null;
+      let pauseCount = 0;
+      let completed = false;
+
+      for (const item of data.scenarios) {
+        const option = document.createElement('option');
+        option.value = item.id;
+        option.textContent = item.label;
+        scenarioSelect.append(option);
+      }
+
+      const formatTime = seconds => {
+        const whole = Math.max(0, Math.floor(seconds));
+        return `${String(Math.floor(whole / 60)).padStart(2, '0')}:${String(whole % 60).padStart(2, '0')}`;
+      };
+      const segmentAt = (segments, time) => segments.find(segment => time >= segment.onset && time < segment.onset + segment.duration);
+      const currentTime = () => elapsed % scenario.durationSeconds;
+      const currentSegment = () => segmentAt(scenario.segments, currentTime());
+
+      function appendEvent(segment, time, cycle) {
+        const key = `${scenario.id}:${segment.id}:${cycle}`;
+        if (key === lastEventKey) return;
+        lastEventKey = key;
+        events.unshift({ segment, time, cycle, observedAtMs: performance.now() });
+        events = events.slice(0, 14);
+        log.replaceChildren();
+        for (const event of events) {
+          const row = document.createElement('li');
+          const timeNode = document.createElement('span');
+          timeNode.className = 'event-time';
+          timeNode.textContent = formatTime(event.time);
+          const kindNode = document.createElement('span');
+          const kind = event.segment.expected === 'negative' ? 'negative' : event.segment.expected;
+          kindNode.className = `event-kind ${kind}`;
+          kindNode.textContent = kind;
+          const idNode = document.createElement('strong');
+          idNode.textContent = ` ${event.segment.id}`;
+          row.append(timeNode, kindNode, idNode);
+          row.title = `${event.segment.kind || 'subtitle'}; onset ${event.segment.onset}s; duration ${event.segment.duration}s; observed ${event.observedAtMs.toFixed(1)}ms`;
+          log.append(row);
+        }
+        logSummary.textContent = `${events.length} event${events.length === 1 ? '' : 's'}`;
+      }
+
+      function updateNegative(time) {
+        const timerSegment = scenario.negativeSegments.find(segment => segment.kind === 'timer');
+        timer.textContent = formatTime(time);
+        timer.dataset.segmentId = timerSegment.id;
+        timer.dataset.onset = timerSegment.onset;
+        timer.dataset.duration = timerSegment.duration;
+        const scene = segmentAt(scenario.negativeSegments.filter(segment => segment.kind === 'scene-text'), time);
+        sceneCopy.textContent = scene ? scene.text : '';
+        sceneCopy.classList.toggle('is-active', Boolean(scene));
+        sceneCopy.dataset.segmentId = scene ? scene.id : 'none';
+        const credit = segmentAt(scenario.negativeSegments.filter(segment => segment.kind === 'credits'), time);
+        credits.textContent = segmentText(credit, time);
+        credits.classList.toggle('is-active', Boolean(credit));
+        credits.dataset.segmentId = credit ? credit.id : 'none';
+      }
+
+      function segmentText(segment, time) {
+        if (!segment) return '';
+        if (segment.kind === 'timer') return formatTime(time);
+        if (segment.variants?.length) {
+          const index = Math.floor((time - segment.onset) / (segment.changeInterval || 1)) % segment.variants.length;
+          return segment.variants[Math.max(0, index)];
+        }
+        return segment.text || '';
+      }
+
+      function cardLines(segment, time) {
+        if (!segment || segment.expected === 'blank') return [];
+        if (segment.lines) return segment.lines;
+        return [segmentText(segment, time)];
+      }
+
+      function render() {
+        const cycle = Math.floor(elapsed / scenario.durationSeconds);
+        const time = currentTime();
+        const segment = currentSegment();
+        const expected = segment?.expected || 'blank';
+        const warmup = Boolean(segment?.allowInitialWarmup && time < segment.onset + (segment.warmupSeconds || 0));
+        const lines = cardLines(segment, time);
+        stage.dataset.scenario = scenario.id;
+        stage.dataset.elapsedSeconds = elapsed.toFixed(3);
+        stage.dataset.cycle = cycle;
+        stage.dataset.expected = expected;
+        stage.dataset.warmup = warmup ? 'true' : 'false';
+        readout.textContent = `${formatTime(time)} / ${formatTime(scenario.durationSeconds)}${running ? '  running' : '  paused'}${warmup ? '  warmup window' : ''}`;
+        updateNegative(time);
+        if (lines.length) {
+          card.replaceChildren(...lines.map(line => { const node = document.createElement('div'); node.textContent = line; return node; }));
+          card.classList.remove('is-blank');
+        } else {
+          card.replaceChildren();
+          card.classList.add('is-blank');
+        }
+        card.dataset.expected = expected;
+        card.dataset.cueId = segment?.id || 'blank';
+        card.dataset.kind = segment?.kind || expected;
+        card.dataset.onset = segment?.onset ?? time.toFixed(3);
+        card.dataset.duration = segment?.duration ?? '0';
+        if (segment) appendEvent(segment, time, cycle);
+      }
+
+      function tick(now) {
+        if (!running) return;
+        if (!lastFrame) lastFrame = now;
+        elapsed += (now - lastFrame) / 1000 * Number(speedSelect.value);
+        lastFrame = now;
+        if (elapsed >= scenario.durationSeconds && !document.getElementById('repeat').checked) {
+          elapsed = scenario.durationSeconds - 0.001;
+          running = false;
+          completed = true;
+          lastFrame = 0;
+        }
+        render();
+        raf = requestAnimationFrame(tick);
+      }
+
+      function setScenario(id) {
+        scenario = data.scenarios.find(item => item.id === id) || data.scenarios[0];
+        elapsed = 0;
+        running = false;
+        lastFrame = 0;
+        lastEventKey = '';
+        runStartedAt = null;
+        pauseCount = 0;
+        completed = false;
+        events = [];
+        log.replaceChildren();
+        logSummary.textContent = '0 events';
+        scenarioSelect.value = scenario.id;
+        render();
+      }
+
+      function start() {
+        if (running) return;
+        if (runStartedAt === null) runStartedAt = performance.now();
+        if (elapsed === 0) {
+          events = [];
+          lastEventKey = '';
+          log.replaceChildren();
+          logSummary.textContent = '0 events';
+        }
+        running = true;
+        lastFrame = 0;
+        cancelAnimationFrame(raf);
+        raf = requestAnimationFrame(tick);
+        render();
+      }
+      function pause() {
+        if (running) pauseCount += 1;
+        running = false;
+        lastFrame = 0;
+        render();
+      }
+      function readState() {
+        return {
+          scenarioId: scenario.id,
+          elapsedSeconds: elapsed,
+          durationSeconds: scenario.durationSeconds,
+          running,
+          paused: !running && !completed && runStartedAt !== null,
+          pauseCount,
+          completed,
+          timeOriginMs: performance.timeOrigin,
+          speed: Number(speedSelect.value),
+          cycle: Math.floor(elapsed / scenario.durationSeconds),
+          segmentId: currentSegment()?.id || 'blank',
+          expected: currentSegment()?.expected || 'blank',
+          warmup: Boolean(currentSegment()?.allowInitialWarmup && currentTime() < currentSegment().onset + (currentSegment().warmupSeconds || 0)),
+          runStartedAtMs: runStartedAt,
+          runStartedAtUtcMs: runStartedAt === null ? null : performance.timeOrigin + runStartedAt,
+          events: events.map(event => ({ id: event.segment.id, onset: event.segment.onset, cycle: event.cycle, expected: event.segment.expected, observedAtMs: event.observedAtMs }))
+        };
+      }
+
+      scenarioSelect.addEventListener('change', event => setScenario(event.target.value));
+      startButton.addEventListener('click', start);
+      pauseButton.addEventListener('click', pause);
+      resetButton.addEventListener('click', () => setScenario(scenario.id));
+      speedSelect.addEventListener('change', render);
+      const repeat = document.createElement('input');
+      repeat.type = 'checkbox'; repeat.id = 'repeat'; repeat.checked = true;
+      const repeatLabel = document.createElement('label'); repeatLabel.htmlFor = 'repeat'; repeatLabel.textContent = 'Repeat';
+      document.querySelector('.controls').insertBefore(repeatLabel, readout);
+      document.querySelector('.controls').insertBefore(repeat, repeatLabel);
+      window.fixture = Object.freeze({
+        data,
+        start,
+        pause,
+        reset: () => setScenario(scenario.id),
+        setScenario,
+        readState
+      });
+      setScenario(scenario.id);
+    })();
+  </script>
+
+</body>
+</html>

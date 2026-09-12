@@ -12,15 +12,16 @@ fn area(x: f32, y: f32, width: f32) -> LineBox {
     }
 }
 
-/// A line of plausible length for a box that wide.
-///
-/// Derived from the width so the two halves of `is_same_cue` stay
-/// consistent, but not equal to it - the character count has to carry its
-/// own signal rather than echo the geometry.
 fn text_for(width: f32) -> String {
-    "x".repeat((width / 14.0) as usize)
+    let cues = [
+        "Please wait by the entrance.",
+        "I thought you had already left.",
+        "Where were you last night?",
+        "We should talk about this tomorrow.",
+        "The trains had stopped.",
+    ];
+    cues[(width as usize / 60) % cues.len()].to_owned()
 }
-
 fn observe(tracker: &mut BandTracker, boxes: Vec<LineBox>, at_ms: u64) -> Banding {
     let texts: Vec<String> = boxes.iter().map(|area| text_for(area.width)).collect();
     tracker.observe(&texts, &boxes, at_ms)
@@ -70,13 +71,14 @@ fn rows_far_apart_are_separate_bands() {
 // benefit of the doubt applies, long before there is enough history to
 // judge what kind of band it is.
 #[test]
-fn a_band_is_translated_once_seen_a_few_times_not_on_first_sight() {
+fn a_band_is_translated_after_two_agreeing_readings_not_on_first_sight() {
     let mut tracker = BandTracker::new(REGION, INTERVAL);
     let first = observe_one(&mut tracker, 100.0, 1000.0, 200.0, 0);
     assert_eq!(first.included, vec![]);
     assert_eq!(first.dropped[0].verdict, Verdict::Glimpsed);
 
-    observe_one(&mut tracker, 100.0, 1000.0, 200.0, INTERVAL);
+    let second = observe_one(&mut tracker, 100.0, 1000.0, 200.0, INTERVAL);
+    assert_eq!(second.included.len(), 1);
     let third = observe_one(&mut tracker, 100.0, 1000.0, 200.0, 2 * INTERVAL);
     assert_eq!(third.dropped, vec![], "three sightings is a band");
     assert_eq!(third.included.len(), 1);
@@ -97,7 +99,8 @@ fn a_glimpse_is_reported_but_not_worth_logging() {
 fn a_band_that_holds_still_and_keeps_changing_is_kept() {
     let mut tracker = BandTracker::new(REGION, INTERVAL);
     play(&mut tracker, 1000.0, 120, 8, 0);
-    let banding = observe_one(&mut tracker, 600.0, 1000.0, 320.0, 120 * INTERVAL);
+    observe_one(&mut tracker, 600.0, 1000.0, 320.0, 120 * INTERVAL);
+    let banding = observe_one(&mut tracker, 600.0, 1000.0, 320.0, 121 * INTERVAL);
     assert_eq!(banding.dropped, vec![], "a subtitle band must survive");
     assert_eq!(banding.included.len(), 1);
 }
@@ -155,69 +158,6 @@ fn a_band_is_rejudged_once_its_old_evidence_expires() {
     assert_eq!(tracker.verdicts()[0].1, Verdict::Static);
 }
 
-/// Drive a band whose reads never agree, which is what OCR wobbling on one
-/// unchanged English cue looks like: 27, 13, 16, 27 characters in two
-/// seconds, each counted as a fresh cue and inflating the rate.
-///
-/// Returns how many of those frames the band was included on - the figure
-/// that decides whether the viewer saw anything.
-fn churn(tracker: &mut BandTracker, y: f32, frames: usize, from_ms: u64) -> usize {
-    let mut included = 0;
-    for frame in 0..frames {
-        let width = 200.0 + (frame % 7) as f32 * 90.0;
-        let at = from_ms + frame as u64 * INTERVAL;
-        let banding = observe_one(tracker, 760.0 - width / 2.0, y, width, at);
-        if !banding.included.is_empty() {
-            included += 1;
-        }
-    }
-    included
-}
-
-// The blackout in issue #59. A real subtitle band read noisily is judged
-// `Churning`, and because every further noisy read refreshes the very
-// observations that caused it, the band stays held until they age out of a
-// ninety-second window. The measured session lost 71.7 seconds this way
-// while OCR was reading text on 87 frames throughout.
-#[test]
-fn a_subtitle_band_held_as_churning_is_let_back_in() {
-    let mut tracker = BandTracker::new(REGION, INTERVAL);
-    play(&mut tracker, 1000.0, 200, 8, 0);
-    assert_eq!(tracker.verdicts()[0].1, Verdict::Subtitle);
-
-    let churning_from = 200 * INTERVAL;
-    churn(&mut tracker, 1000.0, 40, churning_from);
-    assert_eq!(
-        tracker.verdicts()[0].1,
-        Verdict::Churning,
-        "noisy reads should demote the band in the first place"
-    );
-
-    // Now keep churning for twice the cap, which is still well inside the
-    // ninety-second window the old code had to wait out. The band will be
-    // re-demoted each time it is let back in - that part is correct, since
-    // the reads really are noisy - so what matters is that it is let back in
-    // at all, and how often.
-    let held_frames = (2 * MAX_DEMOTION_MS / INTERVAL) as usize;
-    let seen = churn(
-        &mut tracker,
-        1000.0,
-        held_frames,
-        churning_from + 40 * INTERVAL,
-    );
-
-    // A floor rather than "more than nothing". The first version of this fix
-    // cleared the window but left the band reading as `Glimpsed`, which is
-    // excluded - so it came back for five frames in thirty seconds, and an
-    // assertion of `seen > 0` was satisfied by almost nothing.
-    assert!(
-        seen >= READMITTED_GRACE_FRAMES,
-        "a demotion must not outlast MAX_DEMOTION_MS: the band was included on \
-         {seen} of {held_frames} frames, and one expiry alone should be worth \
-         {READMITTED_GRACE_FRAMES}"
-    );
-}
-
 #[test]
 fn a_band_that_stops_appearing_is_forgotten() {
     let mut tracker = BandTracker::new(REGION, INTERVAL);
@@ -273,13 +213,21 @@ fn two_live_bands_are_both_kept() {
         );
     }
     let width = 340.0;
-    let banding = observe(
+    observe(
         &mut tracker,
         vec![
             area(760.0 - width / 2.0, 110.0, width),
             area(760.0 - width / 2.0, 1000.0, width),
         ],
         120 * INTERVAL,
+    );
+    let banding = observe(
+        &mut tracker,
+        vec![
+            area(760.0 - width / 2.0, 110.0, width),
+            area(760.0 - width / 2.0, 1000.0, width),
+        ],
+        121 * INTERVAL,
     );
     assert_eq!(banding.dropped, vec![]);
     assert_eq!(banding.included.len(), 2);

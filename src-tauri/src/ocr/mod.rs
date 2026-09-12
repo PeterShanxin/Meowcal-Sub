@@ -9,6 +9,7 @@
 // - Supports many languages
 // =============================================================================
 
+mod band_cue;
 mod band_filter;
 mod band_geometry;
 mod band_log;

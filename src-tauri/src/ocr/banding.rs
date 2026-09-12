@@ -39,6 +39,18 @@ pub struct DroppedBand {
     pub verdict: Verdict,
 }
 
+/// Privacy-safe evidence for one band's admission decision.
+#[derive(Debug, Clone, PartialEq)]
+pub struct BandDecision {
+    pub band_id: u64,
+    pub cue_id: u64,
+    pub raw: Verdict,
+    pub settled: Verdict,
+    pub cue_changed: bool,
+    pub recovered: bool,
+    pub changed: bool,
+}
+
 /// One frame's lines, sorted into what to translate and what to leave.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct Banding {
@@ -46,4 +58,5 @@ pub struct Banding {
     /// sort them itself.
     pub included: Vec<BandGroup>,
     pub dropped: Vec<DroppedBand>,
+    pub decisions: Vec<BandDecision>,
 }
