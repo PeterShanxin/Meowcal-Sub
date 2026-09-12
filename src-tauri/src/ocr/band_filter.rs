@@ -13,7 +13,7 @@
 use super::band_tracker::BandTracker;
 use super::OcrResult;
 use crate::translation_eligibility::Eligibility;
-use std::time::Instant;
+use std::time::{Instant, SystemTime};
 use tracing::debug;
 
 pub struct BandFilter {
@@ -68,15 +68,27 @@ impl BandFilter {
     /// more leniently: stationary page text is `Static` however long it is
     /// watched, and that is the case the mode exists for. The tracker goes cold
     /// while it is skipped, so switching back requires a newly confirmed cue.
-    pub fn apply(&mut self, result: OcrResult, eligibility: Eligibility) -> OcrResult {
-        self.apply_at(
+    pub fn apply_captured(
+        &mut self,
+        result: OcrResult,
+        eligibility: Eligibility,
+        captured_at: SystemTime,
+    ) -> OcrResult {
+        self.apply_frame(
             result,
             eligibility,
             self.started.elapsed().as_millis() as u64,
+            captured_at,
         )
     }
 
-    fn apply_at(&mut self, result: OcrResult, eligibility: Eligibility, at_ms: u64) -> OcrResult {
+    fn apply_frame(
+        &mut self,
+        result: OcrResult,
+        eligibility: Eligibility,
+        at_ms: u64,
+        captured_at: SystemTime,
+    ) -> OcrResult {
         self.held_lines = 0;
         if !eligibility.requires_subtitle_shape() {
             self.tracker = None;
@@ -86,7 +98,7 @@ impl BandFilter {
             if let Some(tracker) = &mut self.tracker {
                 tracker.observe(&[], &[], at_ms);
             }
-            super::band_log::record_gate(&result, at_ms, &[], &[]);
+            super::band_log::record_gate(&result, at_ms, captured_at, &[], &[]);
             return result;
         }
         if result.boxes.len() != result.lines.len() {
@@ -131,7 +143,7 @@ impl BandFilter {
                 boxes.push(result.boxes[*index]);
             }
         }
-        super::band_log::record_gate(&result, at_ms, &banding.decisions, &lines);
+        super::band_log::record_gate(&result, at_ms, captured_at, &banding.decisions, &lines);
         OcrResult::with_boxes(lines, boxes, width)
     }
 }
@@ -143,6 +155,21 @@ mod tests {
 
     const SUBTITLE: Eligibility = Eligibility::SubtitleLike;
     const ANY_TEXT: Eligibility = Eligibility::AnyText;
+
+    impl BandFilter {
+        fn apply(&mut self, result: OcrResult, eligibility: Eligibility) -> OcrResult {
+            self.apply_captured(result, eligibility, SystemTime::UNIX_EPOCH)
+        }
+
+        fn apply_at(
+            &mut self,
+            result: OcrResult,
+            eligibility: Eligibility,
+            at_ms: u64,
+        ) -> OcrResult {
+            self.apply_frame(result, eligibility, at_ms, SystemTime::UNIX_EPOCH)
+        }
+    }
 
     fn frame(y: f32, width: f32, chars: usize) -> OcrResult {
         let cues = [

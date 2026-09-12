@@ -113,3 +113,27 @@ fn failed_ocr_calls_do_not_count_as_observed_screen_time() {
     }
     assert_eq!(band.stats(INTERVAL).on_screen_ms, 1_000);
 }
+
+#[test]
+fn scatter_grace_restarts_after_blanks_and_ocr_outages() {
+    for blank in [false, true] {
+        let mut band = TrackedBand::new(1000.0, INTERVAL);
+        for at in [0, 250, 500] {
+            record(&mut band, "Please wait here", at);
+            band.settle(Verdict::Subtitle, at);
+        }
+        assert_eq!(band.settle(Verdict::Scattered, 500), Verdict::Subtitle);
+        if blank {
+            band.missing();
+        }
+        record(&mut band, "Please wait here", 30_000);
+        band.settle(Verdict::Scattered, 30_000);
+        record(&mut band, "Please wait here", 30_250);
+        assert_eq!(band.settle(Verdict::Scattered, 30_250), Verdict::Subtitle);
+        for at in (30_500..=32_000).step_by(250) {
+            record(&mut band, "Please wait here", at);
+            band.settle(Verdict::Scattered, at);
+        }
+        assert_eq!(band.settled, Some(Verdict::Scattered));
+    }
+}

@@ -63,10 +63,7 @@ function stateTimebase(state) {
 }
 
 function frameUtcMs(frame) {
-  const raw = frame.utc_ms ?? frame.utcMs;
-  if (raw === null || raw === undefined || raw === '') return null;
-  const value = Number(raw);
-  return Number.isFinite(value) ? value : null;
+  return finiteNumber(frame.capture_utc_ms);
 }
 
 function frameText(frame) {
@@ -189,13 +186,14 @@ export function compareFixture({ scenario, fixtureState, gateFrames, translation
       cycles: {},
     }]));
   let admissionEvidenceMissing = false;
+  let blankAdmittedFrameCount = 0;
   const relativeFrames = [];
 
   if (timebase) {
     for (const frame of frames) {
       const utcMs = frameUtcMs(frame);
       if (utcMs === null) {
-        warnings.push('gate frame missing utc_ms; frame ignored');
+        warnings.push('gate frame missing capture UTC timestamp; frame ignored');
         continue;
       }
       const seconds = (utcMs - timebase.startUtcMs) / 1000;
@@ -208,7 +206,7 @@ export function compareFixture({ scenario, fixtureState, gateFrames, translation
       const forwardedText = admittedText(frame);
       relativeFrames.push({ utcMs, seconds, scenarioSeconds, cycle, segmentId: segment?.id || null, admitted, text, forwardedText });
       if (!segment) continue;
-      if (forwardedText === null && (segment.expected === 'subtitle' || segment.expected === 'negative')) {
+      if (forwardedText === null) {
         admissionEvidenceMissing = true;
       }
       if (segment.expected === 'subtitle') {
@@ -226,6 +224,8 @@ export function compareFixture({ scenario, fixtureState, gateFrames, translation
             if (metric.firstCorrectAdmissionUtcMs === null) metric.firstCorrectAdmissionUtcMs = utcMs;
           }
         }
+      } else if (segment.expected === 'blank') {
+        if (forwardedText) blankAdmittedFrameCount += 1;
       } else if (segment.expected === 'negative') {
         const stat = negativeStats.get(segment.id);
         if (!stat) continue;
@@ -315,12 +315,14 @@ export function compareFixture({ scenario, fixtureState, gateFrames, translation
       && translation.unmatchedNonemptyCount === 0 && !translation.timingEvidencePartial;
     if (translation.timingEvidencePartial) warnings.push('translation timing evidence is partial; capture origin was not proven');
   }
+  if (blankAdmittedFrameCount > 0) warnings.push('text was forwarded during an authored blank');
   const partial = warnings.some(warning => /paused|completed|shorter|1x live|UTC timestamp|timing drift|admitted_texts|translation timing/.test(warning));
   const gateOk = fatal.length === 0
     && !partial
     && missedOCRcueIDs.size === 0
     && missedAdmissionCueIDs.length === 0
     && negativePostWarmupAdmittedFrameCount === 0
+    && blankAdmittedFrameCount === 0
     && negativeCoverageOk;
   const endToEndOk = translation ? gateOk && translation.ok : null;
   const ok = gateOk && (endToEndOk === null || endToEndOk);
@@ -356,6 +358,7 @@ export function compareFixture({ scenario, fixtureState, gateFrames, translation
       },
       negativePostWarmup: [...negativeStats.values()],
       negativePostWarmupAdmittedFrameCount,
+      blankAdmittedFrameCount,
       negativeCoverage,
       negativeCoverageMissing,
       negativeCoverageInsufficient,

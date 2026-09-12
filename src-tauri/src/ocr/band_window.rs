@@ -29,6 +29,7 @@ pub(super) struct TrackedBand {
     pub(super) settled: Option<Verdict>,
     pub(super) last_raw: Option<Verdict>,
     scattered_since: Option<u64>,
+    subtitle_established: bool,
 }
 
 impl TrackedBand {
@@ -44,6 +45,7 @@ impl TrackedBand {
             settled: None,
             last_raw: None,
             scattered_since: None,
+            subtitle_established: false,
         }
     }
 
@@ -51,9 +53,7 @@ impl TrackedBand {
         let content = self.cue.verdict();
         let verdict = if raw == Verdict::Scattered {
             let since = *self.scattered_since.get_or_insert(at_ms);
-            if self.settled == Some(Verdict::Subtitle)
-                && at_ms.saturating_sub(since) < SCATTER_HOLD_MS
-            {
+            if self.subtitle_established && at_ms.saturating_sub(since) < SCATTER_HOLD_MS {
                 content
             } else {
                 Verdict::Scattered
@@ -64,6 +64,10 @@ impl TrackedBand {
             // initial acquisition. Historical turnover cannot veto that cue.
             content
         };
+        // Reconfirmation after a blank does not revoke an earned scatter grace.
+        if verdict != Verdict::Glimpsed {
+            self.subtitle_established = verdict == Verdict::Subtitle;
+        }
         self.settled = Some(verdict);
         verdict
     }
@@ -77,12 +81,16 @@ impl TrackedBand {
     }
 
     pub(super) fn missing(&mut self) {
+        self.scattered_since = None;
         self.present = false;
         self.cue.missing();
     }
 
     pub(super) fn record(&mut self, centre_y: f32, left: f32, right: f32, text: &str, at_ms: u64) {
         let gap = at_ms.saturating_sub(self.last_seen_ms);
+        if gap > self.max_gap_ms {
+            self.scattered_since = None;
+        }
         let elapsed_ms = if self.present && gap <= self.max_gap_ms {
             gap
         } else {

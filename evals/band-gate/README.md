@@ -52,7 +52,7 @@ application-level translation.
 
 ## Offline gate report
 
-After a native run, save the content-aware application band log as JSONL with a `utc_ms` field on every gate frame, and save `window.fixture.readState()` as `fixture-state.json`. The state must come from a completed 1x run with Repeat disabled. The report uses `timeOriginMs + runStartedAtMs` to align authored onset windows with the UTC gate frames:
+After a native run, save the content-aware application band log as JSONL with a `capture_utc_ms` field recorded before capture/OCR on every gate frame, and save `window.fixture.readState()` as `fixture-state.json`. The state must come from a completed 1x run with Repeat disabled. The report rejects older logs that only timestamp processing completion. It uses `timeOriginMs + runStartedAtMs` to align authored onset windows with the UTC gate frames:
 
 ```powershell
 node .\evals\band-gate\report.mjs .\gate-log.jsonl .\fixture-state.json .\translation-events.json
@@ -66,6 +66,11 @@ Warmup starts at the first non-empty OCR observation of a negative segment.
 This separates capture startup latency from the gate's hold duration. Fixture
 onset drift beyond 250ms makes the report partial, since nominal timestamps
 can no longer reliably identify the visible cue.
+
+Any forwarded text during an authored blank fails the gate. Negative exclusion
+measures new admissions; the existing `bandHeld` display policy may retain a
+translation admitted during warmup, so zero later admissions does not prove
+that the overlay is empty.
 
 The small deterministic report checks run with:
 

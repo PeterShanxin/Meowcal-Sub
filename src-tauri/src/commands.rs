@@ -712,8 +712,8 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
             debug!("📸 Capturing region: {:?}", current_capture_region);
             let frame_started = Instant::now();
             let token = pipeline_clock.next_capture(session_id);
-
             let capture_started = Instant::now();
+            let captured_at = std::time::SystemTime::now();
             let capture_result =
                 match try_capture(&current_capture_region, &mut capture_state, &app) {
                     CaptureAttemptResult::Success(result) => result,
@@ -765,7 +765,7 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
                 continue;
             }
 
-            let ocr_result = band_filter.apply(ocr_result, eligibility);
+            let ocr_result = band_filter.apply_captured(ocr_result, eligibility, captured_at);
 
             if ocr_result.is_empty() {
                 debug!("[FILTER: {}] skipping", band_filter.skip_reason());

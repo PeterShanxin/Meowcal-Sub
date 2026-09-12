@@ -28,9 +28,46 @@ const state = scenario => ({
 });
 const frame = (seconds, text, admitted = true, extra = {}) => ({
   utc_ms: timeOriginMs + seconds * 1000,
+  capture_utc_ms: timeOriginMs + seconds * 1000,
   lines: [{ text, x: 120, y: 560, w: 720, h: 48 }],
   admitted_texts: admitted && text ? [text] : [],
   decisions: [{ cue_id: extra.cueId || 'native-band', admitted }],
+});
+
+test('forwarded text during an authored blank fails the gate', () => {
+  const scenario = {
+    id: 'blank-regression', durationSeconds: 8,
+    segments: [
+      { id: 'cue', onset: 0, duration: 4, expected: 'subtitle', lines: ['Please wait.'] },
+      { id: 'blank', onset: 4, duration: 4, expected: 'blank' },
+    ],
+  };
+  const gateFrames = [frame(1, 'Please wait.'), frame(5, 'Stale text')];
+  const result = compareFixture({ scenario, fixtureState: state(scenario), gateFrames });
+  assert.equal(result.gateOk, false);
+  assert.equal(result.gate.blankAdmittedFrameCount, 1);
+});
+
+test('gate evidence is assigned at capture even when OCR crosses a boundary', () => {
+  const scenario = {
+    id: 'capture-regression', durationSeconds: 8,
+    segments: [
+      { id: 'negative', onset: 0, duration: 4, warmupSeconds: 0, expected: 'negative' },
+      { id: 'cue', onset: 4, duration: 4, expected: 'subtitle', lines: ['Please wait.'] },
+    ],
+  };
+  const gateFrames = [frame(0, 'Credits', false), frame(3, 'Credits', false),
+    { ...frame(3.9, 'Credits'), utc_ms: timeOriginMs + 4_100 }, frame(5, 'Please wait.')];
+  const result = compareFixture({ scenario, fixtureState: state(scenario), gateFrames });
+  assert.equal(result.gateOk, false);
+  assert.equal(result.gate.negativePostWarmupAdmittedFrameCount, 1);
+});
+
+test('legacy processing timestamps cannot stand in for capture evidence', () => {
+  const gateFrames = oneFramePerCue(equalScenario).map(({ capture_utc_ms, ...legacy }) => legacy);
+  const result = compareFixture({ scenario: equalScenario, fixtureState: state(equalScenario), gateFrames });
+  assert.equal(result.partial, true);
+  assert.equal(result.gateOk, false);
 });
 
 function oneFramePerCue(scenario, omitId = null) {

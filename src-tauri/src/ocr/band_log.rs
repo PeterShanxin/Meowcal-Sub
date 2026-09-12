@@ -12,6 +12,7 @@ use std::time::{Instant, SystemTime, UNIX_EPOCH};
 pub(super) fn record_gate(
     result: &super::OcrResult,
     at_ms: u64,
+    captured_at: SystemTime,
     decisions: &[super::banding::BandDecision],
     admitted_texts: &[String],
 ) {
@@ -48,6 +49,7 @@ pub(super) fn record_gate(
     let mut entry = serde_json::json!({
         "kind": "gate", "ms": at_ms,
         "utc_ms": SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_millis(),
+        "capture_utc_ms": captured_at.duration_since(UNIX_EPOCH).unwrap_or_default().as_millis(),
         "frame_width": result.frame_width,
         "lines": lines, "decisions": decisions
     });
