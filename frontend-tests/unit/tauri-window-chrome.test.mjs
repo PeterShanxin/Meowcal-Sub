@@ -107,9 +107,9 @@ describe("tauri window chrome", () => {
 
   // A literal asset path resolved under the dev server and 404'd once the
   // bundler emitted the file under a content hash, so the app shipped with no
-  // logo in its own title bar.
-  it("imports the title bar logo instead of hardcoding its path", () => {
-    expect(titlebar).toContain('from "../assets/meowcal-icon.png"');
+  // logo in its own title bar. The logo is now drawn inline, with no path at all.
+  it("draws the title bar logo inline instead of loading it from a path", () => {
+    expect(titlebar).toContain("catLogo()");
     expect(titlebar).not.toContain('src="./assets/');
   });
 

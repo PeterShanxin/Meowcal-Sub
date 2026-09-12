@@ -2,7 +2,33 @@ import type { DownloadEvent, UpdateStatus } from "./update-state";
 
 export type AppScreen = "home" | "appearance" | "settings";
 export type BusyState = "idle" | "loading" | "warming" | "starting" | "stopping" | "saving";
-export type Tone = "neutral" | "accent" | "success" | "warning" | "danger";
+export type Tone = "neutral" | "success" | "warning" | "danger";
+
+/** Glyphs drawn by `icons.ts`. */
+export type IconName =
+  | "alert"
+  | "area"
+  | "arrow-right"
+  | "check"
+  | "check-circle"
+  | "chevron-right"
+  | "clock"
+  | "close"
+  | "copy"
+  | "download"
+  | "gear"
+  | "home"
+  | "info"
+  | "play"
+  | "redo"
+  | "ring"
+  | "shield"
+  | "spinner"
+  | "stop"
+  | "subtitles"
+  | "text"
+  | "update"
+  | "wrench";
 
 export interface CaptureRegion {
   x: number;
@@ -30,6 +56,8 @@ export interface OverlayConfig {
   offsetY: number;
   maxWidth: number;
   showDiagnostics: boolean;
+  /** Light plate with dark text instead of the default dark plate. */
+  lightBackground: boolean;
 }
 
 export interface TranslationConfig {
@@ -97,9 +125,11 @@ export interface HomePresentation {
   description: string;
   action: PrimaryAction;
   actionLabel: string;
-  actionIcon: string;
+  actionIcon: IconName;
   actionDisabled: boolean;
   supportLine: string;
+  /** Shown after `supportLine` in a monospace face so it can be read out exactly. */
+  supportCode?: string;
   supportTone: Tone;
 }
 
@@ -147,6 +177,12 @@ declare global {
     TauriBridge: TauriBridgeApi;
     OcrLanguageTags: {
       isOcrLanguageAvailable(installed: ReadonlySet<string>, selected: string): boolean;
+    };
+    /** The subtitle text-size range, owned by `overlay-appearance.js` for both windows. */
+    OverlayAppearance: {
+      FONT_SIZE_MIN: number;
+      FONT_SIZE_MAX: number;
+      clampFontSize(value: number): number;
     };
   }
 }

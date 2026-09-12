@@ -18,13 +18,14 @@ export const defaultSettings: AppSettings = {
   // Must track `default_config()` in src-tauri/src/config.rs so frontend defaults don't override backend.
   captureIntervalMs: 250,
   overlay: {
-    fontSize: 32,
+    fontSize: 28,
     fontFamily: "Segoe UI",
     textColor: "#FFFFFF",
     backgroundColor: "rgba(0, 0, 0, 0.72)",
     offsetY: 10,
     maxWidth: 0,
     showDiagnostics: false,
+    lightBackground: false,
   },
   translation: {
     enableLocalEngine: true,

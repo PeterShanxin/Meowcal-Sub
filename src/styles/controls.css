@@ -1,0 +1,296 @@
+/* Controls shared by the main and setup windows. Three sizes only: 44px for the
+   one primary action, 40px for fields, 30px for inline row controls. */
+
+.icon {
+  flex: none;
+  width: 16px;
+  height: 16px;
+}
+
+.spin {
+  animation: meowcal-spin 1.1s linear infinite;
+}
+
+/* =============================================================================
+   BUTTONS
+   ============================================================================= */
+
+.primary-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-width: min(100%, 264px);
+  height: var(--control-lg);
+  padding: 0 22px;
+  color: var(--primary-ink);
+  background: var(--primary-fill);
+  border: 0;
+  border-radius: var(--radius-md);
+  box-shadow: var(--primary-shadow);
+  font-size: 15px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.primary-button:hover:not(:disabled) {
+  background: var(--primary-fill-hover);
+}
+
+.primary-button:disabled,
+.primary-button.compact:disabled {
+  color: var(--text-3);
+  background: rgba(255, 255, 255, 0.1);
+  box-shadow: var(--inset-highlight);
+}
+
+.primary-button:focus-visible {
+  outline-offset: 3px;
+}
+
+.primary-button .icon {
+  width: 18px;
+  height: 18px;
+}
+
+.primary-button.compact {
+  gap: 8px;
+  min-width: 0;
+  height: 36px;
+  padding: 0 16px;
+  font-size: var(--type-body);
+  box-shadow: var(--primary-shadow-compact);
+}
+
+.primary-button.compact .icon {
+  width: 16px;
+  height: 16px;
+}
+
+.secondary-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: var(--control-sm);
+  padding: 0 12px;
+  color: var(--text-1);
+  background: var(--surface-raised);
+  border: 1px solid var(--line-control);
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.secondary-button:hover:not(:disabled) {
+  background: var(--surface-hover);
+}
+
+.secondary-button:disabled {
+  color: var(--text-3);
+  border-color: var(--line);
+}
+
+.secondary-button .icon {
+  width: 14px;
+  height: 14px;
+}
+
+.quiet-button {
+  height: 36px;
+  padding: 0 10px;
+  color: var(--text-2);
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-md);
+  font-size: 13.5px;
+  cursor: pointer;
+}
+
+.quiet-button:hover:not(:disabled) {
+  color: var(--text-1);
+  background: var(--surface-raised);
+}
+
+.quiet-button:disabled {
+  color: var(--text-3);
+}
+
+.link-button {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 2px;
+  padding: 0 4px;
+  color: var(--accent);
+  background: none;
+  border: 0;
+  border-radius: var(--radius-sm);
+  font-size: 13.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+/* =============================================================================
+   FIELDS
+   ============================================================================= */
+
+.field {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  color: var(--text-3);
+  font-size: var(--type-label);
+}
+
+.select {
+  width: 100%;
+  height: var(--control-md);
+  padding: 0 36px 0 12px;
+  color: var(--text-1);
+  background:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23c0c9dc' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9.5l6 6 6-6'/%3E%3C/svg%3E")
+      right 12px center / 14px no-repeat,
+    var(--surface-raised);
+  border: 1px solid var(--line-control);
+  border-radius: var(--radius-md);
+  box-shadow: var(--inset-highlight);
+  font-size: var(--type-body);
+  appearance: none;
+  cursor: pointer;
+}
+
+.select:disabled {
+  opacity: 0.55;
+}
+
+.select option {
+  color: var(--text-1);
+  background: #151922;
+}
+
+.select.compact {
+  width: auto;
+  min-width: 128px;
+  height: var(--control-sm);
+  padding-right: 32px;
+  background-position:
+    right 10px center,
+    0 0;
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+}
+
+.language-pair {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 22px minmax(0, 1fr);
+  gap: 8px;
+  align-items: end;
+}
+
+.language-arrow {
+  justify-self: center;
+  margin-bottom: 12px;
+  color: var(--text-3);
+}
+
+.switch {
+  position: relative;
+  flex: none;
+  width: 36px;
+  height: 20px;
+  margin: 0;
+  background: transparent;
+  border: 1px solid var(--line-control);
+  border-radius: 999px;
+  appearance: none;
+  cursor: pointer;
+}
+
+.switch::before {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 12px;
+  height: 12px;
+  content: "";
+  background: var(--text-2);
+  border-radius: 50%;
+  transition: transform var(--motion-fast);
+}
+
+.switch:checked {
+  background: var(--switch-on);
+  border-color: transparent;
+}
+
+.switch:checked::before {
+  background: var(--switch-knob-on);
+  transform: translateX(16px);
+}
+
+.segmented {
+  display: inline-flex;
+  gap: 2px;
+  padding: 2px;
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid var(--line-control);
+  border-radius: var(--radius-md);
+}
+
+.segmented button {
+  height: 26px;
+  padding: 0 12px;
+  color: var(--text-2);
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-sm);
+  font-size: var(--type-caption);
+  cursor: pointer;
+}
+
+.segmented button:hover {
+  color: var(--text-1);
+}
+
+.segmented button[aria-pressed="true"] {
+  color: var(--text-1);
+  background: rgba(232, 238, 247, 0.16);
+}
+
+/* `--ratio` (0-1) paints the filled part of the track up to the thumb centre. */
+.slider {
+  width: 190px;
+  height: 20px;
+  margin: 0;
+  background: transparent;
+  appearance: none;
+  cursor: pointer;
+}
+
+.slider::-webkit-slider-runnable-track {
+  height: 4px;
+  background:
+    linear-gradient(var(--accent), var(--accent)) 0 0 / calc(7px + (100% - 14px) * var(--ratio, 0))
+      100% no-repeat,
+    rgba(255, 255, 255, 0.14);
+  border-radius: 4px;
+}
+
+.slider::-webkit-slider-thumb {
+  width: 14px;
+  height: 14px;
+  margin-top: -5px;
+  background: #ffffff;
+  border-radius: 50%;
+  box-shadow:
+    0 0 0 2px var(--bg),
+    0 0 0 3px rgba(255, 255, 255, 0.4);
+  appearance: none;
+}
+
+.slider:focus-visible {
+  outline-offset: 4px;
+}

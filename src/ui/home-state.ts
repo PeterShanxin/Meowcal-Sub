@@ -18,12 +18,12 @@ export function deriveHomePresentation(snapshot: UiSnapshot): HomePresentation {
       state: "checking",
       statusLabel: "Checking",
       title: "Getting things ready",
-      description: "Checking local translation, recognition, and your subtitle area.",
+      description: "Checking translation, recognition, and your subtitle area.",
       action: "none",
       actionLabel: "Checking this PC…",
-      actionIcon: "ph ph-spinner-gap",
+      actionIcon: "spinner",
       actionDisabled: true,
-      supportLine: "Private local processing",
+      supportLine: "Everything stays on this PC",
       supportTone: "neutral",
     };
   }
@@ -33,10 +33,10 @@ export function deriveHomePresentation(snapshot: UiSnapshot): HomePresentation {
       state: "running",
       statusLabel: "Running",
       title: "Subtitles are live",
-      description: "Keep watching—translated subtitles will stay above your selected area.",
+      description: "Translated subtitles appear above your selected area.",
       action: "stop",
-      actionLabel: snapshot.busy === "stopping" ? "Stopping translation…" : "Stop translation",
-      actionIcon: "ph-fill ph-stop",
+      actionLabel: snapshot.busy === "stopping" ? "Stopping…" : "Stop translation",
+      actionIcon: "stop",
       actionDisabled: snapshot.busy !== "idle",
       supportLine: "Overlay active · Local processing",
       supportTone: "success",
@@ -47,14 +47,14 @@ export function deriveHomePresentation(snapshot: UiSnapshot): HomePresentation {
     return {
       state: "checking",
       statusLabel: "Starting",
-      title: "Starting local translation",
-      description: "The first start can take a little longer while the engine warms up.",
+      title: "Starting translation",
+      description: "The first start takes a little longer while the engine warms up.",
       action: "none",
-      actionLabel: "Starting translation…",
-      actionIcon: "ph ph-spinner-gap",
+      actionLabel: "Starting…",
+      actionIcon: "spinner",
       actionDisabled: true,
-      supportLine: "Preparing the private engine",
-      supportTone: "accent",
+      supportLine: "Preparing the engine on this PC",
+      supportTone: "neutral",
     };
   }
 
@@ -62,14 +62,14 @@ export function deriveHomePresentation(snapshot: UiSnapshot): HomePresentation {
   if (missingPhases.has(phase)) {
     return {
       state: "notReady",
-      statusLabel: "Not ready",
+      statusLabel: "Setup needed",
       title: "Set up private translation",
-      description: "A short guided setup will download and test the supported local engine.",
+      description: "A guided setup downloads and tests the translation engine.",
       action: "setup",
-      actionLabel: "Set up local translation",
-      actionIcon: "ph ph-download-simple",
+      actionLabel: "Set up translation",
+      actionIcon: "download",
       actionDisabled: false,
-      supportLine: "Engine not installed · Local setup required",
+      supportLine: "Engine not installed · about 1.1 GB",
       supportTone: "warning",
     };
   }
@@ -78,31 +78,30 @@ export function deriveHomePresentation(snapshot: UiSnapshot): HomePresentation {
     return {
       state: "checking",
       statusLabel: "Preparing",
-      title: "Warming up local translation",
-      description:
-        "The private engine is checking its local model. You can start when it is ready.",
+      title: "Warming up translation",
+      description: "The engine is checking its model. You can start when it is ready.",
       action: "none",
       actionLabel: "Preparing engine…",
-      actionIcon: "ph ph-spinner-gap",
+      actionIcon: "spinner",
       actionDisabled: true,
-      supportLine: "Preparing the private engine",
-      supportTone: "accent",
+      supportLine: "Preparing the engine on this PC",
+      supportTone: "neutral",
     };
   }
 
   if (repairPhases.has(phase) || !readyPhases.has(phase)) {
+    const supportCode = snapshot.engine?.supportCode;
     return {
       state: "attention",
-      statusLabel: "Needs attention",
-      title: "Translation needs a quick repair",
-      description: "Your settings are safe. Meowcal Sub can verify and restore the local engine.",
+      statusLabel: "Needs repair",
+      title: "Translation needs a repair",
+      description: "Your settings are safe. Repair checks and restores the engine.",
       action: "repair",
-      actionLabel: "Repair translation engine",
-      actionIcon: "ph ph-wrench",
+      actionLabel: "Repair engine",
+      actionIcon: "wrench",
       actionDisabled: false,
-      supportLine: snapshot.engine?.supportCode
-        ? `Support code · ${snapshot.engine.supportCode}`
-        : "Engine check failed · Repair available",
+      supportLine: supportCode ? "Support code" : "Engine check failed · Repair available",
+      supportCode,
       supportTone: "danger",
     };
   }
@@ -111,13 +110,13 @@ export function deriveHomePresentation(snapshot: UiSnapshot): HomePresentation {
     return {
       state: "notReady",
       statusLabel: "Almost ready",
-      title: "Install the selected language",
-      description: "Windows needs the matching recognition language before it can read subtitles.",
+      title: "Install the recognition language",
+      description: "Windows needs this language to read the original subtitles.",
       action: "installOcr",
-      actionLabel: "Install required OCR",
-      actionIcon: "ph ph-text-aa",
+      actionLabel: "Install recognition language",
+      actionIcon: "text",
       actionDisabled: snapshot.busy !== "idle",
-      supportLine: "Recognition language missing · Windows installation required",
+      supportLine: "Recognition language missing",
       supportTone: "warning",
     };
   }
@@ -130,7 +129,7 @@ export function deriveHomePresentation(snapshot: UiSnapshot): HomePresentation {
       description: "Draw a box around the original subtitles once, then start watching.",
       action: "selectRegion",
       actionLabel: "Select subtitle area",
-      actionIcon: "ph ph-selection",
+      actionIcon: "area",
       actionDisabled: false,
       supportLine: "Engine ready · Area not selected",
       supportTone: "warning",
@@ -144,7 +143,7 @@ export function deriveHomePresentation(snapshot: UiSnapshot): HomePresentation {
     description: "Start when your episode is playing. Everything stays on this PC.",
     action: "start",
     actionLabel: "Start translation",
-    actionIcon: "ph-fill ph-play",
+    actionIcon: "play",
     actionDisabled: snapshot.busy !== "idle",
     supportLine: "Engine ready · Local processing",
     supportTone: "success",

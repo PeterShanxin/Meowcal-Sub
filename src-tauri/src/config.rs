@@ -402,7 +402,7 @@ impl Default for AppConfig {
 impl Default for OverlayConfig {
     fn default() -> Self {
         Self {
-            font_size: 24,
+            font_size: 28,
             font_family: "Segoe UI".to_string(),
             text_color: "#FFFFFF".to_string(), // White text
             background_color: "rgba(0, 0, 0, 0.75)".to_string(), // Semi-transparent black

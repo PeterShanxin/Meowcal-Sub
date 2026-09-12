@@ -26,6 +26,7 @@
     "src/scripts/selector-geometry.js",
     "src/scripts/translation-display.js",
     "src/ui/app-controller.ts",
+    "src/ui/error-copy.ts",
     "src/ui/home-state.ts",
     "src/ui/languages.ts",
     "src/ui/settings-defaults.ts",
@@ -51,9 +52,7 @@
     "src-tauri/src/llm/prompt_router.rs": 471,
     "src/scripts/overlay.js": 1062,
     "src/scripts/selector.js": 721,
-    "src/styles/main.css": 697,
     "src/styles/overlay.css": 508,
-    "src/styles/selector.css": 414,
-    "src/styles/settings.css": 506
+    "src/styles/selector.css": 414
   }
 }

@@ -1,0 +1,145 @@
+/* Lists, status pills, and error boxes shared by the main and setup windows. */
+
+.list {
+  margin: 0;
+  padding: 0;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--inset-highlight);
+  list-style: none;
+}
+
+.list-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 16px;
+  align-items: center;
+  min-height: 42px;
+  padding: 4px 14px;
+}
+
+.list-row + .list-row {
+  border-top: 1px solid var(--line);
+}
+
+label.list-row {
+  cursor: pointer;
+}
+
+.list-row strong {
+  display: block;
+  font-size: 13.5px;
+  font-weight: 600;
+  line-height: 18px;
+}
+
+.list-row small {
+  display: block;
+  color: var(--text-3);
+  font-size: var(--type-label);
+  line-height: 16px;
+}
+
+.row-end {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* A tone class sets `--tone`; the pill, chip, or dot decides how to paint it. */
+.tone-neutral {
+  --tone: var(--accent);
+}
+
+.tone-success {
+  --tone: var(--success);
+}
+
+.tone-warning {
+  --tone: var(--warning);
+}
+
+.tone-danger {
+  --tone: var(--danger);
+}
+
+.status-pill,
+.status-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--tone);
+  background: color-mix(in srgb, var(--tone) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--tone) 26%, transparent);
+  border-radius: 999px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.status-pill {
+  height: 24px;
+  padding: 0 10px;
+  font-size: var(--type-caption);
+}
+
+.status-chip {
+  height: 22px;
+  padding: 0 8px;
+  font-size: var(--type-label);
+}
+
+.status-pill .icon {
+  width: 12px;
+  height: 12px;
+  stroke-width: 2.2;
+}
+
+.dot {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  background: var(--tone, currentColor);
+  border-radius: 50%;
+}
+
+.status-pill .dot {
+  width: 7px;
+  height: 7px;
+}
+
+.support-code {
+  color: var(--text-2);
+  font-family: var(--font-mono);
+  font-size: var(--type-label);
+}
+
+.error-box {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  gap: 4px 10px;
+  padding: 10px 12px;
+  background: color-mix(in srgb, var(--danger) 7%, transparent);
+  border: 1px solid color-mix(in srgb, var(--danger) 38%, transparent);
+  border-radius: var(--radius-lg);
+  font-size: 13px;
+  text-align: left;
+}
+
+.error-box > .icon {
+  margin-top: 2px;
+  color: var(--danger);
+}
+
+.error-actions {
+  display: flex;
+  grid-column: 2;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.error-actions .support-code {
+  margin-left: auto;
+}

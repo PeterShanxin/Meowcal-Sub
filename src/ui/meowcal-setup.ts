@@ -1,25 +1,20 @@
-import { LitElement, html, nothing } from "lit";
+import { LitElement, html } from "lit";
 import { customElement, state } from "lit/decorators.js";
 import type { AppSettings, EngineStatus } from "./contracts";
-import { applyLanguageSelection, ensureDistinctLanguagePair, languages } from "./languages";
+import { applyLanguageSelection, ensureDistinctLanguagePair } from "./languages";
 import { pickSampleTranslation } from "./sample-translations";
-import { classifyWizardOutput } from "./setup-progress";
+import {
+  classifyWizardOutput,
+  failCurrentStage,
+  initialStages,
+  type SetupStage,
+  type StageState,
+} from "./setup-progress";
+import { renderFooter, renderStep, type CopyState, type SampleResult } from "./setup-steps";
 import "./meowcal-titlebar";
 
-const wizardLogoUrl = new URL("../assets/meowcal-icon.png", import.meta.url).href;
-
-type Stage = "pending" | "active" | "complete" | "error";
-
-interface SetupStage {
-  id: string;
-  label: string;
-  state: Stage;
-}
-
-interface SampleResult {
-  translatedText?: string;
-  latencyMs?: number;
-}
+/** Asks the main window, which owns area selection, to open the selector. */
+const SELECT_AREA_EVENT = "setup-select-area";
 
 @customElement("meowcal-setup")
 export class MeowcalSetup extends LitElement {
@@ -31,14 +26,10 @@ export class MeowcalSetup extends LitElement {
   @state() private error: string | null = null;
   @state() private supportCode = "";
   @state() private sample: SampleResult | null = null;
-  @state() private details: string[] = [];
-  @state() private stages: SetupStage[] = [
-    { id: "system", label: "Checking this PC", state: "pending" },
-    { id: "download", label: "Downloading engine files", state: "pending" },
-    { id: "verify", label: "Verifying files", state: "pending" },
-    { id: "start", label: "Starting the engine", state: "pending" },
-    { id: "test", label: "Running a sample translation", state: "pending" },
-  ];
+  @state() private sampleSource = "";
+  @state() private copyState: CopyState = "idle";
+  @state() private stages: SetupStage[] = initialStages();
+  private details: string[] = [];
   private unlisten: Array<() => void> = [];
 
   protected createRenderRoot(): HTMLElement | DocumentFragment {
@@ -107,11 +98,6 @@ export class MeowcalSetup extends LitElement {
     );
   }
 
-  private async saveLanguages(): Promise<void> {
-    if (!this.settings) return;
-    await window.TauriBridge.invoke("save_settings", { settings: this.settings });
-  }
-
   private async installSourceOcr(): Promise<void> {
     if (!this.settings) return;
     this.installingOcr = true;
@@ -122,7 +108,7 @@ export class MeowcalSetup extends LitElement {
       });
       this.ocrLanguages = new Set(await window.TauriBridge.invoke<string[]>("get_ocr_languages"));
       if (!this.sourceReady()) {
-        this.error = "Windows did not report the language as installed. You can try again.";
+        this.error = "Windows didn’t report the language as installed. Try again.";
       }
     } catch (error) {
       this.error = this.message(error);
@@ -140,13 +126,17 @@ export class MeowcalSetup extends LitElement {
     this.step = 3;
     this.working = true;
     this.error = null;
+    this.supportCode = "";
+    this.copyState = "idle";
     this.details = [];
-    this.stages = this.stages.map((stage, index) => ({
+    this.stages = initialStages().map((stage, index) => ({
       ...stage,
       state: index === 0 ? "active" : "pending",
     }));
     try {
-      await this.saveLanguages();
+      if (this.settings) {
+        await window.TauriBridge.invoke("save_settings", { settings: this.settings });
+      }
       await window.TauriBridge.invoke("wizard_install_engine");
     } catch (error) {
       this.fail(this.message(error));
@@ -171,13 +161,15 @@ export class MeowcalSetup extends LitElement {
       this.setStage(4, "active");
       if (!this.settings) throw new Error("SETTINGS_UNAVAILABLE");
       const { sourceLanguage, targetLanguage } = this.settings;
+      const sourceText = pickSampleTranslation(sourceLanguage);
       const sample = await window.TauriBridge.invoke<SampleResult>("wizard_test_translation", {
-        sourceText: pickSampleTranslation(sourceLanguage),
+        sourceText,
         sourceLanguage,
         targetLanguage,
       });
       if (!sample.translatedText) throw new Error("ENGINE_SAMPLE_TRANSLATION_FAILED");
       this.sample = sample;
+      this.sampleSource = sourceText;
       this.setStage(4, "complete");
       this.working = false;
       this.step = 4;
@@ -186,19 +178,19 @@ export class MeowcalSetup extends LitElement {
     }
   }
 
-  private setStage(index: number, state: Stage): void {
+  private setStage(index: number, state: StageState): void {
     this.stages = this.stages.map((stage, stageIndex) =>
       stageIndex === index ? { ...stage, state } : stage,
     );
   }
 
   private fail(error: string): void {
+    const failure = failCurrentStage(this.stages);
     this.working = false;
-    this.error =
-      "Setup could not finish. Check your connection and available storage, then try again.";
+    this.stages = failure.stages;
+    this.error = failure.message;
     this.supportCode = error.match(/\bENGINE_[A-Z0-9_]+\b/)?.[0] ?? "ENGINE_SETUP_FAILED";
-    const active = this.stages.findIndex((stage) => stage.state === "active");
-    if (active >= 0) this.setStage(active, "error");
+    this.details = [...this.details, error];
   }
 
   private reset(): void {
@@ -207,177 +199,73 @@ export class MeowcalSetup extends LitElement {
     this.error = null;
     this.supportCode = "";
     this.sample = null;
+    this.sampleSource = "";
+    this.copyState = "idle";
     this.details = [];
+    this.stages = initialStages();
   }
 
-  private async close(): Promise<void> {
+  private async copyDetails(): Promise<void> {
+    const report = [this.supportCode, ...this.details].filter(Boolean).join("\n");
+    try {
+      await navigator.clipboard.writeText(report);
+      this.copyState = "copied";
+    } catch (error) {
+      console.warn("[Meowcal] setup details could not be copied", error);
+      this.copyState = "failed";
+    }
+  }
+
+  private async close(): Promise<boolean> {
     try {
       await window.TauriBridge.invoke("close_engine_wizard", {
         modelDownloaded: Boolean(this.sample),
         selectedModel: null,
       });
+      return true;
     } catch (error) {
-      this.fail(this.message(error));
+      this.error = this.message(error);
+      return false;
     }
   }
 
-  private renderWelcome() {
-    return html`
-      <section class="wizard-content welcome-step">
-        <span class="wizard-eyebrow">Setup · Step 1 of 4</span>
-        <h1 tabindex="-1">Welcome to Meowcal Sub</h1>
-        <p class="wizard-lead">
-          Private local subtitle translation for watching shows in your language.
-        </p>
-        <div class="setup-benefits">
-          <div>
-            <i class="ph ph-shield-check" aria-hidden="true"></i
-            ><span
-              ><strong>Everything stays on this PC</strong
-              ><small>Captured subtitles never leave your device.</small></span
-            >
-          </div>
-          <div>
-            <i class="ph ph-download-simple" aria-hidden="true"></i
-            ><span
-              ><strong>One-time download about 1.1 GB</strong
-              ><small>The supported engine and model are included.</small></span
-            >
-          </div>
-          <div>
-            <i class="ph ph-clock" aria-hidden="true"></i
-            ><span
-              ><strong>Guided setup takes a few minutes</strong
-              ><small>Files are verified before they become active.</small></span
-            >
-          </div>
-        </div>
-        <p class="compatibility">
-          <i class="ph ph-info" aria-hidden="true"></i> Windows 11 · ARM64 or x64 · 8 GB RAM
-        </p>
-      </section>
-    `;
-  }
-
-  private renderLanguages() {
-    if (!this.settings) return html`<div class="wizard-loading">Checking Windows languages…</div>`;
-    const ready = this.sourceReady();
-    return html`
-      <section class="wizard-content language-step">
-        <span class="wizard-eyebrow">Setup · Step 2 of 4</span>
-        <h1 tabindex="-1">Choose your languages</h1>
-        <p class="wizard-lead">
-          We’ll prepare Windows recognition and local translation for this pair.
-        </p>
-        <div class="wizard-language-pair">
-          <label
-            ><span>Original subtitles</span
-            ><select
-              .value=${this.settings.sourceLanguage}
-              @change=${(event: Event) => this.setLanguage("source", (event.target as HTMLSelectElement).value)}
-            >
-              ${languages.map((language) => html`<option value=${language.value} ?selected=${language.value === this.settings?.sourceLanguage}>${language.label}</option>`)}
-            </select></label
-          >
-          <i class="ph ph-arrow-right" aria-hidden="true"></i>
-          <label
-            ><span>Translate into</span
-            ><select
-              .value=${this.settings.targetLanguage}
-              @change=${(event: Event) => this.setLanguage("target", (event.target as HTMLSelectElement).value)}
-            >
-              ${languages.map((language) => html`<option value=${language.value} ?selected=${language.value === this.settings?.targetLanguage}>${language.label}</option>`)}
-            </select></label
-          >
-        </div>
-        <div class="ocr-readiness">
-          <div>
-            <span
-              ><i class="ph ph-text-aa" aria-hidden="true"></i> Selected language recognition</span
-            ><strong class=${ready ? "ready" : "missing"}
-              >${ready ? "Ready" : "Needs install"}</strong
-            >
-          </div>
-          <p>Windows may ask for permission to add the recognition language.</p>
-          ${ready ? nothing : html`<button class="secondary-button" type="button" @click=${() => this.installSourceOcr()} ?disabled=${this.installingOcr}><i class="ph ph-download-simple" aria-hidden="true"></i>${this.installingOcr ? "Installing…" : "Install selected OCR"}</button>`}
-        </div>
-      </section>
-    `;
-  }
-
-  private renderProgress() {
-    return html`
-      <section class="wizard-content progress-step">
-        <span class="wizard-eyebrow">Setup · Step 3 of 4</span>
-        <h1 tabindex="-1">Preparing local translation</h1>
-        <p class="wizard-lead">
-          Meowcal Sub is downloading, verifying, and starting the private engine.
-        </p>
-        <div class="progress-track" aria-hidden="true"><span></span></div>
-        <ol class="setup-stages" aria-live="polite">
-          ${this.stages.map((stage) => html`<li class=${stage.state}><i class=${stage.state === "complete" ? "ph-fill ph-check-circle" : stage.state === "error" ? "ph ph-warning-circle" : stage.state === "active" ? "ph ph-spinner-gap" : "ph ph-circle"} aria-hidden="true"></i><span>${stage.label}</span><small>${stage.state === "active" ? "Working…" : stage.state}</small></li>`)}
-        </ol>
-        ${
-          this.error
-            ? html`<details class="setup-details">
-                <summary>Setup details</summary>
-                <pre>${this.details.join("\n") || "No additional setup output was reported."}</pre>
-              </details>`
-            : nothing
-        }
-      </section>
-    `;
-  }
-
-  private renderFinish() {
-    return html`
-      <section class="wizard-content finish-step">
-        <span class="wizard-eyebrow">Setup · Step 4 of 4</span>
-        <h1 tabindex="-1">Ready to watch</h1>
-        <p class="wizard-lead">A real sample translation passed on this PC.</p>
-        <div class="setup-success">
-          <i class="ph-fill ph-check-circle" aria-hidden="true"></i>
-          <div>
-            <strong>Private translation is ready</strong>
-            <p>${this.sample?.translatedText}</p>
-            <small>${this.sample?.latencyMs ?? "—"} ms sample latency</small>
-          </div>
-        </div>
-        <p class="next-step">
-          <i class="ph ph-selection" aria-hidden="true"></i> Close setup, select the subtitle area,
-          then start translation.
-        </p>
-      </section>
-    `;
+  private async selectArea(): Promise<void> {
+    if (!(await this.close())) return;
+    try {
+      await window.TauriBridge.event.emit(SELECT_AREA_EVENT, null);
+    } catch (error) {
+      this.error = this.message(error);
+    }
   }
 
   protected render() {
-    const ready = this.sourceReady();
+    const view = {
+      step: this.step,
+      settings: this.settings,
+      ocrReady: this.sourceReady(),
+      installingOcr: this.installingOcr,
+      working: this.working,
+      error: this.error,
+      supportCode: this.supportCode,
+      stages: this.stages,
+      sample: this.sample,
+      sampleSource: this.sampleSource,
+      copyState: this.copyState,
+    };
+    const actions = {
+      setLanguage: (kind: "source" | "target", value: string) => this.setLanguage(kind, value),
+      installOcr: () => void this.installSourceOcr(),
+      prepare: () => void this.beginEngineSetup(),
+      copyDetails: () => void this.copyDetails(),
+      next: () => (this.step = 2),
+      back: () => (this.step = 1),
+      close: () => void this.close(),
+      selectArea: () => void this.selectArea(),
+    };
     return html`
       <div class="wizard-frame">
-        <meowcal-titlebar label="Local Translation Setup" no-maximize></meowcal-titlebar>
-        <header class="wizard-brand">
-          <img src=${wizardLogoUrl} alt="" /><span>Meowcal Sub</span
-          ><span class="step-count">${this.step} / 4</span>
-        </header>
-        ${this.step === 1 ? this.renderWelcome() : this.step === 2 ? this.renderLanguages() : this.step === 3 ? this.renderProgress() : this.renderFinish()}
-        <div class="wizard-error-slot">
-          ${this.error ? html`<div class="wizard-error" role="alert"><i class="ph ph-warning-circle" aria-hidden="true"></i><span>${this.error}${this.supportCode ? html`<small>Support code · ${this.supportCode}</small>` : nothing}</span></div>` : nothing}
-        </div>
-        <footer class="wizard-footer">
-          <button
-            class="quiet-button"
-            type="button"
-            @click=${() => (this.step > 1 && this.step < 3 ? (this.step -= 1) : this.close())}
-            ?disabled=${this.working}
-          >
-            ${this.step > 1 && this.step < 3 ? "Back" : "Cancel"}
-          </button>
-          <div class="step-dots" aria-label=${`Step ${this.step} of 4`}>
-            ${[1, 2, 3, 4].map((value) => html`<i class=${value === this.step ? "ph-fill ph-circle active" : value < this.step ? "ph-fill ph-check-circle done" : "ph-fill ph-circle"} aria-hidden="true"></i>`)}
-          </div>
-          ${this.step === 1 ? html`<button class="wizard-primary" type="button" @click=${() => (this.step = 2)}>Continue <i class="ph ph-arrow-right" aria-hidden="true"></i></button>` : this.step === 2 ? html`<button class="wizard-primary" type="button" @click=${() => this.beginEngineSetup()} ?disabled=${!ready || this.installingOcr}>Prepare local translation <i class="ph ph-arrow-right" aria-hidden="true"></i></button>` : this.step === 3 ? html`<button class="wizard-primary" type="button" @click=${() => this.beginEngineSetup()} ?disabled=${this.working}>${this.working ? "Setting up…" : "Try again"}</button>` : html`<button class="wizard-primary" type="button" @click=${() => this.close()}>Finish <i class="ph ph-check" aria-hidden="true"></i></button>`}
-        </footer>
+        <meowcal-titlebar label="Meowcal Sub Setup" no-maximize></meowcal-titlebar>
+        ${renderStep(view, actions)} ${renderFooter(view, actions)}
       </div>
     `;
   }

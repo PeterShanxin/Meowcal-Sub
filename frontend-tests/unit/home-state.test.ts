@@ -26,6 +26,7 @@ function snapshot(patch: Partial<UiSnapshot> = {}): UiSnapshot {
         offsetY: 10,
         maxWidth: 0,
         showDiagnostics: false,
+        lightBackground: false,
       },
       translation: {
         enableLocalEngine: true,
@@ -74,17 +75,17 @@ describe("deriveHomePresentation", () => {
     [snapshot({ running: true, busy: "stopping" }), "stop", "Running"],
     [snapshot({ busy: "warming" }), "none", "Starting"],
     [snapshot({ busy: "starting" }), "none", "Starting"],
-    [snapshot({ engine: { phase: "notInstalled" } }), "setup", "Not ready"],
-    [snapshot({ engine: { phase: "notinstalled" } }), "setup", "Not ready"],
+    [snapshot({ engine: { phase: "notInstalled" } }), "setup", "Setup needed"],
+    [snapshot({ engine: { phase: "notinstalled" } }), "setup", "Setup needed"],
     [
       snapshot({ engine: { phase: "error", supportCode: "ENGINE_BROKEN" } }),
       "repair",
-      "Needs attention",
+      "Needs repair",
     ],
-    [snapshot({ engine: { phase: "noModels" } }), "repair", "Needs attention"],
+    [snapshot({ engine: { phase: "noModels" } }), "repair", "Needs repair"],
     [snapshot({ engine: { phase: "preparing" } }), "none", "Preparing"],
-    [snapshot({ engine: { phase: "unknown" } }), "repair", "Needs attention"],
-    [snapshot({ engine: { phase: "unexpected" } }), "repair", "Needs attention"],
+    [snapshot({ engine: { phase: "unknown" } }), "repair", "Needs repair"],
+    [snapshot({ engine: { phase: "unexpected" } }), "repair", "Needs repair"],
     [snapshot({ error: "save failed" }), "start", "Ready"],
     [snapshot({ ocrLanguages: new Set() }), "installOcr", "Almost ready"],
     [snapshot({ region: null }), "selectRegion", "Almost ready"],
@@ -117,10 +118,22 @@ describe("deriveHomePresentation", () => {
       expect(result).toMatchObject({
         state: "attention",
         action: "repair",
-        statusLabel: "Needs attention",
+        statusLabel: "Needs repair",
       });
     },
   );
+
+  it("keeps a repair support code out of the sentence so it can be read out exactly", () => {
+    const result = deriveHomePresentation(
+      snapshot({ engine: { phase: "error", supportCode: "ENGINE_HEALTH_FAILED" } }),
+    );
+
+    expect(result).toMatchObject({
+      supportLine: "Support code",
+      supportCode: "ENGINE_HEALTH_FAILED",
+      supportTone: "danger",
+    });
+  });
 
   it("routes a missing engine status to attention instead of Ready", () => {
     const result = deriveHomePresentation(snapshot({ engine: null }));
@@ -128,7 +141,7 @@ describe("deriveHomePresentation", () => {
     expect(result).toMatchObject({
       state: "attention",
       action: "repair",
-      statusLabel: "Needs attention",
+      statusLabel: "Needs repair",
     });
   });
 
