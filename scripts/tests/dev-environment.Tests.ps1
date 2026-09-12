@@ -188,6 +188,12 @@ foreach ($launcher in @("dev-tauri.cmd", "dev-browser.cmd")) {
 # be mistaken for a resolved one. That is why the helper writes MEOWCAL_RESOLVED_*
 # names it alone produces, rather than the variables they become.
 $tauriLauncher = Get-Content -LiteralPath (Join-Path $repositoryRoot "dev-tauri.cmd") -Raw
+Assert-True ($tauriLauncher -match 'set "MEOWCAL_PS=pwsh"') `
+    "Tauri development must use the documented PowerShell 7 prerequisite."
+Assert-True ($tauriLauncher -notmatch '(?m)^powershell\s') `
+    "Tauri preparation must not switch back to Windows PowerShell."
+Assert-True ($tauriLauncher -match '%MEOWCAL_PS%[^\r\n]+scripts\\prepare-core-resource\.ps1') `
+    "Core preparation must use the resolved PowerShell 7 executable."
 $browserLauncher = Get-Content -LiteralPath (Join-Path $repositoryRoot "dev-browser.cmd") -Raw
 
 foreach ($name in @("MEOWCAL_RESOLVED_VSDEVCMD", "MEOWCAL_RESOLVED_HOST_ARCH")) {
@@ -214,13 +220,22 @@ foreach ($name in @("MEOWCAL_RESOLVED_CARGO_TARGET_DIR", "MEOWCAL_RESOLVED_VSDEV
 
 # The documented overrides must still reach the helper. Emitting under separate
 # names must not break the inputs a developer sets.
+$previousCargoTargetDir = $env:CARGO_TARGET_DIR
 $env:MEOWCAL_CARGO_TARGET_DIR = $fakeOverride
 try {
+    # This assertion exercises MEOWCAL_CARGO_TARGET_DIR. An externally supplied
+    # CARGO_TARGET_DIR deliberately wins, so it cannot be present for this case.
+    Remove-Item Env:\CARGO_TARGET_DIR -ErrorAction SilentlyContinue
     $overridden = & (Join-Path $scriptsDirectory "dev-environment.ps1") -Emit CargoTargetDir
     Assert-Equal "MEOWCAL_RESOLVED_CARGO_TARGET_DIR=$fakeOverride" ($overridden | Select-Object -First 1) `
         "MEOWCAL_CARGO_TARGET_DIR must still override the build directory."
 } finally {
     Remove-Item Env:\MEOWCAL_CARGO_TARGET_DIR -ErrorAction SilentlyContinue
+    if ([string]::IsNullOrWhiteSpace($previousCargoTargetDir)) {
+        Remove-Item Env:\CARGO_TARGET_DIR -ErrorAction SilentlyContinue
+    } else {
+        $env:CARGO_TARGET_DIR = $previousCargoTargetDir
+    }
     Remove-Item -LiteralPath $fakeOverride -Recurse -Force -ErrorAction SilentlyContinue
 }
 

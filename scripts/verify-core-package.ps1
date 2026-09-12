@@ -65,6 +65,9 @@ try {
         $entries = @($zip.Entries)
         $entryNames = @($entries | ForEach-Object FullName)
         $expectedEntries = @("LICENSE", "meowcal-core.exe", "meowcal-core.json")
+        $maxEntryBytes = 256MB
+        $maxTotalBytes = 512MB
+        [long]$totalUncompressedBytes = 0
         if ($entries.Count -ne $expectedEntries.Count -or
             @($entryNames | Where-Object { $_ -notin $expectedEntries }).Count -ne 0 -or
             @($expectedEntries | Where-Object { $_ -notin $entryNames }).Count -ne 0) {
@@ -73,6 +76,13 @@ try {
         foreach ($entry in $entries) {
             if ($entry.FullName -ne $entry.Name -or $entry.FullName.Contains("..")) {
                 throw "Core archive contains an unsafe path: $($entry.FullName)"
+            }
+            if ($entry.Length -gt $maxEntryBytes) {
+                throw "Core archive entry $($entry.Name) exceeds the 256 MiB extraction limit."
+            }
+            $totalUncompressedBytes += [long]$entry.Length
+            if ($totalUncompressedBytes -gt $maxTotalBytes) {
+                throw "Core archive exceeds the 512 MiB extraction limit."
             }
         }
     } finally {

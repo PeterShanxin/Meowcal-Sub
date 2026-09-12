@@ -8,7 +8,12 @@ param(
     # both shipped architectures, because the crate compiles genuinely different
     # code for each - see the cfg(target_arch) split in `engine_launch.rs`.
     [ValidateSet("host", "aarch64-pc-windows-msvc", "x86_64-pc-windows-msvc")]
-    [string]$Target = "host"
+    [string]$Target = "host",
+
+    # A reviewed lock is the default consumer path when one exists. Keep the
+    # source-built Core candidate available for development and Core changes,
+    # but require callers to opt into it once a lock has been reviewed.
+    [switch]$CoreSourceCandidate
 )
 
 $ErrorActionPreference = "Stop"
@@ -28,11 +33,18 @@ if ($Target -eq "aarch64-pc-windows-msvc" -and -not $hostIsArm64) {
 }
 
 $targetArguments = if ($Target -eq "host") { @() } else { @("--target", $Target) }
+$coreSourceCandidateArguments = if ($CoreSourceCandidate) {
+    @("--features", "core-source-candidate")
+} else {
+    @()
+}
 
 $repositoryRoot = Split-Path -Parent $PSScriptRoot
 $resourceScript = Join-Path $PSScriptRoot "prepare-validation-resources.ps1"
 $contractTest = Join-Path $PSScriptRoot "tests\verify.Tests.ps1"
 $corePackageTest = Join-Path $PSScriptRoot "tests\core-package.Tests.ps1"
+$coreUpgradeTest = Join-Path $PSScriptRoot "tests\core-upgrade.Tests.ps1"
+$browserBackendTest = Join-Path $PSScriptRoot "tests\browser-backend.Tests.ps1"
 $engineSupportTest = Join-Path $PSScriptRoot "tests\engine-support.Tests.ps1"
 $devEnvironmentTest = Join-Path $PSScriptRoot "tests\dev-environment.Tests.ps1"
 $rustDirectory = Join-Path $repositoryRoot "src-tauri"
@@ -127,6 +139,16 @@ if ($env:MEOWCAL_VERIFY_CONTRACT_ACTIVE -ne "1") {
     if ($LASTEXITCODE -ne 0) {
         exit $LASTEXITCODE
     }
+    Write-Host "==> Core upgrade automation contract tests" -ForegroundColor Cyan
+    & pwsh -NoProfile -File $coreUpgradeTest
+    if ($LASTEXITCODE -ne 0) {
+        exit $LASTEXITCODE
+    }
+    Write-Host "==> Browser backend startup contract tests" -ForegroundColor Cyan
+    & pwsh -NoProfile -File $browserBackendTest
+    if ($LASTEXITCODE -ne 0) {
+        exit $LASTEXITCODE
+    }
     Write-Host "==> Engine support contract tests" -ForegroundColor Cyan
     & pwsh -NoProfile -File $engineSupportTest
     if ($LASTEXITCODE -ne 0) {
@@ -180,6 +202,43 @@ if ($Stage -in @("All", "Lint", "Test")) {
         if ($LASTEXITCODE -ne 0) {
             exit $LASTEXITCODE
         }
+
+        if ($Stage -in @("All", "Test")) {
+            $coreLockPath = Join-Path $repositoryRoot "config\meowcal-core.lock.json"
+            $coreExecutable = $coreBinary
+            if ((Test-Path -LiteralPath $coreLockPath -PathType Leaf) -and -not $CoreSourceCandidate) {
+                Write-Host "==> Fetch reviewed Core release" -ForegroundColor Cyan
+                & (Join-Path $PSScriptRoot "fetch-meowcal-core.ps1") `
+                    -Architecture $coreArchitecture `
+                    -LockPath $coreLockPath | Out-Null
+                if ($LASTEXITCODE -ne 0) {
+                    exit $LASTEXITCODE
+                }
+                $coreExecutable = Join-Path $repositoryRoot "src-tauri\resources\core\meowcal-core.exe"
+            } elseif ($CoreSourceCandidate) {
+                Write-Host "Using explicit source-built Core candidate." -ForegroundColor Yellow
+            } else {
+                Write-Host "No reviewed Core lock exists; retaining the source-built candidate." -ForegroundColor Yellow
+            }
+
+            $previousCoreExecutable = $env:MEOWCAL_CORE_EXECUTABLE
+            try {
+                $env:MEOWCAL_CORE_EXECUTABLE = $coreExecutable
+                Push-Location $rustDirectory
+                try {
+                    Invoke-CargoStep "Core consumer handshake" (
+                        @("test", "--locked") + $targetArguments + $coreSourceCandidateArguments + @(
+                            "--lib", "core_client::tests::real_core_handshake_status_and_shutdown",
+                            "--", "--ignored", "--exact"
+                        )
+                    )
+                } finally {
+                    Pop-Location
+                }
+            } finally {
+                $env:MEOWCAL_CORE_EXECUTABLE = $previousCoreExecutable
+            }
+        }
     }
 }
 
@@ -188,19 +247,19 @@ try {
     if ($Stage -in @("All", "Lint")) {
         # Formatting is architecture-independent, so it never takes a target.
         Invoke-CargoStep "Rust format" @("fmt", "--check")
-        Invoke-CargoStep "Rust clippy" (@("clippy", "--locked") + $targetArguments + @("--", "-D", "warnings"))
+        Invoke-CargoStep "Rust clippy" (@("clippy", "--locked") + $targetArguments + $coreSourceCandidateArguments + @("--", "-D", "warnings"))
     }
 
     if ($Stage -in @("All", "Test")) {
-        Invoke-CargoStep "Rust unit tests" (@("test", "--locked") + $targetArguments + @("--lib"))
+        Invoke-CargoStep "Rust unit tests" (@("test", "--locked") + $targetArguments + $coreSourceCandidateArguments + @("--lib"))
         Invoke-CargoStep "Rust IPC integration tests" (
-            @("test", "--locked") + $targetArguments + @("--test", "integration_ipc")
+            @("test", "--locked") + $targetArguments + $coreSourceCandidateArguments + @("--test", "integration_ipc")
         )
         # Outside src/ so they survive module moves unchanged: these pin the
         # command payload shapes the frontend reads, which a structural
         # refactor must not alter.
         Invoke-CargoStep "Rust command contract tests" (
-            @("test", "--locked") + $targetArguments + @("--test", "command_contracts")
+            @("test", "--locked") + $targetArguments + $coreSourceCandidateArguments + @("--test", "command_contracts")
         )
     }
 } finally {

@@ -61,9 +61,11 @@ describe("tauri window chrome", () => {
     expect(config.identifier).toBe("com.meowcal.sub");
     expect(devConfig).toEqual({ identifier: "com.meowcal.sub.dev" });
     expect(packageJson.scripts["tauri:dev"]).toBe(
-      "tauri dev --config src-tauri/tauri.dev.conf.json",
+      "tauri dev --features core-source-candidate --config src-tauri/tauri.dev.conf.json",
     );
-    expect(devLauncher).toContain("npx tauri dev --config src-tauri/tauri.dev.conf.json");
+    expect(devLauncher).toContain(
+      "npx tauri dev --features core-source-candidate --config src-tauri/tauri.dev.conf.json",
+    );
   });
 
   it("keeps default engine install and recovery on Tauri's profile cache", () => {

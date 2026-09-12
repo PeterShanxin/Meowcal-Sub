@@ -22,7 +22,11 @@ pub use types::{CoreInstallPaths, CoreStatus, OcrRecognizeParams, OcrRecognizeRe
 use types::{HelloResult, OcrInitializeResult, OcrLanguagesResult, Request};
 
 pub(super) const API_VERSION: u32 = meowcal_core::protocol::API_VERSION;
-const CORE_VERSION: &str = meowcal_core::protocol::CORE_VERSION;
+const CORE_VERSION: &str = env!("MEOWCAL_EXPECTED_CORE_VERSION");
+#[cfg(meowcal_core_source_candidate)]
+pub(super) const CORE_SOURCE_CANDIDATE: bool = true;
+#[cfg(not(meowcal_core_source_candidate))]
+pub(super) const CORE_SOURCE_CANDIDATE: bool = false;
 const HELLO_TIMEOUT: Duration = Duration::from_secs(5);
 pub const READY_TIMEOUT: Duration = Duration::from_secs(120);
 
@@ -223,18 +227,20 @@ fn spawn_initialized(
         clear_kill(kill_slot);
         format!("CORE_HELLO_INVALID: {error}")
     })?;
-    let required = meowcal_core::protocol::CAPABILITIES;
-    let compatible = hello.version == CORE_VERSION
-        && hello.api == API_VERSION
-        && required
-            .iter()
-            .all(|required| hello.capabilities.iter().any(|actual| actual == required));
-    if !compatible {
+    if !hello_is_compatible(&hello, CORE_VERSION) {
         process.kill_and_wait();
         clear_kill(kill_slot);
         return Err(format!("CORE_INCOMPATIBLE: expected version {CORE_VERSION}, API {API_VERSION}, and required capabilities"));
     }
     Ok(process)
+}
+
+fn hello_is_compatible(hello: &HelloResult, expected_version: &str) -> bool {
+    hello.version == expected_version
+        && hello.api == API_VERSION
+        && meowcal_core::protocol::CAPABILITIES
+            .iter()
+            .all(|required| hello.capabilities.iter().any(|actual| actual == required))
 }
 
 fn remaining(deadline: Instant, method: &str) -> Result<Duration, String> {

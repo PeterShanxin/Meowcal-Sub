@@ -1,0 +1,106 @@
+name: Update Meowcal Core pin
+
+on:
+  schedule:
+    - cron: "17 4 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: core-upgrade
+  cancel-in-progress: false
+
+jobs:
+  update:
+    name: Discover and verify a stable Core release
+    runs-on: windows-2025
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+
+      - name: Resolve, verify, and prepare the lock
+        id: update
+        shell: pwsh
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          $resultPath = Join-Path $env:RUNNER_TEMP 'core-upgrade-result.json'
+          .\scripts\update-meowcal-core.ps1 -ResultPath $resultPath
+          $result = Get-Content -LiteralPath $resultPath -Raw | ConvertFrom-Json
+          "changed=$($result.changed.ToString().ToLowerInvariant())" >> $env:GITHUB_OUTPUT
+          "version=$($result.coreVersion)" >> $env:GITHUB_OUTPUT
+          "tag=$($result.tag)" >> $env:GITHUB_OUTPUT
+
+      - name: Run Core automation contract tests
+        if: steps.update.outputs.changed == 'true'
+        shell: pwsh
+        run: .\scripts\tests\core-upgrade.Tests.ps1
+
+      - name: Check whether PR creation is configured
+        id: token
+        if: steps.update.outputs.changed == 'true'
+        shell: pwsh
+        env:
+          CORE_UPGRADE_TOKEN: ${{ secrets.CORE_UPGRADE_TOKEN }}
+        run: |
+          $configured = -not [string]::IsNullOrWhiteSpace($env:CORE_UPGRADE_TOKEN)
+          "configured=$($configured.ToString().ToLowerInvariant())" >> $env:GITHUB_OUTPUT
+
+      - name: Create or update the reviewed upgrade PR
+        if: steps.update.outputs.changed == 'true' && steps.token.outputs.configured == 'true'
+        uses: peter-evans/create-pull-request@22a9089034f40e5a961c8808d113e2c98fb63676 # v7
+        with:
+          token: ${{ secrets.CORE_UPGRADE_TOKEN }}
+          base: ${{ github.event.repository.default_branch }}
+          branch: automation/core-${{ steps.update.outputs.version }}
+          delete-branch: false
+          draft: true
+          add-paths: |
+            config/meowcal-core.lock.json
+          title: "chore(core): update Meowcal Core to v${{ steps.update.outputs.version }}"
+          commit-message: "chore(core): update Meowcal Core to v${{ steps.update.outputs.version }}"
+          body: |
+            ## Intent
+
+            Update the reviewed Meowcal Core pin to `${{ steps.update.outputs.tag }}`.
+
+            ## Changes
+
+            Replace both architecture digests in `config/meowcal-core.lock.json` with the verified published release.
+
+            ## Non-goals
+
+            This pull request does not publish, promote, or merge a Core release.
+
+            ## Validation
+
+            - `.\scripts\verify.ps1` — pending on this pull request.
+            - CI — pending on this pull request.
+
+            ## Manual Windows validation
+
+            Outstanding: this runtime upgrade requires fresh native Windows validation after CI passes.
+
+            ## Risk and rollback
+
+            An incorrect pin prevents Core startup. Revert this lock update to restore the prior reviewed release.
+
+            ## Issues
+
+            Routine Core dependency update.
+
+            ---
+
+            <sub>By submitting this pull request, you agree to the <a href="https://github.com/PeterShanxin/Meowcal-Sub/blob/main/CLA.md">Contributor License Agreement</a>.</sub>
+
+      - name: Explain why no PR was created
+        if: steps.update.outputs.changed == 'true' && steps.token.outputs.configured != 'true'
+        shell: pwsh
+        run: Write-Host "A stable Core update was verified, but CORE_UPGRADE_TOKEN is not configured; no PR was created."
