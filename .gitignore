@@ -5,6 +5,7 @@
 # --- Personal/Development ---
 todo/
 .worktrees/
+.local/
 .claude/settings.local.json
 
 # --- Secrets / credentials ---

@@ -246,8 +246,17 @@ tested commit. Do not reuse an earlier manual pass after changing behavior.
 Report hardware architecture, Windows build, scenario, observed result, and
 relevant logs or timing.
 
-Never claim completion while the approved real 30-minute episode validation or
-other required manual gates remain outstanding.
+For subtitle-gate regressions, the existing reproduction page and the offline
+[moving-scene fixture](../evals/band-gate/README.md) are accepted native inputs.
+Authored cue timings and negative controls make these regressions reproducible
+without external media dependencies; they do not establish general movie reliability.
+Run the equal-width and negative/recovery scenarios at 1x through real Windows
+capture, OCR, translation, and overlay; retain cue-level and negative-band
+results. A browser-only fixture run does not satisfy this gate.
+
+Honor any explicitly required real-media or long-duration acceptance test in
+addition to the fixture. Never claim completion while such a test or another
+required manual gate remains outstanding.
 
 ## Evidence and claims
 

@@ -15,9 +15,7 @@ use super::band_verdict::classify;
 #[cfg(test)]
 use super::band_verdict::Verdict;
 use super::band_window::{TrackedBand, WINDOW_MS};
-#[cfg(test)]
-use super::band_window::{MAX_DEMOTION_MS, READMITTED_GRACE_FRAMES};
-use super::banding::{BandGroup, Banding, DroppedBand};
+use super::banding::{BandDecision, BandGroup, Banding, DroppedBand};
 use super::LineBox;
 
 /// How long a band survives without being seen before it is forgotten.
@@ -35,6 +33,7 @@ pub struct BandTracker {
     region_width: f32,
     frame_interval_ms: u64,
     bands: Vec<TrackedBand>,
+    next_id: u64,
 }
 
 impl BandTracker {
@@ -43,6 +42,7 @@ impl BandTracker {
             region_width,
             frame_interval_ms: frame_interval_ms.max(1),
             bands: Vec::new(),
+            next_id: 0,
         }
     }
 
@@ -73,22 +73,37 @@ impl BandTracker {
         }
 
         let mut banding = Banding::default();
+        for (id, tracked) in self.bands.iter_mut().enumerate() {
+            if !per_band.iter().any(|(band, _)| *band == id) {
+                tracked.missing();
+            }
+        }
         for (band, lines) in per_band {
-            let chars = lines
+            let text = lines
                 .iter()
                 .filter_map(|index| texts.get(*index))
-                .map(|text| text.chars().count())
-                .sum();
-            // Before recording, not after: expiry clears the window, and doing
-            // it second would throw away the observation this frame just added -
-            // leaving the band at zero and costing it a further frame before it
-            // can be judged. See `MAX_DEMOTION_MS`.
-            self.bands[band].expire_a_stale_demotion(at_ms);
-            self.record(band, chars, boxes, &lines, at_ms);
+                .map(String::as_str)
+                .collect::<Vec<_>>()
+                .join(" ");
+            self.record(band, &text, boxes, &lines, at_ms);
             let (interval, width) = (self.frame_interval_ms, self.region_width);
             let tracked = &mut self.bands[band];
             let raw = classify(&tracked.stats(interval), width);
+            let previous = tracked.settled;
+            let previous_raw = tracked.last_raw;
             let verdict = tracked.settle(raw, at_ms);
+            tracked.last_raw = Some(raw);
+            banding.decisions.push(BandDecision {
+                band_id: tracked.id,
+                cue_id: tracked.cue.id,
+                raw,
+                settled: verdict,
+                cue_changed: tracked.cue.changed,
+                recovered: previous.is_some_and(|v| !v.is_included()) && verdict.is_included(),
+                changed: previous != Some(verdict)
+                    || previous_raw != Some(raw)
+                    || tracked.cue.changed,
+            });
             let tracked = &self.bands[band];
             if verdict.is_included() {
                 banding.included.push(BandGroup {
@@ -132,12 +147,7 @@ impl BandTracker {
     pub fn verdicts(&self) -> Vec<(f32, Verdict)> {
         self.bands
             .iter()
-            .map(|band| {
-                (
-                    band.centre_y(),
-                    classify(&band.stats(self.frame_interval_ms), self.region_width),
-                )
-            })
+            .map(|band| (band.centre_y(), band.settled.unwrap_or(Verdict::Glimpsed)))
             .collect()
     }
 
@@ -153,22 +163,18 @@ impl BandTracker {
         match nearest {
             Some((index, _)) => index,
             None => {
-                self.bands.push(TrackedBand::new(centre_y));
+                let mut band = TrackedBand::new(centre_y, self.frame_interval_ms);
+                band.id = self.next_id;
+                self.next_id += 1;
+                self.bands.push(band);
                 self.bands.len() - 1
             }
         }
     }
 
-    fn record(
-        &mut self,
-        band: usize,
-        chars: usize,
-        boxes: &[LineBox],
-        lines: &[usize],
-        at_ms: u64,
-    ) {
+    fn record(&mut self, band: usize, text: &str, boxes: &[LineBox], lines: &[usize], at_ms: u64) {
         let (left, right, centre_y) = super::band_geometry::union(boxes, lines);
-        self.bands[band].record(centre_y, left, right, chars, at_ms);
+        self.bands[band].record(centre_y, left, right, text, at_ms);
     }
 
     fn retire(&mut self, at_ms: u64) {
@@ -179,3 +185,7 @@ impl BandTracker {
 #[cfg(test)]
 #[path = "band_tracker_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "band_cue_tests.rs"]
+mod cue_tests;

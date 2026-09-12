@@ -13,7 +13,7 @@
 use super::band_tracker::BandTracker;
 use super::OcrResult;
 use crate::translation_eligibility::Eligibility;
-use std::time::Instant;
+use std::time::{Instant, SystemTime};
 use tracing::debug;
 
 pub struct BandFilter {
@@ -67,15 +67,41 @@ impl BandFilter {
     /// time, so `Eligibility::AnyText` skips it entirely rather than reading it
     /// more leniently: stationary page text is `Static` however long it is
     /// watched, and that is the case the mode exists for. The tracker goes cold
-    /// while it is skipped, so switching back holds nothing until the bands are
-    /// observed again - the safe direction, and the one `Verdict::Warming`
-    /// already takes.
-    pub fn apply(&mut self, result: OcrResult, eligibility: Eligibility) -> OcrResult {
+    /// while it is skipped, so switching back requires a newly confirmed cue.
+    pub fn apply_captured(
+        &mut self,
+        result: OcrResult,
+        eligibility: Eligibility,
+        captured_at: SystemTime,
+    ) -> OcrResult {
+        self.apply_frame(
+            result,
+            eligibility,
+            self.started.elapsed().as_millis() as u64,
+            captured_at,
+        )
+    }
+
+    fn apply_frame(
+        &mut self,
+        result: OcrResult,
+        eligibility: Eligibility,
+        at_ms: u64,
+        captured_at: SystemTime,
+    ) -> OcrResult {
         self.held_lines = 0;
         if !eligibility.requires_subtitle_shape() {
+            self.tracker = None;
             return result;
         }
-        if result.boxes.len() != result.lines.len() || result.lines.is_empty() {
+        if result.lines.is_empty() {
+            if let Some(tracker) = &mut self.tracker {
+                tracker.observe(&[], &[], at_ms);
+            }
+            super::band_log::record_gate(&result, at_ms, captured_at, &[], &[]);
+            return result;
+        }
+        if result.boxes.len() != result.lines.len() {
             return result;
         }
 
@@ -87,8 +113,14 @@ impl BandFilter {
         self.tracker = Some(tracker);
         let tracker = self.tracker.as_mut().expect("just stored");
 
-        let at_ms = self.started.elapsed().as_millis() as u64;
         let banding = tracker.observe(&result.lines, &result.boxes, at_ms);
+        for decision in banding.decisions.iter().filter(|decision| decision.changed) {
+            debug!(
+                "[BAND decision] ms={} band={} cue={} raw={:?} settled={:?} new={} recovered={} reason={}",
+                at_ms, decision.band_id, decision.cue_id, decision.raw, decision.settled,
+                decision.cue_changed, decision.recovered, decision.settled.reason().unwrap_or("admitted")
+            );
+        }
 
         self.held_lines = banding.dropped.iter().map(|band| band.lines).sum();
         for band in &banding.dropped {
@@ -111,6 +143,7 @@ impl BandFilter {
                 boxes.push(result.boxes[*index]);
             }
         }
+        super::band_log::record_gate(&result, at_ms, captured_at, &banding.decisions, &lines);
         OcrResult::with_boxes(lines, boxes, width)
     }
 }
@@ -123,9 +156,31 @@ mod tests {
     const SUBTITLE: Eligibility = Eligibility::SubtitleLike;
     const ANY_TEXT: Eligibility = Eligibility::AnyText;
 
+    impl BandFilter {
+        fn apply(&mut self, result: OcrResult, eligibility: Eligibility) -> OcrResult {
+            self.apply_captured(result, eligibility, SystemTime::UNIX_EPOCH)
+        }
+
+        fn apply_at(
+            &mut self,
+            result: OcrResult,
+            eligibility: Eligibility,
+            at_ms: u64,
+        ) -> OcrResult {
+            self.apply_frame(result, eligibility, at_ms, SystemTime::UNIX_EPOCH)
+        }
+    }
+
     fn frame(y: f32, width: f32, chars: usize) -> OcrResult {
+        let cues = [
+            "Please wait by the entrance.",
+            "I thought you had already left.",
+            "Where were you last night?",
+            "We should talk about this tomorrow.",
+            "The trains had stopped.",
+        ];
         OcrResult::with_boxes(
-            vec!["x".repeat(chars)],
+            vec![cues[chars % cues.len()].to_owned()],
             vec![LineBox {
                 x: 700.0,
                 y,
@@ -157,7 +212,11 @@ mod tests {
         // interval, which is dialogue. Changing every frame would be credits.
         for step in 0..40 {
             let cue = step / 8 % 5;
-            last = filter.apply(frame(1000.0, 300.0 + cue as f32 * 60.0, 20 + cue), SUBTITLE);
+            last = filter.apply_at(
+                frame(1000.0, 300.0 + cue as f32 * 60.0, 20 + cue),
+                SUBTITLE,
+                step as u64 * 250,
+            );
         }
         assert!(!last.is_empty(), "a subtitle band must keep being read");
     }
@@ -187,14 +246,14 @@ mod tests {
     #[test]
     fn changing_the_frame_size_starts_the_bands_over() {
         let mut filter = BandFilter::new(250);
-        for _ in 0..40 {
-            filter.apply(frame(1000.0, 300.0, 20), SUBTITLE);
+        for step in 0..40 {
+            filter.apply_at(frame(1000.0, 300.0, 20), SUBTITLE, step * 250);
         }
         let mut narrower = frame(1000.0, 300.0, 20);
         narrower.frame_width = 900.0;
         // A brand new tracker knows nothing, so it holds the first sighting
         // back as a glimpse rather than applying the old band's verdict.
-        assert!(filter.apply(narrower, SUBTITLE).is_empty());
+        assert!(filter.apply_at(narrower, SUBTITLE, 10_000).is_empty());
     }
 
     // Page text, application UI, and slides hold still and hold the same words,
@@ -207,9 +266,9 @@ mod tests {
         let mut anything = BandFilter::new(250);
         let mut last_subtitles = OcrResult::empty();
         let mut last_anything = OcrResult::empty();
-        for _ in 0..40 {
-            last_subtitles = subtitles.apply(frame(1000.0, 300.0, 20), SUBTITLE);
-            last_anything = anything.apply(frame(1000.0, 300.0, 20), ANY_TEXT);
+        for step in 0..40 {
+            last_subtitles = subtitles.apply_at(frame(1000.0, 300.0, 20), SUBTITLE, step * 250);
+            last_anything = anything.apply_at(frame(1000.0, 300.0, 20), ANY_TEXT, step * 250);
         }
         assert!(
             last_subtitles.is_empty(),

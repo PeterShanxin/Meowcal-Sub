@@ -1,30 +1,6 @@
-// =============================================================================
-// BAND_VERDICT.RS - deciding whether a horizontal band holds subtitles
-// =============================================================================
-// A capture region taller than one subtitle contains three kinds of text, and
-// they have to be told apart without knowing what any of them says.
-//
-// Measured over 32 minutes of a real session (docs/evidence, 1832x1091 capture,
-// 5522 frames, 20 bands), the three separate cleanly on two axes:
-//
-//                          centre scatter    distinct cues per minute on screen
-//   scene text                389 - 575 px          67 - 202
-//   SUBTITLES                  96 - 172 px          37 -  44
-//   a frozen screen            56 - 115 px         2.2 - 2.5
-//
-// Subtitles sit in the middle of both columns, which is why one signal cannot
-// do this. Scene text - a newspaper in shot, a sign - wanders horizontally as
-// the camera moves and is re-read differently every frame. A static overlay
-// holds still and holds the same words for minutes. A subtitle holds its
-// position and changes every few seconds.
-//
-// Vertical position is deliberately absent. Roughly one subtitle in ten sits at
-// the top of the frame rather than the bottom, so a rule preferring the bottom
-// band scores ninety percent and fails precisely the cases the feature exists
-// to handle. On the measured session these two signals kept 42 of 42 top-band
-// cues without ever consulting y.
-// =============================================================================
-
+//! Raw spatial and turnover evidence for diagnostics. `TrackedBand::settle`
+//! combines it with confirmed text identity before admitting a reading. Slow
+//! turnover alone cannot veto a new cue. Vertical position is not a criterion.
 /// Largest centre-line wander, as a fraction of the capture region's width,
 /// that still counts as holding position.
 ///
@@ -40,7 +16,7 @@ const MAX_CENTRE_SCATTER: f32 = 0.15;
 /// rate. Expressed per minute *on screen* rather than per minute of session, so
 /// a band that appears rarely - which is what the top band does - is judged on
 /// how it behaves while it is up, not on how often it is up.
-const MIN_CUE_RATE_PER_MINUTE: f32 = 10.0;
+pub(super) const MIN_CUE_RATE_PER_MINUTE: f32 = 10.0;
 
 /// Most distinct readings per minute on screen that still counts as a subtitle.
 ///
@@ -50,7 +26,7 @@ const MIN_CUE_RATE_PER_MINUTE: f32 = 10.0;
 /// and so translated in full. Text that turns over four times faster than
 /// dialogue is not dialogue. Measured subtitles reached 44 and the slowest thing
 /// that was not a subtitle 67, in either session; this sits between them.
-const MAX_CUE_RATE_PER_MINUTE: f32 = 55.0;
+pub(super) const MAX_CUE_RATE_PER_MINUTE: f32 = 55.0;
 
 /// Observations a band needs before it is worth translating at all.
 ///
@@ -178,48 +154,6 @@ pub fn classify(stats: &BandStats, region_width: f32) -> Verdict {
     }
     Verdict::Subtitle
 }
-
-/// Whether two readings of a band are the same cue still on screen.
-///
-/// Windows OCR misreads roughly a character in three, so comparing the text
-/// itself - or a digest of it - reports a change on almost every frame and makes
-/// a motionless subtitle indistinguishable from an animation. The bounding box
-/// width and the character count both survive a wrong glyph, and both move when
-/// the cue genuinely changes.
-///
-/// The slacks are measured against the *larger* of the two readings. The wobble
-/// goes in both directions - issue #59 measured one static English cue read as
-/// 27, 27, 13, 16, 27 characters - and a tolerance anchored to the previous
-/// read alone lets a read that *grows* past the smaller count split one cue in
-/// two. Symmetric slacks judge the pair by how far apart they are, not by which
-/// arrived first.
-pub fn is_same_cue(width: f32, chars: usize, previous_width: f32, previous_chars: usize) -> bool {
-    let wider = previous_width.max(width);
-    let longer = previous_chars.max(chars);
-    let width_slack = (0.08 * wider).max(8.0);
-    let chars_slack = ((CHAR_COUNT_SLACK * longer as f32) as usize).max(2);
-    (width - previous_width).abs() <= width_slack && chars.abs_diff(previous_chars) <= chars_slack
-}
-
-/// How far the character count may wobble between two reads of one cue.
-///
-/// Fifteen percent was calibrated on Chinese, where a cue is a fixed number of
-/// glyphs and OCR either reads one or misreads it. English does not behave that
-/// way: it drops and merges whole words, and issue #59 measured a single
-/// unchanged subtitle read as 27, 27, 13, 16, 27 characters inside two seconds -
-/// a 52% swing on text that never changed.
-///
-/// Every one of those wobbles counted as a fresh cue, inflating the rate three-
-/// to fourfold and pushing a real subtitle band past `MAX_CUE_RATE_PER_MINUTE`
-/// into `Churning`. Fifty-five percent covers the measured swing in both
-/// directions - the 27 -> 13 drop and the 16 -> 27 growth are within the same
-/// tolerance because it is measured against the larger read.
-///
-/// Widening this cannot hide a real cue change, because the width test still has
-/// to pass as well - and it costs little in the other direction: merging two
-/// cues halves the rate, and measured subtitles ran at 37-44 against a floor of
-/// 10, so there is room to spare before a band would read as `Static`.
-const CHAR_COUNT_SLACK: f32 = 0.55;
 
 #[cfg(test)]
 mod tests {
@@ -357,38 +291,5 @@ mod tests {
         // Division by zero would otherwise produce an infinite rate and admit
         // anything at all.
         assert_eq!(classify(&stats(20, 10.0, 5, 0), REGION), Verdict::Static);
-    }
-
-    #[test]
-    fn a_misread_glyph_does_not_split_one_cue_in_two() {
-        // Same subtitle, one character read wrongly and the box a pixel wider.
-        assert!(is_same_cue(301.0, 23, 300.0, 23));
-        assert!(is_same_cue(300.0, 24, 300.0, 23));
-    }
-
-    // The measurement that moved `CHAR_COUNT_SLACK` from 15% to 55% (issue #59):
-    // one unchanged English subtitle read as 27, 27, 13, 16, 27 characters
-    // inside two seconds. Under the old slack the 27 -> 13 swing was a new cue
-    // every wobble, inflating the rate three- to fourfold and judging a real
-    // subtitle band `Churning`.
-    #[test]
-    fn the_measured_character_wobble_is_one_cue() {
-        assert!(is_same_cue(300.0, 27, 300.0, 27));
-        assert!(is_same_cue(300.0, 13, 300.0, 27));
-        assert!(is_same_cue(300.0, 16, 300.0, 27));
-        assert!(is_same_cue(300.0, 27, 300.0, 13));
-    }
-
-    #[test]
-    fn a_genuinely_different_cue_is_a_different_cue() {
-        assert!(!is_same_cue(520.0, 41, 300.0, 23));
-        assert!(!is_same_cue(300.0, 60, 300.0, 23));
-    }
-
-    // A short line has no room for a proportional tolerance, so the slack has a
-    // floor - otherwise every reading of a two-character cue is a new cue.
-    #[test]
-    fn short_lines_keep_a_usable_tolerance() {
-        assert!(is_same_cue(20.0, 3, 14.0, 2));
     }
 }
