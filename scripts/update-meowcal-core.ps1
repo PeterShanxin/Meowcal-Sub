@@ -12,13 +12,26 @@ Set-StrictMode -Version Latest
 
 $repository = "PeterShanxin/Meowcal-Sub"
 $apiVersion = 1
-$requiredCapabilities = @(
-    "status", "install", "ready", "complete", "shutdown", "ocrInitialize",
-    "ocrLanguages", "ocrRecognizeBgra"
-)
 $repositoryRoot = Split-Path -Parent $PSScriptRoot
+$defaultOutputPath = Join-Path $repositoryRoot "config\meowcal-core.lock.json"
 if (-not $OutputPath) {
-    $OutputPath = Join-Path $repositoryRoot "config\meowcal-core.lock.json"
+    $OutputPath = $defaultOutputPath
+}
+
+function Get-ConsumerCoreVersion {
+    $manifestPath = Join-Path $repositoryRoot "core\Cargo.toml"
+    if (-not (Test-Path -LiteralPath $manifestPath -PathType Leaf)) {
+        throw "Missing consumer Core manifest: $manifestPath"
+    }
+    $manifest = Get-Content -LiteralPath $manifestPath -Raw
+    $match = [regex]::Match(
+        $manifest,
+        '(?ms)^\[package\].*?^version\s*=\s*"(?<version>\d+\.\d+\.\d+)"'
+    )
+    if (-not $match.Success) {
+        throw "Consumer Core manifest must declare a major.minor.patch version."
+    }
+    return $match.Groups["version"].Value
 }
 
 function Write-Result {
@@ -50,26 +63,6 @@ function Write-Result {
     Write-Host $Message
 }
 
-function Get-PeMachine {
-    param([Parameter(Mandatory)][string]$Path)
-
-    $stream = [IO.File]::OpenRead($Path)
-    try {
-        $reader = [IO.BinaryReader]::new($stream)
-        try {
-            if ($stream.Length -lt 0x40 -or $reader.ReadUInt16() -ne 0x5A4D) {
-                throw "Core executable is not a PE file."
-            }
-            $stream.Position = 0x3C
-            $peOffset = $reader.ReadUInt32()
-            if ($peOffset + 6 -gt $stream.Length) { throw "Core PE header is truncated." }
-            $stream.Position = $peOffset
-            if ($reader.ReadUInt32() -ne 0x00004550) { throw "Core PE signature is invalid." }
-            return $reader.ReadUInt16()
-        } finally { $reader.Dispose() }
-    } finally { $stream.Dispose() }
-}
-
 function Get-ReleaseList {
     if ($ReleaseJsonPath) {
         if (-not (Test-Path -LiteralPath $ReleaseJsonPath -PathType Leaf)) {
@@ -78,18 +71,24 @@ function Get-ReleaseList {
         return @(Get-Content -LiteralPath $ReleaseJsonPath -Raw | ConvertFrom-Json)
     }
 
-    try {
-        return @(Invoke-RestMethod `
-            -Headers @{ Accept = "application/vnd.github+json"; "User-Agent" = "Meowcal-Core-Updater" } `
-            -Uri "https://api.github.com/repos/$repository/releases?per_page=100" `
-            -TimeoutSec 30)
-    } catch {
-        throw "Canonical Core release API request failed: $($_.Exception.Message)"
+    $releases = [System.Collections.Generic.List[object]]::new()
+    for ($page = 1; $page -le 100; $page++) {
+        try {
+            $pageReleases = @(Invoke-RestMethod `
+                -Headers @{ Accept = "application/vnd.github+json"; "User-Agent" = "Meowcal-Core-Updater" } `
+                -Uri "https://api.github.com/repos/$repository/releases?per_page=100&page=$page" `
+                -TimeoutSec 30)
+        } catch {
+            throw "Canonical Core release API request failed: $($_.Exception.Message)"
+        }
+        foreach ($release in $pageReleases) { [void]$releases.Add($release) }
+        if ($pageReleases.Count -lt 100) { break }
     }
+    return @($releases)
 }
 
 function Get-StableRelease {
-    param([Parameter(Mandatory)][object[]]$Releases)
+    param([AllowEmptyCollection()][object[]]$Releases = @())
 
     $candidates = foreach ($release in $Releases) {
         if ($release.draft -or $release.prerelease) { continue }
@@ -145,6 +144,32 @@ function Get-Checksum {
     return $match.Groups["hash"].Value
 }
 
+function Read-CurrentLock {
+    if (-not (Test-Path -LiteralPath $OutputPath -PathType Leaf)) { return $null }
+    try { $lock = Get-Content -LiteralPath $OutputPath -Raw | ConvertFrom-Json }
+    catch { throw "Existing Core lock is not valid JSON: $_" }
+
+    $properties = @($lock.PSObject.Properties.Name)
+    $required = @("schemaVersion", "repository", "tag", "coreVersion", "apiVersion", "architectures")
+    if (@($required | Where-Object { $_ -notin $properties }).Count -ne 0 -or
+        $lock.schemaVersion -ne 1 -or $lock.repository -ne $repository -or
+        $lock.apiVersion -ne $apiVersion -or
+        $lock.coreVersion -notmatch '^\d+\.\d+\.\d+$' -or
+        $lock.tag -ne "core-v$($lock.coreVersion)") {
+        throw "Existing Core lock has an invalid canonical identity or version."
+    }
+    foreach ($architecture in @("x64", "arm64")) {
+        $entry = $lock.architectures.$architecture
+        if ($null -eq $entry -or
+            $entry.asset -ne "meowcal-core-v$($lock.coreVersion)-windows-$architecture.zip" -or
+            $entry.sha256 -notmatch '^[0-9a-f]{64}$' -or
+            $entry.sha256 -eq ("0" * 64)) {
+            throw "Existing Core lock has an invalid $architecture identity."
+        }
+    }
+    return $lock
+}
+
 function Test-CoreArchive {
     param(
         [Parameter(Mandatory)][string]$ArchivePath,
@@ -163,73 +188,23 @@ function Test-CoreArchive {
     )
     try {
         New-Item -ItemType Directory -Path $temporaryDirectory | Out-Null
-        Add-Type -AssemblyName System.IO.Compression
-        Add-Type -AssemblyName System.IO.Compression.FileSystem
-        $zip = [IO.Compression.ZipFile]::OpenRead((Resolve-Path -LiteralPath $ArchivePath))
-        try {
-            $entries = @($zip.Entries)
-            $entryNames = @($entries | ForEach-Object FullName)
-            $expectedEntries = @("LICENSE", "meowcal-core.exe", "meowcal-core.json")
-            if ($entries.Count -ne 3 -or
-                @($entryNames | Where-Object { $_ -notin $expectedEntries }).Count -ne 0 -or
-                @($expectedEntries | Where-Object { $_ -notin $entryNames }).Count -ne 0) {
-                throw "Core $Architecture archive must contain only LICENSE, meowcal-core.exe, and meowcal-core.json at its root."
-            }
-            foreach ($entry in $entries) {
-                if ($entry.FullName -ne $entry.Name -or $entry.FullName.Contains("..")) {
-                    throw "Core $Architecture archive contains an unsafe path: $($entry.FullName)"
-                }
-            }
-        } finally { $zip.Dispose() }
-
-        [IO.Compression.ZipFile]::ExtractToDirectory(
-            (Resolve-Path -LiteralPath $ArchivePath), $temporaryDirectory
-        )
-        $metadataPath = Join-Path $temporaryDirectory "meowcal-core.json"
         $binaryPath = Join-Path $temporaryDirectory "meowcal-core.exe"
+        $metadataPath = Join-Path $temporaryDirectory "meowcal-core.json"
         $licensePath = Join-Path $temporaryDirectory "LICENSE"
-        try { $metadata = Get-Content -LiteralPath $metadataPath -Raw | ConvertFrom-Json }
-        catch { throw "Core $Architecture metadata is not valid JSON: $_" }
-        $expectedProperties = @(
-            "schemaVersion", "coreVersion", "apiVersion", "os", "architecture",
-            "executable", "executableSha256", "license", "licenseSha256"
-        )
-        $actualProperties = @($metadata.PSObject.Properties.Name)
-        if (@($actualProperties | Where-Object { $_ -notin $expectedProperties }).Count -ne 0 -or
-            @($expectedProperties | Where-Object { $_ -notin $actualProperties }).Count -ne 0) {
-            throw "Core $Architecture metadata fields do not match schema 1."
-        }
-        if ($metadata.schemaVersion -ne 1 -or $metadata.coreVersion -ne $Version -or
-            $metadata.apiVersion -ne $apiVersion -or $metadata.os -ne "windows" -or
-            $metadata.architecture -ne $Architecture -or $metadata.executable -ne "meowcal-core.exe" -or
-            $metadata.license -ne "LICENSE") {
-            throw "Core $Architecture package metadata does not match the release contract."
-        }
-        if ($metadata.executableSha256 -notmatch '^[0-9a-f]{64}$' -or
-            $metadata.licenseSha256 -notmatch '^[0-9a-f]{64}$') {
-            throw "Core $Architecture package metadata contains an invalid digest."
-        }
-        $binaryHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $binaryPath).Hash.ToLowerInvariant()
-        if ($binaryHash -ne $metadata.executableSha256) {
-            throw "Core $Architecture executable SHA-256 does not match package metadata."
-        }
-        $licenseHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $licensePath).Hash.ToLowerInvariant()
-        if ($licenseHash -ne $metadata.licenseSha256) {
-            throw "Core $Architecture license SHA-256 does not match package metadata."
-        }
-        $expectedMachine = if ($Architecture -eq "arm64") { 0xAA64 } else { 0x8664 }
-        if ((Get-PeMachine -Path $binaryPath) -ne $expectedMachine) {
-            throw "Core $Architecture executable PE machine does not match the package architecture."
-        }
+        & (Join-Path $PSScriptRoot "verify-core-package.ps1") `
+            -ArchivePath $ArchivePath `
+            -ExpectedVersion $Version `
+            -ExpectedApiVersion $apiVersion `
+            -ExpectedArchitecture $Architecture `
+            -ExpectedArchiveSha256 $ExpectedChecksum `
+            -DestinationPath $binaryPath `
+            -MetadataDestinationPath $metadataPath `
+            -LicenseDestinationPath $licensePath | Out-Null
         if ($RunExecutableContract) {
-            $versionJson = & $binaryPath --version-json 2>$null
-            if ($LASTEXITCODE -ne 0) { throw "Core x64 executable did not answer --version-json." }
-            try { $versionInfo = $versionJson | ConvertFrom-Json }
-            catch { throw "Core x64 executable returned invalid --version-json output: $_" }
-            if ($versionInfo.version -ne $Version -or $versionInfo.api -ne $apiVersion -or
-                @($requiredCapabilities | Where-Object { $_ -notin $versionInfo.capabilities }).Count -ne 0) {
-                throw "Core x64 executable version, API, or capabilities do not match the v1 consumer contract."
-            }
+            & (Join-Path $PSScriptRoot "test-core-executable.ps1") `
+                -BinaryPath $binaryPath `
+                -ExpectedVersion $Version `
+                -ExpectedApiVersion $apiVersion | Out-Null
         }
         return $archiveHash
     } finally {
@@ -241,6 +216,7 @@ if (-not $AssetDirectory) {
     $AssetDirectory = Join-Path ([IO.Path]::GetTempPath()) (
         "meowcal-core-upgrade-assets-" + [guid]::NewGuid().ToString("N")
     )
+    New-Item -ItemType Directory -Path $AssetDirectory -Force | Out-Null
     $removeAssetDirectory = $true
 } else {
     New-Item -ItemType Directory -Path $AssetDirectory -Force | Out-Null
@@ -256,6 +232,18 @@ try {
     $release = $stable.Release
     $version = $stable.Version
     $tag = [string]$release.tag_name
+    if ([IO.Path]::GetFullPath($OutputPath) -eq [IO.Path]::GetFullPath($defaultOutputPath)) {
+        $consumerVersion = Get-ConsumerCoreVersion
+        if ($version -ne $consumerVersion) {
+            throw "Stable Core release $tag does not match consumer Core version $consumerVersion."
+        }
+    }
+    $current = Read-CurrentLock
+    if ($current -and [version]$current.coreVersion -gt [version]$version) {
+        Write-Result -Status "unchanged" -Message "Core lock already covers $($current.coreVersion); no upgrade is needed." `
+            -Version $current.coreVersion -Tag $current.tag
+        return
+    }
     $assetNames = @(
         "meowcal-core-v$version-windows-x64.zip",
         "meowcal-core-v$version-windows-x64.zip.sha256",
@@ -278,13 +266,7 @@ try {
     $arm64ArchiveHash = Test-CoreArchive -ArchivePath $assets[$arm64Asset] -ExpectedChecksum $arm64Checksum `
         -Version $version -Architecture arm64
 
-    $current = $null
-    if (Test-Path -LiteralPath $OutputPath -PathType Leaf) {
-        try { $current = Get-Content -LiteralPath $OutputPath -Raw | ConvertFrom-Json }
-        catch { throw "Existing Core lock is not valid JSON: $_" }
-        if ($current.repository -ne $repository -or $current.coreVersion -notmatch '^\d+\.\d+\.\d+$') {
-            throw "Existing Core lock has an invalid canonical identity or version."
-        }
+    if ($current) {
         if ([version]$current.coreVersion -eq [version]$version -and
             ($current.architectures.x64.sha256 -ne $x64Checksum -or
              $current.architectures.arm64.sha256 -ne $arm64Checksum)) {
@@ -297,24 +279,11 @@ try {
         }
     }
 
-    $lock = [ordered]@{
-        schemaVersion = 1
-        repository = $repository
-        tag = $tag
-        coreVersion = $version
-        apiVersion = $apiVersion
-        architectures = [ordered]@{
-            x64 = [ordered]@{ asset = $x64Asset; sha256 = $x64Checksum }
-            arm64 = [ordered]@{ asset = $arm64Asset; sha256 = $arm64Checksum }
-        }
-    }
-    $outputDirectory = Split-Path -Parent $OutputPath
-    if ($outputDirectory) { New-Item -ItemType Directory -Path $outputDirectory -Force | Out-Null }
-    [IO.File]::WriteAllText(
-        $OutputPath,
-        (($lock | ConvertTo-Json -Depth 5) + "`n"),
-        [Text.UTF8Encoding]::new($false)
-    )
+    & (Join-Path $PSScriptRoot "write-meowcal-core-lock.ps1") `
+        -Version $version `
+        -X64ChecksumPath $assets[$assetNames[1]] `
+        -Arm64ChecksumPath $assets[$assetNames[3]] `
+        -OutputPath $OutputPath | Out-Null
     Write-Result -Status "updated" -Message "Prepared exact Meowcal Core $version lock from $tag (x64 $x64ArchiveHash; arm64 $arm64ArchiveHash)." `
         -Version $version -Tag $tag -Changed $true
 } finally {

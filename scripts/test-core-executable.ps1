@@ -11,9 +11,29 @@ if (-not (Test-Path -LiteralPath $BinaryPath -PathType Leaf)) {
     throw "Core executable is missing: $BinaryPath"
 }
 
-$versionJson = & $BinaryPath --version-json
-if ($LASTEXITCODE -ne 0) {
-    throw "Core executable did not answer --version-json."
+$probeDirectory = Join-Path ([IO.Path]::GetTempPath()) (
+    "meowcal-core-version-probe-" + [guid]::NewGuid().ToString("N")
+)
+try {
+    New-Item -ItemType Directory -Path $probeDirectory | Out-Null
+    $stdoutPath = Join-Path $probeDirectory "stdout.txt"
+    $stderrPath = Join-Path $probeDirectory "stderr.txt"
+    $process = Start-Process -FilePath $BinaryPath -ArgumentList "--version-json" `
+        -RedirectStandardOutput $stdoutPath -RedirectStandardError $stderrPath `
+        -WindowStyle Hidden -PassThru
+    if (-not $process.WaitForExit(15000)) {
+        Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
+        throw "Core executable timed out while answering --version-json."
+    }
+    if ($process.ExitCode -ne 0) {
+        throw "Core executable did not answer --version-json."
+    }
+    $versionJson = Get-Content -LiteralPath $stdoutPath -Raw
+} finally {
+    if ($null -ne $process -and -not $process.HasExited) {
+        Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
+    }
+    Remove-Item -LiteralPath $probeDirectory -Recurse -Force -ErrorAction SilentlyContinue
 }
 try {
     $versionInfo = $versionJson | ConvertFrom-Json

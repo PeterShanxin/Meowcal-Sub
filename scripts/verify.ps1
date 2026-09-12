@@ -8,7 +8,12 @@ param(
     # both shipped architectures, because the crate compiles genuinely different
     # code for each - see the cfg(target_arch) split in `engine_launch.rs`.
     [ValidateSet("host", "aarch64-pc-windows-msvc", "x86_64-pc-windows-msvc")]
-    [string]$Target = "host"
+    [string]$Target = "host",
+
+    # A reviewed lock is the default consumer path when one exists. Keep the
+    # source-built Core candidate available for development and Core changes,
+    # but require callers to opt into it once a lock has been reviewed.
+    [switch]$CoreSourceCandidate
 )
 
 $ErrorActionPreference = "Stop"
@@ -33,6 +38,7 @@ $repositoryRoot = Split-Path -Parent $PSScriptRoot
 $resourceScript = Join-Path $PSScriptRoot "prepare-validation-resources.ps1"
 $contractTest = Join-Path $PSScriptRoot "tests\verify.Tests.ps1"
 $corePackageTest = Join-Path $PSScriptRoot "tests\core-package.Tests.ps1"
+$coreUpgradeTest = Join-Path $PSScriptRoot "tests\core-upgrade.Tests.ps1"
 $engineSupportTest = Join-Path $PSScriptRoot "tests\engine-support.Tests.ps1"
 $devEnvironmentTest = Join-Path $PSScriptRoot "tests\dev-environment.Tests.ps1"
 $rustDirectory = Join-Path $repositoryRoot "src-tauri"
@@ -127,6 +133,11 @@ if ($env:MEOWCAL_VERIFY_CONTRACT_ACTIVE -ne "1") {
     if ($LASTEXITCODE -ne 0) {
         exit $LASTEXITCODE
     }
+    Write-Host "==> Core upgrade automation contract tests" -ForegroundColor Cyan
+    & pwsh -NoProfile -File $coreUpgradeTest
+    if ($LASTEXITCODE -ne 0) {
+        exit $LASTEXITCODE
+    }
     Write-Host "==> Engine support contract tests" -ForegroundColor Cyan
     & pwsh -NoProfile -File $engineSupportTest
     if ($LASTEXITCODE -ne 0) {
@@ -179,6 +190,21 @@ if ($Stage -in @("All", "Lint", "Test")) {
             -BinaryPath $coreBinary | Out-Null
         if ($LASTEXITCODE -ne 0) {
             exit $LASTEXITCODE
+        }
+
+        $coreLockPath = Join-Path $repositoryRoot "config\meowcal-core.lock.json"
+        if ((Test-Path -LiteralPath $coreLockPath -PathType Leaf) -and -not $CoreSourceCandidate) {
+            Write-Host "==> Fetch reviewed Core release" -ForegroundColor Cyan
+            & (Join-Path $PSScriptRoot "fetch-meowcal-core.ps1") `
+                -Architecture $coreArchitecture `
+                -LockPath $coreLockPath | Out-Null
+            if ($LASTEXITCODE -ne 0) {
+                exit $LASTEXITCODE
+            }
+        } elseif ($CoreSourceCandidate) {
+            Write-Host "Using explicit source-built Core candidate." -ForegroundColor Yellow
+        } else {
+            Write-Host "No reviewed Core lock exists; retaining the source-built candidate." -ForegroundColor Yellow
         }
     }
 }

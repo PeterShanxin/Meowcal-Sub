@@ -105,9 +105,16 @@ New-Item -ItemType Directory -Path $temporaryDirectory | Out-Null
 try {
     $assets = Join-Path $temporaryDirectory "assets"
     $noRelease = Join-Path $temporaryDirectory "no-release.json"
+    $emptyRelease = Join-Path $temporaryDirectory "empty-release.json"
     $lock = Join-Path $temporaryDirectory "lock.json"
     $result = Join-Path $temporaryDirectory "result.json"
     New-Item -ItemType Directory -Path $assets | Out-Null
+    [IO.File]::WriteAllText($emptyRelease, "[]`n", [Text.UTF8Encoding]::new($false))
+    $emptyResult = Invoke-Updater -ReleasePath $emptyRelease -AssetDirectory $assets `
+        -LockPath $lock -ResultPath $result
+    if ($emptyResult.status -ne "no-release" -or (Test-Path $lock)) {
+        throw "An empty release list must not create a Core lock."
+    }
     $noReleaseData = @(
         [ordered]@{ tag_name = "core-v9.9.9"; draft = $false; prerelease = $true; assets = @() },
         [ordered]@{ tag_name = "v0.7.0"; draft = $false; prerelease = $false; assets = @() }
@@ -145,7 +152,7 @@ try {
     $badApiRelease = Join-Path $temporaryDirectory "bad-api.json"
     New-ReleaseFixture -Path $badApiRelease -Version "0.3.0" -AssetDirectory $badApiAssets -ApiVersion 2
     Assert-Throws { Invoke-Updater -ReleasePath $badApiRelease -AssetDirectory $badApiAssets `
-        -LockPath (Join-Path $temporaryDirectory "api-fail.json") -ResultPath $result } "metadata does not match"
+        -LockPath (Join-Path $temporaryDirectory "api-fail.json") -ResultPath $result } "API version"
 
     $olderAssets = Join-Path $temporaryDirectory "older-assets"
     New-Item -ItemType Directory -Path $olderAssets | Out-Null
@@ -158,7 +165,8 @@ try {
     $workflow = Get-Content -LiteralPath (Join-Path $repositoryRoot ".github\workflows\core-upgrade.yml") -Raw
     foreach ($requirement in @(
         'schedule:', 'workflow_dispatch:', 'CORE_UPGRADE_TOKEN',
-        'peter-evans/create-pull-request@22a9089034f40e5a961c8808d113e2c98fb63676'
+        'peter-evans/create-pull-request@22a9089034f40e5a961c8808d113e2c98fb63676',
+        'draft: true', 'config/meowcal-core.lock.json', 'RUNNER_TEMP'
     )) {
         if ($workflow -notmatch [regex]::Escape($requirement)) {
             throw "Core upgrade workflow is missing $requirement."
@@ -170,6 +178,9 @@ try {
     }
     if ($workflow -match 'token:\s*\$\{\{\s*github\.token') {
         throw "Core upgrade PR creation must use an explicitly configured token so pull_request CI is emitted."
+    }
+    if ($workflow -match '(?ms)^\s{4}env:\s*\r?\n\s+CORE_UPGRADE_TOKEN:') {
+        throw "Core upgrade token must not be available to the whole job."
     }
 
     Write-Host "Core upgrade automation tests passed." -ForegroundColor Green
