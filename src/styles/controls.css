@@ -293,4 +293,5 @@
 
 .slider:focus-visible {
   outline-offset: 4px;
+  border-radius: 12px;
 }

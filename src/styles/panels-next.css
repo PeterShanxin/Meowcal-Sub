@@ -42,7 +42,8 @@
   display: grid;
   place-items: end center;
   min-height: 150px;
-  padding: 0 16px 20px;
+  /* The top padding keeps a large, wrapped plate clear of the Preview tag. */
+  padding: 34px 16px 20px;
   overflow: hidden;
   border: 1px solid var(--line);
   border-radius: var(--radius-lg);
