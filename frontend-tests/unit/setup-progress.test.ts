@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  activateStage,
   classifyWizardOutput,
   describeProgress,
   failCurrentStage,
@@ -95,5 +96,30 @@ describe("setup failure", () => {
 
     expect(failure.stages.at(-1)?.state).toBe("error");
     expect(failure.message).toMatch(/sample translation failed/i);
+  });
+});
+
+describe("setup stage transitions", () => {
+  // Core's last install line says the engine was verified, which leaves the
+  // verify stage running when setup moves on to starting the service.
+  it("finishes every earlier stage when a later one starts", () => {
+    const next = activateStage(withStates("complete", "complete", "active"), 3);
+
+    expect(next.map((stage) => stage.state)).toEqual([
+      "complete",
+      "complete",
+      "complete",
+      "active",
+      "pending",
+    ]);
+  });
+
+  it("blames the start stage when the service fails after verification", () => {
+    const failure = failCurrentStage(
+      activateStage(withStates("complete", "complete", "active"), 3),
+    );
+
+    expect(failure.stages[3].state).toBe("error");
+    expect(failure.message).toMatch(/didn’t start/);
   });
 });

@@ -4,11 +4,11 @@ import type { AppSettings, EngineStatus } from "./contracts";
 import { applyLanguageSelection, ensureDistinctLanguagePair } from "./languages";
 import { pickSampleTranslation } from "./sample-translations";
 import {
+  activateStage,
   classifyWizardOutput,
   failCurrentStage,
   initialStages,
   type SetupStage,
-  type StageState,
 } from "./setup-progress";
 import { renderFooter, renderStep, type CopyState, type SampleResult } from "./setup-steps";
 import "./meowcal-titlebar";
@@ -129,10 +129,7 @@ export class MeowcalSetup extends LitElement {
     this.supportCode = "";
     this.copyState = "idle";
     this.details = [];
-    this.stages = initialStages().map((stage, index) => ({
-      ...stage,
-      state: index === 0 ? "active" : "pending",
-    }));
+    this.stages = activateStage(initialStages(), 0);
     try {
       if (this.settings) {
         await window.TauriBridge.invoke("save_settings", { settings: this.settings });
@@ -145,20 +142,16 @@ export class MeowcalSetup extends LitElement {
 
   private advanceForLine(line: string, stream?: string): void {
     const { activeStage } = classifyWizardOutput(line, stream);
-    this.stages = this.stages.map((stage, index) => ({
-      ...stage,
-      state: index < activeStage ? "complete" : index === activeStage ? "active" : "pending",
-    }));
+    this.stages = activateStage(this.stages, activeStage);
   }
 
   private async verifyReady(): Promise<void> {
     try {
-      this.setStage(3, "active");
+      this.stages = activateStage(this.stages, 3);
       await window.TauriBridge.invoke("wizard_start_service");
       const engine = await window.TauriBridge.invoke<EngineStatus>("refresh_engine_status");
       if (engine.phase !== "ready" || !engine.serviceRunning) throw new Error("ENGINE_NOT_READY");
-      this.setStage(3, "complete");
-      this.setStage(4, "active");
+      this.stages = activateStage(this.stages, 4);
       if (!this.settings) throw new Error("SETTINGS_UNAVAILABLE");
       const { sourceLanguage, targetLanguage } = this.settings;
       const sourceText = pickSampleTranslation(sourceLanguage);
@@ -170,18 +163,12 @@ export class MeowcalSetup extends LitElement {
       if (!sample.translatedText) throw new Error("ENGINE_SAMPLE_TRANSLATION_FAILED");
       this.sample = sample;
       this.sampleSource = sourceText;
-      this.setStage(4, "complete");
+      this.stages = this.stages.map((stage) => ({ ...stage, state: "complete" as const }));
       this.working = false;
       this.step = 4;
     } catch (error) {
       this.fail(this.message(error));
     }
-  }
-
-  private setStage(index: number, state: StageState): void {
-    this.stages = this.stages.map((stage, stageIndex) =>
-      stageIndex === index ? { ...stage, state } : stage,
-    );
   }
 
   private fail(error: string): void {

@@ -48,6 +48,14 @@ export function classifyWizardOutput(line: string, stream?: string): WizardOutpu
   return { activeStage, isDiagnostic: stream === "stderr" };
 }
 
+/** Starts one stage: every stage before it has finished and none after it has begun. */
+export function activateStage(stages: readonly SetupStage[], active: number): SetupStage[] {
+  return stages.map((stage, index) => ({
+    ...stage,
+    state: index < active ? "complete" : index === active ? "active" : "pending",
+  }));
+}
+
 /**
  * Fails the stage that was running and says what to do about it. Every stage
  * before it had finished, so it is shown as done; the failure copy belongs to
