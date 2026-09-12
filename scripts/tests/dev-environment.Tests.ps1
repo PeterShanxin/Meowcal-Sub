@@ -188,6 +188,12 @@ foreach ($launcher in @("dev-tauri.cmd", "dev-browser.cmd")) {
 # be mistaken for a resolved one. That is why the helper writes MEOWCAL_RESOLVED_*
 # names it alone produces, rather than the variables they become.
 $tauriLauncher = Get-Content -LiteralPath (Join-Path $repositoryRoot "dev-tauri.cmd") -Raw
+Assert-True ($tauriLauncher -match 'set "MEOWCAL_PS=pwsh"') `
+    "Tauri development must use the documented PowerShell 7 prerequisite."
+Assert-True ($tauriLauncher -notmatch '(?m)^powershell\s') `
+    "Tauri preparation must not switch back to Windows PowerShell."
+Assert-True ($tauriLauncher -match '%MEOWCAL_PS%[^\r\n]+scripts\\prepare-core-resource\.ps1') `
+    "Core preparation must use the resolved PowerShell 7 executable."
 $browserLauncher = Get-Content -LiteralPath (Join-Path $repositoryRoot "dev-browser.cmd") -Raw
 
 foreach ($name in @("MEOWCAL_RESOLVED_VSDEVCMD", "MEOWCAL_RESOLVED_HOST_ARCH")) {

@@ -63,13 +63,15 @@ fn development_path_matches_the_compiled_runtime_selection() {
     if std::env::var_os("MEOWCAL_CORE_EXECUTABLE").is_some() {
         return;
     }
-    let path =
-        resolve_executable("development", Path::new("")).expect("development path should resolve");
+    let manifest_root = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let path = resolve_executable("development", manifest_root)
+        .expect("headless development path should resolve");
+    assert!(path.is_absolute());
     if CORE_SOURCE_CANDIDATE {
         assert!(path.ends_with(Path::new("release/meowcal-core.exe")));
         assert!(path.is_absolute());
     } else {
-        assert_eq!(path, PathBuf::from("resources/core/meowcal-core.exe"));
+        assert_eq!(path, manifest_root.join("resources/core/meowcal-core.exe"));
     }
 }
 

@@ -24,7 +24,7 @@ pub fn register_headless(
     legacy_roots: Vec<PathBuf>,
 ) -> Result<(), String> {
     set_launch(
-        resolve_executable("development", Path::new(""))?,
+        resolve_executable("development", Path::new(env!("CARGO_MANIFEST_DIR")))?,
         "development",
     )?;
     configure_storage(storage_root, legacy_roots)

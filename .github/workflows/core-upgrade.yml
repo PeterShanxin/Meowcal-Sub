@@ -22,6 +22,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
         with:
+          ref: ${{ github.event.repository.default_branch }}
           persist-credentials: false
 
       - name: Resolve, verify, and prepare the lock
@@ -57,6 +58,7 @@ jobs:
         uses: peter-evans/create-pull-request@22a9089034f40e5a961c8808d113e2c98fb63676 # v7
         with:
           token: ${{ secrets.CORE_UPGRADE_TOKEN }}
+          base: ${{ github.event.repository.default_branch }}
           branch: automation/core-${{ steps.update.outputs.version }}
           delete-branch: false
           draft: true

@@ -12,8 +12,12 @@ REM Resolve the build directory, the Visual Studio installation, and the host
 REM architecture. A batch file cannot discover any of those, so
 REM scripts\dev-environment.ps1 decides them and prints KEY=VALUE lines; see that
 REM script for the rules and for the override variables it honours.
-set "MEOWCAL_PS=powershell"
-where pwsh >nul 2>&1 && set "MEOWCAL_PS=pwsh"
+set "MEOWCAL_PS=pwsh"
+where pwsh >nul 2>&1
+if %ERRORLEVEL% neq 0 (
+    echo ERROR: PowerShell 7 is required. Install it before starting development.
+    exit /b 1
+)
 
 REM Cleared first, so a missing line is unambiguously a failed resolution. The
 REM helper writes MEOWCAL_RESOLVED_* rather than the variables these become,
@@ -56,7 +60,7 @@ REM Core keeps its own target directory because the development client resolves
 REM core\target\<triple>\release\meowcal-core.exe directly. Core's debug OCR
 REM path is too slow to represent the product's normal development behavior.
 echo Building Meowcal Core for current architecture...
-powershell -ExecutionPolicy Bypass -File scripts\prepare-core-resource.ps1 -Architecture auto -Configuration Release
+%MEOWCAL_PS% -NoProfile -ExecutionPolicy Bypass -File scripts\prepare-core-resource.ps1 -Architecture auto -Configuration Release
 if %ERRORLEVEL% neq 0 (
     echo ERROR: Meowcal Core build failed
     popd
@@ -64,7 +68,7 @@ if %ERRORLEVEL% neq 0 (
 )
 
 echo Building OverlayHost for current architecture...
-powershell -ExecutionPolicy Bypass -File scripts\build-overlayhost.ps1 -Architecture auto
+%MEOWCAL_PS% -NoProfile -ExecutionPolicy Bypass -File scripts\build-overlayhost.ps1 -Architecture auto
 if %ERRORLEVEL% neq 0 (
     echo ERROR: OverlayHost build failed
     popd

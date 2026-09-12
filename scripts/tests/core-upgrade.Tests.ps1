@@ -191,6 +191,8 @@ try {
         'schedule:', 'workflow_dispatch:', 'CORE_UPGRADE_TOKEN',
         'peter-evans/create-pull-request@22a9089034f40e5a961c8808d113e2c98fb63676',
         'draft: true', 'config/meowcal-core.lock.json', 'RUNNER_TEMP',
+        'ref: ${{ github.event.repository.default_branch }}',
+        'base: ${{ github.event.repository.default_branch }}',
         '## Intent', '## Changes', '## Non-goals', '## Validation',
         '## Manual Windows validation', '## Risk and rollback', '## Issues',
         'Routine Core dependency update.', 'Contributor License Agreement'

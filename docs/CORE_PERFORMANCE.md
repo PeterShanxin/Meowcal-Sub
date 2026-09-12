@@ -26,7 +26,9 @@ for the normal four-per-second cadence. Keep both reports: pacing must not hide
 a regression under sustained work.
 
 For Sub 1, build `src-tauri/examples/ocr_benchmark.rs` with
-`cargo build --manifest-path src-tauri/Cargo.toml --release --example ocr_benchmark`.
+`cargo build --manifest-path src-tauri/Cargo.toml --release --features core-source-candidate --example ocr_benchmark`.
+The explicit feature keeps this candidate comparison independent of the reviewed
+release lock used by product builds.
 Build the same example in a separate pre-Core checkout, omitting only the two
 Core registration and shutdown statements. Keep all recognition calls and
 measurement code identical, and use the same release profile. Validation-only
