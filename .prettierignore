@@ -6,8 +6,5 @@ src/wizard.html
 src/scripts/overlay.js
 src/scripts/selector.js
 src/scripts/tauri-bridge.js
-src/styles/main.css
 src/styles/overlay.css
 src/styles/selector.css
-src/styles/settings.css
-src/styles/wizard.css
