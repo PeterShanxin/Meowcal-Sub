@@ -2,9 +2,11 @@ import { LitElement, html, nothing } from "lit";
 import { customElement, state } from "lit/decorators.js";
 import { AppController } from "./app-controller";
 import { renderAppearance } from "./appearance-view";
-import type { AppScreen, HomePresentation, UiSnapshot } from "./contracts";
+import type { AppScreen, HomePresentation, IconName, UiSnapshot } from "./contracts";
+import { describeError, type MessageAction, type MessagePresentation } from "./error-copy";
 import { deriveHomePresentation } from "./home-state";
 import { renderHome } from "./home-view";
+import { icon } from "./icons";
 import { renderSettings } from "./settings-view";
 import "./meowcal-titlebar";
 
@@ -56,21 +58,18 @@ export class MeowcalApp extends LitElement {
     }
   }
 
+  private runMessageAction(action: MessageAction): void {
+    this.controller.dismissMessage();
+    void (action === "selectRegion" ? this.controller.selectRegion() : this.controller.openSetup());
+  }
+
   private renderScreen() {
     const snapshot = this.snapshot;
     if (snapshot.screen === "appearance") {
       return renderAppearance(snapshot.settings.overlay, {
-        onPreset: (preset) => {
-          const values = {
-            cinema: { fontSize: 32, backgroundColor: "rgba(0, 0, 0, 0.72)" },
-            minimal: { fontSize: 25, backgroundColor: "rgba(0, 0, 0, 0.3)" },
-            contrast: { fontSize: 40, backgroundColor: "rgba(0, 0, 0, 0.94)" },
-          };
-          void this.controller.updateOverlay(values[preset]);
-        },
         onFontSize: (fontSize) => void this.controller.updateOverlay({ fontSize }),
-        onOpacity: (value) =>
-          void this.controller.updateOverlay({ backgroundColor: `rgba(0, 0, 0, ${value / 100})` }),
+        onLightBackground: (lightBackground) =>
+          void this.controller.updateOverlay({ lightBackground }),
       });
     }
     if (snapshot.screen === "settings") {
@@ -81,6 +80,7 @@ export class MeowcalApp extends LitElement {
         onRepair: () => void this.controller.openSetup(),
         onTest: () => void this.controller.testTranslation(),
         onDeveloper: (enabled) => this.controller.setDeveloperMode(enabled),
+        onDiagnostics: (showDiagnostics) => void this.controller.updateOverlay({ showDiagnostics }),
         onCheckUpdates: () => void this.controller.checkForUpdates(),
         onInstallUpdate: () => void this.controller.installUpdate(),
         onAutoCheckUpdates: (enabled) =>
@@ -97,7 +97,7 @@ export class MeowcalApp extends LitElement {
     });
   }
 
-  private navButton(screen: AppScreen, label: string, icon: string, hasIndicator = false) {
+  private navButton(screen: AppScreen, label: string, glyph: IconName, hasIndicator = false) {
     const selected = this.snapshot.screen === screen;
     return html`
       <button
@@ -106,13 +106,46 @@ export class MeowcalApp extends LitElement {
         aria-current=${selected ? "page" : nothing}
         @click=${() => this.controller.setScreen(screen)}
       >
-        <i class=${`ph ${icon}`} aria-hidden="true"></i><span>${label}</span>
+        ${icon(glyph)}<span>${label}</span>
         ${
           hasIndicator
             ? html`<span class="nav-indicator" role="status" aria-label="Update available"></span>`
             : nothing
         }
       </button>
+    `;
+  }
+
+  private renderMessage() {
+    const { error, notice } = this.snapshot;
+    if (!error && !notice) return nothing;
+    const message: MessagePresentation = error
+      ? describeError(error)
+      : { text: notice ?? "", action: null };
+    return html`
+      <div class=${error ? "toast error" : "toast notice"} role=${error ? "alert" : "status"}>
+        ${icon(error ? "alert" : "check-circle")}
+        <span class="toast-message">${message.text}</span>
+        ${
+          message.action
+            ? html`<button
+                type="button"
+                class="link-button"
+                @click=${() => this.runMessageAction(message.action!.kind)}
+              >
+                ${message.action.label}
+              </button>`
+            : nothing
+        }
+        <button
+          type="button"
+          class="toast-dismiss"
+          aria-label="Dismiss"
+          @click=${() => this.controller.dismissMessage()}
+        >
+          ${icon("close")}
+        </button>
+      </div>
     `;
   }
 
@@ -124,33 +157,12 @@ export class MeowcalApp extends LitElement {
         ${this.renderScreen()}
 
         <nav class="app-nav" aria-label="Main navigation">
-          ${this.navButton("home", "Home", "ph-house")}
-          ${this.navButton(
-            "appearance",
-            this.snapshot.running ? "Adjust overlay" : "Overlay appearance",
-            "ph-paint-brush",
-          )}
-          ${this.navButton(
-            "settings",
-            "Settings",
-            "ph-gear",
-            this.snapshot.update.kind === "available",
-          )}
+          ${this.navButton("home", "Home", "home")}
+          ${this.navButton("appearance", "Subtitle style", "subtitles")}
+          ${this.navButton("settings", "Settings", "gear", this.snapshot.update.kind === "available")}
         </nav>
 
-        ${
-          this.snapshot.error
-            ? html`<div class="toast error" role="alert">
-                <i class="ph ph-warning-circle" aria-hidden="true"></i>
-                <span>${this.snapshot.error}</span>
-              </div>`
-            : this.snapshot.notice
-              ? html`<div class="toast notice" role="status">
-                  <i class="ph ph-check-circle" aria-hidden="true"></i>
-                  <span>${this.snapshot.notice}</span>
-                </div>`
-              : nothing
-        }
+        ${this.renderMessage()}
       </div>
     `;
   }

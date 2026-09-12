@@ -9,15 +9,26 @@
 // is how the two paths drifted - the loader coerced with `||`, the patch
 // checked `typeof`, and neither was the stated rule.
 //
-// This module holds the rule and the defaults; the adapter keeps the DOM.
+// This module holds the rule and the defaults; the adapter keeps the DOM. The
+// main window loads it too, so both windows offer the same text-size range.
 (function exposeOverlayAppearance(root) {
+  // Below 20px a subtitle is unreadable at viewing distance (#75), so a smaller
+  // stored size is raised rather than honoured.
+  const FONT_SIZE_MIN = 20;
+  const FONT_SIZE_MAX = 48;
+
   const DEFAULT_APPEARANCE = Object.freeze({
-    fontSize: 24,
+    fontSize: 28,
     fontFamily: "Segoe UI",
     textColor: "#FFFFFF",
     lightBackground: false,
     showDiagnostics: false,
   });
+
+  function clampFontSize(value) {
+    if (!Number.isFinite(value)) return DEFAULT_APPEARANCE.fontSize;
+    return Math.min(FONT_SIZE_MAX, Math.max(FONT_SIZE_MIN, Math.round(value)));
+  }
 
   // Startup: a missing or falsy value takes the default, and the two toggles
   // are strictly boolean so an absent field can never read as "on".
@@ -25,7 +36,7 @@
     const settings = overlaySettings || {};
 
     return {
-      fontSize: settings.fontSize || DEFAULT_APPEARANCE.fontSize,
+      fontSize: clampFontSize(settings.fontSize || DEFAULT_APPEARANCE.fontSize),
       fontFamily: settings.fontFamily || DEFAULT_APPEARANCE.fontFamily,
       textColor: settings.textColor || DEFAULT_APPEARANCE.textColor,
       lightBackground: settings.lightBackground === true,
@@ -58,11 +69,19 @@
     take("textColor", "string");
     take("lightBackground", "boolean");
     take("showDiagnostics", "boolean");
+    next.fontSize = clampFontSize(next.fontSize);
 
     return { applied, next };
   }
 
-  const api = { DEFAULT_APPEARANCE, hydrateAppearance, patchAppearance };
+  const api = {
+    DEFAULT_APPEARANCE,
+    FONT_SIZE_MAX,
+    FONT_SIZE_MIN,
+    clampFontSize,
+    hydrateAppearance,
+    patchAppearance,
+  };
   if (typeof module === "object" && module.exports) {
     module.exports = api;
   }

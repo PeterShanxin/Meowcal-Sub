@@ -12,10 +12,10 @@ the measured coverage scope (#31 lifecycle, #32 engine/pipeline, #33 main/setup,
 
 - production files under `src/`, `src-tauri/src/`, and `core/src/`;
 - 400 lines maximum for a new `.rs`, `.js`, `.ts`, `.html`, or `.css` production file;
-- 13 explicit legacy files above that ceiling;
+- 10 explicit legacy files above that ceiling;
 - 1 existing ESLint warning, with zero allowed errors;
 - frontend coverage floors of 83% statements, 77% branches, 84% functions, and
-  86% lines, over a named 31-module scope.
+  86% lines, over a named 32-module scope.
 
 ## Frontend coverage scope
 
@@ -86,10 +86,10 @@ decomposition-owned hotspots are:
 | ------------------------------------ | ------: | ----------------- |
 | `src-tauri/src/llm/foundry_local.rs` |   1,561 | #32               |
 | `src-tauri/src/commands.rs`          |   1,090 | #31 / #32 surface |
-| `src/scripts/overlay.js`             |   1,062 | #34               |
+| `src/scripts/overlay.js`             |   1,046 | #34               |
 | `src-tauri/src/llm/context.rs`       |     732 | #32               |
 | `src-tauri/src/llm/manager.rs`       |     726 | #32               |
-| `src/scripts/selector.js`            |     721 | #34               |
+| `src/scripts/selector.js`            |     636 | #34               |
 | `src-tauri/src/config.rs`            |     595 | #31               |
 
 `main.rs` left the legacy list in the #31 lifecycle wave. `http_server.rs`

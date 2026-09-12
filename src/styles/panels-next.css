@@ -1,331 +1,175 @@
-.detail-screen {
-  padding: var(--space-5) clamp(24px, 6vw, 64px) var(--space-7);
-}
-
-.detail-heading {
-  max-width: 640px;
-  margin: 0 auto var(--space-5);
-  text-align: center;
-}
-
-.eyebrow {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-2);
-  color: var(--accent);
-  font-size: 12px;
-  font-weight: 650;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-}
-
-.detail-heading h1 {
-  margin: var(--space-2) 0 var(--space-2);
-  font-size: clamp(28px, 4.5vw, 38px);
-  letter-spacing: -0.03em;
-}
-
-.detail-heading p {
-  margin: 0;
-  color: var(--text-2);
-  font-size: 14px;
-}
-
-.preview-card,
-.settings-section,
-.advanced-panel {
-  width: min(100%, 640px);
+.page {
+  display: grid;
+  align-content: start;
+  gap: 10px;
+  width: min(100%, 680px);
   margin-inline: auto;
-  background: var(--surface-1);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-panel);
-  box-shadow: var(--shadow-control);
+  padding: 14px 28px;
 }
 
-.preview-card {
-  padding: var(--space-3);
+.page-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
 }
 
-.preview-label {
-  display: block;
-  margin: 0 0 var(--space-2) var(--space-1);
+.page-head h1 {
+  font-family: var(--font-display);
+  font-size: var(--type-page);
+  font-weight: 600;
+  line-height: 26px;
+}
+
+.page-head p {
   color: var(--text-3);
-  font-size: 12px;
+  font-size: var(--type-caption);
 }
+
+.group-label {
+  margin: 2px 0 -6px 2px;
+  color: var(--text-3);
+  font-size: var(--type-label);
+  font-weight: 600;
+}
+
+/* =============================================================================
+   SUBTITLE STYLE
+   ============================================================================= */
 
 .subtitle-preview {
+  position: relative;
   display: grid;
-  min-height: 130px;
-  padding: var(--space-4);
-  place-items: center;
+  place-items: end center;
+  min-height: 150px;
+  /* The top padding keeps a large, wrapped plate clear of the Preview tag. */
+  padding: 34px 16px 20px;
   overflow: hidden;
-  background: #132341 url("../assets/cinematic-background.png") center 62% / cover no-repeat;
-  border: 1px solid var(--border);
-  border-radius: 13px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  isolation: isolate;
 }
 
-.subtitle-preview span {
-  max-width: 96%;
-  padding: 7px 14px 9px;
-  overflow: hidden;
-  color: #fff;
-  border-radius: 8px;
-  line-height: 1.28;
-  text-align: center;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
+/* A desaturated scene, so the preview judges the plate rather than the photo. */
+.subtitle-preview::before {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  content: "";
+  background: url("../assets/cinematic-background.png") center 62% / cover no-repeat;
+  filter: grayscale(1) brightness(0.62) contrast(1.08);
 }
 
-.control-stack {
-  display: grid;
-  gap: var(--space-3);
-  width: min(100%, 640px);
-  margin: var(--space-4) auto 0;
-}
-
-.control-row,
-.setting-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: var(--space-4);
-  align-items: center;
-  min-height: 64px;
-  padding: var(--space-3) var(--space-4);
-  background: var(--surface-1);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-control);
-}
-
-.control-row > div:first-child,
-.control-row > span:first-child,
-.setting-row > span:first-child {
-  display: grid;
-  gap: 3px;
-}
-
-.control-row strong,
-.setting-row strong {
-  font-size: 14px;
-}
-
-.control-row small,
-.setting-row small {
-  color: var(--text-3);
-  font-size: 12px;
-}
-
-.segmented {
-  display: inline-flex;
-  padding: 3px;
-  background: rgba(8, 18, 39, 0.62);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-}
-
-.segmented button {
-  min-height: 34px;
-  padding: 0 12px;
-  color: var(--text-3);
-  background: transparent;
-  border: 0;
-  border-radius: 7px;
-  cursor: pointer;
-  font-size: 12px;
-}
-
-.segmented button.selected {
-  color: var(--text-1);
-  background: var(--accent-soft);
-}
-
-.slider-row {
-  grid-template-columns: minmax(150px, 1fr) minmax(160px, 1.2fr) 52px;
-}
-
-.slider-row input {
-  width: 100%;
-}
-
-.slider-row output {
+.preview-tag {
+  position: absolute;
+  top: 8px;
+  left: 10px;
+  padding: 0 6px;
   color: var(--text-2);
-  font-size: 13px;
+  background: rgba(6, 8, 12, 0.6);
+  border-radius: var(--radius-sm);
+  font-size: 11.5px;
+}
+
+/* Painted like the live overlay plate: a solid colour in one of the same two
+   schemes, seen through the overlay window's fixed alpha of 200/255
+   (OVERLAY_ALPHA in src-tauri/src/overlay/window_alpha.rs). */
+.subtitle-plate {
+  max-width: 100%;
+  opacity: 0.784;
+  padding: 8px 20px 10px;
+  color: #ffffff;
+  background: var(--plate-dark);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--inset-highlight);
+  font-weight: 500;
+  line-height: 1.4;
+  text-align: center;
+  text-wrap: balance;
+}
+
+.subtitle-plate.light {
+  color: var(--plate-light-ink);
+  background: var(--plate-light);
+  border-color: rgba(0, 0, 0, 0.08);
+  box-shadow: none;
+}
+
+.slider-control {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.slider-control output {
+  min-width: 44px;
+  color: var(--text-2);
+  font-size: var(--type-caption);
+  font-variant-numeric: tabular-nums;
   text-align: right;
 }
 
-.settings-screen {
-  display: grid;
-  align-content: start;
-  gap: var(--space-3);
-}
-
-.settings-screen .detail-heading {
-  margin-bottom: var(--space-2);
-}
-
-.settings-section {
-  padding: var(--space-3);
-}
-
-.section-heading {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  gap: var(--space-3);
-  align-items: start;
-  padding: var(--space-1) var(--space-1) var(--space-3);
-}
-
-.section-heading > i {
-  margin-top: 2px;
-  color: var(--accent);
-  font-size: 20px;
-}
-
-.section-heading h2,
-.section-heading p {
-  margin: 0;
-}
-
-.section-heading h2 {
-  font-size: 15px;
-}
-
-.section-heading p {
-  margin-top: 3px;
-  color: var(--text-3);
-  font-size: 12px;
-}
-
-.settings-section .setting-row {
-  background: rgba(7, 18, 40, 0.34);
-  border-color: rgba(191, 211, 255, 0.1);
-}
+/* =============================================================================
+   SETTINGS
+   ============================================================================= */
 
 /* Release notes arrive as plain text with the author's own line breaks. */
 .update-notes {
-  margin: var(--space-2) 0 0;
-  padding: var(--space-2);
-  max-height: 160px;
+  max-height: 140px;
+  margin: 0;
+  padding: 8px 12px;
   overflow-y: auto;
-  border-radius: 10px;
-  background: rgba(7, 18, 40, 0.34);
   color: var(--text-3);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
   font-family: inherit;
-  font-size: 12px;
+  font-size: var(--type-label);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
 
-.settings-section.compact {
-  display: grid;
-  gap: var(--space-2);
-}
-
-.settings-screen select {
-  min-width: 150px;
-  min-height: 40px;
-}
-
-.switch {
-  width: 20px;
-  height: 20px;
+.disclosure summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 4px;
+  color: var(--text-3);
+  border-radius: var(--radius-sm);
+  font-size: var(--type-caption);
+  list-style: none;
   cursor: pointer;
 }
 
-.status-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-2);
-  padding: 6px 10px;
-  border-radius: 999px;
-  font-size: 12px;
+.disclosure summary::-webkit-details-marker {
+  display: none;
 }
 
-.status-chip i {
-  font-size: 7px;
-}
-
-.status-chip.success {
-  color: var(--success);
-  background: rgba(85, 214, 153, 0.1);
-}
-
-.status-chip.warning {
-  color: var(--warning);
-  background: rgba(245, 188, 87, 0.1);
-}
-
-.section-actions {
-  display: flex;
-  gap: var(--space-2);
-  padding-top: var(--space-3);
-}
-
-.secondary-button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: var(--space-2);
-  min-height: 40px;
-  padding: 0 var(--space-4);
-  color: var(--text-2);
-  background: rgba(110, 168, 255, 0.08);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  cursor: pointer;
-}
-
-.secondary-button:hover {
+.disclosure summary:hover {
   color: var(--text-1);
-  border-color: var(--border-strong);
 }
 
-.advanced-panel {
-  padding: var(--space-3) var(--space-4);
+.disclosure summary .icon {
+  width: 13px;
+  height: 13px;
+  transition: transform var(--motion-fast);
 }
 
-.advanced-panel summary {
-  color: var(--text-2);
-  cursor: pointer;
-  font-size: 13px;
-  font-weight: 600;
+.disclosure[open] summary .icon {
+  transform: rotate(90deg);
 }
 
-.advanced-panel .setting-row {
-  margin-top: var(--space-3);
+.disclosure .list {
+  margin-top: 8px;
 }
 
 .developer-readout {
-  display: grid;
-  grid-template-columns: 1fr auto;
-  gap: var(--space-2) var(--space-4);
-  margin-top: var(--space-3);
-  padding: var(--space-3);
   color: var(--text-3);
-  background: rgba(7, 18, 40, 0.5);
-  border-radius: 10px;
-  font-size: 12px;
+  font-size: var(--type-label);
 }
 
 .developer-readout code {
   color: var(--text-2);
-}
-
-@media (max-width: 720px) {
-  .preset-row,
-  .slider-row {
-    grid-template-columns: 1fr;
-  }
-
-  .slider-row output {
-    display: none;
-  }
-
-  .segmented {
-    width: 100%;
-  }
-
-  .segmented button {
-    flex: 1;
-  }
+  font-family: var(--font-mono);
 }

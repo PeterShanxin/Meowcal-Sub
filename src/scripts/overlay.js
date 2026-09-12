@@ -14,7 +14,7 @@ const { pointInBounds, rectToPhysicalBounds, regionToPhysicalBounds } = window.O
 const { buildDiagnosticsText } = window.OverlayDiagnostics;
 const { frameScaleTokens, resolveSubtitlePlacement, roundedRectBounds } = window.OverlayGeometry;
 const { moveRegion, resizeRegion } = window.RegionGeometry;
-const { DEFAULT_APPEARANCE, hydrateAppearance, patchAppearance } = window.OverlayAppearance;
+const { DEFAULT_APPEARANCE, FONT_SIZE_MAX, FONT_SIZE_MIN, hydrateAppearance, patchAppearance } = window.OverlayAppearance;
 const { createTimerOwner } = window.OverlayTimers;
 
 // Smallest capture region a resize drag may leave behind. Larger than the
@@ -717,12 +717,8 @@ async function setupEventListeners(elements) {
             const { applied, next } = patchAppearance(overlayState, payload);
             Object.assign(overlayState, next);
 
-            if (applied.includes('fontSize')) {
-                const fontSizeSlider = document.getElementById('font-size-slider');
-                const fontSizeDisplay = document.getElementById('font-size-display');
-                if (fontSizeSlider) fontSizeSlider.value = overlayState.fontSize;
-                if (fontSizeDisplay) fontSizeDisplay.textContent = `${overlayState.fontSize}px`;
-            }
+            if (applied.includes('fontSize')) settingsMenuControls?.syncFontSize(overlayState.fontSize);
+            if (applied.includes('lightBackground')) settingsMenuControls?.syncPlate(overlayState.lightBackground);
 
             // Apply all styles to subtitle elements
             applyOverlayStyles();
@@ -732,12 +728,7 @@ async function setupEventListeners(elements) {
                 updateSubtitlePosition(subtitleContainer, overlayState.region);
             }
 
-            // Update diagnostics visibility
-            if (applied.includes('showDiagnostics')) {
-                updateDiagnosticsVisibility();
-                const diagnosticsToggle = document.getElementById('diagnostics-toggle');
-                if (diagnosticsToggle) diagnosticsToggle.checked = overlayState.showDiagnostics;
-            }
+            if (applied.includes('showDiagnostics')) updateDiagnosticsVisibility();
         });
 
         // Liveness: ready only after every required listener above registered (#112).
@@ -953,12 +944,6 @@ async function loadOverlaySettings() {
             // Apply diagnostics visibility
             updateDiagnosticsVisibility();
 
-            // Sync the toggle checkbox if it exists
-            const diag = document.getElementById('diagnostics-toggle');
-            if (diag) diag.checked = overlayState.showDiagnostics;
-            const light = document.getElementById('light-background-toggle');
-            if (light) light.checked = overlayState.lightBackground;
-
             console.log('🎨 Loaded overlay settings:', settings.overlay);
         }
     } catch (e) {
@@ -1016,19 +1001,22 @@ async function saveOverlaySettings() {
     }
 }
 
+// Lets a change made in the main window move the popup's own controls.
+let settingsMenuControls = null;
+
 function setupSettingsButton(button, menu, subtitleText, subtitleContainer) {
-    setupSettingsMenu({
+    const fontSizeSlider = document.getElementById('font-size-slider');
+    if (fontSizeSlider) Object.assign(fontSizeSlider, { min: FONT_SIZE_MIN, max: FONT_SIZE_MAX });
+    settingsMenuControls = setupSettingsMenu({
         button,
         menu,
         closeButton: document.getElementById('settings-close'),
-        fontSizeSlider: document.getElementById('font-size-slider'),
+        fontSizeSlider,
         fontSizeDisplay: document.getElementById('font-size-display'),
-        diagnosticsToggle: document.getElementById('diagnostics-toggle'),
-        lightToggle: document.getElementById('light-background-toggle'),
+        plateInputs: [...document.querySelectorAll('input[name="subtitle-plate"]')],
+        initialFontSize: overlayState.fontSize,
         initialLight: overlayState.lightBackground,
         onLight: (on) => { overlayState.lightBackground = on; applyOverlayStyles(); },
-        initialFontSize: overlayState.fontSize,
-        initialDiagnostics: overlayState.showDiagnostics,
         onOpenChange: (open) => {
             overlayState.settingsOpen = open;
             if (open) {
@@ -1044,10 +1032,6 @@ function setupSettingsButton(button, menu, subtitleText, subtitleContainer) {
             if (overlayState.region && subtitleContainer) {
                 updateSubtitlePosition(subtitleContainer, overlayState.region);
             }
-        },
-        onDiagnostics: (enabled) => {
-            overlayState.showDiagnostics = enabled;
-            updateDiagnosticsVisibility();
         },
         onCommit: () => saveOverlaySettings(),
     });

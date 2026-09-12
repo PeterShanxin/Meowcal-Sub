@@ -1,200 +1,231 @@
-import { html, type TemplateResult } from "lit";
-import type { UiSnapshot } from "./contracts";
+import { html, nothing, type TemplateResult } from "lit";
+import type { Tone, UiSnapshot } from "./contracts";
+import { icon } from "./icons";
 import { deriveUpdatePresentation } from "./update-state";
 
+type Recognition = "fast" | "balanced" | "accurate";
+
 interface SettingsActions {
-  onRecognition(value: "fast" | "balanced" | "accurate"): void;
+  onRecognition(value: Recognition): void;
   onContinuity(enabled: boolean): void;
   onTranslateAllOcrText(enabled: boolean): void;
   onRepair(): void;
   onTest(): void;
   onDeveloper(enabled: boolean): void;
+  onDiagnostics(enabled: boolean): void;
   onCheckUpdates(): void;
   onInstallUpdate(): void;
   onAutoCheckUpdates(enabled: boolean): void;
 }
 
-function recognition(snapshot: UiSnapshot): "fast" | "balanced" | "accurate" {
+interface EngineRow {
+  tone: Tone;
+  chip: string;
+  detail: string;
+  actionLabel: string;
+  actionIsPrimary: boolean;
+  canTest: boolean;
+}
+
+function recognition(snapshot: UiSnapshot): Recognition {
   const config = snapshot.settings.translation.ocr;
   if (config.enableMultiPass || config.validationStrictness === "strict") return "accurate";
   if (!config.preprocessingEnabled || config.validationStrictness === "permissive") return "fast";
   return "balanced";
 }
 
-function renderUpdates(snapshot: UiSnapshot, actions: SettingsActions): TemplateResult {
-  const update = deriveUpdatePresentation(snapshot.update, snapshot.appVersion);
-  const run = update.action === "install" ? actions.onInstallUpdate : actions.onCheckUpdates;
+function engineRow(snapshot: UiSnapshot): EngineRow {
+  const phase = snapshot.engine?.phase ?? "unknown";
+  if (snapshot.busy === "loading" || phase === "preparing") {
+    const chip = snapshot.busy === "loading" ? "Checking" : "Preparing";
+    return {
+      tone: "neutral",
+      chip,
+      detail: "Checking the engine on this PC",
+      actionLabel: "Repair",
+      actionIsPrimary: false,
+      canTest: false,
+    };
+  }
+  if (phase === "ready" || phase === "notRunning" || phase === "notrunning") {
+    return {
+      tone: "success",
+      chip: "Ready",
+      detail: "Installed and working",
+      actionLabel: "Repair",
+      actionIsPrimary: false,
+      canTest: true,
+    };
+  }
+  if (phase === "notInstalled" || phase === "notinstalled") {
+    return {
+      tone: "warning",
+      chip: "Not installed",
+      detail: "Set it up to start translating",
+      actionLabel: "Set up",
+      actionIsPrimary: true,
+      canTest: false,
+    };
+  }
+  return {
+    tone: "danger",
+    chip: "Needs repair",
+    detail: "Repair it before translating",
+    actionLabel: "Repair",
+    actionIsPrimary: true,
+    canTest: false,
+  };
+}
+
+function switchRow(
+  title: string,
+  detail: string,
+  checked: boolean,
+  onChange: (checked: boolean) => void,
+): TemplateResult {
   return html`
-    <section class="settings-section" aria-labelledby="updates-heading">
-      <div class="section-heading">
-        <i class="ph ph-arrow-circle-up" aria-hidden="true"></i>
-        <div>
-          <h2 id="updates-heading">Updates</h2>
-          <p>Get the latest fixes and improvements automatically or on demand.</p>
-        </div>
-      </div>
-      <label class="setting-row">
-        <span>
-          <strong>Automatically check for updates</strong>
-          <small>Checks at most once per day after startup</small>
+    <label class="list-row">
+      <span><strong>${title}</strong><small>${detail}</small></span>
+      <input
+        class="switch"
+        type="checkbox"
+        role="switch"
+        .checked=${checked}
+        @change=${(event: Event) => onChange((event.target as HTMLInputElement).checked)}
+      />
+    </label>
+  `;
+}
+
+function renderEngineAndUpdates(snapshot: UiSnapshot, actions: SettingsActions): TemplateResult {
+  const engine = engineRow(snapshot);
+  const update = deriveUpdatePresentation(snapshot.update, snapshot.appVersion);
+  const runUpdate = update.action === "install" ? actions.onInstallUpdate : actions.onCheckUpdates;
+  return html`
+    <h2 class="group-label">Engine and updates</h2>
+    <div class="list">
+      <div class="list-row">
+        <span><strong>Translation engine</strong><small>${engine.detail}</small></span>
+        <span class="row-end">
+          <span class=${`status-chip tone-${engine.tone}`}
+            ><span class="dot"></span>${engine.chip}</span
+          >
+          <button
+            class="secondary-button"
+            type="button"
+            title=${engine.canTest ? nothing : "Available once the engine is ready"}
+            @click=${actions.onTest}
+            ?disabled=${!engine.canTest || snapshot.busy !== "idle"}
+          >
+            Test
+          </button>
+          <button
+            class=${engine.actionIsPrimary ? "primary-button compact" : "secondary-button"}
+            type="button"
+            @click=${actions.onRepair}
+          >
+            ${icon("wrench")}${engine.actionLabel}
+          </button>
         </span>
-        <input
-          class="switch"
-          type="checkbox"
-          .checked=${snapshot.settings.autoCheckUpdates !== false}
-          @change=${(event: Event) =>
-            actions.onAutoCheckUpdates((event.target as HTMLInputElement).checked)}
-        />
-      </label>
-      <div class="setting-row">
+      </div>
+      ${switchRow(
+        "Automatically check for updates",
+        "At most once a day, after startup",
+        snapshot.settings.autoCheckUpdates !== false,
+        actions.onAutoCheckUpdates,
+      )}
+      <div class="list-row">
         <span><strong>${update.headline}</strong><small>${update.detail}</small></span>
         <button
           class="secondary-button"
           type="button"
           @click=${() => {
-            if (update.action !== "none") run();
+            if (update.action !== "none") runUpdate();
           }}
           ?disabled=${update.actionDisabled}
         >
-          <i class="ph ph-arrow-circle-up" aria-hidden="true"></i> ${update.actionLabel}
+          ${icon(update.action === "install" ? "download" : "update")}${update.actionLabel}
         </button>
       </div>
-      ${update.notes ? html`<pre class="update-notes">${update.notes}</pre>` : ""}
-    </section>
+    </div>
+    ${update.notes ? html`<pre class="update-notes">${update.notes}</pre>` : nothing}
+  `;
+}
+
+function renderDeveloper(snapshot: UiSnapshot, actions: SettingsActions): TemplateResult {
+  return html`
+    <details class="disclosure" ?open=${snapshot.developerMode}>
+      <summary>${icon("chevron-right")}Developer options</summary>
+      <div class="list">
+        ${switchRow(
+          "Developer mode",
+          "Diagnostics for development only",
+          snapshot.developerMode,
+          actions.onDeveloper,
+        )}
+        ${
+          snapshot.developerMode
+            ? html`
+                ${switchRow(
+                  "Show subtitle diagnostics",
+                  "Adds recognition details beside the live subtitles",
+                  snapshot.settings.overlay.showDiagnostics,
+                  actions.onDiagnostics,
+                )}
+                <div class="list-row developer-readout">
+                  <span>Engine phase</span><code>${snapshot.engine?.phase ?? "unknown"}</code>
+                </div>
+                <div class="list-row developer-readout">
+                  <span>Support code</span><code>${snapshot.engine?.supportCode ?? "None"}</code>
+                </div>
+              `
+            : nothing
+        }
+      </div>
+    </details>
   `;
 }
 
 export function renderSettings(snapshot: UiSnapshot, actions: SettingsActions): TemplateResult {
-  const phase = snapshot.engine?.phase ?? "unknown";
-  const engineReady = phase === "ready" || phase === "notRunning" || phase === "notrunning";
   return html`
-    <main class="screen detail-screen settings-screen" aria-labelledby="settings-title">
-      <header class="detail-heading">
-        <span class="eyebrow"><i class="ph ph-gear" aria-hidden="true"></i> Settings</span>
-        <h1 id="settings-title">Keep it simple</h1>
-        <p>Everyday choices stay clear. Technical controls remain out of the way.</p>
-      </header>
+    <main class="screen" aria-labelledby="settings-title">
+      <div class="page">
+        <header class="page-head"><h1 id="settings-title">Settings</h1></header>
 
-      <section class="settings-section" aria-labelledby="recognition-heading">
-        <div class="section-heading">
-          <i class="ph ph-text-aa" aria-hidden="true"></i>
-          <div>
-            <h2 id="recognition-heading">Recognition</h2>
-            <p>Choose the balance between responsiveness and OCR effort.</p>
-          </div>
+        <h2 class="group-label">Translation</h2>
+        <div class="list">
+          ${switchRow(
+            "Translate any text",
+            "Pages, apps, and games, not just subtitles",
+            snapshot.settings.translation.translateAllOcrText,
+            actions.onTranslateAllOcrText,
+          )}
+          ${switchRow(
+            "Keep names consistent",
+            "Remembers names and terms across nearby lines",
+            snapshot.settings.translation.enableContextAware,
+            actions.onContinuity,
+          )}
+          <label class="list-row">
+            <span
+              ><strong>Recognition quality</strong
+              ><small>Balanced suits most subtitles</small></span
+            >
+            <select
+              class="select compact"
+              .value=${recognition(snapshot)}
+              @change=${(event: Event) =>
+                actions.onRecognition((event.target as HTMLSelectElement).value as Recognition)}
+            >
+              <option value="fast">Fast</option>
+              <option value="balanced">Balanced</option>
+              <option value="accurate">Accurate</option>
+            </select>
+          </label>
         </div>
-        <label class="setting-row">
-          <span
-            ><strong>Recognition quality</strong
-            ><small>Balanced is recommended for most subtitles</small></span
-          >
-          <select
-            .value=${recognition(snapshot)}
-            @change=${(event: Event) =>
-              actions.onRecognition(
-                (event.target as HTMLSelectElement).value as "fast" | "balanced" | "accurate",
-              )}
-          >
-            <option value="fast">Fast</option>
-            <option value="balanced">Balanced</option>
-            <option value="accurate">Accurate</option>
-          </select>
-        </label>
-      </section>
 
-      <section class="settings-section" aria-labelledby="translation-heading">
-        <div class="section-heading">
-          <i class="ph ph-translate" aria-hidden="true"></i>
-          <div>
-            <h2 id="translation-heading">Translation</h2>
-            <p>Choose what gets translated, and how lines relate to each other.</p>
-          </div>
-        </div>
-        <label class="setting-row">
-          <span
-            ><strong>Translate any text</strong
-            ><small>Pages, apps, and games, not just subtitles</small></span
-          >
-          <input
-            class="switch"
-            type="checkbox"
-            .checked=${snapshot.settings.translation.translateAllOcrText}
-            @change=${(event: Event) =>
-              actions.onTranslateAllOcrText((event.target as HTMLInputElement).checked)}
-          />
-        </label>
-        <label class="setting-row">
-          <span
-            ><strong>Subtitle continuity</strong
-            ><small>Uses a small source-only session memory</small></span
-          >
-          <input
-            class="switch"
-            type="checkbox"
-            .checked=${snapshot.settings.translation.enableContextAware}
-            @change=${(event: Event) => actions.onContinuity((event.target as HTMLInputElement).checked)}
-          />
-        </label>
-      </section>
-
-      <section class="settings-section" aria-labelledby="engine-heading">
-        <div class="section-heading">
-          <i class="ph ph-hard-drives" aria-hidden="true"></i>
-          <div>
-            <h2 id="engine-heading">Engine and support</h2>
-            <p>HY-MT is managed and tested by Meowcal Sub.</p>
-          </div>
-        </div>
-        <div class="setting-row engine-row">
-          <span>
-            <strong>Private translation engine</strong>
-            <small>${engineReady ? "Installed on this PC" : "Needs attention"}</small>
-          </span>
-          <span class=${engineReady ? "status-chip success" : "status-chip warning"}>
-            <i class="ph-fill ph-circle" aria-hidden="true"></i
-            >${engineReady ? "Ready" : "Check required"}
-          </span>
-        </div>
-        <div class="section-actions">
-          <button
-            class="secondary-button"
-            type="button"
-            @click=${actions.onTest}
-            ?disabled=${snapshot.busy !== "idle"}
-          >
-            <i class="ph ph-check-circle" aria-hidden="true"></i> Test translation
-          </button>
-          <button class="secondary-button" type="button" @click=${actions.onRepair}>
-            <i class="ph ph-wrench" aria-hidden="true"></i> Install or repair
-          </button>
-        </div>
-      </section>
-
-      ${renderUpdates(snapshot, actions)}
-
-      <details class="advanced-panel" ?open=${snapshot.developerMode}>
-        <summary>Advanced</summary>
-        <label class="setting-row">
-          <span
-            ><strong>Developer mode</strong
-            ><small>Unsupported diagnostics for development only</small></span
-          >
-          <input
-            class="switch"
-            type="checkbox"
-            .checked=${snapshot.developerMode}
-            @change=${(event: Event) => actions.onDeveloper((event.target as HTMLInputElement).checked)}
-          />
-        </label>
-        ${
-          snapshot.developerMode
-            ? html`<div class="developer-readout">
-                <span>Engine phase</span><code>${phase}</code> <span>Support code</span
-                ><code>${snapshot.engine?.supportCode ?? "None"}</code>
-              </div>`
-            : ""
-        }
-      </details>
+        ${renderEngineAndUpdates(snapshot, actions)} ${renderDeveloper(snapshot, actions)}
+      </div>
     </main>
   `;
 }

@@ -1,31 +1,41 @@
 // =============================================================================
 // SELECTOR.JS - Area Selection Logic
 // =============================================================================
-// Handles click-and-drag selection for choosing the subtitle capture region.
+// Handles choosing the subtitle capture region with the mouse or the keyboard.
 //
 // Flow:
-// 1. User clicks anywhere to start selection
-// 2. User drags to define the rectangle
-// 3. On mouse up, show Confirm/Redraw buttons
-// 4. User clicks Confirm to save, or Redraw to try again
-// 5. Cancel button or ESC closes without saving
+// 1. Drag across one line of subtitles, or press Enter to place a box
+// 2. Drag, resize, or use the arrow keys to adjust it
+// 3. Enter or "Use this area" saves it; Redraw starts again
+// 4. Esc, right-click, or Cancel closes without saving
 // =============================================================================
 
 const {
+    actionBarTop,
+    arrowDelta,
     buildCaptureRegionPayload,
     buildDimOverlaySegments,
+    containRegion,
+    defaultSelectionRect,
     meetsMinimumSelection,
+    regionFits,
     screenRectToClientRect,
     selectionRectFromPoints,
 } = window.SelectorGeometry;
 // Shared with the overlay, which enforces a larger minimum rectangle.
 const { moveRegion, resizeRegion } = window.RegionGeometry;
 const MIN_RESIZE_SIZE = 30;
+const ACTION_BAR_GAP = 12;
+
+// Shown in the hint bar instead of a native dialog or a silently dropped drag (#76).
+const TOO_SMALL_MESSAGE = 'Area too small. Drag across one full line of subtitles.';
+const SAVE_FAILED_MESSAGE = 'Couldn’t save the area. Try again.';
 
 // Selection state
 const state = {
     isSelecting: false,
     hasSelection: false,
+    isSaving: false,
     startX: 0,
     startY: 0,
     currentX: 0,
@@ -35,12 +45,11 @@ const state = {
 
 // DOM elements - will be set after DOM loads
 let selectionBox = null;
-let dimensionsDisplay = null;
-let instructions = null;
 let actionButtons = null;
 let confirmBtn = null;
 let retryBtn = null;
 let cancelBtn = null;
+let errorText = null;
 let desktopSnapshot = null;
 let overlayTop = null;
 let overlayLeft = null;
@@ -52,21 +61,17 @@ let overlayBottom = null;
 // =============================================================================
 
 document.addEventListener('DOMContentLoaded', async () => {
-    console.log('📐 Selector window loaded');
-
     // Force transparent background via WebView2 API (workaround for Tauri 2.0 transparency issues)
     // On Windows 8+, alpha=0 creates true transparency
     try {
         const currentWebview = window.__TAURI__.webview.getCurrentWebview();
         await currentWebview.setBackgroundColor([0, 0, 0, 0]);
-        console.log('✅ Set webview background to transparent');
     } catch (e) {
         console.warn('Could not set transparent background via webview API:', e);
         // Fallback: try window API (WebviewWindow combines window + webview)
         try {
             const currentWindow = window.__TAURI__.window.getCurrentWindow();
             await currentWindow.setBackgroundColor([0, 0, 0, 0]);
-            console.log('✅ Set window background to transparent (fallback)');
         } catch (e2) {
             console.warn('Could not set transparent background:', e2);
         }
@@ -74,19 +79,18 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // Get DOM elements
     selectionBox = document.getElementById('selection-box');
-    dimensionsDisplay = document.getElementById('dimensions');
-    instructions = document.getElementById('instructions');
     actionButtons = document.getElementById('action-buttons');
     confirmBtn = document.getElementById('confirm-btn');
     retryBtn = document.getElementById('retry-btn');
     cancelBtn = document.getElementById('cancel-btn');
+    errorText = document.getElementById('selector-error');
     desktopSnapshot = document.getElementById('desktop-snapshot');
     overlayTop = document.getElementById('overlay-top');
     overlayLeft = document.getElementById('overlay-left');
     overlayRight = document.getElementById('overlay-right');
     overlayBottom = document.getElementById('overlay-bottom');
 
-    if (!selectionBox || !dimensionsDisplay || !instructions) {
+    if (!selectionBox || !actionButtons) {
         console.error('Failed to find required DOM elements');
         return;
     }
@@ -109,14 +113,13 @@ document.addEventListener('DOMContentLoaded', async () => {
     try {
         const currentWindow = window.__TAURI__.window.getCurrentWindow();
         await currentWindow.setFocus();
-        console.log('Window focus set');
     } catch (e) {
         console.warn('Could not set window focus:', e);
     }
 
-    // Focus body for keyboard events
-    document.body.focus();
-    document.body.setAttribute('tabindex', '0');
+    // The body only accepts focus once it has a tabindex, so set that first.
+    document.body.setAttribute('tabindex', '-1');
+    if (!state.hasSelection) document.body.focus();
 });
 
 // =============================================================================
@@ -126,11 +129,14 @@ document.addEventListener('DOMContentLoaded', async () => {
 async function setupSelectorSnapshotBackground() {
     if (!window.__TAURI__?.core?.invoke || !desktopSnapshot) return;
 
-    // 1) Listen for new snapshots (when the selector is opened again without a reload).
+    // 1) Listen for new snapshots. The window is hidden and reused rather than
+    //    reloaded, so a new snapshot is also the signal that it is being reopened.
     try {
         if (window.__TAURI__?.event?.listen) {
             await window.__TAURI__.event.listen('selector-background-snapshot', (event) => {
                 applySelectorSnapshot(event.payload);
+                resetSelection();
+                restoreExistingSelection();
             });
         }
     } catch (e) {
@@ -154,7 +160,7 @@ function applySelectorSnapshot(snapshot) {
 }
 
 // =============================================================================
-// PREMIUM DIM OVERLAY ("HOLE" AROUND SELECTION)
+// DIM OVERLAY ("HOLE" AROUND SELECTION)
 // =============================================================================
 
 function dimOverlayFull() {
@@ -205,8 +211,8 @@ function setupEventListeners() {
     document.addEventListener('mousemove', handleMouseMove);
     document.addEventListener('mouseup', handleMouseUp);
 
-    // Keyboard events - multiple targets for reliability
-    document.addEventListener('keydown', handleKeyDown, true);
+    // Capture phase on the window, so the selector's keys work whichever
+    // element holds focus.
     window.addEventListener('keydown', handleKeyDown, true);
 
     // Right-click cancels (common in region selectors)
@@ -215,32 +221,18 @@ function setupEventListeners() {
         cancelSelection();
     });
 
-    // Button click events
-    if (cancelBtn) {
-        cancelBtn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            console.log('Cancel button clicked');
-            cancelSelection();
-        });
-    }
-
-    if (confirmBtn) {
-        confirmBtn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            console.log('Confirm button clicked');
-            confirmSelection();
-        });
-    }
-
-    if (retryBtn) {
-        retryBtn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            console.log('Retry button clicked');
-            resetSelection();
-        });
-    }
-
-    console.log('Event listeners set up');
+    cancelBtn?.addEventListener('click', (e) => {
+        e.stopPropagation();
+        cancelSelection();
+    });
+    confirmBtn?.addEventListener('click', (e) => {
+        e.stopPropagation();
+        confirmSelection();
+    });
+    retryBtn?.addEventListener('click', (e) => {
+        e.stopPropagation();
+        resetSelection();
+    });
 }
 
 // =============================================================================
@@ -249,7 +241,6 @@ function setupEventListeners() {
 
 async function restoreExistingSelection() {
     if (!window.__TAURI__?.core?.invoke) return;
-    if (!selectionBox || !instructions) return;
 
     try {
         const existing = await window.__TAURI__.core.invoke('get_capture_region');
@@ -257,26 +248,45 @@ async function restoreExistingSelection() {
         if (!Number.isFinite(existing.width) || existing.width <= 0) return;
         if (!Number.isFinite(existing.height) || existing.height <= 0) return;
 
-        state.isSelecting = false;
-        state.hasSelection = true;
-        state.region = { ...existing };
-        state.startX = existing.x;
-        state.startY = existing.y;
-        state.currentX = existing.x + existing.width;
-        state.currentY = existing.y + existing.height;
-
-        selectionBox.classList.add('active', 'has-selection');
-        updateSelectionBox();
-        showActionButtons();
-        setupDragAndResize();
-
-        document.body.classList.add('selection-ready');
-        instructions.style.opacity = '0.4';
-
-        console.log('Preloaded existing region:', existing);
+        showSelection({ ...existing });
     } catch (e) {
         console.warn('Failed to restore existing selection:', e);
     }
+}
+
+// =============================================================================
+// PHASES
+// =============================================================================
+
+// The hint bar shows only what applies now: how to draw, how to adjust, or
+// what went wrong.
+function setPhase(phase, message = '') {
+    document.body.dataset.phase = phase;
+    if (errorText) errorText.textContent = message;
+}
+
+function setRegion(region) {
+    state.region = region;
+    state.startX = region.x;
+    state.startY = region.y;
+    state.currentX = region.x + region.width;
+    state.currentY = region.y + region.height;
+}
+
+// Single entry to "a selection exists": a finished drag, a restored region,
+// or a box placed from the keyboard.
+function showSelection(region) {
+    state.isSelecting = false;
+    state.hasSelection = true;
+    setRegion(region);
+
+    selectionBox.classList.add('active', 'has-selection');
+    actionButtons.classList.add('visible');
+    setupDragAndResize();
+    document.body.classList.add('selection-ready');
+    setPhase('adjust');
+    updateSelectionBox();
+    confirmBtn?.focus({ preventScroll: true });
 }
 
 // =============================================================================
@@ -284,10 +294,8 @@ async function restoreExistingSelection() {
 // =============================================================================
 
 function handleMouseDown(e) {
-    // Ignore clicks on buttons
-    if (e.target.closest('.cancel-btn') ||
-        e.target.closest('.confirm-btn') ||
-        e.target.closest('.retry-btn')) {
+    // Clicks on the hint bar and the buttons are not the start of a drag.
+    if (e.target.closest('.instructions, .action-buttons')) {
         return;
     }
 
@@ -305,18 +313,10 @@ function handleMouseDown(e) {
     state.currentX = e.screenX;
     state.currentY = e.screenY;
 
-    // Hide action buttons if visible
     actionButtons.classList.remove('visible');
-
-    // Show and position the selection box
     selectionBox.classList.add('active');
-    selectionBox.classList.remove('complete');
+    setPhase('draw');
     updateSelectionBox();
-
-    // Fade instructions
-    instructions.style.opacity = '0.6';
-
-    console.log(`Selection started at (${state.startX}, ${state.startY})`);
 }
 
 // Single owner of the document mousemove. Once a selection exists the same
@@ -349,7 +349,6 @@ function handleMouseUp(e) {
         e.preventDefault();
         isDragging = false;
         dragRegionStart = null;
-        console.log('Drag ended');
         return;
     }
     if (isResizing) {
@@ -357,7 +356,6 @@ function handleMouseUp(e) {
         isResizing = false;
         resizeHandle = null;
         dragRegionStart = null;
-        console.log('Resize ended');
         return;
     }
 
@@ -368,34 +366,15 @@ function handleMouseUp(e) {
     state.currentX = e.screenX;
     state.currentY = e.screenY;
 
-    // Calculate the final region
     const region = calculateRegion();
 
-    // Validate minimum size
+    // Keep the rejected box on screen so the user can see what was too small.
     if (!meetsMinimumSelection(region)) {
-        console.log('Selection too small, resetting');
-        resetSelection();
+        setPhase('error', TOO_SMALL_MESSAGE);
         return;
     }
 
-    console.log(`Selection complete: (${region.x}, ${region.y}) ${region.width}×${region.height}`);
-
-    // Store the region
-    state.region = region;
-    state.hasSelection = true;
-
-    // Show action buttons
-    showActionButtons();
-
-    // Add has-selection class to enable drag/resize handles
-    selectionBox.classList.add('has-selection');
-
-    // Set up drag and resize handlers
-    setupDragAndResize();
-
-    // Update visual state
-    document.body.classList.add('selection-ready');
-    instructions.style.opacity = '0.4';
+    showSelection(region);
 }
 
 // =============================================================================
@@ -403,19 +382,40 @@ function handleMouseUp(e) {
 // =============================================================================
 
 function handleKeyDown(e) {
-    console.log('Key pressed:', e.key);
-
     if (e.key === 'Escape') {
         e.preventDefault();
-        e.stopPropagation();
-        console.log('ESC pressed');
         cancelSelection();
-    } else if (e.key === 'Enter' && state.hasSelection) {
-        e.preventDefault();
-        e.stopPropagation();
-        console.log('Enter pressed');
-        confirmSelection();
+        return;
     }
+
+    const viewport = { x: window.screenX, y: window.screenY, width: window.innerWidth, height: window.innerHeight };
+    if (e.key === 'Enter') {
+        // A focused button acts on Enter itself - Redraw must not confirm.
+        if (e.target instanceof Element && e.target.closest('button')) return;
+        e.preventDefault();
+        if (state.hasSelection) {
+            confirmSelection();
+        } else if (!state.isSelecting) {
+            showSelection(defaultSelectionRect(viewport));
+        }
+        return;
+    }
+
+    const delta = arrowDelta(e.key, e.ctrlKey);
+    if (!delta || !state.hasSelection) return;
+    e.preventDefault();
+
+    // A focused handle resizes from its own edge; Shift resizes from the
+    // bottom-right corner; otherwise the whole box moves. Neither leaves the screen.
+    const handle = e.target instanceof HTMLElement ? e.target.dataset.position : undefined;
+    if (handle || e.shiftKey) {
+        const resized = resizeRegion(state.region, handle || 'se', delta.dx, delta.dy, MIN_RESIZE_SIZE);
+        if (regionFits(resized, viewport)) setRegion(resized);
+    } else {
+        setRegion(containRegion(moveRegion(state.region, delta.dx, delta.dy), viewport));
+    }
+    setPhase('adjust');
+    updateSelectionBox();
 }
 
 // =============================================================================
@@ -430,26 +430,18 @@ function updateSelectionBox() {
         x: window.screenX,
         y: window.screenY,
     });
-    const left = clientRect.left;
-    const top = clientRect.top;
 
-    // Position and size the selection box
-    selectionBox.style.left = `${left}px`;
-    selectionBox.style.top = `${top}px`;
+    selectionBox.style.left = `${clientRect.left}px`;
+    selectionBox.style.top = `${clientRect.top}px`;
     selectionBox.style.width = `${region.width}px`;
     selectionBox.style.height = `${region.height}px`;
 
     // Dim outside the selection for a "snipping tool" feel
-    dimOverlayWithHole(left, top, region.width, region.height);
+    dimOverlayWithHole(clientRect.left, clientRect.top, region.width, region.height);
 
-    // Update dimensions display
-    dimensionsDisplay.textContent = `${region.width} × ${region.height}`;
-
-    // Check if near bottom of screen (for dimensions positioning)
-    if (top + region.height > window.innerHeight - 100) {
-        selectionBox.classList.add('near-bottom');
-    } else {
-        selectionBox.classList.remove('near-bottom');
+    if (actionButtons.classList.contains('visible')) {
+        const top = actionBarTop(clientRect, window.innerHeight, actionButtons.offsetHeight, ACTION_BAR_GAP);
+        actionButtons.style.top = `${top}px`;
     }
 }
 
@@ -464,26 +456,12 @@ function calculateRegion() {
 }
 
 // =============================================================================
-// ACTION BUTTONS
-// =============================================================================
-
-function showActionButtons() {
-    actionButtons.classList.add('visible');
-}
-
-function hideActionButtons() {
-    actionButtons.classList.remove('visible');
-}
-
-// =============================================================================
 // SELECTION ACTIONS
 // =============================================================================
 
 async function confirmSelection() {
-    if (!state.region) {
-        console.error('No region to confirm');
-        return;
-    }
+    if (!state.region || state.isSaving) return;
+    state.isSaving = true;
 
     let scaleFactor = 1;
     try {
@@ -507,102 +485,61 @@ async function confirmSelection() {
         scaleFactor,
     );
 
-    console.log('Confirming region:', regionData);
-
-    // Flash animation
-    selectionBox.classList.add('complete');
-
     try {
-        // Save the region via Tauri command
         await window.__TAURI__.core.invoke('set_capture_region', regionData);
-        console.log('✅ Region saved to backend');
 
         // Emit event to all windows
         try {
             await window.__TAURI__.event.emit('region-selected', regionData);
-            console.log('✅ Event emitted');
         } catch (emitError) {
             console.warn('Event emit warning:', emitError);
         }
 
-        // Small delay for visual feedback
-        await new Promise(resolve => setTimeout(resolve, 300));
-
-        // Close this window
         await closeWindow();
-
+        resetSelection();
     } catch (error) {
         console.error('Failed to save region:', error);
-        alert('Failed to save region: ' + error);
+        setPhase('error', SAVE_FAILED_MESSAGE);
+    } finally {
+        state.isSaving = false;
     }
 }
 
 function resetSelection() {
-    console.log('Resetting selection');
-
-    // Reset state
     state.isSelecting = false;
     state.hasSelection = false;
     state.region = null;
 
-    // Hide elements
-    selectionBox.classList.remove('active', 'complete', 'has-selection');
-    hideActionButtons();
+    selectionBox.classList.remove('active', 'has-selection');
+    actionButtons.classList.remove('visible');
 
-    // Reset visual state
     document.body.classList.remove('selection-ready');
-    instructions.style.opacity = '1';
+    setPhase('draw');
     dimOverlayFull();
+    document.body.focus({ preventScroll: true });
 }
 
 async function cancelSelection() {
-    console.log('Cancelling selection');
-
-    // Reset state
-    state.isSelecting = false;
-    state.hasSelection = false;
-    state.region = null;
-
-    // Close window without saving
+    // Close first, so the reset is never drawn in the moment before the window hides.
     await closeWindow();
+    resetSelection();
 }
 
 async function closeWindow() {
-    console.log('Closing selector window via Rust command...');
     try {
         // Use Rust command to close window (more reliable than JS API)
         await window.__TAURI__.core.invoke('close_area_selector');
-        console.log('Window close command sent');
     } catch (error) {
         console.error('Failed to close window via command:', error);
         // Fallback: try JS API
         try {
             const currentWindow = window.__TAURI__.window.getCurrentWindow();
             await currentWindow.hide();
-            console.log('Window hidden via fallback');
         } catch (e2) {
             console.error('Fallback also failed:', e2);
         }
     }
 }
-
-// =============================================================================
-// GLOBAL FALLBACK HANDLERS
-// =============================================================================
-
-// Global escape handler as ultimate fallback
-window.onkeydown = function (e) {
-    if (e.key === 'Escape') {
-        console.log('Global ESC handler');
-        cancelSelection();
-        return false;
-    }
-    if (e.key === 'Enter' && state.hasSelection) {
-        console.log('Global Enter handler');
-        confirmSelection();
-        return false;
-    }
-};
 
 // =============================================================================
 // DRAG AND RESIZE FUNCTIONALITY
@@ -648,8 +585,7 @@ function handleResizeStart(e) {
     dragStartX = e.screenX;
     dragStartY = e.screenY;
     dragRegionStart = { ...state.region };
-
-    console.log(`Resize started from ${resizeHandle} handle`);
+    setPhase('adjust');
 }
 
 /**
@@ -658,10 +594,8 @@ function handleResizeStart(e) {
 function handleDragStart(e) {
     if (!state.hasSelection) return;
 
-    // Ignore if clicking on resize handle, button, or dimensions
-    if (e.target.classList.contains('resize-handle') ||
-        e.target.classList.contains('dimensions') ||
-        e.target.closest('button')) {
+    // Ignore if clicking on resize handle or button
+    if (e.target.classList.contains('resize-handle') || e.target.closest('button')) {
         return;
     }
 
@@ -672,8 +606,7 @@ function handleDragStart(e) {
     dragStartX = e.screenX;
     dragStartY = e.screenY;
     dragRegionStart = { ...state.region };
-
-    console.log('Drag started');
+    setPhase('adjust');
 }
 
 /**
@@ -685,15 +618,7 @@ function handleDrag(e) {
     const deltaX = e.screenX - dragStartX;
     const deltaY = e.screenY - dragStartY;
 
-    // Update region position
-    state.region = moveRegion(dragRegionStart, deltaX, deltaY);
-
-    // Update state for visual update
-    state.startX = state.region.x;
-    state.startY = state.region.y;
-    state.currentX = state.region.x + state.region.width;
-    state.currentY = state.region.y + state.region.height;
-
+    setRegion(moveRegion(dragRegionStart, deltaX, deltaY));
     updateSelectionBox();
 }
 
@@ -706,16 +631,6 @@ function handleResize(e) {
     const deltaX = e.screenX - dragStartX;
     const deltaY = e.screenY - dragStartY;
 
-    const nextRegion = resizeRegion(dragRegionStart, resizeHandle, deltaX, deltaY, MIN_RESIZE_SIZE);
-
-    // Update region
-    state.region = nextRegion;
-
-    // Update state for visual update
-    state.startX = nextRegion.x;
-    state.startY = nextRegion.y;
-    state.currentX = nextRegion.x + nextRegion.width;
-    state.currentY = nextRegion.y + nextRegion.height;
-
+    setRegion(resizeRegion(dragRegionStart, resizeHandle, deltaX, deltaY, MIN_RESIZE_SIZE));
     updateSelectionBox();
 }

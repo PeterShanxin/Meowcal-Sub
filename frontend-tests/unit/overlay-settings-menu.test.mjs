@@ -54,16 +54,30 @@ function buildMenu(overrides = {}) {
     closeButton,
     fontSizeSlider: null,
     fontSizeDisplay: null,
-    diagnosticsToggle: null,
-    initialFontSize: 24,
-    initialDiagnostics: false,
+    initialFontSize: 28,
+    initialLight: false,
     onOpenChange: (open) => openStates.push(open),
     onFontSize: () => {},
-    onDiagnostics: () => {},
+    onLight: () => {},
     onCommit: () => {},
     ...overrides,
   });
   return { button, menu, closeButton, openStates, controller };
+}
+
+function fakeRadio(value) {
+  return Object.assign(fakeElement(), { value, checked: false });
+}
+
+function fakeSlider() {
+  const properties = new Map();
+  return Object.assign(fakeElement(), {
+    min: "20",
+    max: "48",
+    value: "",
+    style: { setProperty: (name, value) => properties.set(name, value) },
+    properties,
+  });
 }
 
 describe("overlay settings menu", () => {
@@ -133,29 +147,74 @@ describe("overlay settings menu", () => {
   });
 
   it("keeps the menu open when a click lands inside it", () => {
-    const button = fakeElement();
     const inner = {};
     const menu = fakeElement([inner]);
-    const openStates = [];
-    setupSettingsMenu({
-      button,
-      menu,
-      closeButton: null,
-      fontSizeSlider: null,
-      fontSizeDisplay: null,
-      diagnosticsToggle: null,
-      initialFontSize: 24,
-      initialDiagnostics: false,
-      onOpenChange: (open) => openStates.push(open),
-      onFontSize: () => {},
-      onDiagnostics: () => {},
-      onCommit: () => {},
-    });
+    const { button, openStates } = buildMenu({ menu, closeButton: null });
 
     button.fire("click");
     document.fire("click", { target: inner });
 
     expect(menu.classes.has("visible")).toBe(true);
     expect(openStates).toEqual([true]);
+  });
+
+  it("reports the chosen plate scheme and saves it", () => {
+    const dark = fakeRadio("dark");
+    const light = fakeRadio("light");
+    const choices = [];
+    let commits = 0;
+    buildMenu({
+      plateInputs: [dark, light],
+      onLight: (on) => choices.push(on),
+      onCommit: () => (commits += 1),
+    });
+
+    expect(dark.checked).toBe(true);
+    light.checked = true;
+    light.fire("change");
+    dark.checked = false;
+    dark.fire("change");
+
+    expect(choices).toEqual([true]);
+    expect(commits).toBe(1);
+  });
+
+  it("keeps its controls in step with a change made in the main window", () => {
+    const slider = fakeSlider();
+    const display = { textContent: "" };
+    const dark = fakeRadio("dark");
+    const light = fakeRadio("light");
+    const { controller } = buildMenu({
+      fontSizeSlider: slider,
+      fontSizeDisplay: display,
+      plateInputs: [dark, light],
+    });
+
+    controller.syncFontSize(34);
+    controller.syncPlate(true);
+
+    expect(slider.value).toBe("34");
+    expect(slider.properties.get("--ratio")).toBe(String(14 / 28));
+    expect(display.textContent).toBe("34 px");
+    expect([dark.checked, light.checked]).toEqual([false, true]);
+  });
+
+  it("shows a dragged text size before it is saved on release", () => {
+    const slider = fakeSlider();
+    const display = { textContent: "" };
+    const sizes = [];
+    let commits = 0;
+    buildMenu({
+      fontSizeSlider: slider,
+      fontSizeDisplay: display,
+      onFontSize: (size) => sizes.push(size),
+      onCommit: () => (commits += 1),
+    });
+
+    slider.fire("input", { target: { value: "40" } });
+    expect([sizes, display.textContent, commits]).toEqual([[40], "40 px", 0]);
+
+    slider.fire("change");
+    expect(commits).toBe(1);
   });
 });

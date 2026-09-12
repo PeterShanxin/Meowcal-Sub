@@ -1,3 +1,55 @@
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  width: 100%;
+  min-width: 560px;
+  height: 100%;
+  min-height: 430px;
+  margin: 0;
+  overflow: hidden;
+  color: var(--text-1);
+  background: radial-gradient(120% 70% at 50% -10%, var(--bg-glow), transparent 62%), var(--bg);
+  font-size: var(--type-body);
+  line-height: 20px;
+  -webkit-font-smoothing: antialiased;
+}
+
+h1,
+p {
+  margin: 0;
+}
+
+button,
+select,
+input {
+  font: inherit;
+}
+
+:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+button:disabled,
+select:disabled,
+input:disabled {
+  cursor: not-allowed;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}
+
 meowcal-app,
 meowcal-setup {
   display: block;
@@ -12,21 +64,10 @@ meowcal-setup {
   width: 100%;
   height: 100%;
   overflow: hidden;
-  background: rgba(7, 18, 40, 0.76);
-  border: 1px solid var(--border);
-  box-shadow: var(--shadow-window);
-}
-
-@supports (backdrop-filter: blur(24px)) {
-  .app-frame,
-  .wizard-frame {
-    background: rgba(7, 18, 40, 0.5);
-    backdrop-filter: blur(20px) saturate(110%);
-  }
 }
 
 .app-frame {
-  grid-template-rows: 32px minmax(0, 1fr) 60px;
+  grid-template-rows: 32px minmax(0, 1fr) 44px;
 }
 
 /* =============================================================================
@@ -38,8 +79,9 @@ meowcal-setup {
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   height: 32px;
-  padding-left: var(--space-3);
-  border-bottom: 1px solid rgba(191, 211, 255, 0.09);
+  padding-left: 12px;
+  background: rgba(255, 255, 255, 0.025);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
   user-select: none;
 }
 
@@ -48,14 +90,14 @@ meowcal-setup {
   align-items: center;
   gap: 8px;
   min-width: 0;
-  color: var(--text-3);
-  font-size: 12px;
+  color: var(--text-2);
+  font-size: var(--type-label);
 }
 
-.titlebar-identity img {
+.titlebar-identity .logo {
+  flex: none;
   width: 16px;
   height: 16px;
-  border-radius: 4px;
 }
 
 .titlebar-identity span {
@@ -73,31 +115,31 @@ meowcal-setup {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 44px;
+  width: 46px;
   height: 100%;
   padding: 0;
-  border: 0;
-  background: transparent;
   color: var(--text-2);
+  background: transparent;
+  border: 0;
   cursor: pointer;
   transition:
-    background 0.15s ease,
-    color 0.15s ease;
+    background-color var(--motion-fast),
+    color var(--motion-fast);
 }
 
 .titlebar-button:hover {
-  background: rgba(191, 211, 255, 0.12);
   color: var(--text-1);
+  background: var(--surface-hover);
 }
 
 .titlebar-button:focus-visible {
-  outline: 2px solid var(--accent);
   outline-offset: -2px;
 }
 
+/* The Windows close-button red, which people look for before any brand colour. */
 .titlebar-close:hover {
-  background: var(--danger);
   color: #ffffff;
+  background: #c42b1c;
 }
 
 .screen {
@@ -106,46 +148,48 @@ meowcal-setup {
   scrollbar-color: rgba(141, 154, 180, 0.45) transparent;
 }
 
+/* =============================================================================
+   NAVIGATION
+   ============================================================================= */
+
 .app-nav {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: var(--space-2);
+  display: flex;
   align-items: center;
-  padding: 6px var(--space-5);
-  background: rgba(8, 18, 39, 0.62);
-  border-top: 1px solid rgba(191, 211, 255, 0.12);
+  justify-content: center;
+  gap: 6px;
+  background: rgba(255, 255, 255, 0.02);
+  border-top: 1px solid var(--line);
 }
 
 .nav-button {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-  gap: var(--space-2);
-  min-height: 44px;
-  color: var(--text-3);
+  gap: 8px;
+  height: 32px;
+  padding: 0 14px;
+  color: var(--text-2);
   background: transparent;
-  border: 1px solid transparent;
-  border-radius: var(--radius-control);
+  border: 0;
+  border-radius: var(--radius-md);
+  font-size: 13px;
   cursor: pointer;
   transition:
-    color var(--motion-fast),
     background-color var(--motion-fast),
-    border-color var(--motion-fast);
+    color var(--motion-fast);
 }
 
 .nav-button:hover {
   color: var(--text-1);
-  background: rgba(110, 168, 255, 0.08);
+  background: var(--surface-raised);
 }
 
 .nav-button.selected {
-  color: var(--accent);
-  background: rgba(110, 168, 255, 0.09);
-  border-color: transparent;
+  color: var(--text-1);
+  background: var(--accent-soft);
 }
 
-.nav-button i {
-  font-size: 19px;
+.nav-button.selected .icon {
+  color: var(--accent);
 }
 
 .nav-indicator {
@@ -153,42 +197,84 @@ meowcal-setup {
   height: 6px;
   border-radius: 50%;
   background: var(--accent);
-  display: inline-block;
-  flex-shrink: 0;
 }
 
+/* =============================================================================
+   MESSAGES
+   ============================================================================= */
+
+/* Only the message's own buttons take input, so a message sitting over a
+   compact window never blocks the controls beneath it. */
 .toast {
   pointer-events: none;
   position: absolute;
-  right: var(--space-5);
-  bottom: 80px;
-  left: var(--space-5);
+  right: 20px;
+  bottom: 54px;
+  left: 20px;
   z-index: 10;
   display: flex;
   align-items: center;
-  gap: var(--space-3);
-  max-width: 620px;
-  min-height: 48px;
+  gap: 10px;
+  max-width: 640px;
+  min-height: 44px;
   margin-inline: auto;
-  padding: var(--space-3) var(--space-4);
+  padding: 6px 8px 6px 12px;
   color: var(--text-1);
-  background: var(--surface-solid);
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius-control);
-  box-shadow: var(--shadow-control);
+  background: var(--surface-menu);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 10px 26px -10px rgba(0, 0, 0, 0.7);
   font-size: 13px;
 }
 
-.toast.error {
-  border-color: rgba(255, 123, 142, 0.56);
+.toast button {
+  pointer-events: auto;
 }
 
-.toast.error i {
+.toast-message {
+  flex: 1;
+  min-width: 0;
+}
+
+.toast.error {
+  border-color: color-mix(in srgb, var(--danger) 42%, transparent);
+}
+
+.toast.error > .icon {
   color: var(--danger);
 }
 
-.toast.notice i {
+.toast.notice > .icon {
   color: var(--success);
+}
+
+.toast-dismiss {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  color: var(--text-2);
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.toast-dismiss:hover {
+  color: var(--text-1);
+  background: var(--surface-hover);
+}
+
+/* In a short window the message would cover Home's primary action, so it
+   covers the navigation instead until it expires or is dismissed. */
+@media (max-height: 480px) {
+  .toast {
+    bottom: 4px;
+    min-height: 36px;
+    padding-block: 2px;
+  }
 }
 
 /* Shared by every shell page. The setup wizard animates its stage spinner with
@@ -197,11 +283,5 @@ meowcal-setup {
 @keyframes meowcal-spin {
   to {
     transform: rotate(360deg);
-  }
-}
-
-@media (max-width: 700px) {
-  .nav-button span {
-    font-size: 12px;
   }
 }

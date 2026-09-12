@@ -4,21 +4,22 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title></title>
+    <link rel="stylesheet" href="styles/tokens.css">
+    <link rel="stylesheet" href="styles/controls.css">
     <link rel="stylesheet" href="styles/overlay.css">
     <link rel="stylesheet" href="styles/overlay-settings.css">
     <link rel="stylesheet" href="styles/overlay-theme.css">
 </head>
 <body>
-    <!-- 
+    <!--
         This overlay window is fullscreen and transparent.
         It displays:
-        1. A border around the capture region
+        1. A frame around the capture region
         2. Translated subtitles near the capture region
     -->
-    
-    <!-- Capture region border indicator -->
+
+    <!-- Capture region frame -->
     <div id="capture-frame" class="capture-frame hidden">
-        <!-- Corner decorations for premium look -->
         <div class="corner top-left"></div>
         <div class="corner top-right"></div>
         <div class="corner bottom-left"></div>
@@ -35,13 +36,14 @@
         <div class="resize-handle" data-position="se"></div>
 
         <!-- Settings gear button (top-right corner of capture frame) -->
-        <button id="settings-button" class="settings-button" title="Overlay Settings">
-            <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
-                <path d="M19.14 12.94c.04-.31.06-.63.06-.94 0-.31-.02-.63-.06-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.04.31-.06.63-.06.94s.02.63.06.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"/>
+        <button id="settings-button" class="settings-button" type="button" title="Subtitle style" aria-label="Subtitle style">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <circle cx="12" cy="12" r="3"/>
+                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
             </svg>
         </button>
     </div>
-    
+
     <!-- Subtitle display area -->
     <div id="subtitle-container" class="subtitle-container hidden">
         <!-- Lightweight status / fallback hint (shown only when useful) -->
@@ -52,42 +54,37 @@
         <div id="subtitle-text" class="subtitle-text"></div>
     </div>
 
-    <!-- Settings popup menu -->
-    <div id="settings-menu" class="settings-menu hidden">
+    <!-- Quick subtitle style popup -->
+    <div id="settings-menu" class="settings-menu hidden" role="dialog" aria-label="Subtitle style">
         <div class="settings-menu-title">
-            <span>Overlay Settings</span>
-            <button id="settings-close" class="settings-close" type="button" aria-label="Close overlay settings">&times;</button>
+            <span>Subtitle style</span>
+            <button id="settings-close" class="settings-close" type="button" aria-label="Close subtitle style">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+            </button>
         </div>
         <div class="settings-item">
-            <label for="font-size-slider">Font Size</label>
-            <div class="settings-slider-row">
-                <input type="range" id="font-size-slider" min="12" max="48" value="24" class="settings-slider">
-                <span id="font-size-display" class="settings-value">24px</span>
+            <div class="settings-label-row">
+                <label for="font-size-slider">Text size</label>
+                <span id="font-size-display" class="settings-value"></span>
+            </div>
+            <input type="range" id="font-size-slider" class="slider" step="1">
+        </div>
+        <div class="settings-item">
+            <span id="plate-label" class="settings-label">Background</span>
+            <div class="plate-choice" role="radiogroup" aria-labelledby="plate-label">
+                <label><input type="radio" name="subtitle-plate" value="dark"><span>Dark</span></label>
+                <label><input type="radio" name="subtitle-plate" value="light"><span>Light</span></label>
             </div>
         </div>
-        <div class="settings-item settings-toggle-item">
-            <label for="light-background-toggle">Light Background</label>
-            <label class="settings-toggle">
-                <input type="checkbox" id="light-background-toggle">
-                <span class="settings-toggle-slider"></span>
-            </label>
-        </div>
-        <div class="settings-item settings-toggle-item">
-            <label for="diagnostics-toggle">Show Diagnostics</label>
-            <label class="settings-toggle">
-                <input type="checkbox" id="diagnostics-toggle">
-                <span class="settings-toggle-slider"></span>
-            </label>
-        </div>
     </div>
-    
-    <!-- Diagnostics panel (bottom-right, controlled by settings) -->
+
+    <!-- Diagnostics panel (bottom-right, turned on from Developer options) -->
     <div id="debug-info" class="debug-info hidden">
         <span>OVERLAY LOADED</span>
         <span id="debug-region">Region: waiting...</span>
         <span id="debug-status">Status: initializing...</span>
     </div>
-    
+
     <script type="module" src="./entries/overlay.ts"></script>
 </body>
 </html>

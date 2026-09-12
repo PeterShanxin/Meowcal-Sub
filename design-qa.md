@@ -2,54 +2,45 @@
 
 ## Visual source
 
-- Direction source: the seven 1448 x 1086 references in `D:\Downloads\ref`.
-- Selected direction: the restrained dark cinematic shell, compact bottom navigation, guided
-  four-step setup, and an app-managed private translation engine.
-- Real app assets are used for the Meowcal icon and cinematic preview background. The interface
-  uses the checked-in Phosphor subset rather than text symbols or improvised drawings.
+- Structure and flow: the seven 1448 x 1086 references in
+  `docs/design/curated-redesign/reference/`.
+- Visual language: Obsidian Ceramic, locked in #72. A near-black ground, glass
+  panels with hairline borders, one white ceramic primary action per screen, and
+  an ice-white accent. Colour is reserved for success, warning, and danger.
+- One token set, `src/styles/tokens.css`, is shared by the main window, setup,
+  area selector, and subtitle overlay. Icons are the inline SVG set in
+  `src/ui/icons.ts`.
 
 ## Native verification
 
-- Runtime: Tauri 2 / WebView2 on Windows ARM64.
-- Display: 200% DPI (`GetDpiForSystem = 192`).
-- Reference viewport: 1448 x 1086 physical pixels.
-- User-reported viewport: approximately 1364 x 1060 physical pixels.
-- Capture method: Win32 `PrintWindow` against the live native windows while the desktop was
-  locked; window resize/repaint was used only to force WebView2 to composite the current state.
-- Home comparison: `artifacts/qa-home-ready-comparison-2.png`.
-- Setup comparison: `artifacts/qa-wizard-comparison.png`.
-- Final native states: `artifacts/tauri-home-startup-gate.png`,
-  `artifacts/tauri-appearance-repaint.png`, `artifacts/tauri-settings.png`,
-  `artifacts/tauri-wizard-fit.png`, and `artifacts/tauri-wizard-step2-fit.png`.
+- Tested commit: `821b614`, run through `dev-tauri.cmd` in the isolated
+  `com.meowcal.sub.dev` profile. The selector checks ran earlier in the same
+  session on `e5fac60`; the selector files are unchanged since.
+- Hardware: Snapdragon X Elite X1E80100, Windows 11 25H2 build 26200.9445,
+  ARM64, 2560 x 1440 at 125% (120 DPI).
+- Captures: Win32 `PrintWindow` of the app's own windows, in
+  `docs/design/curated-redesign/qa/`. The selector and overlay were checked on
+  screen but not captured, because both windows cover the rest of the desktop.
+- Escape was checked with a raw key event. Desktop automation that reserves Esc
+  as its own stop key cannot show whether the selector handles it.
 
-## Iterations completed
+| Scenario | Result | Capture |
+| --- | --- | --- |
+| First launch opens setup; Continue, Back, and Cancel work; Cancel closes it | Pass | `setup-welcome.png`, `setup-languages.png` |
+| Returning launch after closing setup once: setup stays closed, Home is ready, text size and plate persist | Pass | `home-ready.png`, `subtitle-style-light.png` |
+| Home: Ready, Start, Running, Stop, Ready again; the overlay hides on Stop | Pass | `home-ready.png`, `home-running.png` |
+| Subtitle style: text size by keyboard, Dark and Light plates, preview at the overlay's opacity | Pass | `subtitle-style-light.png`, `subtitle-style-dark.png` |
+| Overlay: hovering the frame edge shows the handles and settings button; the quick menu shows text size and background; switching to Dark changes the live plate; the main window picks the value up on focus | Pass | `subtitle-style-dark.png` |
+| Area selector: opens on the saved area; arrow keys move, Shift+arrows resize; Esc closes it without saving | Pass | none |
+| Settings: plain-language rows and pill switches; Repair opens setup | Pass | `settings.png` |
+| Minimum window, 560 x 430: Home and Subtitle style fit without scrolling; Settings scrolls | Pass | `min-home.png`, `min-subtitle-style.png`, `min-settings.png` |
 
-- Removed the duplicate in-page brand row because the native title bar already carries identity.
-- Restored readable contrast on the primary action.
-- Replaced raw capture dimensions with the user-facing `Area selected` state.
-- Reduced default high-DPI window sizing and removed the Home scrollbar.
-- Added a startup readiness gate so the UI cannot render Rust defaults before persisted settings
-  load; verified the real Chinese-to-English pair after a native restart.
-- Fixed the setup grid's missing error-slot row, which left a blank footer-sized strip and forced
-  unnecessary scrolling.
-- Compacted setup at short window heights and kept the language pair side by side so steps 1 and
-  2 show all required content and actions without scrolling at the reported viewport.
-- Removed the misleading focus ring from programmatically focused step headings while preserving
-  focus announcements for assistive technology.
-- Bound setup select options explicitly so the saved English target cannot visually fall back to
-  the first option.
-- Kept technical setup details out of the normal progress state; they appear only with an error.
+## Known limits
 
-## Coverage
-
-- Home ready state: native capture, matched against reference 2.
-- Overlay appearance: native navigation and capture.
-- Settings: native navigation and capture.
-- Setup steps 1 and 2: native navigation, persisted language values, no-scroll capture, and matched
-  step 1 against reference 4.
-- Setup progress: native action reached the real progress screen. The model/runtime path was also
-  verified independently by the live subtitle eval.
-- Browser smoke was intentionally not run because no browser preference has been selected; native
-  Tauri verification is the primary acceptance path for this desktop UI.
-
-final result: passed
+- The overlay window is drawn at a fixed alpha of 200/255
+  (`src-tauri/src/overlay/window_alpha.rs`), so the quick menu and both plates
+  show some of what is behind them. The Subtitle style preview renders at the
+  same alpha.
+- Not covered by this pass: x64, a real engine download and its failure path
+  (stage-specific failure copy is covered by unit tests), and a 30-minute episode
+  run.

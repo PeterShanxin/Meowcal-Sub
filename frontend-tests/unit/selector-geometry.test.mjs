@@ -3,13 +3,53 @@ import { describe, expect, it } from "vitest";
 
 const require = createRequire(import.meta.url);
 const {
+  actionBarTop,
+  arrowDelta,
   buildCaptureRegionPayload,
   buildDimOverlaySegments,
   clampSelectionHole,
+  containRegion,
+  defaultSelectionRect,
   meetsMinimumSelection,
+  regionFits,
   screenRectToClientRect,
   selectionRectFromPoints,
 } = require("../../src/scripts/selector-geometry.js");
+
+describe("selector keyboard geometry", () => {
+  it("moves one pixel per arrow press and ten with Ctrl", () => {
+    expect(arrowDelta("ArrowLeft", false)).toEqual({ dx: -1, dy: 0 });
+    expect(arrowDelta("ArrowDown", true)).toEqual({ dx: 0, dy: 10 });
+    expect(arrowDelta("Enter", false)).toBeNull();
+  });
+
+  it("places a keyboard user's first box across the lower screen in screen coordinates", () => {
+    expect(defaultSelectionRect({ x: -1920, y: 0, width: 1920, height: 1080 })).toEqual({
+      x: -1920 + 384,
+      y: 810,
+      width: 1152,
+      height: 108,
+    });
+  });
+
+  it("keeps that box tall enough for one line on a short screen", () => {
+    expect(defaultSelectionRect({ x: 0, y: 0, width: 800, height: 300 }).height).toBe(40);
+  });
+});
+
+describe("selector action bar placement", () => {
+  it("puts the buttons under the box when they fit", () => {
+    expect(actionBarTop({ top: 100, height: 60 }, 1080, 36, 12)).toBe(172);
+  });
+
+  it("puts them above a box near the bottom edge", () => {
+    expect(actionBarTop({ top: 980, height: 80 }, 1080, 36, 12)).toBe(932);
+  });
+
+  it("never pushes them past the top edge", () => {
+    expect(actionBarTop({ top: 10, height: 1060 }, 1080, 36, 12)).toBe(12);
+  });
+});
 
 describe("selector geometry", () => {
   it("normalizes forward and reverse screen drags", () => {
@@ -86,5 +126,44 @@ describe("selector geometry", () => {
         1.5,
       ),
     ).toEqual({ x: 0, y: 0, width: 1, height: 1, scaleFactor: 1.5 });
+  });
+});
+
+describe("selector keyboard bounds", () => {
+  // A secondary monitor to the left of the primary one.
+  const viewport = { x: -1920, y: 0, width: 1920, height: 1080 };
+
+  // Held arrow keys used to carry the box off screen, where a confirmed save
+  // collapsed it to a one-pixel capture area.
+  it("stops a moved box at the screen edge instead of letting it leave", () => {
+    expect(containRegion({ x: -40, y: 1050, width: 400, height: 60 }, viewport)).toEqual({
+      x: -400,
+      y: 1020,
+      width: 400,
+      height: 60,
+    });
+    expect(containRegion({ x: -2000, y: -5, width: 400, height: 60 }, viewport)).toEqual({
+      x: -1920,
+      y: 0,
+      width: 400,
+      height: 60,
+    });
+  });
+
+  it("leaves a box that fits alone and shrinks one larger than the screen", () => {
+    const fits = { x: -1000, y: 900, width: 600, height: 80 };
+    expect(containRegion(fits, viewport)).toEqual(fits);
+    expect(containRegion({ x: -1900, y: 10, width: 2400, height: 90 }, viewport)).toEqual({
+      x: -1920,
+      y: 10,
+      width: 1920,
+      height: 90,
+    });
+  });
+
+  it("reports whether a resized box still fits on screen", () => {
+    expect(regionFits({ x: -1920, y: 0, width: 1920, height: 1080 }, viewport)).toBe(true);
+    expect(regionFits({ x: -1921, y: 0, width: 100, height: 100 }, viewport)).toBe(false);
+    expect(regionFits({ x: -100, y: 1000, width: 101, height: 80 }, viewport)).toBe(false);
   });
 });

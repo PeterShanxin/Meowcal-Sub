@@ -6,7 +6,10 @@ import { UpdateController } from "./update-controller";
 
 type Subscriber = (snapshot: UiSnapshot) => void;
 
-const ONBOARDING_COMPLETE_KEY = "meowcal.onboardingComplete";
+// Named for an earlier rule; renaming it would reopen setup for everyone who
+// already finished it.
+const ONBOARDING_SEEN_KEY = "meowcal.onboardingComplete";
+const NOTICE_DURATION_MS = 4000;
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
@@ -19,6 +22,7 @@ export class AppController {
   private pollingId: number | null = null;
   private overlaySaveId: number | null = null;
   private autoCheckTimer: number | null = null;
+  private noticeTimer: number | null = null;
   private settingsLoaded = false;
   private disposed = false;
   private snapshot: UiSnapshot = {
@@ -49,7 +53,21 @@ export class AppController {
   private publish(patch: Partial<UiSnapshot>): void {
     if (this.disposed) return;
     this.snapshot = { ...this.snapshot, ...patch };
+    if (patch.notice) this.expireNotice(patch.notice);
     this.subscriber(this.snapshot);
+  }
+
+  /** Notices confirm something that already happened; errors stay until dismissed. */
+  private expireNotice(notice: string): void {
+    if (this.noticeTimer !== null) window.clearTimeout(this.noticeTimer);
+    this.noticeTimer = window.setTimeout(() => {
+      this.noticeTimer = null;
+      if (this.snapshot.notice === notice) this.publish({ notice: null });
+    }, NOTICE_DURATION_MS);
+  }
+
+  dismissMessage(): void {
+    this.publish({ error: null, notice: null });
   }
 
   async initialize(): Promise<void> {
@@ -73,8 +91,9 @@ export class AppController {
       busy: "idle",
       ...(await this.updates.initialState()),
     });
+    this.hideDiagnosticsOutsideDeveloperMode();
     await this.setupEvents();
-    if (!browserMode && localStorage.getItem(ONBOARDING_COMPLETE_KEY) !== "true") {
+    if (!browserMode && localStorage.getItem(ONBOARDING_SEEN_KEY) !== "true") {
       await this.openSetup();
     }
     this.scheduleAutomaticUpdateCheck();
@@ -109,15 +128,17 @@ export class AppController {
       const payload = event.payload as { isError?: boolean; message?: string };
       if (payload.isError) this.publish({ error: payload.message ?? "Screen capture failed" });
     });
-    const wizardUnlisten = await window.TauriBridge.event.listen(
-      "engine-wizard-closed",
-      (event) => {
-        if ((event.payload as { modelDownloaded?: boolean } | null)?.modelDownloaded) {
-          localStorage.setItem(ONBOARDING_COMPLETE_KEY, "true");
-        }
-      },
+    // Setup opens by itself only until the user has closed it once, finished or
+    // not. After that Home's setup action is the way back, so a cancelled setup
+    // cannot trap anyone in a window that reopens on every launch (#74).
+    const wizardUnlisten = await window.TauriBridge.event.listen("engine-wizard-closed", () => {
+      localStorage.setItem(ONBOARDING_SEEN_KEY, "true");
+    });
+    const selectAreaUnlisten = await window.TauriBridge.event.listen(
+      "setup-select-area",
+      () => void this.selectRegion(),
     );
-    this.unlisten.push(regionUnlisten, captureUnlisten, wizardUnlisten);
+    this.unlisten.push(regionUnlisten, captureUnlisten, wizardUnlisten, selectAreaUnlisten);
   }
 
   dispose(): void {
@@ -125,6 +146,7 @@ export class AppController {
     this.stopRegionPolling();
     if (this.overlaySaveId !== null) window.clearTimeout(this.overlaySaveId);
     if (this.autoCheckTimer !== null) window.clearTimeout(this.autoCheckTimer);
+    if (this.noticeTimer !== null) window.clearTimeout(this.noticeTimer);
     this.unlisten.splice(0).forEach((callback) => callback());
   }
 
@@ -190,11 +212,18 @@ export class AppController {
   }
 
   async refresh(): Promise<void> {
-    const [engine, region] = await Promise.all([
+    const [engine, region, stored] = await Promise.all([
       this.safeInvoke<EngineStatus>("refresh_engine_status", this.snapshot.engine ?? {}),
       this.safeInvoke<CaptureRegion | null>("get_capture_region", this.snapshot.region),
+      this.safeInvoke<Partial<AppSettings> | null>("get_settings", null),
     ]);
-    this.publish({ engine, region, error: null });
+    const patch: Partial<UiSnapshot> = { engine, region, error: null };
+    // The overlay's quick menu saves appearance itself. Take its values back,
+    // unless an edit made in this window is still waiting to be saved.
+    if (stored && this.overlaySaveId === null) {
+      patch.settings = { ...this.snapshot.settings, overlay: mergeSettings(stored).overlay };
+    }
+    this.publish(patch);
     await this.finishEnginePreparation(engine);
   }
 
@@ -347,5 +376,14 @@ export class AppController {
   setDeveloperMode(enabled: boolean): void {
     localStorage.setItem("meowcal.developerMode", String(enabled));
     this.publish({ developerMode: enabled });
+    this.hideDiagnosticsOutsideDeveloperMode();
+  }
+
+  // Diagnostics show raw recognition text, which normal mode never shows. The
+  // setting can predate Developer options, so startup applies this rule too.
+  private hideDiagnosticsOutsideDeveloperMode(): void {
+    if (!this.snapshot.developerMode && this.snapshot.settings.overlay.showDiagnostics) {
+      void this.updateOverlay({ showDiagnostics: false });
+    }
   }
 }

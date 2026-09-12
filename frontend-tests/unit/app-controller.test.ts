@@ -220,16 +220,150 @@ describe("AppController settings persistence", () => {
     expect(snapshots).toHaveLength(count);
   });
 
-  it("marks onboarding complete only after a successful wizard close", async () => {
+  // A cancelled setup used to leave the flag unset, so the wizard reopened on
+  // every launch and Home's own setup action was never reachable (#74).
+  it("stops opening setup by itself once the user has closed it, finished or not", async () => {
     const invoke = vi.fn().mockResolvedValue(undefined);
     const { controller, listeners, storage } = createController(invoke, undefined, false);
 
     await controller.initialize();
     listeners.get("engine-wizard-closed")?.({ payload: { modelDownloaded: false } });
-    expect(storage.setItem).not.toHaveBeenCalled();
 
-    listeners.get("engine-wizard-closed")?.({ payload: { modelDownloaded: true } });
     expect(storage.setItem).toHaveBeenCalledWith("meowcal.onboardingComplete", "true");
+    controller.dispose();
+  });
+
+  it("does not reopen setup on a launch after it was closed", async () => {
+    const invoke = vi.fn().mockResolvedValue(undefined);
+    const { controller, storage } = createController(invoke, undefined, false);
+    storage.getItem.mockReturnValue("true" as unknown as null);
+
+    await controller.initialize();
+
+    expect(invoke).not.toHaveBeenCalledWith("open_engine_wizard");
+    controller.dispose();
+  });
+
+  it("opens area selection when setup hands over to it", async () => {
+    const invoke = vi.fn().mockResolvedValue(undefined);
+    const { controller, listeners } = createController(invoke);
+
+    await controller.initialize();
+    listeners.get("setup-select-area")?.({ payload: null });
+
+    await vi.waitFor(() => expect(invoke).toHaveBeenCalledWith("open_area_selector"));
+    controller.dispose();
+  });
+
+  it("clears a notice after a few seconds but keeps an error until it is dismissed", async () => {
+    vi.useFakeTimers();
+    const invoke = vi.fn().mockResolvedValue(undefined);
+    const { controller } = createController(invoke);
+
+    await controller.stop();
+    expect(controller.current().notice).toBe("Translation stopped");
+    await vi.advanceTimersByTimeAsync(4000);
+    expect(controller.current().notice).toBeNull();
+
+    invoke.mockRejectedValueOnce(new Error("stop failed"));
+    await controller.stop();
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(controller.current().error).toBe("stop failed");
+
+    controller.dismissMessage();
+    expect(controller.current()).toMatchObject({ error: null, notice: null });
+    controller.dispose();
+  });
+
+  it("does not let an earlier notice's timer clear a newer notice early", async () => {
+    vi.useFakeTimers();
+    const invoke = vi.fn().mockResolvedValue(undefined);
+    const { controller } = createController(invoke);
+
+    await controller.stop();
+    await vi.advanceTimersByTimeAsync(3000);
+    await controller.saveSettings();
+    await vi.advanceTimersByTimeAsync(3000);
+
+    expect(controller.current().notice).toBe("Settings saved");
+    controller.dispose();
+  });
+
+  it("takes appearance saved by the overlay menu back when the window regains focus", async () => {
+    const invoke = vi.fn(async (command: string) =>
+      command === "get_settings" ? { overlay: { fontSize: 36, lightBackground: true } } : undefined,
+    );
+    const { controller } = createController(invoke as TauriBridgeApi["invoke"]);
+
+    await controller.refresh();
+
+    expect(controller.current().settings.overlay).toMatchObject({
+      fontSize: 36,
+      lightBackground: true,
+    });
+  });
+
+  it("keeps an unsaved appearance edit from this window over the stored one", async () => {
+    vi.useFakeTimers();
+    const invoke = vi.fn(async (command: string) =>
+      command === "get_settings" ? { overlay: { fontSize: 36 } } : undefined,
+    );
+    const { controller } = createController(invoke as TauriBridgeApi["invoke"]);
+
+    await controller.updateOverlay({ fontSize: 40 });
+    await controller.refresh();
+
+    expect(controller.current().settings.overlay.fontSize).toBe(40);
+    controller.dispose();
+  });
+
+  // Diagnostics could be switched on from the overlay's own menu before they
+  // moved under Developer options, and they show raw recognition text.
+  it("turns persisted overlay diagnostics off at startup outside developer mode", async () => {
+    const emit = vi.fn().mockResolvedValue(undefined);
+    const invoke = vi.fn(async (command: string) =>
+      command === "get_settings" ? { overlay: { showDiagnostics: true } } : undefined,
+    );
+    const { controller } = createController(invoke as TauriBridgeApi["invoke"], emit);
+
+    await controller.initialize();
+
+    expect(controller.current().settings.overlay.showDiagnostics).toBe(false);
+    expect(emit).toHaveBeenCalledWith(
+      "overlay-settings-updated",
+      expect.objectContaining({ showDiagnostics: false }),
+    );
+    controller.dispose();
+  });
+
+  it("keeps persisted overlay diagnostics in developer mode", async () => {
+    const emit = vi.fn().mockResolvedValue(undefined);
+    const invoke = vi.fn(async (command: string) =>
+      command === "get_settings" ? { overlay: { showDiagnostics: true } } : undefined,
+    );
+    const { controller } = createController(invoke as TauriBridgeApi["invoke"], emit);
+    controller.setDeveloperMode(true);
+
+    await controller.initialize();
+
+    expect(controller.current().settings.overlay.showDiagnostics).toBe(true);
+    expect(emit).not.toHaveBeenCalled();
+    controller.dispose();
+  });
+
+  it("turns overlay diagnostics off with developer mode", async () => {
+    const emit = vi.fn().mockResolvedValue(undefined);
+    const invoke = vi.fn().mockResolvedValue(undefined);
+    const { controller } = createController(invoke, emit);
+
+    await controller.updateOverlay({ showDiagnostics: true });
+    controller.setDeveloperMode(false);
+
+    expect(emit).toHaveBeenLastCalledWith(
+      "overlay-settings-updated",
+      expect.objectContaining({ showDiagnostics: false }),
+    );
+    controller.dispose();
   });
 
   it("uses current settings and a curated source for settings test translation", async () => {

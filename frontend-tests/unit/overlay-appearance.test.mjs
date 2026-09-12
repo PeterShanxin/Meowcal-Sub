@@ -4,9 +4,35 @@ import { describe, expect, it } from "vitest";
 const require = createRequire(import.meta.url);
 const {
   DEFAULT_APPEARANCE,
+  FONT_SIZE_MAX,
+  FONT_SIZE_MIN,
+  clampFontSize,
   hydrateAppearance,
   patchAppearance,
 } = require("../../src/scripts/overlay-appearance.js");
+
+describe("overlay text size range", () => {
+  // A 12px subtitle was confirmed unreadable on a real screen (#75).
+  it("raises a size below the floor and caps one above the range", () => {
+    expect(FONT_SIZE_MIN).toBe(20);
+    expect(clampFontSize(12)).toBe(20);
+    expect(clampFontSize(90)).toBe(FONT_SIZE_MAX);
+    expect(clampFontSize(27.6)).toBe(28);
+  });
+
+  it("falls back to the default for a size that is not a number", () => {
+    expect(clampFontSize(Number.NaN)).toBe(DEFAULT_APPEARANCE.fontSize);
+    expect(clampFontSize("large")).toBe(DEFAULT_APPEARANCE.fontSize);
+  });
+
+  it("applies the floor to stored settings and to live updates alike", () => {
+    expect(hydrateAppearance({ fontSize: 12 }).fontSize).toBe(20);
+    expect(patchAppearance(hydrateAppearance({}), { fontSize: 14 })).toMatchObject({
+      applied: ["fontSize"],
+      next: { fontSize: 20 },
+    });
+  });
+});
 
 describe("overlay appearance hydration", () => {
   it("supplies every default when settings carry nothing", () => {
@@ -50,7 +76,7 @@ describe("overlay appearance hydration", () => {
     const hydrated = hydrateAppearance({});
     hydrated.fontSize = 99;
 
-    expect(DEFAULT_APPEARANCE.fontSize).toBe(24);
+    expect(DEFAULT_APPEARANCE.fontSize).toBe(28);
   });
 });
 

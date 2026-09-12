@@ -6,16 +6,34 @@
 // on the desktop never reaches this document. The popup must therefore own an
 // explicit close affordance (close button, Escape, and the gear toggle) rather
 // than relying on an outside-click handler alone.
+//
+// It holds quick adjustments only - text size and plate scheme. The main
+// window's Subtitle style page changes the same settings.
 (function exposeOverlaySettingsMenu(root) {
   function setMenuOpen(menu, open) {
     menu.classList.toggle("visible", open);
     menu.classList.toggle("hidden", !open);
   }
 
+  function syncFontSize(slider, display, value) {
+    if (slider) {
+      slider.value = String(value);
+      const min = Number(slider.min);
+      const max = Number(slider.max);
+      if (max > min) slider.style.setProperty("--ratio", String((value - min) / (max - min)));
+    }
+    if (display) display.textContent = `${value} px`;
+  }
+
+  function syncPlate(inputs, light) {
+    for (const input of inputs) {
+      input.checked = input.value === (light ? "light" : "dark");
+    }
+  }
+
   // options: { button, menu, closeButton, fontSizeSlider, fontSizeDisplay,
-  //            diagnosticsToggle, lightToggle, initialFontSize,
-  //            initialDiagnostics, initialLight, onLight,
-  //            onOpenChange, onFontSize, onDiagnostics, onCommit }
+  //            plateInputs, initialFontSize, initialLight,
+  //            onOpenChange, onFontSize, onLight, onCommit }
   function setupSettingsMenu(options) {
     const {
       button,
@@ -23,15 +41,12 @@
       closeButton,
       fontSizeSlider,
       fontSizeDisplay,
-      diagnosticsToggle,
-      lightToggle,
+      plateInputs = [],
       initialFontSize,
-      initialDiagnostics,
       initialLight,
       onOpenChange,
       onFontSize,
-      onDiagnostics,
-      onLight = () => {},
+      onLight,
       onCommit,
     } = options;
 
@@ -39,10 +54,8 @@
 
     let open = false;
 
-    if (fontSizeSlider) fontSizeSlider.value = String(initialFontSize);
-    if (fontSizeDisplay) fontSizeDisplay.textContent = `${initialFontSize}px`;
-    if (diagnosticsToggle) diagnosticsToggle.checked = initialDiagnostics === true;
-    if (lightToggle) lightToggle.checked = initialLight === true;
+    syncFontSize(fontSizeSlider, fontSizeDisplay, initialFontSize);
+    syncPlate(plateInputs, initialLight === true);
 
     const applyOpen = (next) => {
       if (open === next) return;
@@ -90,22 +103,16 @@
       fontSizeSlider.addEventListener("input", (event) => {
         const value = Number.parseInt(event.target.value, 10);
         if (!Number.isFinite(value)) return;
-        if (fontSizeDisplay) fontSizeDisplay.textContent = `${value}px`;
+        syncFontSize(fontSizeSlider, fontSizeDisplay, value);
         onFontSize(value);
       });
       fontSizeSlider.addEventListener("change", () => onCommit());
     }
 
-    if (diagnosticsToggle) {
-      diagnosticsToggle.addEventListener("change", (event) => {
-        onDiagnostics(event.target.checked === true);
-        onCommit();
-      });
-    }
-
-    if (lightToggle) {
-      lightToggle.addEventListener("change", (event) => {
-        onLight(event.target.checked === true);
+    for (const input of plateInputs) {
+      input.addEventListener("change", () => {
+        if (!input.checked) return;
+        onLight(input.value === "light");
         onCommit();
       });
     }
@@ -114,7 +121,12 @@
     // already opt in through CSS, and an inline value outranks the `.hidden` and
     // `.faded` rules that switch it back off - which leaves an invisible popup
     // sitting at screen centre swallowing every click that reaches the overlay.
-    return { isOpen: () => open, close: () => applyOpen(false) };
+    return {
+      isOpen: () => open,
+      close: () => applyOpen(false),
+      syncFontSize: (value) => syncFontSize(fontSizeSlider, fontSizeDisplay, value),
+      syncPlate: (light) => syncPlate(plateInputs, light),
+    };
   }
 
   const api = { setupSettingsMenu };

@@ -1,12 +1,8 @@
 import { LitElement, html, svg, type TemplateResult } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
+import { catLogo } from "./icons";
 
-// Imported rather than written as a path so the bundler rewrites it. A literal
-// "./assets/meowcal-icon.png" resolved under the dev server and 404'd in the
-// packaged app, where the file is emitted under a content hash.
-import meowcalIcon from "../assets/meowcal-icon.png";
-
-// Inline so the controls stay crisp at 10px and do not depend on the icon font.
+// Drawn on a 12px grid so the controls stay crisp at 10px.
 const GLYPH = {
   minimize: svg`<path d="M1 6h10" />`,
   maximize: svg`<rect x="1.5" y="1.5" width="9" height="9" rx="1" />`,
@@ -67,7 +63,7 @@ export class MeowcalTitlebar extends LitElement {
     return html`
       <div class="titlebar" data-tauri-drag-region>
         <div class="titlebar-identity" data-tauri-drag-region>
-          <img src=${meowcalIcon} alt="" aria-hidden="true" />
+          ${catLogo()}
           <span data-tauri-drag-region>${this.label}${this.development ? " - Dev" : ""}</span>
         </div>
         <div class="titlebar-controls">
