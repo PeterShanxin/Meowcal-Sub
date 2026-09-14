@@ -45,7 +45,7 @@ export function icon(name: IconName, className = ""): TemplateResult {
   </svg>`;
 }
 
-/** The line-art cat, lit from above. The coloured app icon stays for the taskbar and installer. */
+/** The line-art cat, lit from above — the app's mark everywhere: titlebar, taskbar, tray, and installer. */
 export function catLogo(): TemplateResult {
   return html`<svg
     class="logo"
