@@ -42,9 +42,13 @@ MSI installers and `SHA256SUMS.txt` are on the release page. For newer versions,
 use [the latest application release](https://github.com/PeterShanxin/Meowcal-Sub/releases/latest).
 You do not need to install Rust, Node.js, or Meowcal Core separately to use the app.
 
+**Engine requirements:** at least **8 GiB of system RAM reported by Windows**
+and **3 GiB free on the engine installation drive**. These are setup checks,
+not a guarantee of smooth performance; leave headroom for your video player.
+
 First-time setup downloads the local translation runtime and model, about
-**1.1 GB**. Allow additional disk space for installation, caches, and retained
-versions. Windows may also need the OCR language for your original subtitles.
+**1.1 GB**. Allow additional space for caches and retained versions. Windows may
+also need the OCR language for your original subtitles.
 
 **Windows may show an unknown-publisher warning.** Installers are not
 Authenticode-signed. Download only from this repository and compare the file's
@@ -56,9 +60,9 @@ SHA-256 with the release checksums; do not disable Windows security globally.
 1. **Set up translation.** Open the app and complete the guided setup. Choose
    the original subtitle language and the language you want to read; let setup
    install and test the engine and check the Windows recognition language.
-2. **Select subtitle area.** Draw a box around the original subtitles, not the
-   whole video. Keep that area visible and reselect it when the video moves or
-   changes size.
+2. **Select subtitle area.** Play the video on your **primary monitor** and
+   draw a box around the original subtitles, not the whole video. Keep that area
+   visible and reselect it when the video moves or changes size on that monitor.
 3. **Start translation.** Watch with the floating translation overlay. Use
    **Subtitle style** for text size and a Dark or Light plate; use
    **Stop translation** when you are done.
@@ -77,12 +81,16 @@ SHA-256 with the release checksums; do not disable Windows security globally.
 | Translate readable text beyond subtitles | **Translate any text** in Settings relaxes the subtitle-only filter. It is off by default. |
 | Keep the local engine working | Guided setup, integrity checks, engine repair, and signature-verified in-app updates. |
 
-**Know the limits.** Recognition depends on the source language, text clarity,
-and what screen capture can actually see. Stylized fonts, fast-changing text,
-and protected video can cause missing or incorrect results. Translation is not
-instant or error-free; speed depends on your PC and the text. GPU acceleration
-is limited to validated hardware/driver configurations, with CPU fallback — it
-is not a promise of support for every GPU.
+**Know the limits.** The normal capture/selection workflow targets the **primary
+monitor**, not secondary displays. Recognition depends on the source language,
+text clarity, and what screen capture can actually see. Stylized fonts,
+fast-changing text, and protected video can cause missing or incorrect results.
+Translation is not instant or error-free; speed depends on your PC and the text.
+
+**GPU support differs by architecture.** ARM64 gates Adreno acceleration to
+validated hardware/drivers and can retry on CPU after a GPU readiness timeout.
+The x64 build uses Vulkan and does **not** currently offer that same validation
+gate or application-managed CPU retry. [GPU compatibility details →](docs/USAGE.md#how-does-gpu-support-differ-by-architecture)
 
 ## Privacy, without the fine-print surprise
 

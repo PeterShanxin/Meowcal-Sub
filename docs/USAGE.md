@@ -14,11 +14,16 @@ The `.exe` is the regular setup installer; `.msi` packages are also available.
 GitHub's **Source code** archives are for developers, not app installation.
 You do not need a separate Rust, Node.js, or Core installation.
 
-The app is a Windows 11 public beta. First-time setup downloads approximately
-1.1 GB of local translation assets. That is a download estimate, **not a total
-installed-disk requirement**: allow additional space for extraction, caches,
-and retained runtime versions. A missing Windows OCR language is a separate
-setup requirement. Model inference also uses local memory and processing power.
+The app is a Windows 11 public beta. The engine checks for at least **8 GiB of
+total system RAM reported by Windows** and, when installation needs disk space,
+**3 GiB free on the engine installation drive**. These thresholds come from the
+[engine manifest](../core/config/engine-manifest.v1.json), not a performance
+benchmark. Extra memory headroom is needed for your video player and other apps.
+
+First-time setup downloads approximately **1.1 GB** of local translation assets.
+That is a download estimate, **not a total installed-disk requirement**: allow
+additional space for extraction, caches, and retained runtime versions. A missing
+Windows OCR language is a separate setup requirement.
 
 ### Check a download
 
@@ -47,11 +52,13 @@ original subtitle language and your target language. Let setup download and
 test the local engine. Follow **Install recognition language** if Windows lacks
 the OCR language for the original subtitles.
 
-Play a video with readable subtitles, choose **Select subtitle area**, and draw
-a box around the original lines. Include space for all subtitle lines, while
-avoiding player controls, unrelated text, and the translated overlay itself.
-The box is a screen region, not an object tracker: reselect it when the video
-moves, changes size, or moves to another display.
+Play a video with readable subtitles on your **primary monitor**, choose
+**Select subtitle area**, and draw a box around the original lines. Include space
+for all subtitle lines, while avoiding player controls, unrelated text, and the
+translated overlay itself. The box is a screen region, not an object tracker:
+reselect it when the video moves or changes size on that monitor. The normal
+selector/capture workflow does not support secondary-display capture; move the
+video back to the primary monitor before selecting its subtitle area.
 
 Choose **Start translation**. The first start takes longer while the model warms
 up. **Subtitle style** controls text size and a Dark or Light plate; use
@@ -63,6 +70,7 @@ up. **Subtitle style** controls text size and a Dark or Light plate; use
 | --- | --- |
 | Home says the recognition language is missing | Install the Windows OCR language matching the original subtitles, not just the target translation language. |
 | Home offers **Repair engine** | Use that action to check and restore the managed engine. Keep the displayed support code if repair fails. |
+| Setup reports `ENGINE_INCOMPATIBLE` or `ENGINE_DISK_SPACE` | Check the Windows 11, 8 GiB system-RAM, and 3 GiB free-installation-space requirements above. A missing architecture/runtime or unsupported installation path can also produce an incompatibility error; include the exact support message in a report. |
 | Text is missing or misread | Check that the selected region is still aligned and visible, contains every subtitle line, and does not include player controls or the translation overlay. Try clearer, larger source subtitles. |
 | Readable non-subtitle text is ignored | Normal mode filters for subtitle-like text. Enable **Translate any text** in Settings only when that is your intended use. It does not improve the OCR model itself. |
 | Translation feels slow | Allow for the initial model warm-up. Check local CPU and memory pressure and the size of the selected region. Different hardware, source text, and model load produce different latency. |
@@ -89,13 +97,20 @@ language are installed. Setup, repair downloads, missing Windows language
 components, and update checks/downloads use the network. Your video service has
 its own connectivity requirements.
 
-### Is a GPU required?
+### How does GPU support differ by architecture?
 
-There is a CPU inference path. Acceleration is enabled only for validated
-hardware/driver configurations, with CPU fallback; having a GPU does not mean
-it will be used. There is no universal latency or minimum-memory claim here.
-See [Core performance evidence](CORE_PERFORMANCE.md) for scoped measurements,
-not a prediction for every machine.
+**ARM64:** Adreno acceleration is gated to validated hardware/driver combinations.
+Other configurations take the CPU policy. A GPU readiness timeout can trigger
+one CPU retry within the existing startup deadline.
+
+**x64:** the shipped runtime uses Vulkan. The application does not currently
+apply the ARM64 hardware-validation gate or its CPU-retry behavior to x64. Do
+not assume an incompatible or failing Vulkan configuration will automatically
+switch to CPU.
+
+Both paths require the system RAM listed above. See
+[Core performance evidence](CORE_PERFORMANCE.md) for scoped measurements, not
+a universal latency promise or a prediction for every machine.
 
 ### Can it translate web pages or slides?
 
