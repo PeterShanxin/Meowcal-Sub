@@ -1,195 +1,165 @@
 <p align="center">
-  <img src="docs/assets/logo.png" width="96" alt="Meowcal Sub icon">
+  <img src="docs/assets/logo.png" width="96" alt="Meowcal Sub cat icon">
 </p>
 
 <h1 align="center">Meowcal Sub</h1>
 
 <p align="center">
-  <strong>Capture on-screen subtitles and translate them locally on Windows.</strong>
+  <strong>Translate the subtitles already on your screen.</strong><br>
+  Local OCR and AI translation for Windows 11. Your subtitle text stays on your PC.
 </p>
 
 <p align="center">
-  <a href="https://github.com/PeterShanxin/Meowcal-Sub/releases"><img alt="Latest release" src="https://img.shields.io/github/v/release/PeterShanxin/Meowcal-Sub?label=latest"></a>
-  <img alt="Windows 11" src="https://img.shields.io/badge/platform-Windows%2011-0078D6?logo=windows">
-  <img alt="x64 and ARM64" src="https://img.shields.io/badge/arch-x64%20%7C%20ARM64-blue">
-  <img alt="On-device AI" src="https://img.shields.io/badge/AI-on--device-22c55e">
-  <img alt="Tauri and Rust" src="https://img.shields.io/badge/stack-Tauri%20%2B%20Rust-ffc131">
-  <img alt="AGPL-3.0-only" src="https://img.shields.io/badge/license-AGPL--3.0--only-blue">
+  <a href="https://github.com/PeterShanxin/Meowcal-Sub/releases/latest"><img alt="Latest application release" src="https://img.shields.io/github/v/release/PeterShanxin/Meowcal-Sub?label=release"></a>
+  <img alt="Windows 11, x64 and ARM64" src="https://img.shields.io/badge/Windows%2011-x64%20%7C%20ARM64-52627a">
+  <a href="LICENSE"><img alt="License: AGPL-3.0-only" src="https://img.shields.io/badge/license-AGPL--3.0--only-52627a"></a>
 </p>
 
 <p align="center">
-  <a href="https://github.com/PeterShanxin/Meowcal-Sub/releases/latest"><strong>Download</strong></a>
-  &nbsp;·&nbsp;
-  <a href="https://github.com/PeterShanxin/Meowcal-Sub/releases">All releases</a>
-  &nbsp;·&nbsp;
-  <a href="https://github.com/PeterShanxin/Meowcal-Sub/releases/tag/v0.8.0">Release notes</a>
+  <a href="#download"><strong>Download for Windows</strong></a>
+  &nbsp;·&nbsp; <a href="#quick-start">Quick start</a>
+  &nbsp;·&nbsp; <a href="README.zh-CN.md">简体中文</a>
+  &nbsp;·&nbsp; <a href="https://github.com/PeterShanxin/Meowcal-Sub/issues/new/choose">Report a problem</a>
 </p>
 
----
+Draw a box around the original subtitles in your video. Meowcal Sub reads that
+area, translates the text locally, and puts the translation in a floating
+overlay. No subtitle file, cloud account, or API key is needed for normal use.
 
-## ✨ What it does
+> **Screen text, not speech.** The video needs visible subtitles. Meowcal Sub
+> does not listen to audio or generate captions for a video without on-screen text.
 
-Select the on-screen subtitle region once. Meowcal Sub captures that band, runs Windows OCR, translates locally, and draws translated lines in a floating overlay while you watch.
+## Download
 
-```text
-subtitle region → capture → OCR → local translation → overlay
-```
+**Windows 11 public beta · v0.8.0** — [release notes and all files](https://github.com/PeterShanxin/Meowcal-Sub/releases/tag/v0.8.0).
 
-No account. Subtitle text is not uploaded. A one-time download (~1.1 GB) sets up the local translation runtime.
-
-## 🎯 Key features
-
-| Feature | Description |
+| Your PC | Installer |
 | --- | --- |
-| **Screen-region capture** | Select the subtitle band once; the app watches that region while you watch. |
-| **Windows OCR** | Uses the built-in Windows OCR engine — no cloud vision API. |
-| **Translate any text** | Off by default, the app only translates text that behaves like a subtitle track. Turn it on in Settings to translate any readable text in the capture region — web pages, app windows, game text, slides. |
-| **On-device translation** | HY-MT runs locally after a one-time model download (~1.1 GB). Subtitle text stays on your machine. |
-| **Floating overlay** | Translated lines render in an always-on-top overlay you can position over the video. |
-| **ARM64 GPU path** | Validated Adreno configurations can offload inference to the GPU with CPU fallback. |
-| **In-app updates** | Check for updates from Settings; downloads are signature-verified before install. |
+| Intel or AMD Windows PC | **[Download x64 (.exe)](https://github.com/PeterShanxin/Meowcal-Sub/releases/download/v0.8.0/Meowcal.Sub_0.8.0_x64-setup.exe)** |
+| Snapdragon or other Windows on ARM PC | **[Download ARM64 (.exe)](https://github.com/PeterShanxin/Meowcal-Sub/releases/download/v0.8.0/Meowcal.Sub_0.8.0_arm64-setup.exe)** |
 
-## ⚡ Engineering
+MSI installers and `SHA256SUMS.txt` are on the release page. For newer versions,
+use [the latest application release](https://github.com/PeterShanxin/Meowcal-Sub/releases/latest).
+You do not need to install Rust, Node.js, or Meowcal Core separately to use the app.
 
-- Tauri 2 desktop shell with Rust backend and a multi-webview frontend (main, selector, overlay, setup wizard).
-- End-to-end pipeline: capture → preprocess → OCR → normalize/dedupe → local translation → validate → overlay.
-- App-managed engine lifecycle: download, integrity checks, transactional install, rollback, repair.
-- Evidence-backed ARM64 acceleration policy with hardware/driver gating and CPU fallback.
-- Privacy-safe logging — production logs exclude subtitle text.
-- Dual-architecture packaging (x64 + ARM64) published on this repository's GitHub Releases.
+**Engine requirements:** at least **8 GiB of system RAM reported by Windows**
+and **3 GiB free on the engine installation drive**. These are setup checks,
+not a guarantee of smooth performance; leave headroom for your video player.
 
-## 📊 Performance
+First-time setup downloads the local translation runtime and model, about
+**1.1 GB**. Allow additional space for caches and retained versions. Windows may
+also need the OCR language for your original subtitles.
 
-On Windows ARM64, local translation reached **~660 ms median latency** in our development evaluation, with a hardware-gated GPU path and automatic CPU fallback.
+**Windows may show an unknown-publisher warning.** Installers are not
+Authenticode-signed. Download only from this repository and compare the file's
+SHA-256 with the release checksums; do not disable Windows security globally.
+[Installation and checksum help →](docs/USAGE.md#installation)
 
-<details>
-<summary>Technical benchmark details</summary>
+## Quick start
 
-Measured on specific hardware during development. Figures describe engineering evidence, not marketing guarantees.
+1. **Set up translation.** Open the app and complete the guided setup. Choose
+   the original subtitle language and the language you want to read; let setup
+   install and test the engine and check the Windows recognition language.
+2. **Select subtitle area.** Play the video on your **primary monitor** and
+   draw a box around the original subtitles, not the whole video. Keep that area
+   visible and reselect it when the video moves or changes size on that monitor.
+3. **Start translation.** Watch with the floating translation overlay. Use
+   **Subtitle style** for text size and a Dark or Light plate; use
+   **Stop translation** when you are done.
 
-### ARM64 translation latency (warm model)
+![Workflow diagram: select visible subtitles, read them with Windows OCR, translate with local HY-MT, and show a floating overlay.](docs/assets/architecture.svg)
 
-**Environment:** Windows 11 ARM64, HY-MT1.5-1.8B-Q4_K_M, one server slot, fixed warm-up
+[Setup, troubleshooting, and frequently asked questions →](docs/USAGE.md)
 
-| Metric | Value |
+## Made for watching
+
+| What you need | What Meowcal Sub does |
 | --- | --- |
-| p50 latency | 660 ms |
-| p95 latency | 3,558 ms |
+| Translate visible subtitles without finding a separate subtitle file | Reads the selected screen region with Windows OCR. |
+| Keep captured and translated words off cloud services | Runs OCR and Tencent HY-MT translation on your PC. |
+| Read the translation without leaving the video | Shows an always-on-top overlay with adjustable text size and a Dark or Light plate. |
+| Translate readable text beyond subtitles | **Translate any text** in Settings relaxes the subtitle-only filter. It is off by default. |
+| Keep the local engine working | Guided setup, integrity checks, engine repair, and signature-verified in-app updates. |
 
-33-case privacy-safe subtitle evaluation; all translated attempts passed the quality grader.
+**Know the limits.** The normal capture/selection workflow targets the **primary
+monitor**, not secondary displays. Recognition depends on the source language,
+text clarity, and what screen capture can actually see. Stylized fonts,
+fast-changing text, and protected video can cause missing or incorrect results.
+Translation is not instant or error-free; speed depends on your PC and the text.
 
-Prior auto-warmup run on same machine: p50 841 ms, p95 4,091 ms.
+**GPU support differs by architecture.** ARM64 gates Adreno acceleration to
+validated hardware/drivers and can retry on CPU after a GPU readiness timeout.
+The x64 build uses Vulkan and does **not** currently offer that same validation
+gate or application-managed CPU retry. [GPU compatibility details →](docs/USAGE.md#how-does-gpu-support-differ-by-architecture)
 
-### ARM64 GPU path (v0.6.9)
+## Privacy, without the fine-print surprise
 
-**Environment:** Qualcomm Adreno X1-85, driver 31.0.148.0 — gated configuration only
-
-| Metric | Value |
+| Stays on your PC | Uses the network |
 | --- | --- |
-| Tail latency | Shorter under sustained load vs CPU-only policy |
-| Median latency | Slightly higher than CPU-only |
-| GPU startup | A few seconds longer while the model loads |
+| Capture of the selected region, Windows OCR, translation inference, and the overlay | Engine/model setup or repair downloads, Windows recognition-language installation when needed, and application update checks/downloads |
 
-Tuned for worst-case stalls rather than peak median speed. GPU startup failure falls back to CPU within the same bounded deadline.
+In normal mode, **captured and translated subtitle text is not uploaded**.
+Production logs record support codes, timings, and counts, not subtitle text.
+Once the engine and recognition language are installed, OCR and translation
+can run offline; online video playback may still need its own connection.
 
-</details>
+Update checks run on app startup at most once a day, or when you choose
+**Settings → Engine and updates → Check for updates**. An application update is
+not downloaded until you start it. Updater signature verification is separate
+from Windows publisher signing; it does not remove the installer warning above.
 
-## 🧠 Architecture
+## More Meow tools
 
-![Pipeline overview](docs/assets/architecture.svg)
+Small tools for watching, understanding, and building. Same cats, different jobs.
 
-| Layer | Role |
-| --- | --- |
-| Desktop shell | Tauri 2 — window lifecycle, tray, multi-webview UI |
-| Capture & OCR | Windows screen capture + WinRT OCR |
-| Translation | App-managed local HY-MT runtime with install/repair/rollback |
-| Presentation | Selector, setup wizard, and always-on-top overlay webviews |
-| Distribution | Dual-arch installers, signature-verified in-app updates |
+| Project | Choose it for | Availability |
+| --- | --- | --- |
+| **[Meowcal Sub](https://github.com/PeterShanxin/Meowcal-Sub)** | Direct screen-subtitle capture and local translation — this app. | Windows 11 public beta |
+| **[MeowWatch](https://github.com/PeterShanxin/MeowWatch)** | Watching together with synchronized playback and floating chat. | Public project |
+| **[Meowcal Core](core/README.md)** | The shared, versioned Windows OCR and local translation runtime for developers. | Public; source lives in this repository |
+| **[Meowcal Sub 2](https://github.com/PeterShanxin/Meowcal-Sub-2)** | Subtitle search and playback-aligned subtitle sessions. | Public release coming soon |
 
-Module ownership is recorded in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+Sub 2 is a separate workflow, not a required upgrade for Sub 1. Its repository
+may show a 404 until it is public. Core is infrastructure, not another app you
+need to install manually.
 
-## 🔒 Privacy
+## Under the hood
 
-**On your machine:** Screen capture of the selected subtitle region; OCR and translation inference; overlay rendering
+Tauri 2 and Rust provide the desktop shell. [Meowcal Core](core/README.md) owns
+native OCR and the managed HY-MT engine; the app owns capture, subtitle
+filtering, translation policy, and presentation. Both Windows x64 and ARM64
+installers are published here.
 
-**Uses the network for:** One-time download of the translation runtime and model during setup; update checks (when the app starts, at most once a day, or when you press **Check for updates**; nothing is downloaded until you start an update)
+See the [architecture](docs/ARCHITECTURE.md),
+[Core design decision](docs/adr/0004-versioned-meowcal-core.md), and
+[Core performance evidence](docs/CORE_PERFORMANCE.md). Those measurements describe
+specific test conditions, not a universal end-to-end subtitle latency guarantee.
 
-**Never sent:** Captured subtitle text; translated subtitle text
+## Help and contribute
 
-Production logs record support codes, timings, and counts — not captured or translated text.
+[Report a bug or suggest an improvement](https://github.com/PeterShanxin/Meowcal-Sub/issues/new/choose).
+Include the app version, Windows build, architecture, and a non-private
+reproduction. Do not post captured subtitle text, private screenshots, or raw
+logs containing them. Report vulnerabilities privately using [SECURITY.md](SECURITY.md).
 
-## 📦 Installation
-
-| | |
-| --- | --- |
-| OS | Windows 11 |
-| x64 | Intel / AMD Windows PCs |
-| ARM64 | Snapdragon and other ARM Windows PCs |
-| Disk | ~1.1 GB for the local model (one-time) |
-
-- Installers are not Authenticode-signed; Windows SmartScreen may warn about an unknown publisher.
-- Verify downloads with `SHA256SUMS.txt` attached to each release.
-
-Download from [this repository's latest release](https://github.com/PeterShanxin/Meowcal-Sub/releases/latest). The current **v0.8.0** release includes:
-
-| File | Use |
-| --- | --- |
-| [Meowcal.Sub_0.8.0_x64-setup.exe](https://github.com/PeterShanxin/Meowcal-Sub/releases/download/v0.8.0/Meowcal.Sub_0.8.0_x64-setup.exe) | NSIS installer, Intel / AMD |
-| [Meowcal.Sub_0.8.0_arm64-setup.exe](https://github.com/PeterShanxin/Meowcal-Sub/releases/download/v0.8.0/Meowcal.Sub_0.8.0_arm64-setup.exe) | NSIS installer, ARM64 |
-| [Meowcal.Sub_0.8.0_x64_en-US.msi](https://github.com/PeterShanxin/Meowcal-Sub/releases/download/v0.8.0/Meowcal.Sub_0.8.0_x64_en-US.msi) | MSI installer, Intel / AMD |
-| [Meowcal.Sub_0.8.0_arm64_en-US.msi](https://github.com/PeterShanxin/Meowcal-Sub/releases/download/v0.8.0/Meowcal.Sub_0.8.0_arm64_en-US.msi) | MSI installer, ARM64 |
-| [SHA256SUMS.txt](https://github.com/PeterShanxin/Meowcal-Sub/releases/download/v0.8.0/SHA256SUMS.txt) | checksums for the installers |
-| [latest.json](https://github.com/PeterShanxin/Meowcal-Sub/releases/download/v0.8.0/latest.json) | release metadata |
-
-Installed copies check for updates when they start, at most once a day, or
-immediately from **Settings → Engine and updates → Check for updates**.
-
-## Status
-
-**Windows 11 public beta** — source is this repository.
-
-Current release: **v0.8.0**
-
-## Development
-
-Start with [CONTRIBUTING.md](CONTRIBUTING.md) and
-[docs/AGENT_GUIDE.md](docs/AGENT_GUIDE.md). Intentional submissions are
-governed by the [CLA](CLA.md).
-
-From a clean checkout:
+For development, start with [CONTRIBUTING.md](CONTRIBUTING.md) and the
+[agent guide](docs/AGENT_GUIDE.md). From a prepared Windows checkout:
 
 ```powershell
 .\scripts\verify.ps1
+.\dev-tauri.cmd
 ```
 
-```powershell
-.\dev-tauri.cmd      # architecture-matched Tauri development
-.\dev-browser.cmd    # browser-only UI against the Rust HTTP backend
-```
-
-Report a problem from the
-[issue chooser](https://github.com/PeterShanxin/Meowcal-Sub/issues/new/choose).
-See [SECURITY.md](SECURITY.md) to report a vulnerability privately and
-[TRADEMARKS.md](TRADEMARKS.md) for name and logo use.
+Browser-only development is available through `.\dev-browser.cmd`; it does not
+validate native capture, OCR, overlays, or installers. Intentional contributions
+are governed by the [CLA](CLA.md).
 
 ## License
 
-Meowcal Sub community source is licensed under the
-[GNU Affero General Public License version 3 only](LICENSE) (`AGPL-3.0-only`).
-The project-specific application notice is in
-[LICENSE-NOTICE.md](LICENSE-NOTICE.md).
-Commercial licensing is available for organizations that require terms outside
-AGPL-3.0.
+Community source: **[AGPL-3.0-only](LICENSE)**. See the
+[application notice](LICENSE-NOTICE.md). Using the public project under AGPL does
+not require a paid license; commercial licensing is available for organizations
+that require different terms.
 
-Using the public project under AGPL does not require a paid license.
-
-The Tencent HY-MT model the app can download is under Tencent's community
-license, not AGPL.
-
-See [CLA.md](CLA.md) for the contributor grant,
-[TRADEMARKS.md](TRADEMARKS.md) for name and logo use, and
-[SECURITY.md](SECURITY.md) to report a vulnerability privately.
-
----
-
-<p align="center"><sub>Meowcal Sub · v0.8.0 · Windows 11 public beta</sub></p>
+The downloadable Tencent HY-MT model has its own community license, separate
+from the app's AGPL license. [Name and logo use](TRADEMARKS.md) is separate too.
