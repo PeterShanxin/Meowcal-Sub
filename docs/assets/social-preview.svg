@@ -30,10 +30,10 @@
   <g font-family="Segoe UI, Arial, sans-serif" font-size="23" font-weight="600">
     <rect x="88" y="478" width="188" height="48" rx="24" fill="#ffffff" opacity="0.065" stroke="#ffffff" stroke-opacity="0.12"/>
     <text x="182" y="510" fill="#e8eef7" text-anchor="middle">On-device</text>
-    <rect x="292" y="478" width="254" height="48" rx="24" fill="#ffffff" opacity="0.065" stroke="#ffffff" stroke-opacity="0.12"/>
-    <text x="419" y="510" fill="#e8eef7" text-anchor="middle">No subtitle uploads</text>
-    <rect x="562" y="478" width="204" height="48" rx="24" fill="#ffffff" opacity="0.065" stroke="#ffffff" stroke-opacity="0.12"/>
-    <text x="664" y="510" fill="#e8eef7" text-anchor="middle">x64 + ARM64</text>
+    <rect x="292" y="478" width="294" height="48" rx="24" fill="#ffffff" opacity="0.065" stroke="#ffffff" stroke-opacity="0.12"/>
+    <text x="439" y="510" fill="#e8eef7" text-anchor="middle">No subtitle uploads</text>
+    <rect x="602" y="478" width="204" height="48" rx="24" fill="#ffffff" opacity="0.065" stroke="#ffffff" stroke-opacity="0.12"/>
+    <text x="704" y="510" fill="#e8eef7" text-anchor="middle">x64 + ARM64</text>
   </g>
 
   <text x="1192" y="566" fill="#8d9ab4" font-family="Segoe UI, Arial, sans-serif" font-size="22" text-anchor="end">Windows 11 · public beta</text>
