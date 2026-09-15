@@ -74,8 +74,16 @@ CPU in 3,245 ms, and translated the next cue successfully in 197 ms. A further
 The tested working diff was matched to the source commit above by SHA-256.
 Core binary SHA-256: `cba4b75c2a2355d21aedf58588e9da4dfcaed4fcf206ef19179815f069da086f`.
 
-The application was rebuilt from this source, but the final capture/overlay
-rerun could not proceed because Windows screenshots were entirely black.
-The earlier native subtitle run therefore remains evidence for `90d4f41`,
-not a final-source UI pass. Final-source native subtitle validation remains
-outstanding until a capturable desktop is available.
+The rebuilt application completed the final native capture/OCR/overlay run on
+September 16 using the same 120-second equal-width fixture, at 1x with Repeat
+off and no pauses. All 30 cues were recognized, admitted, and translated;
+the gate and end-to-end reports passed with no partial evidence or missed cues.
+Total translation latency p95 was 410.75 ms. The default memory-headroom guard
+selected CPU because available memory or commit was below 4 GiB; no guard was
+overridden. This is a final-source CPU UI pass, alongside the separate real
+GPU-to-CPU recovery check above.
+
+Application binary SHA-256:
+`3a6ad60e43a1e735d6c86bf28f2b7b59f716bf0a7adbe53ca027ba78e87e8d7a`.
+
+![Final-source CPU translation in the native overlay](../assets/inference-recovery-final-native.png)
