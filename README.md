@@ -77,6 +77,10 @@ SHA-256 with the release checksums; do not disable Windows security globally.
 
 ## Made for watching
 
+<p align="center">
+  <img src="docs/assets/screenshot-overlay.png" width="720" alt="Meowcal Sub on a demo scene: the English subtitle “The last ferry leaves before sunrise.” with its Chinese translation in the floating overlay below it.">
+</p>
+
 | What you need | What Meowcal Sub does |
 | --- | --- |
 | Translate visible subtitles without finding a separate subtitle file | Reads the selected screen region with Windows OCR. |

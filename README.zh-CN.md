@@ -72,6 +72,10 @@ Windows 也可能需要为原字幕语言安装对应的 OCR 识别组件。
 
 ## 为观看而做
 
+<p align="center">
+  <img src="docs/assets/screenshot-overlay.png" width="720" alt="Meowcal Sub 演示画面：英文字幕 “The last ferry leaves before sunrise.”，下方悬浮字幕显示中文译文。">
+</p>
+
 | 你需要什么 | Meowcal Sub 怎么做 |
 | --- | --- |
 | 看懂画面里的字幕，不想再找字幕文件 | 用 Windows OCR 读取圈选区域。 |
