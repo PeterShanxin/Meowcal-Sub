@@ -35,12 +35,12 @@ overlay. No subtitle file, cloud account, or API key is needed for normal use.
 
 ## Download
 
-**Windows 11 public beta · v0.8.1** — [release notes and all files](https://github.com/PeterShanxin/Meowcal-Sub/releases/tag/v0.8.1).
+**Windows 11 public beta · v0.8.2** — [release notes and all files](https://github.com/PeterShanxin/Meowcal-Sub/releases/tag/v0.8.2).
 
 | Your PC | Installer |
 | --- | --- |
-| Intel or AMD Windows PC | **[Download x64 (.exe)](https://github.com/PeterShanxin/Meowcal-Sub/releases/download/v0.8.1/Meowcal.Sub_0.8.1_x64-setup.exe)** |
-| Snapdragon or other Windows on ARM PC | **[Download ARM64 (.exe)](https://github.com/PeterShanxin/Meowcal-Sub/releases/download/v0.8.1/Meowcal.Sub_0.8.1_arm64-setup.exe)** |
+| Intel or AMD Windows PC | **[Download x64 (.exe)](https://github.com/PeterShanxin/Meowcal-Sub/releases/download/v0.8.2/Meowcal.Sub_0.8.2_x64-setup.exe)** |
+| Snapdragon or other Windows on ARM PC | **[Download ARM64 (.exe)](https://github.com/PeterShanxin/Meowcal-Sub/releases/download/v0.8.2/Meowcal.Sub_0.8.2_arm64-setup.exe)** |
 
 MSI installers and `SHA256SUMS.txt` are on the release page. For newer versions,
 use [the latest application release](https://github.com/PeterShanxin/Meowcal-Sub/releases/latest).
