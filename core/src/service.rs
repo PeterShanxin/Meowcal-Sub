@@ -250,8 +250,11 @@ impl Session {
 
     async fn status(&mut self) -> Value {
         let runtime = self.manifest.runtime_for_current_arch();
-        let installed =
-            runtime.is_ok_and(|runtime| self.paths.is_complete(&self.manifest, runtime));
+        // Readiness imports verified assets from `legacy_roots` without a
+        // download, so an engine left by a previous Core version counts (#216).
+        let installed = runtime
+            .is_ok_and(|runtime| self.paths.is_complete(&self.manifest, runtime))
+            || storage::assets_available_offline(&self.paths, &self.legacy_roots, &self.manifest);
         let config = self.paths.managed_config(&self.manifest);
         let ready = self.endpoint.is_some() && hy_mt_runtime::is_healthy(&config).await;
         if self.endpoint.is_some() && !ready {
