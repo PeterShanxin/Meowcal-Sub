@@ -89,6 +89,12 @@ fn call_locked<T: DeserializeOwned>(
     if cancelled.is_some_and(|flag| flag.load(Ordering::SeqCst)) {
         return Err("CORE_REQUEST_CANCELLED".to_string());
     }
+    if std::ptr::eq(kill_slot, &super::TRANSLATION_KILL)
+        && method == "complete"
+        && super::recovering()
+    {
+        return Err("CORE_INFERENCE_RECOVERING: Translation engine is recovering".into());
+    }
     if let Some(process) = guard.as_mut() {
         match process.has_exited() {
             Ok(true) => clear_process(guard, kill_slot),
@@ -114,7 +120,22 @@ fn call_locked<T: DeserializeOwned>(
     } else {
         cancelled
     };
-    let response = process.request(method, params, request_timeout, progress, request_cancelled);
+    let on_progress = |message: String| {
+        if std::ptr::eq(kill_slot, &super::TRANSLATION_KILL)
+            && message == meowcal_core::inference_health::CPU_LOCK_EVENT
+        {
+            super::recovery::lock_cpu();
+        } else if let Some(progress) = progress {
+            progress(message);
+        }
+    };
+    let response = process.request(
+        method,
+        params,
+        request_timeout,
+        Some(&on_progress),
+        request_cancelled,
+    );
     let value = match response {
         Ok(value) => value,
         Err(Failure::Remote { code, message }) if !fatal_remote(&code) => {
@@ -135,9 +156,12 @@ fn call_locked<T: DeserializeOwned>(
         }
     };
     if std::ptr::eq(kill_slot, &super::TRANSLATION_KILL)
-        && matches!(method, "status" | "ready" | "install")
+        && matches!(method, "status" | "ready" | "install" | "recoverInference")
     {
         if let Ok(status) = serde_json::from_value::<super::CoreStatus>(value.clone()) {
+            if status.cpu_locked {
+                super::recovery::lock_cpu();
+            }
             if let Ok(mut cached) = super::STATUS.lock() {
                 *cached = Some(status);
             }

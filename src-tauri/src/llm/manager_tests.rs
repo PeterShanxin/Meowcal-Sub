@@ -209,31 +209,42 @@ async fn test_zh_cn_to_en_validation_rejection_is_not_retried() {
 }
 
 #[tokio::test]
-async fn test_not_ready_foundry_reports_warming_without_translation() {
-    let backends: Vec<Box<dyn TranslatorBackend>> = vec![
-        Box::new(TestBackend {
+async fn test_not_ready_and_recovering_engines_skip_translation() {
+    for (ready_state, code, display) in [
+        (
+            ReadyState::NotReady,
+            "not_ready",
+            TranslationDisplayState::Warming,
+        ),
+        (
+            ReadyState::Recovering,
+            "engine_recovering",
+            TranslationDisplayState::Warming,
+        ),
+        (
+            ReadyState::RecoveryFailed,
+            "engine_recovery_failed",
+            TranslationDisplayState::TemporarilyUnavailable,
+        ),
+    ] {
+        let backend = TestBackend {
             id: BackendId::FoundryLocal,
             available: true,
-            ready_state: ReadyState::NotReady,
-            response: Ok("unused".to_string()),
+            ready_state,
+            response: Ok("must not be shown".into()),
             delay_ms: 0,
-        }),
-        Box::new(TestBackend {
-            id: BackendId::Mock,
-            available: true,
-            ready_state: ReadyState::Ready,
-            response: Ok("你好".to_string()),
-            delay_ms: 0,
-        }),
-    ];
-
-    let diagnostics = Arc::new(Mutex::new(TranslationDiagnosticsState::default()));
-    let manager = TranslationManager::with_backends(base_config(), backends, diagnostics, 500);
-    let outcome = manager
-        .translate_with_fallback("你好", "zh-CN", "en-US")
-        .await;
-
-    assert_eq!(outcome.display_state, TranslationDisplayState::Warming);
+        };
+        let manager = TranslationManager::with_backends(
+            base_config(),
+            vec![Box::new(backend)],
+            Arc::new(Mutex::new(TranslationDiagnosticsState::default())),
+            500,
+        );
+        let outcome = manager.translate_with_fallback("Hello", "en", "zh").await;
+        assert_eq!(outcome.display_state, display);
+        assert!(outcome.warnings.contains(&format!("local_engine: {code}")));
+        assert_ne!(outcome.translated, "must not be shown");
+    }
 }
 
 #[tokio::test]

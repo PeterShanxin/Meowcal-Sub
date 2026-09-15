@@ -9,6 +9,7 @@ pub mod engine_manifest;
 pub mod engine_preflight;
 pub mod hy_mt_paths;
 pub mod hy_mt_runtime;
+pub mod inference_health;
 pub mod installer;
 pub mod ocr;
 pub mod ocr_service;

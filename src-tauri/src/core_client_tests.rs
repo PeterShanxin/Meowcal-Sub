@@ -17,6 +17,7 @@ fn managed_backend_snapshots_do_not_wait_for_an_active_core_request() {
     let status = CoreStatus {
         installed: true,
         ready: true,
+        cpu_locked: false,
         model: "test".into(),
         version: CORE_VERSION.into(),
         storage_root: PathBuf::new(),
@@ -216,6 +217,17 @@ async fn real_core_handshake_status_and_shutdown() {
     assert_eq!(status.version, CORE_VERSION);
     assert!(!status.ready);
     assert!(owned_pid().is_some());
+    if CORE_SOURCE_CANDIDATE {
+        recovery::lock_cpu();
+        shutdown_owned();
+        assert!(owned_pid().is_none());
+        let replacement = super::status().await.expect("replacement Core handshake");
+        assert!(
+            replacement.cpu_locked,
+            "app CPU policy must survive a Core restart"
+        );
+        assert!(!replacement.ready);
+    }
 
     shutdown_owned();
     assert!(owned_pid().is_none());

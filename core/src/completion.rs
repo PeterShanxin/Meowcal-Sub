@@ -156,7 +156,7 @@ pub async fn sample(endpoint: &str, model: &str) -> Result<(), String> {
         timeout_ms: 90_000,
         request: json!({
             "model": model, "messages": [{"role":"user", "content":"Translate the following segment into English, without additional explanation.\n\n先不提时钟塔"}],
-            "temperature":0.7, "top_k":20, "top_p":0.6, "repeat_penalty":1.05, "max_tokens":120, "stream":false
+            "temperature":0.0, "seed":0, "top_k":20, "top_p":0.6, "repeat_penalty":1.05, "max_tokens":120, "stream":false
         }),
     };
     let result = execute(endpoint, &params)
@@ -166,7 +166,12 @@ pub async fn sample(endpoint: &str, model: &str) -> Result<(), String> {
         .pointer("/choices/0/message/content")
         .and_then(Value::as_str)
         .unwrap_or_default();
-    if !is_sample_translation(content) {
+    if result
+        .pointer("/choices/0/finish_reason")
+        .and_then(Value::as_str)
+        != Some("stop")
+        || !is_sample_translation(content)
+    {
         return Err("ENGINE_SAMPLE_TRANSLATION_FAILED".into());
     }
     Ok(())
@@ -176,7 +181,18 @@ pub async fn sample(endpoint: &str, model: &str) -> Result<(), String> {
 /// letters and no CJK left over from the source.
 fn is_sample_translation(content: &str) -> bool {
     let content = content.trim();
-    !content.is_empty()
+    let lower = content.to_ascii_lowercase().replace('’', "'");
+    let words: Vec<_> = lower
+        .split(|ch: char| !ch.is_ascii_alphabetic() && ch != '\'')
+        .filter(|word| !word.is_empty())
+        .collect();
+    (8..=100).contains(&content.chars().count())
+        && words.contains(&"clock")
+        && words.contains(&"tower")
+        && ["not", "don't", "forget", "aside", "leave", "ignore", "skip"]
+            .iter()
+            .any(|word| words.contains(word))
+        && !crate::inference_health::has_garbage_tail("", content)
         && content
             .chars()
             .any(|character| character.is_ascii_alphabetic())
@@ -201,5 +217,30 @@ mod tests {
         ));
         assert!(!is_sample_translation("先不提时钟塔"));
         assert!(!is_sample_translation("   "));
+        assert!(!is_sample_translation(
+            "Security tokens scores tokens scores"
+        ));
+        assert!(!is_sample_translation(
+            "Forget the clock tower for now.---+"
+        ));
+    }
+
+    #[test]
+    fn sample_keywords_are_complete_words() {
+        for text in [
+            "Another clock tower.",
+            "An unforgettable clock tower.",
+            "A clock tower notebook.",
+            "Do not mention the clockwork tower.",
+        ] {
+            assert!(!is_sample_translation(text), "{text}");
+        }
+        for text in [
+            "Don't mention the clock tower yet.",
+            "Don’t mention the clock tower yet.",
+            "Leave the clock tower aside for now.",
+        ] {
+            assert!(is_sample_translation(text), "{text}");
+        }
     }
 }

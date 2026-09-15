@@ -2,12 +2,15 @@
 mod async_call;
 #[path = "core_client_config.rs"]
 mod config;
+#[path = "core_client_recovery.rs"]
+mod recovery;
 #[path = "core_client_request.rs"]
 mod request;
 #[path = "core_client_transport.rs"]
 mod transport;
 #[path = "core_client_types.rs"]
 mod types;
+pub use recovery::{recover_inference, recover_transport, recovering, recovery_failed};
 
 use async_call::call_async;
 pub use config::{configure_storage, register, register_headless, select_storage_root};
@@ -106,14 +109,22 @@ pub async fn install(progress: Arc<dyn Fn(String) + Send + Sync>) -> Result<Core
 }
 
 pub fn ready_blocking(timeout: Duration) -> Result<CoreStatus, String> {
+    recovery::clear_failure();
     call(&TRANSLATION, "ready", json!({}), timeout, None, None, false)
 }
 
 pub async fn ready(timeout: Duration) -> Result<CoreStatus, String> {
+    recovery::clear_failure();
     call_async(&TRANSLATION, "ready", json!({}), timeout, None, false).await
 }
 
 pub async fn complete(request: Value, timeout_ms: u64) -> Result<Value, String> {
+    if recovering() {
+        return Err("CORE_INFERENCE_RECOVERING: Translation engine is recovering".into());
+    }
+    if recovery_failed() {
+        return Err("CORE_INFERENCE_FAILED: Retry the engine explicitly".into());
+    }
     let timeout_ms = timeout_ms.clamp(1, 90_000);
     call_async(
         &TRANSLATION,
@@ -176,6 +187,7 @@ pub fn owned_pid() -> Option<u32> {
 }
 
 pub fn shutdown_owned() {
+    recovery::cancel();
     invalidate_readiness();
     shutdown_slot(&TRANSLATION, &TRANSLATION_KILL);
     shutdown_slot(&OCR, &OCR_KILL);
@@ -202,7 +214,10 @@ fn spawn_initialized(
         clear_kill(kill_slot);
         return Err("CORE_REQUEST_CANCELLED".to_string());
     }
-    let hello = json!({"client":"sub1","profile":config.profile,"expectedVersion":CORE_VERSION,"storageRoot":config.storage_root,"legacyRoots":config.legacy_roots});
+    let mut hello = json!({"client":"sub1","profile":config.profile,"expectedVersion":CORE_VERSION,"storageRoot":config.storage_root,"legacyRoots":config.legacy_roots});
+    if recovery::cpu_locked() {
+        hello["forceCpu"] = json!(true);
+    }
     let hello_timeout = match remaining(deadline, method) {
         Ok(remaining) => remaining.min(HELLO_TIMEOUT),
         Err(error) => {

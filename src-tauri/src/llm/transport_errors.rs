@@ -129,6 +129,12 @@ mod tests {
         assert!(is_transient(&api("CORE_STDOUT_EOF")));
         assert!(is_transient(&api("CORE_REQUEST_TIMEOUT: complete")));
         assert!(!is_transient(&api(
+            "CORE_INFERENCE_RECOVERING: Translation engine is recovering"
+        )));
+        assert!(!is_transient(&api(
+            "CORE_INFERENCE_FAILED: Retry the engine explicitly"
+        )));
+        assert!(!is_transient(&api(
             "CORE_INVALID_COMPLETION: model mismatch"
         )));
     }

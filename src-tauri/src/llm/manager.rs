@@ -326,15 +326,20 @@ impl TranslationManager {
 
             let ready_state = backend.ready_state();
             if ready_state != ReadyState::Ready {
-                warnings.push(format!("{}: not_ready", id.as_str()));
+                let code = match ready_state {
+                    ReadyState::Recovering => "engine_recovering",
+                    ReadyState::RecoveryFailed => "engine_recovery_failed",
+                    _ => "not_ready",
+                };
+                warnings.push(format!("{}: {code}", id.as_str()));
                 self.diagnostics
                     .lock()
                     .unwrap()
-                    .record_error(id, "not_ready", None);
+                    .record_error(id, code, None);
                 debug!(
                     backend_id = id.as_str(),
                     ready_state = ?ready_state,
-                    error_code = "not_ready",
+                    error_code = code,
                     "Translation backend skipped"
                 );
                 continue;
@@ -342,11 +347,6 @@ impl TranslationManager {
 
             let started = Instant::now();
             let timeout_ms = self.timeout_ms_for_backend(id);
-            // Bounded by the pipeline's deadline as well as by config: the retry
-            // loop below measures its remaining budget against this, and if it
-            // measures against thirty seconds while the line is abandoned at
-            // five, it starts a retry that is killed mid-flight and never
-            // reaches the passthrough.
             let total_timeout = Duration::from_millis(timeout_ms).min(backend_budget());
             let max_attempts = match id {
                 BackendId::FoundryLocal => 1 + FOUNDRY_TRANSIENT_MAX_RETRIES,
@@ -523,7 +523,7 @@ impl TranslationManager {
 
         if engine_warnings
             .iter()
-            .any(|warning| warning.contains("not_ready"))
+            .any(|warning| warning.contains("not_ready") || warning.contains("engine_recovering"))
         {
             return TranslationDisplayState::Warming;
         }

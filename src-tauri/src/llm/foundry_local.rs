@@ -1274,8 +1274,6 @@ impl FoundryLocalBackend {
             max_tokens: 150,
         };
 
-        debug!("Sending summarization request to Foundry Local");
-
         let completion = if managed {
             core_translation::complete(&request, self.config.timeout_ms as u64).await?
         } else {
@@ -1486,8 +1484,8 @@ impl TranslatorBackend for FoundryLocalBackend {
             self.transport
                 .endpoint_url_for(&base_url, "chat/completions")
         };
-        let request_started = std::time::Instant::now();
         debug!("Sending translation request to Foundry Local: {}", url);
+        let request_started = std::time::Instant::now();
         info!(
             target: "translation_io",
             source_chars = text.chars().count(),
@@ -1498,7 +1496,15 @@ impl TranslatorBackend for FoundryLocalBackend {
         );
 
         let completion = if managed {
-            core_translation::complete(&request, self.config.timeout_ms as u64).await?
+            core_translation::complete_translation(
+                &request,
+                self.config.timeout_ms as u64,
+                text,
+                source_language,
+                target_language,
+                prompt_options.max_source_chars,
+            )
+            .await?
         } else {
             let response = match self.send_chat_completion(&base_url, &request).await {
                 Ok(resp) => resp,
@@ -1536,12 +1542,6 @@ impl TranslatorBackend for FoundryLocalBackend {
 
         let elapsed_ms = request_started.elapsed().as_millis() as u64;
         let completion_tokens = completion.completion_tokens();
-
-        debug!(
-            "Foundry Local translated {} chars to {} chars",
-            text.chars().count(),
-            translated.chars().count()
-        );
         info!(
             target: "translation_io",
             source_chars = text.chars().count(),

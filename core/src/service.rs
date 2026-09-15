@@ -1,7 +1,7 @@
 use crate::completion::{self, CompletionParams};
 use crate::engine_manifest::EngineManifest;
 use crate::hy_mt_runtime::{self, HyMtInstallPaths};
-use crate::protocol::{Error, Request, API_VERSION, CAPABILITIES, CORE_VERSION};
+use crate::protocol::{Error, Request, API_VERSION, CORE_VERSION};
 use crate::storage::{self, Lease};
 use serde::Deserialize;
 use serde_json::{json, Value};
@@ -14,6 +14,8 @@ struct Hello {
     client: String,
     profile: String,
     expected_version: String,
+    #[serde(default)]
+    force_cpu: bool,
     storage_root: Option<PathBuf>,
     #[serde(default)]
     legacy_roots: Vec<PathBuf>,
@@ -25,7 +27,9 @@ struct Session {
     legacy_roots: Vec<PathBuf>,
     lease: Option<Lease>,
     endpoint: Option<String>,
+    gpu: bool,
     offline_scan: Option<tokio::task::JoinHandle<bool>>,
+    inference: crate::inference_health::InferenceHealth,
 }
 
 #[derive(Default)]
@@ -111,6 +115,11 @@ impl Service {
                 }
                 Ok(session.status().await)
             }
+            "recoverInference" => {
+                let report = serde_json::from_value(Value::Object(request.params))
+                    .map_err(|_| Error::new("INVALID_REPORT", "Invalid inference report"))?;
+                session.recover_inference(report, progress).await
+            }
             "complete" => {
                 let params: CompletionParams =
                     serde_json::from_value(Value::Object(request.params)).map_err(|_| {
@@ -130,7 +139,12 @@ impl Service {
                     .endpoint
                     .as_deref()
                     .ok_or_else(|| Error::new("NOT_READY", "Call ready before completion"))?;
-                completion::execute(endpoint, &params).await
+                let mut response = completion::execute(endpoint, &params).await?;
+                if !response.is_object() {
+                    return Err(Error::new("INVALID_RESPONSE", "Expected completion object"));
+                }
+                session.inference.record(&params.request, &mut response);
+                Ok(response)
             }
             "ocrLanguages" | "ocrInitialize" | "ocrRecognizeBgra" => {
                 self.ocr
@@ -171,14 +185,20 @@ impl Service {
             .runtime_for_current_arch()
             .map_err(|error| Error::from(error.to_string()))?;
         let paths = HyMtInstallPaths::from_cache_root(root, &manifest, runtime);
-        let result = json!({"version":CORE_VERSION,"api":API_VERSION,"capabilities":CAPABILITIES,"model":manifest.model.id,"storageRoot":paths.root});
+        if hello.force_cpu {
+            hy_mt_runtime::lock_cpu();
+        }
+        let capabilities = crate::protocol::capabilities();
+        let result = json!({"version":CORE_VERSION,"api":API_VERSION,"capabilities":capabilities,"model":manifest.model.id,"storageRoot":paths.root});
         self.session = Some(Session {
             manifest,
             paths,
             legacy_roots: hello.legacy_roots,
             lease: None,
             endpoint: None,
+            gpu: false,
             offline_scan: None,
+            inference: Default::default(),
         });
         Ok(result)
     }
@@ -200,7 +220,9 @@ impl Drop for Service {
 impl Session {
     fn stop(&mut self) {
         hy_mt_runtime::shutdown_owned();
+        self.inference.reset_engine();
         self.endpoint = None;
+        self.gpu = false;
         self.lease = None;
     }
 
@@ -236,9 +258,25 @@ impl Session {
                 Some(Lease::acquire(&self.paths.root, false, Duration::from_secs(10)).await?);
             storage::verify(&self.paths, &self.manifest).await?;
         }
-        let result = hy_mt_runtime::ensure_ready(&config, Duration::from_secs(90)).await;
+        let result = hy_mt_runtime::ensure_ready(&config, Duration::from_secs(90), progress).await;
         match result {
             Ok(endpoint) => {
+                if hy_mt_runtime::cpu_locked() {
+                    let valid = tokio::time::timeout(
+                        Duration::from_secs(15),
+                        completion::sample(&endpoint, &self.manifest.model.id),
+                    )
+                    .await
+                    .is_ok_and(|result| result.is_ok());
+                    if !valid {
+                        self.stop();
+                        return Err(Error::new(
+                            "INFERENCE_FAILED",
+                            "CPU inference check failed; retry the engine explicitly",
+                        ));
+                    }
+                }
+                self.gpu = hy_mt_runtime::owned_acceleration() == Some("gpu");
                 self.endpoint = Some(endpoint);
                 Ok(())
             }
@@ -289,7 +327,7 @@ impl Session {
         }
         json!({"installed":installed,"ready":ready,"model":self.manifest.model.id,"version":CORE_VERSION,
             "storageRoot":self.paths.root,"managedConfig":config,"installPaths":self.paths,
-            "acceleration":hy_mt_runtime::owned_acceleration()})
+            "acceleration":hy_mt_runtime::owned_acceleration(),"cpuLocked":hy_mt_runtime::cpu_locked()})
     }
 }
 
@@ -338,3 +376,6 @@ mod tests {
         std::fs::remove_dir_all(root).unwrap();
     }
 }
+
+#[path = "inference_recovery.rs"]
+mod inference_recovery;

@@ -16,6 +16,15 @@ pub const CAPABILITIES: &[&str] = &[
     "ocrRecognizeBgra",
 ];
 
+/// Additive capabilities are advertised without changing API 1's required base.
+pub fn capabilities() -> Vec<&'static str> {
+    CAPABILITIES
+        .iter()
+        .copied()
+        .chain([crate::inference_health::CAPABILITY])
+        .collect()
+}
+
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Request {

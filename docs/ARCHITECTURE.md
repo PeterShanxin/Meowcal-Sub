@@ -143,6 +143,13 @@ Shared contracts have one owner before parallel decomposition begins:
   translation is serialized intentionally to avoid the ARM64 runtime's
   unstable automatic multi-slot latency. This remains subject to x64 and
   capture-to-overlay validation.
+- Inference correctness: Core's `inference_health` owns bounded response receipts
+  and independent failure evidence; `inference_recovery` owns probing and verified
+  CPU fallback. Sub 1 validates raw output before sanitization can hide debris,
+  then reports rejection through `core_client_recovery`. That adapter serializes
+  recovery, skips stale requests, and retains CPU policy across internal Core
+  restarts. CPU recovery failure requires explicit retry. HTTP health alone does
+  not prove translation correctness. See [Core's API contract](../core/README.md#inference-recovery).
 - Product version: `src-tauri/tauri.conf.json` is the product version record.
   `package.json` and `src-tauri/Cargo.toml` are synchronized mirrors.
 - Display state: the pipeline owns translated/source-only/failure semantics.

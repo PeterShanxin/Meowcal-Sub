@@ -73,6 +73,31 @@ fn returns_stable_rejection_reasons() {
 }
 
 #[test]
+fn strong_corruption_is_not_hidden_by_output_length() {
+    for (output, expected) in [
+        (
+            "你好".repeat(24),
+            TranslationOutputRejection::RepetitionLoop,
+        ),
+        (
+            format!(
+                "{}---+",
+                "这段输出没有遵守翻译指令，而且添加了很多额外解释和无关内容。".repeat(2)
+            ),
+            TranslationOutputRejection::GarbageTail,
+        ),
+    ] {
+        assert_eq!(validate("Hi.", &output, "en-US", "zh-CN"), Err(expected));
+    }
+    for (output, target) in [("あ".repeat(12), "ja-JP"), ("한".repeat(12), "ko-KR")] {
+        assert_eq!(
+            validate("Hi.", &output, "en-US", target),
+            Err(TranslationOutputRejection::RepetitionLoop)
+        );
+    }
+}
+
+#[test]
 fn allows_mixed_and_non_english_target_cases() {
     assert!(validate("需要", "OK 好", "zh-CN", "en-US").is_ok());
     assert!(validate("Need eel.", "需要鲨鱼。", "en-US", "zh-CN",).is_ok());
@@ -252,6 +277,58 @@ fn runaway_output_is_refused_even_when_translating_all_text() {
     let runaway = "no ".repeat(400);
     assert_eq!(
         validate_translation_output("Stop.", &runaway, "en-US", "fr-FR", Eligibility::AnyText),
-        Err(TranslationOutputRejection::TooLong)
+        Err(TranslationOutputRejection::RepetitionLoop)
     );
+}
+
+#[test]
+fn rejects_observed_gpu_junk_without_rejecting_names_punctuation_or_general_text() {
+    assert_eq!(
+        validate(
+            "The last ferry leaves before sunrise.",
+            "最后一班渡轮会在中午之前离开。---+",
+            "en",
+            "zh"
+        ),
+        Err(TranslationOutputRejection::GarbageTail)
+    );
+    assert_eq!(
+        validate("Hello", "你好你好你好你好你好你好", "en", "zh"),
+        Err(TranslationOutputRejection::RepetitionLoop)
+    );
+    for (source, output) in [
+        ("Really?!", "真的……？！"),
+        ("Print ---+", "输出 ---+"),
+        ("Jean-Luc", "Jean-Luc"),
+        ("C++", "C++"),
+        ("ha ha ha ha ha ha", "哈哈哈哈哈哈哈哈"),
+    ] {
+        assert!(validate(source, output, "en", "zh").is_ok(), "{output}");
+    }
+    let source = "This is ordinary screen text. ".repeat(30);
+    let output: String = (1..=30)
+        .map(|index| format!("这是第{index}段屏幕文字。"))
+        .collect();
+    assert!(
+        validate_translation_output(&source, &output, "en", "zh", Eligibility::AnyText).is_ok()
+    );
+}
+
+#[test]
+fn inference_reports_use_the_shared_core_rejection_contract() {
+    for reason in [
+        TranslationOutputRejection::EmptyOutput,
+        TranslationOutputRejection::TooLong,
+        TranslationOutputRejection::RepetitionLoop,
+        TranslationOutputRejection::GarbageTail,
+        TranslationOutputRejection::PromptEcho,
+        TranslationOutputRejection::WrongLanguage,
+    ] {
+        assert!(
+            serde_json::from_value::<meowcal_core::inference_health::Report>(
+                serde_json::json!({"receipt":"opaque", "reason":reason.code()})
+            )
+            .is_ok()
+        );
+    }
 }

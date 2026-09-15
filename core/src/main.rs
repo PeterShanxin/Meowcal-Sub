@@ -23,7 +23,7 @@ async fn main() {
     if arguments == ["--version-json"] {
         println!(
             "{}",
-            json!({"version":protocol::CORE_VERSION,"api":protocol::API_VERSION,"capabilities":protocol::CAPABILITIES})
+            json!({"version":protocol::CORE_VERSION,"api":protocol::API_VERSION,"capabilities":protocol::capabilities()})
         );
         return;
     }

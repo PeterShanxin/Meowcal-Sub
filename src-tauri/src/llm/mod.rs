@@ -122,6 +122,8 @@ pub fn language_prompt_label(code: &str) -> Cow<'_, str> {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub enum ReadyState {
+    Recovering,
+    RecoveryFailed,
     NotSupported,
     NotReady,
     Ready,

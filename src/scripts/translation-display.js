@@ -56,7 +56,9 @@
           state: normalized,
           replaceText: false,
           clearText: false,
-          hint: "Translation engine is warming up",
+          hint: warnings?.includes("local_engine: engine_recovering")
+            ? "Translation engine is recovering"
+            : "Translation engine is warming up",
           severity: "warn",
           persist: true,
         };
@@ -65,7 +67,9 @@
           state: normalized,
           replaceText: false,
           clearText: false,
-          hint: "Translation temporarily unavailable",
+          hint: warnings?.includes("local_engine: engine_recovery_failed")
+            ? "Engine recovery failed — retry the engine in Settings"
+            : "Translation temporarily unavailable",
           severity: "error",
           persist: true,
         };
