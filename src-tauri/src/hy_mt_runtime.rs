@@ -1,6 +1,5 @@
 use crate::config::ManagedLocalRuntimeConfig;
 use std::time::Duration;
-use tracing::{info, warn};
 
 pub use crate::hy_mt_paths::HyMtInstallPaths;
 
@@ -42,19 +41,6 @@ pub fn shutdown_owned() {
 
 pub fn owned_pid() -> Option<u32> {
     crate::core_client::owned_pid()
-}
-
-pub fn start_configured(runtime: Option<ManagedLocalRuntimeConfig>) {
-    if runtime.is_none() {
-        return;
-    }
-    tauri::async_runtime::spawn(async move {
-        match crate::core_client::ready(crate::core_client::READY_TIMEOUT).await {
-            Ok(status) if status.ready => info!("Local Translation Engine is ready"),
-            Ok(_) => warn!("Local Translation Engine did not report ready"),
-            Err(error) => warn!("Local Translation Engine startup failed: {error}"),
-        }
-    });
 }
 
 #[cfg(test)]

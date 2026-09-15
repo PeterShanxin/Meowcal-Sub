@@ -145,9 +145,6 @@ fn main() {
                 *lock_or_recover(&state.capture_scale_factor) = scale_factor.unwrap_or(1.0);
                 state.startup_gate.mark_ready();
             }
-            meowcal_sub::hy_mt_runtime::start_configured(
-                loaded_config.translation.foundry_local.managed_runtime.clone(),
-            );
 
             meowcal_sub::window_lifecycle::restore_and_show_main(
                 app.handle(),

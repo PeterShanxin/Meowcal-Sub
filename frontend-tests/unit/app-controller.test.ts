@@ -143,6 +143,30 @@ describe("AppController settings persistence", () => {
     expect(invoke).toHaveBeenCalledTimes(1);
   });
 
+  // The engine is not loaded at launch, so the first Start finds it stopped.
+  it("readies a stopped engine before starting translation", async () => {
+    const invoke = vi.fn(async (command: string) => {
+      if (command === "refresh_engine_status") return { phase: "notRunning" };
+      if (command === "make_engine_ready") return { phase: "ready" };
+      return undefined;
+    });
+    const { controller, snapshots } = createController(invoke as TauriBridgeApi["invoke"]);
+
+    await controller.start();
+
+    expect(invoke.mock.calls.map(([command]) => command)).toEqual([
+      "save_settings",
+      "refresh_engine_status",
+      "make_engine_ready",
+      "start_translation",
+    ]);
+    expect(snapshots.at(-1)).toMatchObject({
+      busy: "idle",
+      engine: { phase: "ready" },
+      running: true,
+    });
+  });
+
   it("opens onboarding on the first real Tauri launch", async () => {
     const invoke = vi.fn().mockResolvedValue(undefined);
     const { controller } = createController(invoke, undefined, false);
