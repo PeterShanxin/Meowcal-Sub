@@ -56,3 +56,26 @@ SHA-256 of the native test binaries:
 Content-aware gate frames, fixture clocks, translation events, and generated
 reports remain local. Only the authored fixture image and aggregate findings
 are published here.
+
+## Recovery boundary verification
+
+Source `297069225dbdfc5a0d9d6f986babe90b019a195c` tightens sample word
+matching, adds kana/Hangul repetition detection, preserves strong corruption
+reasons ahead of length rejection, and retains the producing engine's GPU
+policy after process exit. Each reported defect reproduced in a failing test
+before correction. The full source-candidate gate then passed with 85 Core and
+500 application unit tests, plus the existing integration and frontend gates.
+
+On the same ARM64 host, a real GPU completion supplied a receipt. The controlled
+test terminated that owned GPU process and submitted a deliberate quality
+report for the receipt. Core emitted `inferenceCpuLocked`, loaded and validated
+CPU in 3,245 ms, and translated the next cue successfully in 197 ms. A further
+`ready` call retained CPU policy; shutdown completed in 325 ms with exit code 0.
+The tested working diff was matched to the source commit above by SHA-256.
+Core binary SHA-256: `cba4b75c2a2355d21aedf58588e9da4dfcaed4fcf206ef19179815f069da086f`.
+
+The application was rebuilt from this source, but the final capture/overlay
+rerun could not proceed because Windows screenshots were entirely black.
+The earlier native subtitle run therefore remains evidence for `90d4f41`,
+not a final-source UI pass. Final-source native subtitle validation remains
+outstanding until a capturable desktop is available.
