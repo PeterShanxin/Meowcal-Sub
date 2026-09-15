@@ -1,0 +1,119 @@
+{
+  "schemaVersion": 1,
+  "historicalExperiment": "2026-08-08/09",
+  "archivedOn": "2026-09-15",
+  "sourceAggregateSha256": "3f3dc8a8e5c5da1bd049483e7f5f5b40346d3b56e82306eb153065dce212ea20",
+  "hardware": "Windows 11 build 26200; Snapdragon X Elite X1E80100; CPU-only",
+  "threads": 8,
+  "context": 2048,
+  "parallelSlots": 1,
+  "fullSessionRuns": 15,
+  "stabilityRuns": 30,
+  "percentileScope": "ranges of per-session percentiles, not pooled; cold start separate; throughput unknown",
+  "arms": [
+    {
+      "config": "a",
+      "sessions": 5,
+      "attempts": 2653.0,
+      "harnessFailures": 75.0,
+      "p50RangeMs": [
+        413.0,
+        698.0
+      ],
+      "p95RangeMs": [
+        929.0,
+        3069.0
+      ],
+      "maxMs": 17034.0
+    },
+    {
+      "config": "b",
+      "sessions": 5,
+      "attempts": 2653.0,
+      "harnessFailures": 87.0,
+      "p50RangeMs": [
+        393.0,
+        598.0
+      ],
+      "p95RangeMs": [
+        891.0,
+        1890.0
+      ],
+      "maxMs": 7920.0
+    },
+    {
+      "config": "c",
+      "sessions": 5,
+      "attempts": 2653.0,
+      "harnessFailures": 104.0,
+      "p50RangeMs": [
+        360.0,
+        620.0
+      ],
+      "p95RangeMs": [
+        808.0,
+        3333.0
+      ],
+      "maxMs": 60043.0
+    }
+  ],
+  "blindReview": {
+    "cases": 50,
+    "sourceDecodedSha256": "a436fc5adda58d8ecd1064c1f146975a1ac49cd531687c3a6b6753b6d5f67258",
+    "overall": {
+      "a": {
+        "total": 169,
+        "mean": 3.38,
+        "seriousLtEq2": 16,
+        "unusableEq1": 6
+      },
+      "b": {
+        "total": 165,
+        "mean": 3.3,
+        "seriousLtEq2": 15,
+        "unusableEq1": 5
+      },
+      "c": {
+        "total": 167,
+        "mean": 3.34,
+        "seriousLtEq2": 18,
+        "unusableEq1": 6
+      }
+    },
+    "pairwise": {
+      "a vs c": {
+        "wins": 16,
+        "ties": 19,
+        "losses": 15
+      },
+      "b vs c": {
+        "wins": 16,
+        "ties": 17,
+        "losses": 17
+      },
+      "a vs b": {
+        "wins": 8,
+        "ties": 37,
+        "losses": 5
+      }
+    },
+    "poolMeans": {
+      "high": {
+        "a": 2.6,
+        "b": 2.6,
+        "c": 2.7
+      },
+      "general": {
+        "a": 4.0,
+        "b": 3.83,
+        "c": 4.03
+      },
+      "noise": {
+        "a": 2.3,
+        "b": 2.4,
+        "c": 1.9
+      }
+    },
+    "scope": "historical-free descriptive blind review; not proof of statistical equivalence"
+  }
+}
