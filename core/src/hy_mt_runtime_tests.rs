@@ -215,6 +215,31 @@ fn short_gpu_budget_is_split_and_cpu_only_paths_keep_the_full_deadline() {
     assert_eq!(x64_deadline, deadline);
 }
 
+// A GPU engine that turns healthy late in its window still gets time to
+// translate the sample, and the sample never runs past the overall deadline.
+#[test]
+fn gpu_sample_gets_its_own_budget_inside_the_overall_deadline() {
+    let started = Instant::now();
+    let deadline = started + Duration::from_secs(90);
+    let gpu_deadline = readiness_deadline(deadline, started, true);
+
+    let early = started + Duration::from_secs(5);
+    assert_eq!(
+        gpu_sample_deadline(deadline, gpu_deadline, early),
+        gpu_deadline
+    );
+
+    let late = gpu_deadline - Duration::from_secs(1);
+    assert_eq!(
+        gpu_sample_deadline(deadline, gpu_deadline, late),
+        late + Duration::from_secs(15)
+    );
+
+    let short = started + Duration::from_secs(20);
+    let short_gpu = readiness_deadline(short, started, true);
+    assert_eq!(gpu_sample_deadline(short, short_gpu, short_gpu), short);
+}
+
 #[test]
 fn occupied_preferred_port_selects_another_loopback_port() {
     let occupied =

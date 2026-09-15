@@ -17,9 +17,60 @@
 const VALIDATED_ADAPTER_TOKENS: &[&str] = &["Adreno", "X1-85"];
 const VALIDATED_DRIVER_VERSION: [u16; 4] = [31, 0, 148, 0];
 
+// A GPU load on the validated host drove available memory from about 3 GB to
+// under 1 GB with tens of thousands of hard page-ins per second, and the loaded
+// engine holds about 1.8 GB including its GPU buffers (#107). The same host
+// later stopped with a SOC_CRITICAL_DEVICE_REMOVED bugcheck during a GPU engine
+// session (#215). Below this headroom, in physical memory or in commit, the
+// engine starts on CPU. This is a floor for loading, not a proven crash guard.
+const GPU_START_MINIMUM_AVAILABLE_BYTES: u64 = 4 * 1024 * 1024 * 1024;
+
 /// Whether this machine carries the validated Adreno GPU + driver combination.
 pub(crate) fn validated_adreno_gpu_present() -> bool {
     detect_validated_adapter()
+}
+
+/// Whether a launch may use the Adreno GPU policy now: the validated GPU and
+/// driver, and enough available memory to load the engine onto it.
+pub(crate) fn adreno_gpu_allowed() -> bool {
+    if !validated_adreno_gpu_present() {
+        return false;
+    }
+    let allowed =
+        available_memory().is_some_and(|(physical, commit)| headroom_allows_gpu(physical, commit));
+    if !allowed {
+        use std::io::Write;
+        let _ = writeln!(
+            std::io::stderr().lock(),
+            "HY-MT GPU start skipped: less than {} GiB of available memory or commit; starting on CPU",
+            GPU_START_MINIMUM_AVAILABLE_BYTES / 1024 / 1024 / 1024
+        );
+    }
+    allowed
+}
+
+fn headroom_allows_gpu(available_physical: u64, available_commit: u64) -> bool {
+    available_physical >= GPU_START_MINIMUM_AVAILABLE_BYTES
+        && available_commit >= GPU_START_MINIMUM_AVAILABLE_BYTES
+}
+
+/// Available physical memory and available commit (`ullAvailPageFile` is the
+/// commit limit minus the current commit charge).
+#[cfg(target_os = "windows")]
+fn available_memory() -> Option<(u64, u64)> {
+    use windows::Win32::System::SystemInformation::{GlobalMemoryStatusEx, MEMORYSTATUSEX};
+
+    let mut memory = MEMORYSTATUSEX {
+        dwLength: std::mem::size_of::<MEMORYSTATUSEX>() as u32,
+        ..MEMORYSTATUSEX::default()
+    };
+    unsafe { GlobalMemoryStatusEx(&mut memory) }.ok()?;
+    Some((memory.ullAvailPhys, memory.ullAvailPageFile))
+}
+
+#[cfg(not(target_os = "windows"))]
+fn available_memory() -> Option<(u64, u64)> {
+    None
 }
 
 #[cfg(target_os = "windows")]
@@ -155,6 +206,14 @@ mod tests {
             "NVIDIA GeForce RTX 4070",
             [31, 0, 148, 0]
         ));
+    }
+
+    #[test]
+    fn gpu_start_needs_physical_and_commit_headroom() {
+        const GIB: u64 = 1024 * 1024 * 1024;
+        assert!(headroom_allows_gpu(4 * GIB, 4 * GIB));
+        assert!(!headroom_allows_gpu(4 * GIB - 1, 32 * GIB));
+        assert!(!headroom_allows_gpu(32 * GIB, 4 * GIB - 1));
     }
 
     #[cfg(target_os = "windows")]
