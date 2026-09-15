@@ -73,6 +73,49 @@ fn available_memory() -> Option<(u64, u64)> {
     None
 }
 
+/// The acceleration policy a launch actually runs with. The manifest asks;
+/// this decides: the Adreno GPU policy applies only where
+/// `adreno_gpu_allowed` holds and can be forced off for the startup fallback.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct LaunchPolicy {
+    pub gpu_layers: u32,
+    pub launch_args: Vec<String>,
+    /// Whether this policy puts layers on the GPU. Drives the one-shot CPU
+    /// retry in `ensure_ready`: only a GPU attempt earns a fallback.
+    pub gpu_active: bool,
+}
+
+/// The effective policy for a runtime on this host. Three outcomes:
+///
+/// - not the Adreno runtime (e.g. x64 Vulkan), or it requests no layers:
+///   the manifest policy exactly as shipped;
+/// - the Adreno runtime where `adreno_gpu_allowed` holds, not forced off: the
+///   benchmarked `-ngl 99 --no-kv-offload` configuration;
+/// - the Adreno runtime anywhere else, or forced off after a failed GPU
+///   start: the pre-GPU CPU policy (`-ngl 0`, no KV flag - the flag only
+///   constrains GPU KV offload, and the fallback line should be exactly what
+///   CPU-only releases ran).
+pub(crate) fn effective_launch_policy(
+    runtime_spec: &crate::engine_manifest::RuntimeSpec,
+    adreno_gpu_allowed: bool,
+    force_cpu: bool,
+) -> LaunchPolicy {
+    let adreno_gpu_requested = runtime_spec.id == crate::engine_manifest::ADRENO_B10155_RUNTIME_ID
+        && runtime_spec.gpu_layers > 0;
+    if adreno_gpu_requested && (force_cpu || !adreno_gpu_allowed) {
+        return LaunchPolicy {
+            gpu_layers: 0,
+            launch_args: Vec::new(),
+            gpu_active: false,
+        };
+    }
+    LaunchPolicy {
+        gpu_layers: runtime_spec.gpu_layers,
+        launch_args: runtime_spec.launch_args.clone(),
+        gpu_active: adreno_gpu_requested,
+    }
+}
+
 #[cfg(target_os = "windows")]
 fn matches_validated_adapter(description: &str, driver_version: [u16; 4]) -> bool {
     VALIDATED_ADAPTER_TOKENS

@@ -1,5 +1,6 @@
 use crate::config::ManagedLocalRuntimeConfig;
-use crate::engine_manifest::{EngineManifest, RuntimeSpec};
+use crate::engine_gpu_gate::{effective_launch_policy, LaunchPolicy};
+use crate::engine_manifest::EngineManifest;
 use reqwest::Client;
 use std::io::Write;
 use std::net::{Ipv4Addr, SocketAddrV4, TcpListener};
@@ -75,49 +76,6 @@ async fn owned_runtime_is_healthy(runtime: &ManagedLocalRuntimeConfig, endpoint:
     }
     let healthy = is_endpoint_healthy(endpoint).await;
     healthy && active_owned_endpoint(runtime).as_deref() == Some(endpoint)
-}
-
-/// The acceleration policy a launch actually runs with. The manifest asks;
-/// this decides: the Adreno GPU policy applies only on the validated GPU
-/// (`engine_gpu_gate`) and can be forced off for the startup fallback.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct LaunchPolicy {
-    pub gpu_layers: u32,
-    pub launch_args: Vec<String>,
-    /// Whether this policy puts layers on the GPU. Drives the one-shot CPU
-    /// retry in `ensure_ready`: only a GPU attempt earns a fallback.
-    pub gpu_active: bool,
-}
-
-/// The effective policy for a runtime on this host. Three outcomes:
-///
-/// - not the Adreno runtime (e.g. x64 Vulkan), or it requests no layers:
-///   the manifest policy exactly as shipped;
-/// - the Adreno runtime where `engine_gpu_gate::adreno_gpu_allowed` holds, not
-///   forced off: the benchmarked `-ngl 99 --no-kv-offload` configuration;
-/// - the Adreno runtime anywhere else, or forced off after a failed GPU
-///   start: the pre-GPU CPU policy (`-ngl 0`, no KV flag - the flag only
-///   constrains GPU KV offload, and the fallback line should be exactly what
-///   CPU-only releases ran).
-pub(crate) fn effective_launch_policy(
-    runtime_spec: &RuntimeSpec,
-    adreno_gpu_allowed: bool,
-    force_cpu: bool,
-) -> LaunchPolicy {
-    let adreno_gpu_requested = runtime_spec.id == crate::engine_manifest::ADRENO_B10155_RUNTIME_ID
-        && runtime_spec.gpu_layers > 0;
-    if adreno_gpu_requested && (force_cpu || !adreno_gpu_allowed) {
-        return LaunchPolicy {
-            gpu_layers: 0,
-            launch_args: Vec::new(),
-            gpu_active: false,
-        };
-    }
-    LaunchPolicy {
-        gpu_layers: runtime_spec.gpu_layers,
-        launch_args: runtime_spec.launch_args.clone(),
-        gpu_active: adreno_gpu_requested,
-    }
 }
 
 /// The exact `llama-server` argument vector for a managed runtime, built pure
