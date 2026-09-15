@@ -158,7 +158,7 @@ fn validated_gpu_keeps_normal_policy_and_gets_measured_startup_headroom() {
     let attempt_deadline = readiness_deadline(deadline, started, policy.gpu_active);
 
     assert!(policy.gpu_active);
-    assert_eq!(attempt_deadline, started + Duration::from_secs(30));
+    assert_eq!(attempt_deadline, started + Duration::from_secs(45));
 }
 
 #[test]
@@ -178,7 +178,7 @@ fn failed_gpu_switches_to_cpu_with_remaining_time_under_one_deadline() {
     assert_eq!(cpu_deadline, deadline);
     assert_eq!(
         cpu_deadline.saturating_duration_since(gpu_deadline),
-        Duration::from_secs(60)
+        Duration::from_secs(45)
     );
     assert_eq!(
         deadline.saturating_duration_since(started),
