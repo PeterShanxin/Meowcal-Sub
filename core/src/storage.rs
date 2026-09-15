@@ -234,7 +234,17 @@ pub async fn import_legacy(
     for root in roots {
         validate_absolute(root)?;
     }
-    let candidates = import_candidates(paths, roots, manifest, runtime);
+    let candidates = {
+        let (paths, roots, manifest, runtime) = (
+            paths.clone(),
+            roots.to_vec(),
+            manifest.clone(),
+            runtime.clone(),
+        );
+        tokio::task::spawn_blocking(move || import_candidates(&paths, &roots, &manifest, &runtime))
+            .await
+            .map_err(|error| format!("CORE_IMPORT_TASK: {error}"))?
+    };
     let mut archive = None;
     let mut model = None;
     for candidate in candidates {
