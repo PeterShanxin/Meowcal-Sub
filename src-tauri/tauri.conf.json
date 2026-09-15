@@ -28,6 +28,7 @@
       {
         "title": "Select Area",
         "label": "selector",
+        "create": false,
         "url": "selector.html",
         "fullscreen": true,
         "transparent": true,
@@ -63,6 +64,7 @@
       {
         "title": "Local Translation Setup",
         "label": "foundry-wizard",
+        "create": false,
         "url": "wizard.html",
         "width": 680,
         "height": 500,

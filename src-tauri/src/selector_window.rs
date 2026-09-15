@@ -104,9 +104,7 @@ pub async fn open(
 async fn open_legacy(app: AppHandle, snapshot_slot: &SnapshotSlot) -> Result<(), String> {
     info!("Opening area selector...");
 
-    let Some(window) = app.get_webview_window("selector") else {
-        return Err("Selector window not found".to_string());
-    };
+    let window = crate::configured_window::get_or_create(&app, "selector")?;
 
     // Capture a background snapshot BEFORE showing the selector window.
     // If we capture after showing, the screenshot will include the selector UI itself.
