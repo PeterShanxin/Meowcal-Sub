@@ -25,6 +25,7 @@ struct Session {
     legacy_roots: Vec<PathBuf>,
     lease: Option<Lease>,
     endpoint: Option<String>,
+    offline_scan: Option<tokio::task::JoinHandle<bool>>,
 }
 
 #[derive(Default)]
@@ -177,6 +178,7 @@ impl Service {
             legacy_roots: hello.legacy_roots,
             lease: None,
             endpoint: None,
+            offline_scan: None,
         });
         Ok(result)
     }
@@ -248,10 +250,38 @@ impl Session {
         }
     }
 
+    /// The scan runs off the request task and a reply waits for it at most one
+    /// second, so a slow or disconnected legacy volume cannot hold status past
+    /// the client's five-second timeout. A scan still running is picked up by
+    /// the next status request instead of starting another one.
+    async fn assets_available_offline(&mut self) -> bool {
+        const BUDGET: Duration = Duration::from_secs(1);
+        let mut scan = self.offline_scan.take().unwrap_or_else(|| {
+            let (paths, roots, manifest) = (
+                self.paths.clone(),
+                self.legacy_roots.clone(),
+                self.manifest.clone(),
+            );
+            tokio::task::spawn_blocking(move || {
+                crate::engine_import_sources::assets_available_offline(&paths, &roots, &manifest)
+            })
+        });
+        match tokio::time::timeout(BUDGET, &mut scan).await {
+            Ok(result) => result.unwrap_or(false),
+            Err(_) => {
+                self.offline_scan = Some(scan);
+                false
+            }
+        }
+    }
+
     async fn status(&mut self) -> Value {
         let runtime = self.manifest.runtime_for_current_arch();
-        let installed =
-            runtime.is_ok_and(|runtime| self.paths.is_complete(&self.manifest, runtime));
+        // Readiness imports verified assets from earlier Core versions and
+        // `legacy_roots` without a download, so those count as installed (#216).
+        let installed = runtime
+            .is_ok_and(|runtime| self.paths.is_complete(&self.manifest, runtime))
+            || self.assets_available_offline().await;
         let config = self.paths.managed_config(&self.manifest);
         let ready = self.endpoint.is_some() && hy_mt_runtime::is_healthy(&config).await;
         if self.endpoint.is_some() && !ready {

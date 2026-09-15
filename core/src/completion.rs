@@ -165,17 +165,41 @@ pub async fn sample(endpoint: &str, model: &str) -> Result<(), String> {
     let content = result
         .pointer("/choices/0/message/content")
         .and_then(Value::as_str)
-        .unwrap_or_default()
-        .trim();
-    if content.is_empty()
-        || !content
-            .chars()
-            .any(|character| character.is_ascii_alphabetic())
-        || content
-            .chars()
-            .any(|character| ('\u{3400}'..='\u{9fff}').contains(&character))
-    {
+        .unwrap_or_default();
+    if !is_sample_translation(content) {
         return Err("ENGINE_SAMPLE_TRANSLATION_FAILED".into());
     }
     Ok(())
+}
+
+/// The sample asks for English from Chinese: the answer must carry Latin
+/// letters and no CJK left over from the source.
+fn is_sample_translation(content: &str) -> bool {
+    let content = content.trim();
+    !content.is_empty()
+        && content
+            .chars()
+            .any(|character| character.is_ascii_alphabetic())
+        && !content
+            .chars()
+            .any(|character| ('\u{3400}'..='\u{9fff}').contains(&character))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // Corrupt GPU output from the validated Adreno host (#105) mixes unrelated
+    // CJK and Latin tokens; it must fail the Chinese-to-English sample.
+    #[test]
+    fn sample_check_rejects_corrupt_and_untranslated_output() {
+        assert!(is_sample_translation(
+            "Let's not mention the clock tower yet."
+        ));
+        assert!(!is_sample_translation(
+            "此后执着观众χSecurity个工作Security_scores}}$。"
+        ));
+        assert!(!is_sample_translation("先不提时钟塔"));
+        assert!(!is_sample_translation("   "));
+    }
 }

@@ -1,5 +1,6 @@
 use crate::config::ManagedLocalRuntimeConfig;
-use crate::engine_manifest::{EngineManifest, RuntimeSpec};
+use crate::engine_gpu_gate::{effective_launch_policy, LaunchPolicy};
+use crate::engine_manifest::EngineManifest;
 use reqwest::Client;
 use std::io::Write;
 use std::net::{Ipv4Addr, SocketAddrV4, TcpListener};
@@ -21,6 +22,15 @@ fn readiness_deadline(overall: Instant, now: Instant, gpu_active: bool) -> Insta
         return overall;
     }
     now + std::cmp::min(GPU_STARTUP_MAX, overall.saturating_duration_since(now) / 2)
+}
+
+// Measured sample translations on the validated host: 0.2-2.2 s from a correct
+// GPU engine, 2-3.2 s from a corrupt one running to its 120-token cap (#105).
+const GPU_SAMPLE_MAX: Duration = Duration::from_secs(15);
+/// When the sample on a healthy GPU engine must finish: the rest of the GPU
+/// window, but never less than `GPU_SAMPLE_MAX`, and never past `overall`.
+fn gpu_sample_deadline(overall: Instant, gpu_attempt: Instant, now: Instant) -> Instant {
+    std::cmp::min(overall, std::cmp::max(gpu_attempt, now + GPU_SAMPLE_MAX))
 }
 
 #[derive(Debug)]
@@ -68,49 +78,6 @@ async fn owned_runtime_is_healthy(runtime: &ManagedLocalRuntimeConfig, endpoint:
     healthy && active_owned_endpoint(runtime).as_deref() == Some(endpoint)
 }
 
-/// The acceleration policy a launch actually runs with. The manifest asks;
-/// this decides: the Adreno GPU policy applies only on the validated GPU
-/// (`engine_gpu_gate`) and can be forced off for the startup fallback.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct LaunchPolicy {
-    pub gpu_layers: u32,
-    pub launch_args: Vec<String>,
-    /// Whether this policy puts layers on the GPU. Drives the one-shot CPU
-    /// retry in `ensure_ready`: only a GPU attempt earns a fallback.
-    pub gpu_active: bool,
-}
-
-/// The effective policy for a runtime on this host. Three outcomes:
-///
-/// - not the Adreno runtime (e.g. x64 Vulkan), or it requests no layers:
-///   the manifest policy exactly as shipped;
-/// - the Adreno runtime on the validated GPU, not forced off: the benchmarked
-///   `-ngl 99 --no-kv-offload` configuration;
-/// - the Adreno runtime anywhere else, or forced off after a failed GPU
-///   start: the pre-GPU CPU policy (`-ngl 0`, no KV flag - the flag only
-///   constrains GPU KV offload, and the fallback line should be exactly what
-///   CPU-only releases ran).
-pub(crate) fn effective_launch_policy(
-    runtime_spec: &RuntimeSpec,
-    adreno_gpu_validated: bool,
-    force_cpu: bool,
-) -> LaunchPolicy {
-    let adreno_gpu_requested = runtime_spec.id == crate::engine_manifest::ADRENO_B10155_RUNTIME_ID
-        && runtime_spec.gpu_layers > 0;
-    if adreno_gpu_requested && (force_cpu || !adreno_gpu_validated) {
-        return LaunchPolicy {
-            gpu_layers: 0,
-            launch_args: Vec::new(),
-            gpu_active: false,
-        };
-    }
-    LaunchPolicy {
-        gpu_layers: runtime_spec.gpu_layers,
-        launch_args: runtime_spec.launch_args.clone(),
-        gpu_active: adreno_gpu_requested,
-    }
-}
-
 /// The exact `llama-server` argument vector for a managed runtime, built pure
 /// so the launch line is testable without spawning a process. Policy args are
 /// appended last; manifest validation rejects any that name the Core-owned
@@ -150,7 +117,7 @@ pub fn start(runtime: &ManagedLocalRuntimeConfig) -> Result<String, String> {
         .map_err(|error| error.to_string())?;
     let policy = effective_launch_policy(
         runtime_spec,
-        crate::engine_gpu_gate::validated_adreno_gpu_present(),
+        crate::engine_gpu_gate::adreno_gpu_allowed(),
         false,
     );
     start_with_policy(runtime, &manifest, &policy)
@@ -325,7 +292,7 @@ async fn ensure_ready_with_policy(
         .map_err(|error| error.to_string())?;
     let policy = effective_launch_policy(
         runtime_spec,
-        crate::engine_gpu_gate::validated_adreno_gpu_present(),
+        !force_cpu && crate::engine_gpu_gate::adreno_gpu_allowed(),
         force_cpu,
     );
     let endpoint = start_with_policy(runtime, &manifest, &policy)?;
@@ -341,21 +308,48 @@ async fn ensure_ready_with_policy(
     })
     .await
     .is_ok();
-    if healthy {
-        return Ok(endpoint);
+    if !policy.gpu_active {
+        return if healthy {
+            Ok(endpoint)
+        } else {
+            Err(timeout_error())
+        };
     }
-    if policy.gpu_active {
-        let gpu_window = attempt_deadline.saturating_duration_since(attempt_started);
-        let _ = writeln!(
-            std::io::stderr().lock(),
-            "HY-MT GPU engine did not become ready within {} seconds; retrying on CPU ({} seconds remaining)",
-            gpu_window.as_secs(),
-            deadline.saturating_duration_since(Instant::now()).as_secs()
-        );
-        shutdown_owned();
-        return Box::pin(ensure_ready_with_policy(runtime, deadline, timeout, true)).await;
-    }
-    Err(timeout_error())
+    // A GPU engine can pass health checks while generating corrupt output
+    // (#105), so a GPU start counts only once it translates the sample.
+    let failure = if healthy {
+        let sample_started = Instant::now();
+        let sample_deadline = gpu_sample_deadline(deadline, attempt_deadline, sample_started);
+        match timeout_at(
+            sample_deadline,
+            crate::completion::sample(&endpoint, &manifest.model.id),
+        )
+        .await
+        {
+            Ok(Ok(())) => return Ok(endpoint),
+            Ok(Err(error)) => format!("failed its sample translation ({error})"),
+            Err(_) => format!(
+                "did not finish its sample translation within {} seconds",
+                sample_deadline
+                    .saturating_duration_since(sample_started)
+                    .as_secs()
+            ),
+        }
+    } else {
+        format!(
+            "did not become ready within {} seconds",
+            attempt_deadline
+                .saturating_duration_since(attempt_started)
+                .as_secs()
+        )
+    };
+    let _ = writeln!(
+        std::io::stderr().lock(),
+        "HY-MT GPU engine {failure}; retrying on CPU ({} seconds remaining)",
+        deadline.saturating_duration_since(Instant::now()).as_secs()
+    );
+    shutdown_owned();
+    Box::pin(ensure_ready_with_policy(runtime, deadline, timeout, true)).await
 }
 
 fn active_owned_endpoint(runtime: &ManagedLocalRuntimeConfig) -> Option<String> {

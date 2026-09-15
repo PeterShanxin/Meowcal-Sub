@@ -1,4 +1,5 @@
 use crate::engine_artifact_io::file_matches;
+use crate::engine_import_sources::import_candidates;
 use crate::engine_manifest::EngineManifest;
 use crate::hy_mt_runtime::HyMtInstallPaths;
 use crate::protocol::CORE_VERSION;
@@ -230,17 +231,20 @@ pub async fn import_legacy(
     let runtime = manifest
         .runtime_for_current_arch()
         .map_err(|error| error.to_string())?;
-    let mut candidates = vec![paths.clone()];
     for root in roots {
         validate_absolute(root)?;
-        for candidate_root in [root.clone(), root.join("meowcal-sub")] {
-            candidates.push(HyMtInstallPaths::from_cache_root(
-                candidate_root,
-                manifest,
-                runtime,
-            ));
-        }
     }
+    let candidates = {
+        let (paths, roots, manifest, runtime) = (
+            paths.clone(),
+            roots.to_vec(),
+            manifest.clone(),
+            runtime.clone(),
+        );
+        tokio::task::spawn_blocking(move || import_candidates(&paths, &roots, &manifest, &runtime))
+            .await
+            .map_err(|error| format!("CORE_IMPORT_TASK: {error}"))?
+    };
     let mut archive = None;
     let mut model = None;
     for candidate in candidates {

@@ -17,9 +17,103 @@
 const VALIDATED_ADAPTER_TOKENS: &[&str] = &["Adreno", "X1-85"];
 const VALIDATED_DRIVER_VERSION: [u16; 4] = [31, 0, 148, 0];
 
+// A GPU load on the validated host drove available memory from about 3 GB to
+// under 1 GB with tens of thousands of hard page-ins per second, and the loaded
+// engine holds about 1.8 GB including its GPU buffers (#107). The same host
+// later stopped with a SOC_CRITICAL_DEVICE_REMOVED bugcheck during a GPU engine
+// session (#215). Below this headroom, in physical memory or in commit, the
+// engine starts on CPU. This is a floor for loading, not a proven crash guard.
+const GPU_START_MINIMUM_AVAILABLE_BYTES: u64 = 4 * 1024 * 1024 * 1024;
+
 /// Whether this machine carries the validated Adreno GPU + driver combination.
 pub(crate) fn validated_adreno_gpu_present() -> bool {
     detect_validated_adapter()
+}
+
+/// Whether a launch may use the Adreno GPU policy now: the validated GPU and
+/// driver, and enough available memory to load the engine onto it.
+pub(crate) fn adreno_gpu_allowed() -> bool {
+    if !validated_adreno_gpu_present() {
+        return false;
+    }
+    let allowed =
+        available_memory().is_some_and(|(physical, commit)| headroom_allows_gpu(physical, commit));
+    if !allowed {
+        use std::io::Write;
+        let _ = writeln!(
+            std::io::stderr().lock(),
+            "HY-MT GPU start skipped: less than {} GiB of available memory or commit; starting on CPU",
+            GPU_START_MINIMUM_AVAILABLE_BYTES / 1024 / 1024 / 1024
+        );
+    }
+    allowed
+}
+
+fn headroom_allows_gpu(available_physical: u64, available_commit: u64) -> bool {
+    available_physical >= GPU_START_MINIMUM_AVAILABLE_BYTES
+        && available_commit >= GPU_START_MINIMUM_AVAILABLE_BYTES
+}
+
+/// Available physical memory and available commit (`ullAvailPageFile` is the
+/// commit limit minus the current commit charge).
+#[cfg(target_os = "windows")]
+fn available_memory() -> Option<(u64, u64)> {
+    use windows::Win32::System::SystemInformation::{GlobalMemoryStatusEx, MEMORYSTATUSEX};
+
+    let mut memory = MEMORYSTATUSEX {
+        dwLength: std::mem::size_of::<MEMORYSTATUSEX>() as u32,
+        ..MEMORYSTATUSEX::default()
+    };
+    unsafe { GlobalMemoryStatusEx(&mut memory) }.ok()?;
+    Some((memory.ullAvailPhys, memory.ullAvailPageFile))
+}
+
+#[cfg(not(target_os = "windows"))]
+fn available_memory() -> Option<(u64, u64)> {
+    None
+}
+
+/// The acceleration policy a launch actually runs with. The manifest asks;
+/// this decides: the Adreno GPU policy applies only where
+/// `adreno_gpu_allowed` holds and can be forced off for the startup fallback.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct LaunchPolicy {
+    pub gpu_layers: u32,
+    pub launch_args: Vec<String>,
+    /// Whether this policy puts layers on the GPU. Drives the one-shot CPU
+    /// retry in `ensure_ready`: only a GPU attempt earns a fallback.
+    pub gpu_active: bool,
+}
+
+/// The effective policy for a runtime on this host. Three outcomes:
+///
+/// - not the Adreno runtime (e.g. x64 Vulkan), or it requests no layers:
+///   the manifest policy exactly as shipped;
+/// - the Adreno runtime where `adreno_gpu_allowed` holds, not forced off: the
+///   benchmarked `-ngl 99 --no-kv-offload` configuration;
+/// - the Adreno runtime anywhere else, or forced off after a failed GPU
+///   start: the pre-GPU CPU policy (`-ngl 0`, no KV flag - the flag only
+///   constrains GPU KV offload, and the fallback line should be exactly what
+///   CPU-only releases ran).
+pub(crate) fn effective_launch_policy(
+    runtime_spec: &crate::engine_manifest::RuntimeSpec,
+    adreno_gpu_allowed: bool,
+    force_cpu: bool,
+) -> LaunchPolicy {
+    let adreno_gpu_requested = runtime_spec.id == crate::engine_manifest::ADRENO_B10155_RUNTIME_ID
+        && runtime_spec.gpu_layers > 0;
+    if adreno_gpu_requested && (force_cpu || !adreno_gpu_allowed) {
+        return LaunchPolicy {
+            gpu_layers: 0,
+            launch_args: Vec::new(),
+            gpu_active: false,
+        };
+    }
+    LaunchPolicy {
+        gpu_layers: runtime_spec.gpu_layers,
+        launch_args: runtime_spec.launch_args.clone(),
+        gpu_active: adreno_gpu_requested,
+    }
 }
 
 #[cfg(target_os = "windows")]
@@ -155,6 +249,14 @@ mod tests {
             "NVIDIA GeForce RTX 4070",
             [31, 0, 148, 0]
         ));
+    }
+
+    #[test]
+    fn gpu_start_needs_physical_and_commit_headroom() {
+        const GIB: u64 = 1024 * 1024 * 1024;
+        assert!(headroom_allows_gpu(4 * GIB, 4 * GIB));
+        assert!(!headroom_allows_gpu(4 * GIB - 1, 32 * GIB));
+        assert!(!headroom_allows_gpu(32 * GIB, 4 * GIB - 1));
     }
 
     #[cfg(target_os = "windows")]
