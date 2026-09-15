@@ -29,14 +29,14 @@ Core stderr includes native runtime diagnostics and GPU fallback warnings;
 consumers must drain it continuously with bounded storage. Runtime diagnostics
 must not be parsed as API responses.
 
-The first request pins the version and client profile:
+The first request pins the exact Core version `X.Y.Z` and the client profile:
 
 ```json
 {
   "id": 1,
   "api": 1,
   "method": "hello",
-  "params": { "client": "sub2", "profile": "production", "expectedVersion": "0.1.0" }
+  "params": { "client": "sub2", "profile": "production", "expectedVersion": "X.Y.Z" }
 }
 ```
 

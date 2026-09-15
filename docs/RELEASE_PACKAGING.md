@@ -87,7 +87,7 @@ gh workflow run core-release-preflight.yml --ref main
 After it succeeds on both native runners, publish the matching Cargo version:
 
 ```powershell
-gh workflow run core-release.yml --ref main -f version=0.1.0
+gh workflow run core-release.yml --ref main -f version=X.Y.Z
 ```
 
 `core-release.yml` accepts only `main`, reserves the immutable Core tag, and
