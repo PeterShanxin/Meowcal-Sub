@@ -176,7 +176,7 @@ fn initialized_process_recognizes_binary_blank_frame_with_language_and_geometry(
         (
             1,
             "hello",
-            json!({"client":"sub2","profile":"development","expectedVersion":"0.1.0","storageRoot":root}),
+            json!({"client":"sub2","profile":"development","expectedVersion":env!("CARGO_PKG_VERSION"),"storageRoot":root}),
         ),
         (2, "ocrLanguages", json!({})),
     ] {
