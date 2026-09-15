@@ -1,5 +1,6 @@
 use crate::engine_artifact_io::file_matches;
-use crate::engine_manifest::{EngineManifest, RuntimeSpec};
+use crate::engine_import_sources::import_candidates;
+use crate::engine_manifest::EngineManifest;
 use crate::hy_mt_runtime::HyMtInstallPaths;
 use crate::protocol::CORE_VERSION;
 use fs2::FileExt;
@@ -290,47 +291,6 @@ pub async fn import_legacy(
         .await?;
     }
     Ok(())
-}
-
-/// Install layouts `import_legacy` may take verified assets from, the current
-/// install first.
-fn import_candidates(
-    paths: &HyMtInstallPaths,
-    roots: &[PathBuf],
-    manifest: &EngineManifest,
-    runtime: &RuntimeSpec,
-) -> Vec<HyMtInstallPaths> {
-    let mut candidates = vec![paths.clone()];
-    for root in roots {
-        for candidate_root in [root.clone(), root.join("meowcal-sub")] {
-            candidates.push(HyMtInstallPaths::from_cache_root(
-                candidate_root,
-                manifest,
-                runtime,
-            ));
-        }
-    }
-    candidates
-}
-
-/// Whether `import_legacy` would find a runtime archive and a model to install
-/// from without a download. Sizes only: the import hashes both before copying.
-pub fn assets_available_offline(
-    paths: &HyMtInstallPaths,
-    roots: &[PathBuf],
-    manifest: &EngineManifest,
-) -> bool {
-    let Ok(runtime) = manifest.runtime_for_current_arch() else {
-        return false;
-    };
-    let candidates = import_candidates(paths, roots, manifest, runtime);
-    let sized = |path: &Path, size: u64| path.metadata().is_ok_and(|file| file.len() == size);
-    candidates
-        .iter()
-        .any(|candidate| sized(&candidate.runtime_archive, runtime.archive.size_bytes))
-        && candidates
-            .iter()
-            .any(|candidate| sized(&candidate.model, manifest.model.artifact.size_bytes))
 }
 
 async fn cleanup_staging(paths: &HyMtInstallPaths) -> Result<(), String> {

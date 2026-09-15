@@ -248,13 +248,31 @@ impl Session {
         }
     }
 
+    /// The scan runs off the request task and is abandoned after one second:
+    /// a slow or disconnected legacy volume must not hold a status reply past
+    /// the client's five-second timeout.
+    async fn assets_available_offline(&self) -> bool {
+        const BUDGET: Duration = Duration::from_secs(1);
+        let (paths, roots, manifest) = (
+            self.paths.clone(),
+            self.legacy_roots.clone(),
+            self.manifest.clone(),
+        );
+        let scan = tokio::task::spawn_blocking(move || {
+            crate::engine_import_sources::assets_available_offline(&paths, &roots, &manifest)
+        });
+        tokio::time::timeout(BUDGET, scan)
+            .await
+            .is_ok_and(|result| result.unwrap_or(false))
+    }
+
     async fn status(&mut self) -> Value {
         let runtime = self.manifest.runtime_for_current_arch();
-        // Readiness imports verified assets from `legacy_roots` without a
-        // download, so an engine left by a previous Core version counts (#216).
+        // Readiness imports verified assets from earlier Core versions and
+        // `legacy_roots` without a download, so those count as installed (#216).
         let installed = runtime
             .is_ok_and(|runtime| self.paths.is_complete(&self.manifest, runtime))
-            || storage::assets_available_offline(&self.paths, &self.legacy_roots, &self.manifest);
+            || self.assets_available_offline().await;
         let config = self.paths.managed_config(&self.manifest);
         let ready = self.endpoint.is_some() && hy_mt_runtime::is_healthy(&config).await;
         if self.endpoint.is_some() && !ready {

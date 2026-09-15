@@ -2,6 +2,7 @@ pub mod completion;
 pub mod config;
 pub mod engine_artifact_io;
 pub mod engine_gpu_gate;
+pub mod engine_import_sources;
 pub mod engine_install_transaction;
 pub mod engine_launch;
 pub mod engine_manifest;
