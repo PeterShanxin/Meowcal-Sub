@@ -5,7 +5,6 @@ use serde_json::Value;
 use std::time::{Duration, Instant};
 
 trait RecoveryEngine {
-    fn gpu(&self) -> bool;
     fn lock_cpu(&mut self, progress: &(dyn Fn(String) + Send + Sync));
     async fn sample(&mut self) -> bool;
     async fn start_verified_cpu(
@@ -17,6 +16,7 @@ trait RecoveryEngine {
 
 async fn recover(
     engine: &mut impl RecoveryEngine,
+    was_gpu: bool,
     repeated: bool,
     progress: &(dyn Fn(String) + Send + Sync),
 ) -> Result<(), Error> {
@@ -24,7 +24,7 @@ async fn recover(
         return Ok(());
     }
     engine.lock_cpu(progress);
-    if !engine.gpu() {
+    if !was_gpu {
         engine.stop();
         return Err(Error::new(
             "INFERENCE_FAILED",
@@ -63,16 +63,15 @@ impl Session {
             return Ok(self.status().await);
         };
         if self.endpoint.is_some() {
-            recover(self, repeated, progress).await?;
+            // Keep the producing engine's policy even if it exited before the probe.
+            let was_gpu = self.gpu;
+            recover(self, was_gpu, repeated, progress).await?;
         }
         Ok(self.status().await)
     }
 }
 
 impl RecoveryEngine for Session {
-    fn gpu(&self) -> bool {
-        hy_mt_runtime::owned_acceleration() == Some("gpu")
-    }
     fn lock_cpu(&mut self, progress: &(dyn Fn(String) + Send + Sync)) {
         // The consumer latches before loading so a cancelled or replaced Core
         // cannot silently re-enable GPU in the same application session.

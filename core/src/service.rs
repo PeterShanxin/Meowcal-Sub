@@ -27,6 +27,7 @@ struct Session {
     legacy_roots: Vec<PathBuf>,
     lease: Option<Lease>,
     endpoint: Option<String>,
+    gpu: bool,
     offline_scan: Option<tokio::task::JoinHandle<bool>>,
     inference: crate::inference_health::InferenceHealth,
 }
@@ -195,6 +196,7 @@ impl Service {
             legacy_roots: hello.legacy_roots,
             lease: None,
             endpoint: None,
+            gpu: false,
             offline_scan: None,
             inference: Default::default(),
         });
@@ -220,6 +222,7 @@ impl Session {
         hy_mt_runtime::shutdown_owned();
         self.inference.reset_engine();
         self.endpoint = None;
+        self.gpu = false;
         self.lease = None;
     }
 
@@ -273,6 +276,7 @@ impl Session {
                         ));
                     }
                 }
+                self.gpu = hy_mt_runtime::owned_acceleration() == Some("gpu");
                 self.endpoint = Some(endpoint);
                 Ok(())
             }

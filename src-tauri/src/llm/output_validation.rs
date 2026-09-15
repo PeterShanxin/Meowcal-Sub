@@ -54,6 +54,15 @@ pub(crate) fn validate_translation_output(
     if looks_like_prompt_echo(translated) {
         return Err(TranslationOutputRejection::PromptEcho);
     }
+    // Preserve the stronger fault signal when corruption also exceeds a length limit.
+    if meowcal_core::inference_health::has_garbage_tail(source_text, translated) {
+        return Err(TranslationOutputRejection::GarbageTail);
+    }
+    if looks_repetition_loop(translated)
+        || meowcal_core::inference_health::has_cjk_loop(source_text, translated)
+    {
+        return Err(TranslationOutputRejection::RepetitionLoop);
+    }
 
     let cjk_to_english =
         is_cjk_source(source_language, source_text) && is_english_target(target_language);
@@ -66,14 +75,6 @@ pub(crate) fn validate_translation_output(
         eligibility.requires_subtitle_shape() && translated_chars > MAX_SUBTITLE_OUTPUT_CHARS;
     if over_cue_length || translated_chars > source_chars.saturating_mul(ratio).max(minimum) {
         return Err(TranslationOutputRejection::TooLong);
-    }
-    if meowcal_core::inference_health::has_garbage_tail(source_text, translated) {
-        return Err(TranslationOutputRejection::GarbageTail);
-    }
-    if looks_repetition_loop(translated)
-        || meowcal_core::inference_health::has_cjk_loop(source_text, translated)
-    {
-        return Err(TranslationOutputRejection::RepetitionLoop);
     }
     if is_english_target(target_language) && is_probably_non_english_for_en_target(translated) {
         return Err(TranslationOutputRejection::WrongLanguage);

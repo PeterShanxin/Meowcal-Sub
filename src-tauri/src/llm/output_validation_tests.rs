@@ -73,6 +73,31 @@ fn returns_stable_rejection_reasons() {
 }
 
 #[test]
+fn strong_corruption_is_not_hidden_by_output_length() {
+    for (output, expected) in [
+        (
+            "你好".repeat(24),
+            TranslationOutputRejection::RepetitionLoop,
+        ),
+        (
+            format!(
+                "{}---+",
+                "这段输出没有遵守翻译指令，而且添加了很多额外解释和无关内容。".repeat(2)
+            ),
+            TranslationOutputRejection::GarbageTail,
+        ),
+    ] {
+        assert_eq!(validate("Hi.", &output, "en-US", "zh-CN"), Err(expected));
+    }
+    for (output, target) in [("あ".repeat(12), "ja-JP"), ("한".repeat(12), "ko-KR")] {
+        assert_eq!(
+            validate("Hi.", &output, "en-US", target),
+            Err(TranslationOutputRejection::RepetitionLoop)
+        );
+    }
+}
+
+#[test]
 fn allows_mixed_and_non_english_target_cases() {
     assert!(validate("需要", "OK 好", "zh-CN", "en-US").is_ok());
     assert!(validate("Need eel.", "需要鲨鱼。", "en-US", "zh-CN",).is_ok());
@@ -252,7 +277,7 @@ fn runaway_output_is_refused_even_when_translating_all_text() {
     let runaway = "no ".repeat(400);
     assert_eq!(
         validate_translation_output("Stop.", &runaway, "en-US", "fr-FR", Eligibility::AnyText),
-        Err(TranslationOutputRejection::TooLong)
+        Err(TranslationOutputRejection::RepetitionLoop)
     );
 }
 

@@ -122,9 +122,13 @@ pub fn has_garbage_tail(source: &str, output: &str) -> bool {
 pub fn has_cjk_loop(source: &str, output: &str) -> bool {
     let chars: Vec<char> = output.chars().collect();
     if chars.len() < source.chars().count().saturating_mul(2).max(12)
-        || !chars
-            .iter()
-            .any(|ch| ('\u{3400}'..='\u{9fff}').contains(ch))
+        || !chars.iter().any(|ch| {
+            matches!(ch,
+                '\u{3400}'..='\u{9fff}' | '\u{3040}'..='\u{30ff}' |
+                '\u{31f0}'..='\u{31ff}' | '\u{ff66}'..='\u{ff9f}' |
+                '\u{1100}'..='\u{11ff}' | '\u{3130}'..='\u{318f}' |
+                '\u{a960}'..='\u{a97f}' | '\u{ac00}'..='\u{d7ff}')
+        })
     {
         return false;
     }
@@ -168,6 +172,21 @@ mod tests {
         assert!(!has_garbage_tail("Print ---+", "输出 ---+"));
         assert!(has_cjk_loop("hello", "你好你好你好你好你好你好"));
         assert!(!has_cjk_loop("哈哈哈哈哈哈哈哈", "哈哈哈哈哈哈哈哈"));
+    }
+
+    #[test]
+    fn repetition_covers_kana_and_hangul_with_source_controls() {
+        for unit in ["あ", "ア", "ｱ", "한", "ᄀ", "ㄱ"] {
+            let output = unit.repeat(12);
+            assert!(has_cjk_loop("hello", &output), "{output}");
+            assert!(
+                !has_cjk_loop(&output, &output),
+                "source repetition: {output}"
+            );
+        }
+        for output in ["ちょっと待ってください。", "잠시 기다려 주세요."] {
+            assert!(!has_cjk_loop("wait", output), "{output}");
+        }
     }
 
     fn record(health: &mut InferenceHealth, source: &str, reason: Rejection) -> Report {

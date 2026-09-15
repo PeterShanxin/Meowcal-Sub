@@ -14,17 +14,14 @@ struct Engine {
 }
 
 impl RecoveryEngine for Engine {
-    fn gpu(&self) -> bool {
-        self.gpu
-    }
     fn lock_cpu(&mut self, progress: &(dyn Fn(String) + Send + Sync)) {
         progress(CPU_LOCK_EVENT.into());
     }
     async fn sample(&mut self) -> bool {
         self.samples += 1;
-        let health = reqwest::get(format!("{}/health", self.endpoint))
-            .await
-            .unwrap();
+        let Ok(health) = reqwest::get(format!("{}/health", self.endpoint)).await else {
+            return false;
+        };
         assert!(health.status().is_success());
         completion::sample(&self.endpoint, "owned").await.is_ok()
     }
@@ -47,8 +44,48 @@ impl RecoveryEngine for Engine {
     }
 }
 
+#[tokio::test]
+async fn vanished_gpu_still_gets_a_verified_cpu_replacement() {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let vanished = format!("http://{}", listener.local_addr().unwrap());
+    drop(listener);
+    let (cpu, worker) = server("Leave the clock tower aside for now.", "stop");
+    let mut engine = Engine {
+        gpu: false,
+        endpoint: vanished,
+        cpu_endpoint: cpu,
+        starts: 0,
+        stops: 0,
+        samples: 0,
+    };
+    let result = recover(&mut engine, true, false, &|_| {}).await;
+    assert!(
+        result.is_ok(),
+        "GPU exit must not be classified as CPU failure"
+    );
+    assert_eq!((engine.starts, engine.samples), (1, 2));
+    worker.join().unwrap();
+}
+
 fn server(content: &str, finish: &str) -> (String, std::thread::JoinHandle<()>) {
     server_sequence(&[(content, finish)])
+}
+
+#[tokio::test]
+async fn failed_cpu_probe_is_terminal_without_another_start() {
+    let (endpoint, worker) = server("Another clock tower.", "stop");
+    let mut engine = Engine {
+        gpu: false,
+        endpoint,
+        cpu_endpoint: String::new(),
+        starts: 0,
+        stops: 0,
+        samples: 0,
+    };
+    let result = recover(&mut engine, false, false, &|_| {}).await;
+    assert_eq!(result.unwrap_err().code, "INFERENCE_FAILED");
+    assert_eq!((engine.starts, engine.stops, engine.samples), (0, 1, 1));
+    worker.join().unwrap();
 }
 
 fn server_sequence(replies: &[(&str, &str)]) -> (String, std::thread::JoinHandle<()>) {
@@ -108,7 +145,7 @@ async fn healthy_but_corrupt_gpu_switches_once_and_validates_cpu() {
         "the same GPU initially passes its sample"
     );
     let events = std::sync::Mutex::new(Vec::new());
-    recover(&mut engine, false, &|event| {
+    recover(&mut engine, true, false, &|event| {
         events.lock().unwrap().push(event)
     })
     .await
@@ -133,7 +170,7 @@ async fn sane_sample_does_not_restart_gpu_for_one_rejected_translation() {
         stops: 0,
         samples: 0,
     };
-    recover(&mut engine, false, &|_| panic!("no CPU lock needed"))
+    recover(&mut engine, true, false, &|_| panic!("no CPU lock needed"))
         .await
         .unwrap();
     assert_eq!((engine.starts, engine.stops, engine.samples), (0, 0, 1));
@@ -152,7 +189,10 @@ async fn repeated_strong_failures_skip_gpu_probe_and_cpu_failure_terminates() {
         samples: 0,
     };
     assert_eq!(
-        recover(&mut engine, true, &|_| {}).await.unwrap_err().code,
+        recover(&mut engine, true, true, &|_| {})
+            .await
+            .unwrap_err()
+            .code,
         "INFERENCE_FAILED"
     );
     assert_eq!((engine.starts, engine.stops, engine.samples), (1, 2, 1));
@@ -166,9 +206,6 @@ async fn a_stalled_cpu_load_ends_core_instead_of_leaving_install_work_alive() {
         locked: bool,
     }
     impl RecoveryEngine for StalledEngine {
-        fn gpu(&self) -> bool {
-            true
-        }
         fn lock_cpu(&mut self, _: &(dyn Fn(String) + Send + Sync)) {
             self.locked = true;
         }
@@ -189,7 +226,7 @@ async fn a_stalled_cpu_load_ends_core_instead_of_leaving_install_work_alive() {
         stopped: false,
         locked: false,
     };
-    let result = recover(&mut engine, false, &|_| {}).await;
+    let result = recover(&mut engine, true, false, &|_| {}).await;
     assert_eq!(result.unwrap_err().code, "READY_TIMEOUT");
     assert!(
         engine.locked && !engine.stopped,
