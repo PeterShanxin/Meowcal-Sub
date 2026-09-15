@@ -10,9 +10,7 @@ use tracing::info;
 /// Show the foundry-wizard window, resetting state for a fresh run
 pub fn open(app: &AppHandle) -> Result<(), String> {
     info!("Opening Foundry setup wizard");
-    let Some(window) = app.get_webview_window("foundry-wizard") else {
-        return Err("Wizard window not found".to_string());
-    };
+    let window = crate::configured_window::get_or_create(app, "foundry-wizard")?;
 
     // Emit reset event so the wizard JS resets to step 1 and clears timers
     let _ = window.emit("wizard-reset", ());

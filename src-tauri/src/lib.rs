@@ -117,6 +117,8 @@ pub mod system_info;
 /// Quiescing the app so an update installer can replace its files
 pub mod update_handoff;
 
+/// Windows built on first use instead of at launch
+pub mod configured_window;
 /// System tray icon and menu
 pub mod tray;
 pub mod window_lifecycle;

@@ -984,7 +984,7 @@ pub async fn stop_translation(state: State<'_, AppState>, app: AppHandle) -> Res
 
 /// Show the foundry-wizard window, resetting state for a fresh run
 #[tauri::command]
-pub fn open_engine_wizard(app: AppHandle) -> Result<(), String> {
+pub async fn open_engine_wizard(app: AppHandle) -> Result<(), String> {
     crate::wizard_window::open(&app)
 }
 
