@@ -48,7 +48,8 @@ work. That step also refuses to continue when the runner's own architecture does
 not match the requested one, so a wrong-image build can never reach
 `upload-artifact`.
 
-The application package job declares its own toolchain rather than inheriting one from the image:
+The application package job declares its own toolchain rather than inheriting
+one from the image:
 Node from `actions/setup-node`, the .NET SDK from `actions/setup-dotnet`, and the
 Rust toolchain plus the one target it needs from `rustup`. It restores no Rust
 cache: a release build starts cold.
