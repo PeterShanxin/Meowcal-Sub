@@ -206,6 +206,11 @@ DPI/window behavior.
   repository cache budget. What keeps fork code out of the entry `main` restores is
   separate: GitHub scopes a written entry to the ref that wrote it. The
   third-party cache action is pinned to a commit, not a tag.
+- Core packaging uses its own target-keyed dependency cache, shared by Core
+  preflight and release; only `main` writes it. Its locked all-target tests run
+  in the release profile to reuse dependencies when building the distributable.
+  The ordinary merge gate still runs debug tests. Hosted packaging uses the
+  runner's CPU count; local ARM64 compiler safeguards remain unchanged.
 - Every job runs on a GitHub-hosted runner. `ubuntu-24.04`, `ubuntu-latest`,
   `windows-11-arm`, and `windows-2025` are the only runners a workflow may name;
   `windows-latest`, `windows-2022`, macOS, and any indirect value such as a

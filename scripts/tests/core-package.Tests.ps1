@@ -3,6 +3,7 @@ param()
 
 $ErrorActionPreference = "Stop"
 $repositoryRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
+& (Join-Path $PSScriptRoot "core-package-workflow.Tests.ps1")
 $packageScript = Join-Path $repositoryRoot "scripts\package-core.ps1"
 $verifyScript = Join-Path $repositoryRoot "scripts\verify-core-package.ps1"
 $verifyReleaseScript = Join-Path $repositoryRoot "scripts\verify-core-release-assets.ps1"

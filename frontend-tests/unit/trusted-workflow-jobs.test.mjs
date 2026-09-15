@@ -288,9 +288,9 @@ describe("Core release and preflight share one asset contract", () => {
     expect(contents).toContain("windows-11-arm");
     expect(contents).toContain("windows-2025");
     expect(contents).toContain("RuntimeInformation]::OSArchitecture");
-    expect(contents).toContain("$env:CARGO_BUILD_JOBS = '1'");
+    expect(contents).toContain("CARGO_BUILD_JOBS=$env:NUMBER_OF_PROCESSORS");
     expect(contents).toContain("scripts/package-core.ps1");
-    expect(contents).toContain("cargo test --manifest-path core/Cargo.toml --locked");
+    expect(contents).toContain("cargo test --release --manifest-path core/Cargo.toml --locked");
     expect(contents).not.toContain("SkipExecutableContractCheck");
     expect(
       readFileSync(path.join(repositoryRoot, "scripts/test-core-executable.ps1"), "utf8"),
