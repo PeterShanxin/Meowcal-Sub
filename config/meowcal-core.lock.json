@@ -1,17 +1,17 @@
 {
   "schemaVersion": 1,
   "repository": "PeterShanxin/Meowcal-Sub",
-  "tag": "core-v0.1.1",
-  "coreVersion": "0.1.1",
+  "tag": "core-v0.1.2",
+  "coreVersion": "0.1.2",
   "apiVersion": 1,
   "architectures": {
     "x64": {
-      "asset": "meowcal-core-v0.1.1-windows-x64.zip",
-      "sha256": "1c345302b35a69a6404e3b69020fcb448fcd7d63e9085bf059631ce10ff26d69"
+      "asset": "meowcal-core-v0.1.2-windows-x64.zip",
+      "sha256": "1dd2ed0dc26066b4a6d59bb75fe305597180bc27e64883a2688bed15dbd8be4a"
     },
     "arm64": {
-      "asset": "meowcal-core-v0.1.1-windows-arm64.zip",
-      "sha256": "900fad5a90e441d0ff5bba0f76c65e7df2816ce971e2f91ed518b7173b5ebceb"
+      "asset": "meowcal-core-v0.1.2-windows-arm64.zip",
+      "sha256": "8e01f353a3dfc32e4945e6ef8d4abadb26e4143eb60bd7e16196e63ddfc303bb"
     }
   }
 }
