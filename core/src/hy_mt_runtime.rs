@@ -14,8 +14,8 @@ pub use crate::hy_mt_paths::HyMtInstallPaths;
 
 static OWNED_RUNTIME: OnceLock<Mutex<Option<OwnedRuntime>>> = OnceLock::new();
 
-// Measured GPU readiness: 3-6 seconds, about 11 seconds under ambient load.
-const GPU_STARTUP_MAX: Duration = Duration::from_secs(30);
+// Measured GPU readiness: 3-6 s idle, ~11 s under load, 19 to 30+ s under memory pressure (#107).
+const GPU_STARTUP_MAX: Duration = Duration::from_secs(45);
 fn readiness_deadline(overall: Instant, now: Instant, gpu_active: bool) -> Instant {
     if !gpu_active {
         return overall;
