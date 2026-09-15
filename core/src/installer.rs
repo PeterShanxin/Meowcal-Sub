@@ -169,7 +169,7 @@ async fn install_candidate(
         ..paths.clone()
     };
     emit_progress(progress, "Warming up and checking a sample translation...");
-    verify_sample(&staged, manifest).await?;
+    verify_sample(&staged, manifest, progress).await?;
 
     let mut assets = Vec::new();
     if !executable_verified {
@@ -199,12 +199,16 @@ async fn install_candidate(
     Ok(())
 }
 
-async fn verify_sample(paths: &HyMtInstallPaths, manifest: &EngineManifest) -> Result<(), String> {
+async fn verify_sample(
+    paths: &HyMtInstallPaths,
+    manifest: &EngineManifest,
+    progress: &(dyn Fn(String) + Send + Sync),
+) -> Result<(), String> {
     crate::hy_mt_runtime::shutdown_owned();
     let runtime = paths.managed_config(manifest);
     let result = async {
         let endpoint =
-            crate::hy_mt_runtime::ensure_ready(&runtime, Duration::from_secs(90)).await?;
+            crate::hy_mt_runtime::ensure_ready(&runtime, Duration::from_secs(90), progress).await?;
         crate::completion::sample(&endpoint, &manifest.model.id).await
     }
     .await;

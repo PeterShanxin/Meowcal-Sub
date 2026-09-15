@@ -23,6 +23,7 @@ pub(crate) enum TranslationOutputRejection {
     RepetitionLoop,
     PromptEcho,
     WrongLanguage,
+    GarbageTail,
 }
 
 impl TranslationOutputRejection {
@@ -33,6 +34,7 @@ impl TranslationOutputRejection {
             Self::RepetitionLoop => "repetition_loop",
             Self::PromptEcho => "prompt_echo",
             Self::WrongLanguage => "wrong_language",
+            Self::GarbageTail => "garbage_tail",
         }
     }
 }
@@ -65,7 +67,12 @@ pub(crate) fn validate_translation_output(
     if over_cue_length || translated_chars > source_chars.saturating_mul(ratio).max(minimum) {
         return Err(TranslationOutputRejection::TooLong);
     }
-    if looks_repetition_loop(translated) {
+    if meowcal_core::inference_health::has_garbage_tail(source_text, translated) {
+        return Err(TranslationOutputRejection::GarbageTail);
+    }
+    if looks_repetition_loop(translated)
+        || meowcal_core::inference_health::has_cjk_loop(source_text, translated)
+    {
         return Err(TranslationOutputRejection::RepetitionLoop);
     }
     if is_english_target(target_language) && is_probably_non_english_for_en_target(translated) {
@@ -79,6 +86,9 @@ pub(crate) fn validate_translation_output(
 
 pub(crate) fn quality_issue_message(reason: TranslationOutputRejection) -> String {
     match reason {
+        TranslationOutputRejection::GarbageTail => {
+            "Translation output rejected as corrupted (symbol debris)."
+        }
         TranslationOutputRejection::TooLong => {
             "Translation output rejected as corrupted (overlong output)."
         }

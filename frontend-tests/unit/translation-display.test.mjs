@@ -108,3 +108,17 @@ describe("translation display states", () => {
     expect(normalizeTranslationDisplayState(undefined, "local_engine")).toBe("translated");
   });
 });
+
+it("shows recovery and terminal failure without presenting source as translation", () => {
+  expect(
+    getTranslationPresentation("warming", "mock", ["local_engine: engine_recovering"]),
+  ).toMatchObject({ hint: "Translation engine is recovering", replaceText: false });
+  expect(
+    getTranslationPresentation("temporarilyUnavailable", "mock", [
+      "local_engine: engine_recovery_failed",
+    ]),
+  ).toMatchObject({
+    hint: "Engine recovery failed — retry the engine in Settings",
+    replaceText: false,
+  });
+});

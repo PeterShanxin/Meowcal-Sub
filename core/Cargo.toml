@@ -45,3 +45,6 @@ windows = { version = "0.61", features = [
 ] }
 windows-version = "0.1"
 windows-future = "0.2"
+
+[dev-dependencies]
+tokio = { version = "1", features = ["test-util"] }

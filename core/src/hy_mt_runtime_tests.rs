@@ -117,10 +117,14 @@ fn effective_policy_gates_the_adreno_gpu_path() {
         assert!(!policy.gpu_active, "{adreno_validated}/{force_cpu}");
     }
 
-    // x64 is not the gated runtime: gate inputs must not touch its policy.
+    // The Adreno allowlist does not gate x64; an explicit recovery lock does.
     for (adreno_validated, force_cpu) in [(false, false), (true, false), (true, true)] {
         let policy = effective_launch_policy(x64, adreno_validated, force_cpu);
-        assert_eq!(policy.gpu_layers, 99, "{adreno_validated}/{force_cpu}");
+        assert_eq!(
+            policy.gpu_layers,
+            if force_cpu { 0 } else { 99 },
+            "{adreno_validated}/{force_cpu}"
+        );
         assert!(!policy.gpu_active, "{adreno_validated}/{force_cpu}");
     }
 }

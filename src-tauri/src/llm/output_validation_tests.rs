@@ -255,3 +255,55 @@ fn runaway_output_is_refused_even_when_translating_all_text() {
         Err(TranslationOutputRejection::TooLong)
     );
 }
+
+#[test]
+fn rejects_observed_gpu_junk_without_rejecting_names_punctuation_or_general_text() {
+    assert_eq!(
+        validate(
+            "The last ferry leaves before sunrise.",
+            "最后一班渡轮会在中午之前离开。---+",
+            "en",
+            "zh"
+        ),
+        Err(TranslationOutputRejection::GarbageTail)
+    );
+    assert_eq!(
+        validate("Hello", "你好你好你好你好你好你好", "en", "zh"),
+        Err(TranslationOutputRejection::RepetitionLoop)
+    );
+    for (source, output) in [
+        ("Really?!", "真的……？！"),
+        ("Print ---+", "输出 ---+"),
+        ("Jean-Luc", "Jean-Luc"),
+        ("C++", "C++"),
+        ("ha ha ha ha ha ha", "哈哈哈哈哈哈哈哈"),
+    ] {
+        assert!(validate(source, output, "en", "zh").is_ok(), "{output}");
+    }
+    let source = "This is ordinary screen text. ".repeat(30);
+    let output: String = (1..=30)
+        .map(|index| format!("这是第{index}段屏幕文字。"))
+        .collect();
+    assert!(
+        validate_translation_output(&source, &output, "en", "zh", Eligibility::AnyText).is_ok()
+    );
+}
+
+#[test]
+fn inference_reports_use_the_shared_core_rejection_contract() {
+    for reason in [
+        TranslationOutputRejection::EmptyOutput,
+        TranslationOutputRejection::TooLong,
+        TranslationOutputRejection::RepetitionLoop,
+        TranslationOutputRejection::GarbageTail,
+        TranslationOutputRejection::PromptEcho,
+        TranslationOutputRejection::WrongLanguage,
+    ] {
+        assert!(
+            serde_json::from_value::<meowcal_core::inference_health::Report>(
+                serde_json::json!({"receipt":"opaque", "reason":reason.code()})
+            )
+            .is_ok()
+        );
+    }
+}

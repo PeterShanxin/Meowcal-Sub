@@ -57,6 +57,7 @@ Consumers verify version, API, required capabilities, IDs, and reply shape.
 | `install`          | `{}`                                                             | Verified installation state; progress frames precede the result                            |
 | `ready`            | `{}`                                                             | Ready state after verified launch; may import matching local artifacts without downloading |
 | `complete`         | `request`: bounded chat-completion payload; `timeoutMs`: 1–90000 | Chat-completion response from the owned HY-MT runtime                                      |
+| `recoverInference` | `receipt`: returned inference receipt; `reason`: output rejection code | Validated readiness after a bounded check or CPU recovery |
 | `ocrLanguages`     | `{}`                                                             | Installed Windows OCR language tags                                                        |
 | `ocrInitialize`    | Optional `language` tag; null selects user-profile languages     | Resolved OCR language                                                                      |
 | `ocrRecognizeBgra` | Language, width, height, stride, timeout; raw BGRA body          | Raw native text, lines, line boxes, frame width                                            |
@@ -93,6 +94,40 @@ result while the consumer drains the response within the original deadline,
 preserving the loaded model. Queued cancellations send no request. Closing stdin,
 a transport timeout, or a broken protocol ends the owned session. Consumers must
 bound writes as well as reads and reap the exact process they launched.
+
+## Inference recovery
+
+`hello` advertises the additive `recoverInference` capability. Successful
+completions carry `inferenceReceipt`; consumers retain it with the raw response,
+stop reason, token count, request cap, and actual source length. Reject suspicious
+output before display or context/cache admission, then send the receipt and one
+of `empty_output`, `too_long`, `repetition_loop`, `garbage_tail`, `prompt_echo`, or
+`wrong_language` through the recovery control request. General-text acceptance
+must not use a subtitle-only length cap. A `length` stop or timeout alone is not
+an inference-corruption report.
+
+Recovery is serialized with other Core operations and has its own 120-second
+consumer budget. Consumers skip new and queued translations while recovering;
+they never wait for model reload inside a subtitle deadline. A fixed, independent
+sample must stop normally, stay within its length bound, and retain the clock
+tower sample's meaning. One failed sample, or two distinct strong reports within
+60 seconds, confirms failure. Symbol debris and repetition are strong; overlong
+output is strong only with a `length` stop. Duplicate receipts and identical
+request messages do not increase the streak. A successful probe retains recent
+strong evidence. Engine replacement invalidates outstanding receipts.
+
+Confirmed GPU failure emits the progress message `inferenceCpuLocked` before
+stopping the owned runtime, then loads and validates CPU. Status includes
+`cpuLocked`. Consumers retain this latch for the application lifetime and send
+optional `forceCpu: true` in every replacement Core's `hello`. Startup GPU
+fallback emits the same event; consumers retain the latch from progress and status. CPU validation
+failure returns `INFERENCE_FAILED`, stops the engine, and requires explicit
+retry. There is no automatic GPU restart after confirmed corruption.
+
+The memory-headroom gate and session CPU fallback reduce GPU exposure associated
+with issues #105 and #215. They do not establish the cause of, or prevent, the
+reported `SOC_CRITICAL_DEVICE_REMOVED` bugcheck. A new Core release and reviewed
+consumer pin are required to deliver these controls in packaged applications.
 
 ## Installation and compatibility
 

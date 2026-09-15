@@ -35,6 +35,8 @@ pub(super) struct ChatMessage {
 #[derive(Debug, Deserialize)]
 pub(super) struct ChatCompletionResponse {
     pub choices: Vec<ChatChoice>,
+    #[serde(default, rename = "inferenceReceipt")]
+    pub inference_receipt: Option<String>,
     /// Absent on engines that do not report it, so never required.
     #[serde(default)]
     pub usage: Option<ChatUsage>,
@@ -42,6 +44,8 @@ pub(super) struct ChatCompletionResponse {
 
 #[derive(Debug, Deserialize)]
 pub(super) struct ChatChoice {
+    #[serde(default)]
+    pub finish_reason: Option<String>,
     pub message: ChatMessage,
 }
 

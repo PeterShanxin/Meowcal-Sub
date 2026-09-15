@@ -35,6 +35,8 @@ pub struct CoreInstallPaths {
 pub struct CoreStatus {
     pub installed: bool,
     pub ready: bool,
+    #[serde(default)]
+    pub cpu_locked: bool,
     pub model: String,
     pub version: String,
     pub storage_root: PathBuf,

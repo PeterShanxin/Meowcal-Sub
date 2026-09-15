@@ -82,6 +82,9 @@ async fn managed_status(
     config: &FoundryLocalConfig,
     start_if_needed: bool,
 ) -> Result<EngineStatusSnapshot, String> {
+    if crate::core_client::recovering() {
+        return Ok(preparing_snapshot(config));
+    }
     let status = if start_if_needed {
         crate::core_client::ready(crate::core_client::READY_TIMEOUT).await?
     } else {
@@ -101,8 +104,12 @@ fn preparing_snapshot(config: &FoundryLocalConfig) -> EngineStatusSnapshot {
         models: Vec::new(),
         configured_model: config.model.clone(),
         selected_model: None,
-        notes: "Local translation engine is busy. Please wait for the current operation."
-            .to_string(),
+        notes: if crate::core_client::recovering() {
+            "Translation engine is recovering. Please wait."
+        } else {
+            "Local translation engine is busy. Please wait for the current operation."
+        }
+        .to_string(),
         phase: FoundryLocalPhase::Preparing,
         probe: None,
     }
@@ -119,11 +126,19 @@ fn managed_snapshot(
     } else {
         FoundryLocalPhase::NotInstalled
     };
-    let notes = match phase {
-        FoundryLocalPhase::Ready => "Local Translation Engine is ready.".to_string(),
-        FoundryLocalPhase::NotInstalled => "Translation runtime is missing.".to_string(),
-        FoundryLocalPhase::NotRunning => "Translation engine is installed but stopped.".to_string(),
-        _ => "Local Translation Engine is configured.".to_string(),
+    let notes = if crate::core_client::recovery_failed() {
+        "Engine recovery failed. Retry the engine in Settings.".to_string()
+    } else if status.ready && status.cpu_locked {
+        "Translation is ready on CPU. GPU is disabled until the app exits.".to_string()
+    } else {
+        match phase {
+            FoundryLocalPhase::Ready => "Local Translation Engine is ready.".to_string(),
+            FoundryLocalPhase::NotInstalled => "Translation runtime is missing.".to_string(),
+            FoundryLocalPhase::NotRunning => {
+                "Translation engine is installed but stopped.".to_string()
+            }
+            _ => "Local Translation Engine is configured.".to_string(),
+        }
     };
 
     EngineStatusSnapshot {

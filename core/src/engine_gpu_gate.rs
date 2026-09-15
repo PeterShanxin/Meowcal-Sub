@@ -102,7 +102,7 @@ pub(crate) fn effective_launch_policy(
 ) -> LaunchPolicy {
     let adreno_gpu_requested = runtime_spec.id == crate::engine_manifest::ADRENO_B10155_RUNTIME_ID
         && runtime_spec.gpu_layers > 0;
-    if adreno_gpu_requested && (force_cpu || !adreno_gpu_allowed) {
+    if force_cpu || (adreno_gpu_requested && !adreno_gpu_allowed) {
         return LaunchPolicy {
             gpu_layers: 0,
             launch_args: Vec::new(),
