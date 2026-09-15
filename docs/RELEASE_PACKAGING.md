@@ -48,7 +48,7 @@ work. That step also refuses to continue when the runner's own architecture does
 not match the requested one, so a wrong-image build can never reach
 `upload-artifact`.
 
-The job declares its own toolchain rather than inheriting one from the image:
+The application package job declares its own toolchain rather than inheriting one from the image:
 Node from `actions/setup-node`, the .NET SDK from `actions/setup-dotnet`, and the
 Rust toolchain plus the one target it needs from `rustup`. It restores no Rust
 cache: a release build starts cold.
@@ -77,6 +77,21 @@ Each ZIP contains only `meowcal-core.exe`, `meowcal-core.json`, and `LICENSE`.
 The metadata binds the Core version, API version, architecture, executable hash,
 and license hash. Packaging checks the PE machine type and runs the native
 binary's `--version-json` contract after the Core test suite passes.
+
+Core packaging uses all hosted runner CPUs and tests every Cargo target with
+`cargo test --release --locked` before building the distributable in the same
+release profile and target directory. The ordinary merge gate retains its debug
+profile tests; packaging does not skip tests on a cache hit. Local ARM64 build
+safeguards are unchanged.
+
+The pinned `Swatinem/rust-cache` action restores Core dependency artifacts from
+`core-package-target`, keyed by native target and toolchain/manifest inputs.
+Preflight and release share this cache, separate from application and merge-gate
+caches. Only `main` saves entries; branch preflights can restore `main` entries
+but do not write their own. Cached dependencies are not release assets: every
+run still builds Core, checks the native executable contract and PE machine,
+and verifies the packaged hashes. Preflight and publication remain separate
+runs and do not promote or reuse each other's ZIP files.
 
 Use the Core preflight before publishing:
 
