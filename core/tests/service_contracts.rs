@@ -114,7 +114,7 @@ async fn initialization_is_versioned_and_status_never_installs_or_starts() {
         "VERSION_MISMATCH"
     );
     let mut hello = hello;
-    hello["expectedVersion"] = json!("0.1.0");
+    hello["expectedVersion"] = json!(env!("CARGO_PKG_VERSION"));
     let result = service
         .handle(request("hello", hello), &|_| {})
         .await
@@ -173,7 +173,7 @@ fn process_negotiates_and_exits_after_shutdown() {
         (
             1,
             "hello",
-            json!({"client":"sub2","profile":"production","expectedVersion":"0.1.0","storageRoot":root}),
+            json!({"client":"sub2","profile":"production","expectedVersion":env!("CARGO_PKG_VERSION"),"storageRoot":root}),
         ),
         (2, "status", json!({})),
         (3, "shutdown", json!({})),
@@ -201,7 +201,7 @@ fn storage_profiles_and_versions_never_alias() {
     let prod = resolve_root("production", Some(&base)).unwrap();
     let dev = resolve_root("development", Some(&base)).unwrap();
     assert_ne!(prod, dev);
-    assert!(prod.starts_with(base.join("production").join("0.1.0")));
+    assert!(prod.starts_with(base.join("production").join(env!("CARGO_PKG_VERSION"))));
     assert!(resolve_root("other", Some(&base)).is_err());
     assert!(resolve_root("production", Some(std::path::Path::new("relative"))).is_err());
 }
@@ -272,7 +272,7 @@ async fn eof_cancels_install_waiting_on_another_process_lease() {
         .unwrap();
     let mut input = child.stdin.take().unwrap();
     let mut output = BufReader::new(child.stdout.take().unwrap());
-    writeln!(input, "{}", json!({"id":1,"api":1,"method":"hello","params":{"client":"sub1","profile":"development","expectedVersion":"0.1.0","storageRoot":base}})).unwrap();
+    writeln!(input, "{}", json!({"id":1,"api":1,"method":"hello","params":{"client":"sub1","profile":"development","expectedVersion":env!("CARGO_PKG_VERSION"),"storageRoot":base}})).unwrap();
     input.flush().unwrap();
     let mut line = String::new();
     output.read_line(&mut line).unwrap();

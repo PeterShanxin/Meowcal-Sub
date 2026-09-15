@@ -8,6 +8,11 @@ $verifyScript = Join-Path $repositoryRoot "scripts\verify-core-package.ps1"
 $verifyReleaseScript = Join-Path $repositoryRoot "scripts\verify-core-release-assets.ps1"
 $fetchScript = Join-Path $repositoryRoot "scripts\fetch-meowcal-core.ps1"
 $writeLockScript = Join-Path $repositoryRoot "scripts\write-meowcal-core-lock.ps1"
+# Packaging refuses a version other than core/Cargo.toml's, so the test follows it.
+$coreVersion = [regex]::Match(
+    (Get-Content -LiteralPath (Join-Path $repositoryRoot "core\Cargo.toml") -Raw),
+    '(?ms)^\[package\].*?^version\s*=\s*"(?<version>\d+\.\d+\.\d+)"'
+).Groups["version"].Value
 $temporaryDirectory = Join-Path ([IO.Path]::GetTempPath()) (
     "meowcal-core-package-tests-" + [guid]::NewGuid().ToString("N")
 )
@@ -42,7 +47,7 @@ function New-TestPe {
 function New-TestArchive {
     param(
         [Parameter(Mandatory)][string]$Path,
-        [string]$Version = "0.1.0",
+        [string]$Version = "$coreVersion",
         [int]$ApiVersion = 1,
         [string]$Architecture = "x64",
         [string]$PeArchitecture = $Architecture,
@@ -96,9 +101,9 @@ try {
         -Architecture x64 `
         -OutputDirectory $output `
         -BinaryPath $binary `
-        -Version 0.1.0 `
+        -Version $coreVersion `
         -SkipExecutableContractCheck)
-    $archive = Join-Path $output "meowcal-core-v0.1.0-windows-x64.zip"
+    $archive = Join-Path $output "meowcal-core-v$coreVersion-windows-x64.zip"
     $checksum = "$archive.sha256"
     if (-not (Test-Path -LiteralPath $archive -PathType Leaf) -or
         -not (Test-Path -LiteralPath $checksum -PathType Leaf)) {
@@ -110,7 +115,7 @@ try {
     $licenseDestination = Join-Path (Split-Path -Parent $destination) "LICENSE"
     $verified = & $verifyScript `
         -ArchivePath $archive `
-        -ExpectedVersion 0.1.0 `
+        -ExpectedVersion $coreVersion `
         -ExpectedApiVersion 1 `
         -ExpectedArchitecture x64 `
         -ExpectedArchiveSha256 $checksumHash `
@@ -132,15 +137,15 @@ try {
         -Architecture arm64 `
         -OutputDirectory $output `
         -BinaryPath $arm64Binary `
-        -Version 0.1.0 `
+        -Version $coreVersion `
         -SkipExecutableContractCheck | Out-Null
-    & $verifyReleaseScript -Directory $output -Version 0.1.0
+    & $verifyReleaseScript -Directory $output -Version $coreVersion
 
     $lockPath = Join-Path $temporaryDirectory "meowcal-core.lock.json"
     & $writeLockScript `
-        -Version 0.1.0 `
+        -Version $coreVersion `
         -X64ChecksumPath $checksum `
-        -Arm64ChecksumPath (Join-Path $output "meowcal-core-v0.1.0-windows-arm64.zip.sha256") `
+        -Arm64ChecksumPath (Join-Path $output "meowcal-core-v$coreVersion-windows-arm64.zip.sha256") `
         -OutputPath $lockPath | Out-Null
     $pinnedDestination = Join-Path $temporaryDirectory "pinned\meowcal-core.exe"
     $pinned = & $fetchScript `
@@ -217,40 +222,40 @@ try {
             -ExpectedArchitecture x64 -ExpectedArchiveSha256 $checksumHash
     } "does not match"
     Assert-Throws {
-        & $verifyScript -ArchivePath $archive -ExpectedVersion 0.1.0 `
+        & $verifyScript -ArchivePath $archive -ExpectedVersion $coreVersion `
             -ExpectedApiVersion 2 -ExpectedArchitecture x64 -ExpectedArchiveSha256 $checksumHash
     } "API version"
     Assert-Throws {
-        & $verifyScript -ArchivePath $archive -ExpectedVersion 0.1.0 `
+        & $verifyScript -ArchivePath $archive -ExpectedVersion $coreVersion `
             -ExpectedArchitecture arm64 -ExpectedArchiveSha256 $checksumHash
     } "architecture"
     Assert-Throws {
-        & $verifyScript -ArchivePath $archive -ExpectedVersion 0.1.0 `
+        & $verifyScript -ArchivePath $archive -ExpectedVersion $coreVersion `
             -ExpectedArchitecture x64 -ExpectedArchiveSha256 ("0" * 64)
     } "archive SHA-256 mismatch"
 
     $corrupt = Join-Path $temporaryDirectory "corrupt.zip"
     New-TestArchive -Path $corrupt -CorruptExecutableHash
     Assert-Throws {
-        & $verifyScript -ArchivePath $corrupt -ExpectedVersion 0.1.0 -ExpectedArchitecture x64
+        & $verifyScript -ArchivePath $corrupt -ExpectedVersion $coreVersion -ExpectedArchitecture x64
     } "executable SHA-256 mismatch"
 
     $corruptLicense = Join-Path $temporaryDirectory "corrupt-license.zip"
     New-TestArchive -Path $corruptLicense -CorruptLicenseHash
     Assert-Throws {
-        & $verifyScript -ArchivePath $corruptLicense -ExpectedVersion 0.1.0 -ExpectedArchitecture x64
+        & $verifyScript -ArchivePath $corruptLicense -ExpectedVersion $coreVersion -ExpectedArchitecture x64
     } "license SHA-256 mismatch"
 
     $extra = Join-Path $temporaryDirectory "extra.zip"
     New-TestArchive -Path $extra -ExtraFile
     Assert-Throws {
-        & $verifyScript -ArchivePath $extra -ExpectedVersion 0.1.0 -ExpectedArchitecture x64
+        & $verifyScript -ArchivePath $extra -ExpectedVersion $coreVersion -ExpectedArchitecture x64
     } "must contain only"
 
     $swappedMachine = Join-Path $temporaryDirectory "swapped-machine.zip"
     New-TestArchive -Path $swappedMachine -PeArchitecture arm64
     Assert-Throws {
-        & $verifyScript -ArchivePath $swappedMachine -ExpectedVersion 0.1.0 -ExpectedArchitecture x64
+        & $verifyScript -ArchivePath $swappedMachine -ExpectedVersion $coreVersion -ExpectedArchitecture x64
     } "PE machine"
 
     Assert-Throws {
