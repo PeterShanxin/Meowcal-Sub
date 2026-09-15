@@ -231,18 +231,23 @@ export class AppController {
     this.publish({ busy: "warming", error: null, notice: null });
     try {
       await this.saveSettings(true);
-      let engine = await window.TauriBridge.invoke<EngineStatus>("refresh_engine_status");
-      if (["notRunning", "notrunning", "preparing"].includes(engine.phase ?? "")) {
-        engine = await window.TauriBridge.invoke<EngineStatus>("make_engine_ready");
-      }
-      if (engine.phase !== "ready")
-        throw new Error("The local translation engine is not ready yet.");
+      const engine = await this.readyEngine();
       this.publish({ engine, busy: "starting" });
       await window.TauriBridge.invoke("start_translation");
       this.publish({ running: true, busy: "idle", notice: "Translation started" });
     } catch (error) {
       this.publish({ running: false, busy: "idle", error: errorMessage(error) });
     }
+  }
+
+  /** Launch does not load the engine, so everything that translates readies it first. */
+  private async readyEngine(): Promise<EngineStatus> {
+    let engine = await window.TauriBridge.invoke<EngineStatus>("refresh_engine_status");
+    if (["notRunning", "notrunning", "preparing"].includes(engine.phase ?? "")) {
+      engine = await window.TauriBridge.invoke<EngineStatus>("make_engine_ready");
+    }
+    if (engine.phase !== "ready") throw new Error("The local translation engine is not ready yet.");
+    return engine;
   }
 
   async stop(): Promise<void> {
@@ -334,6 +339,7 @@ export class AppController {
   async testTranslation(): Promise<void> {
     this.publish({ busy: "saving", notice: "Running a private sample translation…", error: null });
     try {
+      this.publish({ engine: await this.readyEngine() });
       const result = await window.TauriBridge.invoke<WizardTestResult>("wizard_test_translation", {
         sourceText: pickSampleTranslation(this.snapshot.settings.sourceLanguage),
         sourceLanguage: this.snapshot.settings.sourceLanguage,

@@ -391,8 +391,10 @@ describe("AppController settings persistence", () => {
   });
 
   it("uses current settings and a curated source for settings test translation", async () => {
-    const invoke = vi.fn().mockResolvedValue({ translatedText: "sample" });
-    const { controller } = createController(invoke);
+    const invoke = vi.fn(async (command: string) =>
+      command === "refresh_engine_status" ? { phase: "ready" } : { translatedText: "sample" },
+    );
+    const { controller } = createController(invoke as TauriBridgeApi["invoke"]);
     vi.spyOn(Math, "random").mockReturnValue(0);
 
     await controller.setLanguage("source", "ja-JP");
@@ -403,6 +405,30 @@ describe("AppController settings persistence", () => {
       sourceText: "時計塔の話は後だ、まずドアを閉めろ。",
       sourceLanguage: "ja-JP",
       targetLanguage: "fr-FR",
+    });
+  });
+
+  // Core rejects a completion until the engine is ready, and launch does not load it.
+  it("readies a stopped engine before the settings sample translation", async () => {
+    const invoke = vi.fn(async (command: string) => {
+      if (command === "refresh_engine_status") return { phase: "notRunning" };
+      if (command === "make_engine_ready") return { phase: "ready" };
+      if (command === "wizard_test_translation") return { translatedText: "sample", latencyMs: 12 };
+      return undefined;
+    });
+    const { controller, snapshots } = createController(invoke as TauriBridgeApi["invoke"]);
+
+    await controller.testTranslation();
+
+    expect(invoke.mock.calls.map(([command]) => command)).toEqual([
+      "refresh_engine_status",
+      "make_engine_ready",
+      "wizard_test_translation",
+    ]);
+    expect(snapshots.at(-1)).toMatchObject({
+      busy: "idle",
+      engine: { phase: "ready" },
+      notice: "Sample passed · 12 ms",
     });
   });
 });
