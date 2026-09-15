@@ -22,6 +22,10 @@
   &nbsp;·&nbsp; <a href="https://github.com/PeterShanxin/Meowcal-Sub/issues/new/choose">Report a problem</a>
 </p>
 
+<p align="center">
+  <img src="docs/assets/screenshot-home.png" width="640" alt="Meowcal Sub Home window, ready to translate English subtitles into Chinese (Simplified), with a Start translation button.">
+</p>
+
 Draw a box around the original subtitles in your video. Meowcal Sub reads that
 area, translates the text locally, and puts the translation in a floating
 overlay. No subtitle file, cloud account, or API key is needed for normal use.

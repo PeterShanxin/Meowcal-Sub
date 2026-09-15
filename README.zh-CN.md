@@ -22,6 +22,10 @@
   &nbsp;·&nbsp; <a href="https://github.com/PeterShanxin/Meowcal-Sub/issues/new/choose">反馈问题</a>
 </p>
 
+<p align="center">
+  <img src="docs/assets/screenshot-home.png" width="640" alt="Meowcal Sub 主界面：准备把英文字幕翻译成简体中文，并显示 Start translation 按钮。">
+</p>
+
 圈出视频中的原字幕区域。Meowcal Sub 会识别这块区域的文字，在本机翻译，
 再用悬浮字幕显示译文。正常使用不需要另外寻找字幕文件、注册云服务账号或填写 API key。
 
