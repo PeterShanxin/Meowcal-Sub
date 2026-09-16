@@ -45,7 +45,9 @@ impl Cue {
             self.missing();
             return;
         }
-        if text == self.anchor && (!self.absent || self.static_anchor) {
+        if (!self.absent && text == self.anchor)
+            || (self.static_anchor && (text == self.anchor || similar(&self.anchor, &text)))
+        {
             self.pending.clear();
             self.absent = false;
             self.confirmed = true;
@@ -104,13 +106,13 @@ impl Cue {
                 self.pending_observed_ms = self.observed_ms;
             }
         }
+        self.static_anchor |= self.confirmed
+            && self.observed_ms.saturating_sub(self.started_observed_ms) >= PERSISTENT_STATIC_MS;
         self.last_text = text;
         self.last_at = Some(at_ms);
     }
 
     pub(super) fn missing(&mut self) {
-        self.static_anchor |= self.confirmed
-            && self.observed_ms.saturating_sub(self.started_observed_ms) >= PERSISTENT_STATIC_MS;
         self.absent = true;
         self.pending.clear();
         self.confirmed = false;
