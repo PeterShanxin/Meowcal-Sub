@@ -114,6 +114,29 @@ fn static_text_and_transient_ocr_noise_do_not_periodically_recover() {
 }
 
 #[test]
+fn a_static_watermark_stays_suppressed_after_a_brief_ocr_dropout() {
+    let mut tracker = BandTracker::new(1832.0, 250);
+    let watermark = "MEOWCAL LAB DEMO";
+    for at in (0..45_000).step_by(250) {
+        read(&mut tracker, watermark, at);
+    }
+    assert!(!read(&mut tracker, watermark, 45_000));
+
+    for at in [45_250, 45_500, 45_750] {
+        tracker.observe(&[], &[], at);
+    }
+    for at in (46_000..48_000).step_by(250) {
+        assert!(
+            !read(&mut tracker, watermark, at),
+            "static watermark admitted at {at}"
+        );
+    }
+
+    assert!(!read(&mut tracker, DIALOGUE[1], 48_000));
+    assert!(read(&mut tracker, DIALOGUE[1], 48_250));
+}
+
+#[test]
 fn credits_and_timers_stay_held_then_stable_dialogue_recovers() {
     for period in [250, 500, 1_000, 1_500, 2_000] {
         let mut tracker = BandTracker::new(1832.0, 250);

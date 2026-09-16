@@ -4,6 +4,9 @@
 const MIN_CUE_MS: u64 = (60_000.0 / super::band_verdict::MAX_CUE_RATE_PER_MINUTE) as u64;
 /// A held reading may stop being admitted, without banning its screen position.
 const STATIC_MS: u64 = (60_000.0 / super::band_verdict::MIN_CUE_RATE_PER_MINUTE) as u64;
+/// Preserve a long-established static identity across OCR dropouts without
+/// suppressing an ordinary subtitle that reappears after a blank.
+const PERSISTENT_STATIC_MS: u64 = 2 * STATIC_MS;
 
 #[derive(Debug, Default)]
 pub(super) struct Cue {
@@ -16,6 +19,7 @@ pub(super) struct Cue {
     last_at: Option<u64>,
     last_text: String,
     absent: bool,
+    static_anchor: bool,
     fast_change: bool,
     numeric_changes: usize,
     pub(super) id: u64,
@@ -41,8 +45,9 @@ impl Cue {
             self.missing();
             return;
         }
-        if !self.absent && text == self.anchor {
+        if text == self.anchor && (!self.absent || self.static_anchor) {
             self.pending.clear();
+            self.absent = false;
             self.confirmed = true;
             if self.observed_ms.saturating_sub(self.started_observed_ms) >= 2 * MIN_CUE_MS {
                 self.numeric_changes = 0;
@@ -86,6 +91,7 @@ impl Cue {
             self.started_observed_ms = self.pending_observed_ms;
             self.id += 1;
             self.absent = false;
+            self.static_anchor = false;
             self.confirmed = true;
             self.changed = true;
         } else {
@@ -103,6 +109,8 @@ impl Cue {
     }
 
     pub(super) fn missing(&mut self) {
+        self.static_anchor |= self.confirmed
+            && self.observed_ms.saturating_sub(self.started_observed_ms) >= PERSISTENT_STATIC_MS;
         self.absent = true;
         self.pending.clear();
         self.confirmed = false;
