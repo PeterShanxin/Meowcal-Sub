@@ -50,6 +50,7 @@ fn set_launch(executable: PathBuf, profile: &'static str) -> Result<(), String> 
         profile,
         storage_root: None,
         legacy_roots: Vec::new(),
+        force_cpu: false,
     });
     Ok(())
 }
@@ -105,6 +106,29 @@ pub fn select_storage_root(storage_root: Option<PathBuf>) -> Result<(), String> 
         .as_mut()
         .ok_or_else(|| "CORE_NOT_REGISTERED".to_string())?;
     config.storage_root = storage_root;
+    Ok(())
+}
+
+/// Core latches CPU for the life of its process, so a changed choice stops the
+/// running Core and the next request starts one with the new `hello`.
+///
+/// Without a registered Core none runs this session, and the saved setting
+/// applies at the next launch; failing here would report a saved setting as lost.
+pub fn select_cpu_only(cpu_only: bool) -> Result<(), String> {
+    {
+        let mut guard = super::CONFIG
+            .get_or_init(|| Mutex::new(None))
+            .lock()
+            .map_err(|_| "CORE_CONFIG_LOCK_POISONED".to_string())?;
+        let Some(config) = guard.as_mut() else {
+            return Ok(());
+        };
+        if config.force_cpu == cpu_only {
+            return Ok(());
+        }
+        config.force_cpu = cpu_only;
+    }
+    super::shutdown_owned();
     Ok(())
 }
 

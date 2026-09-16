@@ -49,6 +49,26 @@ fn managed_snapshot_uses_core_as_the_status_authority() {
     assert!(missing.models.is_empty());
 }
 
+#[test]
+fn a_cpu_start_explains_whether_the_setting_or_a_gpu_failure_caused_it() {
+    let locked = CoreStatus {
+        cpu_locked: true,
+        ..core_status(true, true)
+    };
+    let requested = FoundryLocalConfig {
+        cpu_only: true,
+        ..managed_config()
+    };
+    assert_eq!(
+        managed_snapshot(&requested, locked.clone()).notes,
+        "Translation is ready on CPU, as set in Settings."
+    );
+    assert_eq!(
+        managed_snapshot(&managed_config(), locked).notes,
+        "Translation is ready on CPU. GPU is disabled until the app exits."
+    );
+}
+
 #[tokio::test]
 async fn http_get_status_ignores_managed_runtime_config() {
     let status = get_status_http(managed_config()).await;

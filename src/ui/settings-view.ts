@@ -16,6 +16,7 @@ interface SettingsActions {
   onCheckUpdates(): void;
   onInstallUpdate(): void;
   onAutoCheckUpdates(enabled: boolean): void;
+  onCpuOnly(enabled: boolean): void;
 }
 
 interface EngineRow {
@@ -128,6 +129,12 @@ function renderEngineAndUpdates(snapshot: UiSnapshot, actions: SettingsActions):
           </button>
         </span>
       </div>
+      ${switchRow(
+        "Run the engine on CPU only",
+        "Try this if translations come out garbled or your PC stalls",
+        snapshot.settings.translation.localEngine.cpuOnly,
+        actions.onCpuOnly,
+      )}
       ${switchRow(
         "Automatically check for updates",
         "At most once a day, after startup",

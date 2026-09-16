@@ -73,7 +73,7 @@ export interface TranslationConfig {
   contextBufferSize: number;
   contextResetGapMs: number;
   translateAllOcrText: boolean;
-  localEngine: { model: string | null; timeoutMs: number };
+  localEngine: { model: string | null; timeoutMs: number; cpuOnly: boolean };
   ocr: OcrConfig;
 }
 

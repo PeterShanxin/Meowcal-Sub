@@ -38,4 +38,9 @@ describe("settings defaults", () => {
     expect(configRs).toMatch(/translate_all_ocr_text: false,/);
     expect(settingsDefaults).toMatch(/translateAllOcrText: false,/);
   });
+
+  it("agrees with the backend that the engine is not forced onto CPU by default", () => {
+    expect(configRs).toMatch(/cpu_only: false,/);
+    expect(settingsDefaults).toMatch(/cpuOnly: false/);
+  });
 });

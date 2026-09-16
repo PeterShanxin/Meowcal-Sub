@@ -73,6 +73,7 @@ up. **Subtitle style** controls text size and a Dark or Light plate; use
 | Setup reports `ENGINE_INCOMPATIBLE` or `ENGINE_DISK_SPACE` | Check the Windows 11, 8 GiB system-RAM, and 3 GiB free-installation-space requirements above. A missing architecture/runtime or unsupported installation path can also produce an incompatibility error; include the exact support message in a report. |
 | Text is missing or misread | Check that the selected region is still aligned and visible, contains every subtitle line, and does not include player controls or the translation overlay. Try clearer, larger source subtitles. |
 | Readable non-subtitle text is ignored | Normal mode filters for subtitle-like text. Enable **Translate any text** in Settings only when that is your intended use. It does not improve the OCR model itself. |
+| Translations come out garbled, or the PC stalls while the engine runs | Turn on **Settings → Engine and updates → Run the engine on CPU only**. The engine restarts on CPU. Include the support code and your GPU and driver version in a report. |
 | Translation feels slow | Allow for the initial model warm-up. Check local CPU and memory pressure and the size of the selected region. Different hardware, source text, and model load produce different latency. |
 | Video capture is blank or incomplete | Protected content or a player's display mode may not be capturable. Test with a non-protected local clip in a normal window; this app is not a capture-protection bypass. |
 | The app says it is up to date | Check the installed version against the application release, not a `core-v...` runtime tag. A merged code change is not necessarily a released update. |
@@ -107,6 +108,10 @@ one CPU retry within the existing startup deadline.
 apply the ARM64 hardware-validation gate or its CPU-retry behavior to x64. Do
 not assume an incompatible or failing Vulkan configuration will automatically
 switch to CPU.
+
+**On either architecture**, **Settings → Engine and updates → Run the engine on
+CPU only** starts the engine without GPU offload. Changing it restarts the
+engine. Translation can be slower on CPU.
 
 Both paths require the system RAM listed above. See
 [Core performance evidence](CORE_PERFORMANCE.md) for scoped measurements, not

@@ -40,7 +40,7 @@ export const defaultSettings: AppSettings = {
     contextBufferSize: 12,
     contextResetGapMs: 6000,
     translateAllOcrText: false,
-    localEngine: { model: null, timeoutMs: 30000 },
+    localEngine: { model: null, timeoutMs: 30000, cpuOnly: false },
     ocr: defaultOcr,
   },
   minimizeToTray: true,

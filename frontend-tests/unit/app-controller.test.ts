@@ -85,6 +85,24 @@ describe("AppController settings persistence", () => {
     expect(invoke).toHaveBeenCalledWith("save_settings", expect.anything());
   });
 
+  it("defaults the engine to automatic acceleration and persists CPU only", async () => {
+    const invoke = vi.fn().mockResolvedValue(undefined);
+    const { controller, snapshots } = createController(invoke);
+
+    expect(controller.current().settings.translation.localEngine.cpuOnly).toBe(false);
+
+    await controller.setCpuOnly(true);
+
+    expect(snapshots.at(-1)?.settings.translation.localEngine.cpuOnly).toBe(true);
+    expect(invoke).toHaveBeenCalledWith("save_settings", {
+      settings: expect.objectContaining({
+        translation: expect.objectContaining({
+          localEngine: expect.objectContaining({ cpuOnly: true }),
+        }),
+      }),
+    });
+  });
+
   it("defaults to the subtitle-aware gate and persists a change to it", async () => {
     const invoke = vi.fn().mockResolvedValue(undefined);
     const { controller, snapshots } = createController(invoke);

@@ -53,6 +53,8 @@ pub async fn save(app: AppHandle, state: &AppState, settings: AppConfig) -> Resu
         merged
     };
 
+    let cpu_only = updated.translation.foundry_local.cpu_only;
+
     // Persist to disk without blocking the UI thread
     let app_handle = app.clone();
     let updated_clone = updated.clone();
@@ -69,7 +71,7 @@ pub async fn save(app: AppHandle, state: &AppState, settings: AppConfig) -> Resu
             message
         })?;
 
-    Ok(())
+    crate::core_client::select_cpu_only(cpu_only)
 }
 
 /// Fold app-owned state back into the settings the UI submitted.

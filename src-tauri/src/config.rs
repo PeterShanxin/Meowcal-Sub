@@ -1,9 +1,6 @@
 // =============================================================================
 // CONFIG.RS - Application Configuration
 // =============================================================================
-// This file defines the settings/configuration for the app.
-// These settings can be saved to disk and restored when the app restarts.
-// =============================================================================
 
 pub use crate::capture_region::CaptureRegion;
 pub use crate::engine_config::ManagedLocalRuntimeConfig;
@@ -375,12 +372,14 @@ pub struct FoundryLocalConfig {
     /// back to the default cache directory and began downloading again (#65).
     /// Held separately precisely so it survives the registration.
     pub engine_cache_root: Option<String>,
+
+    /// Start the engine with no GPU offload, whatever the hardware gate allows.
+    pub cpu_only: bool,
 }
 
 // =============================================================================
 // DEFAULT VALUES
 // =============================================================================
-// Rust's Default trait lets us define sensible default values for our config.
 
 impl Default for AppConfig {
     fn default() -> Self {
@@ -459,6 +458,7 @@ impl Default for FoundryLocalConfig {
             endpoint_url: None,
             managed_runtime: None,
             engine_cache_root: None,
+            cpu_only: false,
         }
     }
 }

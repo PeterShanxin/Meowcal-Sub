@@ -32,6 +32,9 @@ pub(super) struct Transport {
     next_id: u64,
     kill_switch: Arc<KillSwitch>,
     diagnostics: Option<std::thread::JoinHandle<()>>,
+    /// Whether this process was started with CPU only selected. A status reply
+    /// describes the process that sent it, not the setting as it is now.
+    pub(super) cpu_only: bool,
 }
 
 pub(super) struct KillSwitch {
@@ -142,6 +145,7 @@ impl Transport {
             next_id: 1,
             kill_switch,
             diagnostics: Some(diagnostics),
+            cpu_only: false,
         })
     }
 

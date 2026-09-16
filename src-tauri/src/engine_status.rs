@@ -128,6 +128,8 @@ fn managed_snapshot(
     };
     let notes = if crate::core_client::recovery_failed() {
         "Engine recovery failed. Retry the engine in Settings.".to_string()
+    } else if status.ready && config.cpu_only {
+        "Translation is ready on CPU, as set in Settings.".to_string()
     } else if status.ready && status.cpu_locked {
         "Translation is ready on CPU. GPU is disabled until the app exits.".to_string()
     } else {
