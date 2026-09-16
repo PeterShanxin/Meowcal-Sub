@@ -87,8 +87,7 @@ itself download an application update.
 
 No. This app reads screen text with Windows OCR; it does not transcribe audio.
 For subtitle-file search and playback-aligned sessions, see
-[Meowcal Sub 2](https://github.com/PeterShanxin/Meowcal-Sub-2), a separate project
-whose public release is coming soon. Its repository may show a 404 until public.
+[Meowcal Sub 2](https://github.com/PeterShanxin/Meowcal-Sub-2), a separate project.
 
 ### Does it work offline?
 
