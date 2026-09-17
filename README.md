@@ -120,16 +120,15 @@ from Windows publisher signing; it does not remove the installer warning above.
 
 Small tools for watching, understanding, and building. Same cats, different jobs.
 
-| Project | Choose it for | Availability |
-| --- | --- | --- |
-| **[Meowcal Sub](https://github.com/PeterShanxin/Meowcal-Sub)** | Direct screen-subtitle capture and local translation — this app. | Windows 11 public beta |
-| **[MeowWatch](https://github.com/PeterShanxin/MeowWatch)** | Watching together with synchronized playback and floating chat. | Public project |
-| **[Meowcal Core](core/README.md)** | The shared, versioned Windows OCR and local translation runtime for developers. | Public; source lives in this repository |
-| **[Meowcal Sub 2](https://github.com/PeterShanxin/Meowcal-Sub-2)** | Subtitle search and playback-aligned subtitle sessions. | Public release coming soon |
+| Project | Choose it for |
+| --- | --- |
+| **[Meowcal Sub](https://github.com/PeterShanxin/Meowcal-Sub)** | Direct screen-subtitle capture and local translation — this app. |
+| **[Meowcal Sub 2](https://github.com/PeterShanxin/Meowcal-Sub-2)** | Subtitle search and playback-aligned subtitle sessions. |
+| **[MeowWatch](https://github.com/PeterShanxin/MeowWatch)** | Watching together with synchronized playback and floating chat. |
+| **[Meowcal Core](core/README.md)** | The shared, versioned Windows OCR and local translation runtime for developers; its source lives in this repository. |
 
-Sub 2 is a separate workflow, not a required upgrade for Sub 1. Its repository
-may show a 404 until it is public. Core is infrastructure, not another app you
-need to install manually.
+Sub 2 is a separate workflow, not a required upgrade for Sub 1. Core is
+infrastructure, not another app you need to install manually.
 
 ## Under the hood
 

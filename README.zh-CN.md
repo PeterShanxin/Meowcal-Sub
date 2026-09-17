@@ -112,15 +112,15 @@ GPU 就绪检查超时后可尝试 CPU 回退。x64 版使用 Vulkan，当前**�
 
 观看、理解和构建，各有一个小工具。猫猫不变，分工不同。
 
-| 项目 | 用来做什么 | 状态 |
-| --- | --- | --- |
-| **[Meowcal Sub](https://github.com/PeterShanxin/Meowcal-Sub)** | 直接捕获屏幕字幕并在本地翻译，就是当前这个应用。 | Windows 11 公开测试版 |
-| **[MeowWatch](https://github.com/PeterShanxin/MeowWatch)** | 同步看视频，同时使用悬浮聊天。 | 已公开 |
-| **[Meowcal Core](core/README.md)** | 面向开发者的共享、版本化 Windows OCR 与本地翻译运行环境。 | 已公开；源码位于本仓库 |
-| **[Meowcal Sub 2](https://github.com/PeterShanxin/Meowcal-Sub-2)** | 搜索字幕，并让字幕会话跟随视频播放进度。 | 即将公开发布 |
+| 项目 | 用来做什么 |
+| --- | --- |
+| **[Meowcal Sub](https://github.com/PeterShanxin/Meowcal-Sub)** | 直接捕获屏幕字幕并在本地翻译，就是当前这个应用。 |
+| **[Meowcal Sub 2](https://github.com/PeterShanxin/Meowcal-Sub-2)** | 搜索字幕，并让字幕会话跟随视频播放进度。 |
+| **[MeowWatch](https://github.com/PeterShanxin/MeowWatch)** | 同步看视频，同时使用悬浮聊天。 |
+| **[Meowcal Core](core/README.md)** | 面向开发者的共享、版本化 Windows OCR 与本地翻译运行环境；源码位于本仓库。 |
 
 Sub 2 是另一种工作流，不是 Sub 1 用户必须升级到的版本。
-公开之前，其仓库链接可能显示 404。Core 是底层运行环境，不是用户需要额外手动安装的应用。
+Core 是底层运行环境，不是用户需要额外手动安装的应用。
 
 ## 技术实现
 
