@@ -15,6 +15,15 @@ jobs:
     if: github.event.pull_request != null && github.event.pull_request.user.login != 'PeterShanxin'
     runs-on: ubuntu-latest
     steps:
+      # The rules come from the base branch, never from the pull request.
+      - name: Check out the routing rules
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.base.ref }}
+          persist-credentials: false
+          sparse-checkout: scripts/dependabot-update-risk.mjs
+          sparse-checkout-cone-mode: false
+
       - name: Route review request
         shell: bash
         env:
@@ -24,6 +33,7 @@ jobs:
           PR_AUTHOR: ${{ github.event.pull_request.user.login }}
           PR_TITLE: ${{ github.event.pull_request.title }}
           PR_HEAD: ${{ github.event.pull_request.head.ref }}
+          PR_BODY: ${{ github.event.pull_request.body || '' }}
           EVENT_NAME: ${{ github.event_name }}
           EVENT_ACTION: ${{ github.event.action }}
           REVIEW_AUTHOR: ${{ github.event.review.user.login || '' }}
@@ -65,6 +75,16 @@ jobs:
              || "$normalized" == *"compatible-dependencies"* \
              || "$normalized" == *"compatible-actions"* ]]; then
             low_risk=true
+          fi
+
+          # Group names follow Dependabot's semver positions, which miss breaking
+          # 0.x updates and truncated bodies; see scripts/dependabot-update-risk.mjs.
+          if [[ "$low_risk" == true ]]; then
+            compatible="$(node --input-type=module -e '
+              import { groupUpdatesAreCompatible } from "./scripts/dependabot-update-risk.mjs";
+              console.log(groupUpdatesAreCompatible(process.env.PR_TITLE, process.env.PR_BODY));
+            ' || true)"
+            [[ "$compatible" == true ]] || low_risk=false
           fi
 
           # Dependabot groups are deliberately named so patch/minor updates are

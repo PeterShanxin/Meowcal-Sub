@@ -14,8 +14,8 @@ the measured coverage scope (#31 lifecycle, #32 engine/pipeline, #33 main/setup,
 - 400 lines maximum for a new `.rs`, `.js`, `.ts`, `.html`, or `.css` production file;
 - 10 explicit legacy files above that ceiling;
 - 1 existing ESLint warning, with zero allowed errors;
-- frontend coverage floors of 83% statements, 77% branches, 84% functions, and
-  86% lines, over a named 32-module scope.
+- frontend coverage floors of 88% statements, 81% branches, 90% functions, and
+  90% lines, over a named 33-module scope (measured 2026-09-17).
 
 ## Frontend coverage scope
 
@@ -33,7 +33,7 @@ enforces two rules over it:
   one module would license dropping every floor to zero. Any other decrease is
   still rejected.
 
-The 31 modules are the risk areas the decomposition lanes produced: the overlay
+The 33 modules are the risk areas the decomposition lanes produced: the overlay
 and selector geometry, appearance, timer, and payload rules from #33/#34; the
 main and setup state and controllers from #33; and the repository's own gates,
 because a gate that is wrong fails open.
@@ -55,15 +55,15 @@ other side: a module that a unit test exercises but the scope omits fails the
 suite, so coverage cannot be kept high by leaving risky code out of the
 measurement. Its exclusions are an explicit list with a reason per entry.
 
-The measured result over that scope is **83.68% statements, 77.75% branches,
-84.54% functions, and 86.16% lines** (985/1177, 699/899, 186/220, 928/1077),
-and the floors are those numbers rounded down to whole percent.
+The measured result over that scope, from the Windows `Frontend & Browser` gate
+job on 2026-09-17, is **88.41% statements, 81.36% branches, 90.69% functions, and
+90.01% lines**, and the floors are those numbers rounded down to whole percent.
 
-**This is not a repository-wide coverage claim.** It is a claim about 31 named
-modules, and the number is not comparable to the 90.17% recorded before #35: the
-previous figure measured nine files, this one measures thirty-one. The percentage
-fell because the scope grew, which is the trade #35 chose deliberately - a lower
-number that describes the risky code beats a higher one that leaves it out.
+**This is not a repository-wide coverage claim.** It is a claim about 33 named
+modules, and the number is not comparable to the 90.17% recorded before #35, which
+measured nine files. Widening the scope lowered the percentage, the trade #35 chose
+deliberately - a lower number that describes the risky code beats a higher one
+that leaves it out.
 
 ## Rust coverage
 

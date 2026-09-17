@@ -45,6 +45,9 @@ updates:
           - "minor"
           - "patch"
 
+  # Core takes every version update, including breaking ones; a group only
+  # batches them. A core/Cargo.toml change also needs src-tauri/Cargo.lock
+  # (docs/AGENT_GUIDE.md, Verification).
   - package-ecosystem: "cargo"
     directory: "/core"
     schedule:
@@ -52,8 +55,21 @@ updates:
       time: "09:00"
       timezone: "Asia/Singapore"
     open-pull-requests-limit: 10
+    ignore:
+      # windows-future 0.100 needs windows-core 0.100, which no published
+      # windows release uses. Remove once one does (#232).
+      - dependency-name: "windows-future"
+        versions: [">= 0.100"]
     groups:
+      # The OCR completion handler from windows-future must share windows-core
+      # with windows, so updating either alone does not compile.
+      windows-rs:
+        applies-to: "version-updates"
+        patterns:
+          - "windows"
+          - "windows-future"
       core-minor-patch:
+        applies-to: "version-updates"
         patterns:
           - "*"
         update-types:

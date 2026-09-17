@@ -3,10 +3,10 @@
   "newProductionFileMaxLines": 400,
   "eslintMaxWarnings": 1,
   "frontendCoverageMinimum": {
-    "branches": 77,
-    "functions": 84,
-    "lines": 86,
-    "statements": 83
+    "branches": 81,
+    "functions": 90,
+    "lines": 90,
+    "statements": 88
   },
   "frontendCoverageScope": [
     "src/scripts/ocr-language-tags.js",
@@ -37,6 +37,7 @@
     "scripts/allocate-port.mjs",
     "scripts/build-updater-manifest.mjs",
     "scripts/commit-contract.mjs",
+    "scripts/dependabot-update-risk.mjs",
     "scripts/doc-links.mjs",
     "scripts/maintainability-ratchet.mjs",
     "scripts/serve-frontend.mjs",
