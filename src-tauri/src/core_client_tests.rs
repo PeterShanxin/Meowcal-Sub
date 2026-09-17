@@ -158,7 +158,7 @@ fn storage_paths_must_be_absolute_and_are_deduplicated() {
 
 fn launch_config(force_cpu: bool) -> LaunchConfig {
     LaunchConfig {
-        executable: PathBuf::from(r"C:coremeowcal-core.exe"),
+        executable: PathBuf::from(r"C:\core\meowcal-core.exe"),
         profile: "production",
         storage_root: None,
         legacy_roots: Vec::new(),
@@ -175,14 +175,15 @@ fn hello_forces_cpu_for_the_setting_or_a_gpu_failure() {
     assert_eq!(hello_params(&launch_config(false), true)["forceCpu"], true);
 }
 
-// Core reports `cpuLocked` for a CPU start the setting asked for too. Latching
-// that as a GPU failure would keep the engine on CPU after the setting is
-// turned off, until the app exits.
+// Core reports a CPU lock for a CPU start the setting asked for too, both in
+// status and as a progress event during inference recovery. Latching that as a
+// GPU failure would keep the engine on CPU after the setting is turned off,
+// until the app exits.
 #[test]
 fn a_cpu_lock_the_setting_requested_is_not_a_gpu_failure() {
-    assert!(status_reports_gpu_failure(true, false));
-    assert!(!status_reports_gpu_failure(true, true));
-    assert!(!status_reports_gpu_failure(false, false));
+    assert!(cpu_lock_is_gpu_failure(true, false));
+    assert!(!cpu_lock_is_gpu_failure(true, true));
+    assert!(!cpu_lock_is_gpu_failure(false, false));
 }
 
 #[test]

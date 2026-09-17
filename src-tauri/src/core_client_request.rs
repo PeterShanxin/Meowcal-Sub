@@ -125,7 +125,9 @@ fn call_locked<T: DeserializeOwned>(
         if std::ptr::eq(kill_slot, &super::TRANSLATION_KILL)
             && message == meowcal_core::inference_health::CPU_LOCK_EVENT
         {
-            super::recovery::lock_cpu();
+            if super::cpu_lock_is_gpu_failure(true, started_cpu_only) {
+                super::recovery::lock_cpu();
+            }
         } else if let Some(progress) = progress {
             progress(message);
         }
@@ -160,7 +162,7 @@ fn call_locked<T: DeserializeOwned>(
         && matches!(method, "status" | "ready" | "install" | "recoverInference")
     {
         if let Ok(status) = serde_json::from_value::<super::CoreStatus>(value.clone()) {
-            if super::status_reports_gpu_failure(status.cpu_locked, started_cpu_only) {
+            if super::cpu_lock_is_gpu_failure(status.cpu_locked, started_cpu_only) {
                 super::recovery::lock_cpu();
             }
             if let Ok(mut cached) = super::STATUS.lock() {

@@ -259,9 +259,11 @@ fn hello_params(config: &LaunchConfig, gpu_failed: bool) -> Value {
     hello
 }
 
-/// Core reports `cpuLocked` for any CPU-latched process, including one started
-/// with `forceCpu` because the setting asked for it. Only the rest is a failure.
-fn status_reports_gpu_failure(cpu_locked: bool, started_cpu_only: bool) -> bool {
+/// Core reports a CPU lock - `cpuLocked` in status, or its CPU lock progress
+/// event - for any CPU-latched process, including one started with `forceCpu`
+/// because the setting asked for it, which never ran on GPU. Only the rest is a
+/// GPU failure.
+fn cpu_lock_is_gpu_failure(cpu_locked: bool, started_cpu_only: bool) -> bool {
     cpu_locked && !started_cpu_only
 }
 
