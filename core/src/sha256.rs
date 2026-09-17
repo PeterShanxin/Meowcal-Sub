@@ -133,6 +133,15 @@ mod tests {
     }
 
     #[test]
+    fn hex_pads_every_byte_to_two_lowercase_digits() {
+        let digest: [u8; 32] = std::array::from_fn(|index| index as u8);
+        assert_eq!(
+            encode_hex(&digest),
+            "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f"
+        );
+    }
+
+    #[test]
     fn incremental_hash_crosses_the_read_buffer_boundary() {
         let input = vec![0x5a; BUFFER_SIZE + 17];
         let native = digest_reader(&mut Cursor::new(&input)).unwrap();

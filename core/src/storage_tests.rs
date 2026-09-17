@@ -62,7 +62,7 @@ async fn legacy_copy_is_verified_independent_and_preserves_source() {
     let source = root.join("legacy.bin");
     let target = root.join("core").join("asset.bin");
     std::fs::write(&source, b"asset").unwrap();
-    let hash = format!("{:x}", Sha256::digest(b"asset"));
+    let hash = crate::sha256::encode_hex(&Sha256::digest(b"asset").into());
     copy_verified_source(&source, &target, 5, &hash)
         .await
         .unwrap();

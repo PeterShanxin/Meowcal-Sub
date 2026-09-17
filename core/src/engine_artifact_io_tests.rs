@@ -125,7 +125,7 @@ async fn corrupt_runtime_executable_requires_repair() {
 fn blocking_verification_fits_in_a_small_thread_stack() {
     let path = fixture_path("small-stack", "bin");
     std::fs::write(&path, b"trusted").unwrap();
-    let expected_hash = format!("{:x}", Sha256::digest(b"trusted"));
+    let expected_hash = crate::sha256::encode_hex(&Sha256::digest(b"trusted").into());
 
     let verified_path = path.clone();
     let matched = std::thread::Builder::new()
