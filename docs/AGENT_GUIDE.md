@@ -138,6 +138,13 @@ test target is invisible to the gate until it is added to `verify.ps1` and to
 `scripts/tests/verify.Tests.ps1`, which asserts the exact invocation list. A failed clean-checkout
 prerequisite is a repository defect, not a reason to skip verification.
 
+`src-tauri` links Core by path, so a change to `core/Cargo.toml` must ship with
+the matching `src-tauri/Cargo.lock`. Dependabot's `/core` pull requests update
+only `core/Cargo.lock`; add the consumer lockfile to that branch with
+`cargo update -p meowcal-core --manifest-path src-tauri/Cargo.toml`. The Lint
+and Test stages check this first and print that command. The two lockfiles may
+still resolve a shared crate to different compatible versions; that is expected.
+
 On ARM64, set `CARGO_BUILD_JOBS=1` for any cargo invocation against a cold
 target directory - a fresh worktree, a cleaned tree, a new machine. Parallel
 rustc exhausts its compiler stack and fails with `STATUS_STACK_BUFFER_OVERRUN`
