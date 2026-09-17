@@ -24,6 +24,7 @@ jobs:
           PR_AUTHOR: ${{ github.event.pull_request.user.login }}
           PR_TITLE: ${{ github.event.pull_request.title }}
           PR_HEAD: ${{ github.event.pull_request.head.ref }}
+          PR_BODY: ${{ github.event.pull_request.body || '' }}
           EVENT_NAME: ${{ github.event_name }}
           EVENT_ACTION: ${{ github.event.action }}
           REVIEW_AUTHOR: ${{ github.event.review.user.login || '' }}
@@ -65,6 +66,41 @@ jobs:
              || "$normalized" == *"compatible-dependencies"* \
              || "$normalized" == *"compatible-actions"* ]]; then
             low_risk=true
+          fi
+
+          # A group name reflects Dependabot's semver positions, but Cargo and npm
+          # treat a 0.x minor bump (0.41 -> 0.42) as breaking and Dependabot still
+          # files it under a minor-patch group. Dependabot also truncates long
+          # bodies, so every update the title counts must be listed and compatible.
+          compatible_updates_only() {
+            local pattern='^Updates `[^`]+` from ([^ ]+) to ([^ ]+)$'
+            local semver='^([0-9]+)\.([0-9]+)\.([0-9]+)'
+            local expected=1 listed=0 line from to
+            if [[ "$PR_TITLE" =~ with\ ([0-9]+)\ updates? ]]; then
+              expected="${BASH_REMATCH[1]}"
+            fi
+            while IFS= read -r line; do
+              [[ "$line" =~ $pattern ]] || continue
+              listed=$((listed + 1))
+              from="${BASH_REMATCH[1]}"
+              to="${BASH_REMATCH[2]}"
+              [[ "$from" =~ $semver ]] || return 1
+              local old=("${BASH_REMATCH[@]:1}")
+              [[ "$to" =~ $semver ]] || return 1
+              local new=("${BASH_REMATCH[@]:1}")
+              [[ "${old[0]}" == "${new[0]}" ]] || return 1
+              if [[ "${old[0]}" == 0 ]]; then
+                [[ "${old[1]}" == "${new[1]}" ]] || return 1
+                if [[ "${old[1]}" == 0 ]]; then
+                  [[ "${old[2]}" == "${new[2]}" ]] || return 1
+                fi
+              fi
+            done < <(printf '%s\n' "$PR_BODY" | tr -d '\r')
+            [[ "$listed" -eq "$expected" ]]
+          }
+
+          if [[ "$low_risk" == true ]] && ! compatible_updates_only; then
+            low_risk=false
           fi
 
           # Dependabot groups are deliberately named so patch/minor updates are
