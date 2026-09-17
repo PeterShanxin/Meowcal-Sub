@@ -211,16 +211,17 @@ fn storage_profiles_and_versions_never_alias() {
 async fn offline_import_checks_disk_before_copy_and_never_adopts_dll_tree() {
     use meowcal_core::engine_manifest::EngineManifest;
     use meowcal_core::hy_mt_runtime::HyMtInstallPaths;
+    use meowcal_core::sha256::encode_hex;
     use meowcal_core::storage::import_legacy;
     use sha2::{Digest, Sha256};
     let base = temporary_root("migration");
     let mut manifest = EngineManifest::shipped().unwrap();
     for runtime in &mut manifest.runtimes {
         runtime.archive.size_bytes = 7;
-        runtime.archive.sha256 = format!("{:x}", Sha256::digest(b"archive"));
+        runtime.archive.sha256 = encode_hex(&Sha256::digest(b"archive").into());
     }
     manifest.model.artifact.size_bytes = 5;
-    manifest.model.artifact.sha256 = format!("{:x}", Sha256::digest(b"model"));
+    manifest.model.artifact.sha256 = encode_hex(&Sha256::digest(b"model").into());
     manifest.requirements.minimum_windows_build = 0;
     manifest.requirements.minimum_ram_bytes = 0;
     manifest.requirements.minimum_free_disk_bytes = u64::MAX;
