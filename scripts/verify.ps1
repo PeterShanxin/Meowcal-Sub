@@ -166,6 +166,17 @@ if ($env:MEOWCAL_VERIFY_CONTRACT_ACTIVE -ne "1") {
 if ($Stage -in @("All", "Lint", "Test")) {
     Push-Location $coreDirectory
     try {
+        # src-tauri links Core by path, so a Core manifest change must also
+        # re-resolve src-tauri/Cargo.lock. Dependabot updates only core/Cargo.lock;
+        # resolving first reports that in seconds instead of after the Core build.
+        Write-Host ""
+        Write-Host "==> Core consumer lockfile" -ForegroundColor Cyan
+        & cargo metadata --locked --format-version 1 --manifest-path ..\src-tauri\Cargo.toml | Out-Null
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host ("src-tauri/Cargo.lock does not satisfy core/Cargo.toml. Run " +
+                "'cargo update -p meowcal-core --manifest-path src-tauri/Cargo.toml' and commit the lockfile.") -ForegroundColor Red
+            exit $LASTEXITCODE
+        }
         if ($Stage -in @("All", "Lint")) {
             Invoke-CargoStep "Core Rust format" @("fmt", "--manifest-path", "Cargo.toml", "--", "--check")
             Invoke-CargoStep "Core Rust clippy" @(

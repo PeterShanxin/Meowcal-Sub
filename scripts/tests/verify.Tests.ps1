@@ -21,7 +21,7 @@ function Core-Commands {
         [switch]$Test
     )
 
-    $commands = @()
+    $commands = @("metadata --locked --format-version 1 --manifest-path ..\src-tauri\Cargo.toml")
     if ($Lint) {
         $commands += "fmt --manifest-path Cargo.toml -- --check"
         $commands += "clippy --manifest-path Cargo.toml --locked --target $Target --target-dir $coreTargetDirectory --all-targets -- -D warnings"
@@ -283,10 +283,17 @@ exit /b 0
     $failure = Invoke-VerifyUnderTest -Stage All -CargoFailOn "clippy"
     Assert-Equal 23 $failure.ExitCode "Failure propagation."
     Assert-Lines @(
+        "metadata --locked --format-version 1 --manifest-path ..\src-tauri\Cargo.toml",
         "fmt --manifest-path Cargo.toml -- --check",
         "clippy --manifest-path Cargo.toml --locked --target $hostCoreTarget --target-dir $coreTargetDirectory --all-targets -- -D warnings"
     ) $failure.CargoCommands "Failure short-circuit"
     Assert-Lines @() $failure.NpmCommands "Cargo failure prevents npm"
+
+    $staleConsumerLock = Invoke-VerifyUnderTest -Stage Test -CargoFailOn "metadata --locked"
+    Assert-Equal 23 $staleConsumerLock.ExitCode "Stale consumer lockfile propagation."
+    Assert-Lines @(
+        "metadata --locked --format-version 1 --manifest-path ..\src-tauri\Cargo.toml"
+    ) $staleConsumerLock.CargoCommands "Stale consumer lockfile stops before the Core build"
 
     $npmFailure = Invoke-VerifyUnderTest -Stage Frontend -NpmFailOn "run lint"
     Assert-Equal 29 $npmFailure.ExitCode "Npm failure propagation."
