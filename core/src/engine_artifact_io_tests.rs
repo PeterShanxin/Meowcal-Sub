@@ -30,15 +30,27 @@ async fn an_unsafe_archive_path_is_rejected() {
     let archive = root.join("runtime.zip");
     let destination = root.join("destination");
     std::fs::create_dir_all(&root).unwrap();
-    write_archive(&archive, "../outside.txt", b"payload");
+    for name in [
+        "../outside.txt",
+        "bin/../../outside.txt",
+        "/outside.txt",
+        "\\outside.txt",
+        "C:/outside.txt",
+        "C:outside.txt",
+        "//server/share/outside.txt",
+    ] {
+        write_archive(&archive, name, b"payload");
 
-    let error = extract_zip(&archive, &destination)
-        .await
-        .expect_err("archive traversal must fail");
+        let error = extract_zip(&archive, &destination).await.expect_err(name);
 
-    assert!(error.starts_with("ENGINE_EXTRACT_FAILED:"), "{error}");
-    assert!(error.contains("unsafe archive path"), "{error}");
-    assert!(!root.join("outside.txt").exists());
+        assert!(
+            error.starts_with("ENGINE_EXTRACT_FAILED:"),
+            "{name}: {error}"
+        );
+        assert!(error.contains("unsafe archive path"), "{name}: {error}");
+        assert!(!root.join("outside.txt").exists(), "{name}");
+        assert!(!destination.join("outside.txt").exists(), "{name}");
+    }
     std::fs::remove_dir_all(root).ok();
 }
 
@@ -80,6 +92,48 @@ async fn a_failing_extraction_names_the_archive_and_reason() {
     assert!(error.starts_with("ENGINE_EXTRACT_FAILED:"), "{error}");
     assert!(error.contains(&missing.display().to_string()), "{error}");
     assert!(error.contains("could not open archive"), "{error}");
+}
+
+#[tokio::test]
+async fn a_truncated_or_corrupted_archive_is_rejected() {
+    let root = fixture_path("extract-corrupt", "dir");
+    let archive = root.join("runtime.zip");
+    let destination = root.join("destination");
+    std::fs::create_dir_all(&root).unwrap();
+    let file = std::fs::File::create(&archive).unwrap();
+    let mut writer = zip::ZipWriter::new(file);
+    writer
+        .start_file(
+            "llama-server.exe",
+            SimpleFileOptions::default().compression_method(zip::CompressionMethod::Stored),
+        )
+        .unwrap();
+    writer.write_all(b"payload").unwrap();
+    writer.finish().unwrap();
+    let valid = std::fs::read(&archive).unwrap();
+
+    std::fs::write(&archive, &valid[..valid.len() / 2]).unwrap();
+    let error = extract_zip(&archive, &destination)
+        .await
+        .expect_err("a truncated archive must fail");
+    assert!(error.contains("invalid archive"), "{error}");
+
+    let mut corrupted = valid.clone();
+    let payload = corrupted
+        .windows(7)
+        .position(|window| window == b"payload")
+        .unwrap();
+    corrupted[payload] ^= 0xff;
+    std::fs::write(&archive, &corrupted).unwrap();
+    let error = extract_zip(&archive, &destination)
+        .await
+        .expect_err("a checksum mismatch must fail");
+    assert!(error.starts_with("ENGINE_EXTRACT_FAILED:"), "{error}");
+    assert!(
+        error.contains("could not write llama-server.exe"),
+        "{error}"
+    );
+    std::fs::remove_dir_all(root).ok();
 }
 
 fn write_archive(path: &Path, name: &str, payload: &[u8]) {

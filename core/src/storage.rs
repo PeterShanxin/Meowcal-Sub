@@ -140,10 +140,8 @@ fn verify_runtime_tree(archive: &Path, directory: &Path) -> Result<(), String> {
         let mut entry = zip
             .by_index(index)
             .map_err(|error| format!("CORE_ARCHIVE_ENTRY: {error}"))?;
-        let relative = entry
-            .enclosed_name()
-            .ok_or("CORE_ARCHIVE_UNSAFE_PATH")?
-            .to_owned();
+        let relative = crate::engine_artifact_io::enclosed_archive_path(&entry)
+            .ok_or("CORE_ARCHIVE_UNSAFE_PATH")?;
         let name = relative
             .components()
             .filter_map(|component| match component {

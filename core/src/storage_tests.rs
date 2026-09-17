@@ -45,6 +45,19 @@ fn runtime_tree_rejects_modified_and_extra_dlls() {
         verify_runtime_tree(&archive, &tree).unwrap_err(),
         "CORE_ARCHIVE_UNSAFE_PATH"
     );
+    for name in ["/engine.dll", "C:engine.dll"] {
+        let mut rooted = zip::ZipWriter::new(File::create(&archive).unwrap());
+        rooted
+            .start_file(name, zip::write::SimpleFileOptions::default())
+            .unwrap();
+        rooted.write_all(b"dll").unwrap();
+        rooted.finish().unwrap();
+        assert_eq!(
+            verify_runtime_tree(&archive, &tree).unwrap_err(),
+            "CORE_ARCHIVE_UNSAFE_PATH",
+            "{name}"
+        );
+    }
     std::fs::remove_dir_all(root).unwrap();
 }
 

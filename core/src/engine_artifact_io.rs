@@ -1,7 +1,7 @@
 use crate::engine_manifest::{DownloadArtifact, InstalledExecutable};
 use crate::sha256::digest_file_hex;
 use reqwest::Client;
-use std::path::{Component, Path};
+use std::path::{Component, Path, PathBuf};
 use std::time::Duration;
 use tokio::fs;
 use tokio::io::AsyncWriteExt;
@@ -180,6 +180,21 @@ pub async fn extract_zip(archive: &Path, destination: &Path) -> Result<(), Strin
         .map_err(|error| format!("ENGINE_EXTRACT_TASK: {error}"))?
 }
 
+/// The entry's path below the extraction root, or `None` when it could leave it.
+/// zip's `enclosed_name` drops a leading root or drive prefix (`/x`, `C:x`)
+/// rather than rejecting it, so those names are refused here.
+pub(crate) fn enclosed_archive_path<R: std::io::Read>(
+    entry: &zip::read::ZipFile<'_, R>,
+) -> Option<PathBuf> {
+    let name = entry.name().as_bytes();
+    let rooted = matches!(name.first(), Some(b'/' | b'\\'));
+    let drive = name.len() >= 2 && name[0].is_ascii_alphabetic() && name[1] == b':';
+    if rooted || drive {
+        return None;
+    }
+    entry.enclosed_name()
+}
+
 fn extract_zip_blocking(archive: &Path, destination: &Path) -> Result<(), String> {
     let failure = |reason: String| {
         format!(
@@ -200,10 +215,8 @@ fn extract_zip_blocking(archive: &Path, destination: &Path) -> Result<(), String
         let mut entry = zip
             .by_index(index)
             .map_err(|error| failure(format!("could not read entry {index}: {error}")))?;
-        let relative = entry
-            .enclosed_name()
-            .ok_or_else(|| failure(format!("unsafe archive path: {}", entry.name())))?
-            .to_path_buf();
+        let relative = enclosed_archive_path(&entry)
+            .ok_or_else(|| failure(format!("unsafe archive path: {}", entry.name())))?;
         let normalized = relative
             .components()
             .filter_map(|component| match component {
