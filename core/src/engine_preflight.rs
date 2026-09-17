@@ -166,4 +166,25 @@ mod tests {
         )
         .is_ok());
     }
+
+    #[cfg(windows)]
+    #[test]
+    fn snapshot_reports_the_build_that_cmd_ver_reports() {
+        // `ver` prints "Microsoft Windows [Version 10.0.<build>.<revision>]".
+        let output = std::process::Command::new("cmd")
+            .args(["/d", "/c", "ver"])
+            .output()
+            .unwrap();
+        let text = String::from_utf8_lossy(&output.stdout);
+        let expected = text
+            .split("[Version ")
+            .nth(1)
+            .and_then(|version| version.split('.').nth(2))
+            .and_then(|build| build.parse::<u32>().ok())
+            .unwrap_or_else(|| panic!("unexpected ver output: {text}"));
+
+        let snapshot = snapshot(&std::env::temp_dir()).unwrap();
+
+        assert_eq!(snapshot.windows_build, expected);
+    }
 }
