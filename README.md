@@ -98,7 +98,9 @@ Translation is not instant or error-free; speed depends on your PC and the text.
 **GPU support differs by architecture.** ARM64 gates Adreno acceleration to
 validated hardware/drivers and can retry on CPU after a GPU readiness timeout.
 The x64 build uses Vulkan and does **not** currently offer that same validation
-gate or application-managed CPU retry. [GPU compatibility details →](docs/USAGE.md#how-does-gpu-support-differ-by-architecture)
+gate or application-managed CPU retry. If GPU translation misbehaves on either
+architecture, turn on **Settings → Engine and updates → Run the engine on CPU only**.
+[GPU compatibility details →](docs/USAGE.md#how-does-gpu-support-differ-by-architecture)
 
 ## Privacy, without the fine-print surprise
 

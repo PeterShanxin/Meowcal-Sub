@@ -279,8 +279,14 @@ export class AppController {
     }
   }
 
-  async setRecognitionPreset(value: "fast" | "balanced" | "accurate"): Promise<void> {
+  private async editSettings(edit: (settings: AppSettings) => void): Promise<void> {
     const settings = structuredClone(this.snapshot.settings);
+    edit(settings);
+    this.publish({ settings });
+    await this.persistSettingsInBackground();
+  }
+
+  async setRecognitionPreset(value: "fast" | "balanced" | "accurate"): Promise<void> {
     const overrides = {
       fast: { preprocessingEnabled: false, validationStrictness: "permissive" as const },
       balanced: {},
@@ -290,24 +296,24 @@ export class AppController {
         validationStrictness: "strict" as const,
       },
     };
-    settings.translation.ocr = { ...defaultOcr, ...overrides[value] };
-    this.publish({ settings });
-    await this.persistSettingsInBackground();
+    await this.editSettings(
+      (settings) => (settings.translation.ocr = { ...defaultOcr, ...overrides[value] }),
+    );
   }
 
   async setTranslateAllOcrText(enabled: boolean): Promise<void> {
-    const settings = structuredClone(this.snapshot.settings);
-    settings.translation.translateAllOcrText = enabled;
-    this.publish({ settings });
-    await this.persistSettingsInBackground();
+    await this.editSettings((settings) => (settings.translation.translateAllOcrText = enabled));
+  }
+
+  async setCpuOnly(enabled: boolean): Promise<void> {
+    await this.editSettings((settings) => (settings.translation.localEngine.cpuOnly = enabled));
   }
 
   async setContinuity(enabled: boolean): Promise<void> {
-    const settings = structuredClone(this.snapshot.settings);
-    settings.translation.enableContextAware = enabled;
-    settings.translation.contextLevel = enabled ? "memoryAndRecent" : "off";
-    this.publish({ settings });
-    await this.persistSettingsInBackground();
+    await this.editSettings((settings) => {
+      settings.translation.enableContextAware = enabled;
+      settings.translation.contextLevel = enabled ? "memoryAndRecent" : "off";
+    });
   }
 
   async updateOverlay(patch: Partial<AppSettings["overlay"]>): Promise<void> {
@@ -330,10 +336,7 @@ export class AppController {
     kind: "minimizeToTray" | "autoCheckUpdates",
     enabled: boolean,
   ): Promise<void> {
-    const settings = structuredClone(this.snapshot.settings);
-    settings[kind] = enabled;
-    this.publish({ settings });
-    await this.persistSettingsInBackground();
+    await this.editSettings((settings) => (settings[kind] = enabled));
   }
 
   async testTranslation(): Promise<void> {

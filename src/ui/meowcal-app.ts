@@ -83,6 +83,7 @@ export class MeowcalApp extends LitElement {
         onDiagnostics: (showDiagnostics) => void this.controller.updateOverlay({ showDiagnostics }),
         onCheckUpdates: () => void this.controller.checkForUpdates(),
         onInstallUpdate: () => void this.controller.installUpdate(),
+        onCpuOnly: (enabled) => void this.controller.setCpuOnly(enabled),
         onAutoCheckUpdates: (enabled) =>
           void this.controller.updatePreference("autoCheckUpdates", enabled),
       });

@@ -13,7 +13,9 @@ mod types;
 pub use recovery::{recover_inference, recover_transport, recovering, recovery_failed};
 
 use async_call::call_async;
-pub use config::{configure_storage, register, register_headless, select_storage_root};
+pub use config::{
+    configure_storage, register, register_headless, select_cpu_only, select_storage_root,
+};
 use request::call;
 use serde_json::{json, Value};
 use std::path::PathBuf;
@@ -39,6 +41,7 @@ struct LaunchConfig {
     profile: &'static str,
     storage_root: Option<PathBuf>,
     legacy_roots: Vec<PathBuf>,
+    force_cpu: bool,
 }
 
 static CONFIG: OnceLock<Mutex<Option<LaunchConfig>>> = OnceLock::new();
@@ -205,6 +208,7 @@ fn spawn_initialized(
         .and_then(|value| value.clone())
         .ok_or_else(|| "CORE_NOT_REGISTERED".to_string())?;
     let mut process = Transport::spawn(&config.executable)?;
+    process.cpu_only = config.force_cpu;
     *kill_slot
         .get_or_init(|| Mutex::new(None))
         .lock()
@@ -214,10 +218,7 @@ fn spawn_initialized(
         clear_kill(kill_slot);
         return Err("CORE_REQUEST_CANCELLED".to_string());
     }
-    let mut hello = json!({"client":"sub1","profile":config.profile,"expectedVersion":CORE_VERSION,"storageRoot":config.storage_root,"legacyRoots":config.legacy_roots});
-    if recovery::cpu_locked() {
-        hello["forceCpu"] = json!(true);
-    }
+    let hello = hello_params(&config, recovery::cpu_locked());
     let hello_timeout = match remaining(deadline, method) {
         Ok(remaining) => remaining.min(HELLO_TIMEOUT),
         Err(error) => {
@@ -248,6 +249,22 @@ fn spawn_initialized(
         return Err(format!("CORE_INCOMPATIBLE: expected version {CORE_VERSION}, API {API_VERSION}, and required capabilities"));
     }
     Ok(process)
+}
+
+fn hello_params(config: &LaunchConfig, gpu_failed: bool) -> Value {
+    let mut hello = json!({"client":"sub1","profile":config.profile,"expectedVersion":CORE_VERSION,"storageRoot":config.storage_root,"legacyRoots":config.legacy_roots});
+    if config.force_cpu || gpu_failed {
+        hello["forceCpu"] = json!(true);
+    }
+    hello
+}
+
+/// Core reports a CPU lock - `cpuLocked` in status, or its CPU lock progress
+/// event - for any CPU-latched process, including one started with `forceCpu`
+/// because the setting asked for it, which never ran on GPU. Only the rest is a
+/// GPU failure.
+fn cpu_lock_is_gpu_failure(cpu_locked: bool, started_cpu_only: bool) -> bool {
+    cpu_locked && !started_cpu_only
 }
 
 fn hello_is_compatible(hello: &HelloResult, expected_version: &str) -> bool {

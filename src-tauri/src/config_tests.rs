@@ -152,6 +152,7 @@ fn a_settings_file_without_the_setting_keeps_the_subtitle_gate() {
     let config: TranslationConfig = serde_json::from_str(json).unwrap();
 
     assert!(!config.translate_all_ocr_text);
+    assert!(!config.foundry_local.cpu_only);
     assert!(config.enable_context_aware);
     assert_eq!(
         config.ocr.validation_strictness,

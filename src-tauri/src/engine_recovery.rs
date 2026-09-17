@@ -74,6 +74,7 @@ pub fn configure_core(
         selected.filter(|root| root != &default_root),
         legacy_roots,
     )?;
+    crate::core_client::select_cpu_only(config.translation.foundry_local.cpu_only)?;
 
     let status = crate::core_client::status_blocking()?;
     if status.installed {

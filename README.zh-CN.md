@@ -91,6 +91,7 @@ Windows 也可能需要为原字幕语言安装对应的 OCR 识别组件。
 
 **GPU 支持因架构而异。** ARM64 的 Adreno 加速仅对已验证的硬件／驱动组合启用，
 GPU 就绪检查超时后可尝试 CPU 回退。x64 版使用 Vulkan，当前**没有同样的验证门槛和应用级 CPU 重试**。
+无论哪种架构，如果 GPU 翻译出现异常，可以打开 **Settings → Engine and updates → Run the engine on CPU only**。
 [GPU 兼容性说明（英文）→](docs/USAGE.md#how-does-gpu-support-differ-by-architecture)
 
 ## 隐私与联网
