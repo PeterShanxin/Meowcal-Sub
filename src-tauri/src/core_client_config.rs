@@ -97,7 +97,7 @@ pub fn select_storage_root(storage_root: Option<PathBuf>) -> Result<(), String> 
     if unchanged {
         return Ok(());
     }
-    super::shutdown_owned();
+    super::restart_owned();
     let mut guard = super::CONFIG
         .get_or_init(|| Mutex::new(None))
         .lock()
@@ -128,7 +128,7 @@ pub fn select_cpu_only(cpu_only: bool) -> Result<(), String> {
         }
         config.force_cpu = cpu_only;
     }
-    super::shutdown_owned();
+    super::restart_owned();
     Ok(())
 }
 

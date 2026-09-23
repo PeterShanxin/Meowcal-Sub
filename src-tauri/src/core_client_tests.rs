@@ -354,3 +354,25 @@ fn binary_ocr_validates_dimensions_stride_size_and_timeout() {
     }
     assert_eq!(meowcal_core::ocr::MAX_FRAME_BYTES, 64 * 1024 * 1024);
 }
+
+#[tokio::test]
+async fn a_configuration_restart_keeps_transport_recovery_available() {
+    shutdown_owned();
+    recover_transport();
+    assert!(!recovering(), "exit and update handoff block late recovery");
+
+    restart_owned();
+    recover_transport();
+    // No Core is registered in unit tests, so the admitted flight fails fast.
+    for _ in 0..200 {
+        if recovery_failed() {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+    assert!(
+        recovery_failed(),
+        "a CPU-only or storage change must not leave the session unable to recover (#245)"
+    );
+    recovery::clear_failure();
+}

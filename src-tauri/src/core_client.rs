@@ -196,6 +196,14 @@ pub fn shutdown_owned() {
     shutdown_slot(&OCR, &OCR_KILL);
 }
 
+/// Stops Core so the next request starts one with a changed configuration.
+/// Unlike `shutdown_owned`, which ends recovery for app exit and update
+/// handoff, a running session can still start the replacement (#245).
+fn restart_owned() {
+    shutdown_owned();
+    recovery::clear_failure();
+}
+
 fn spawn_initialized(
     kill_slot: &OnceLock<Mutex<Option<Arc<KillSwitch>>>>,
     deadline: Instant,
