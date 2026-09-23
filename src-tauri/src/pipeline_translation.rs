@@ -334,7 +334,7 @@ impl Translator {
 /// (#245). Recovering and failed engines report other codes.
 fn engine_needs_restart(managed: bool, warnings: &[String]) -> bool {
     let not_ready = format!("{}: not_ready", BackendId::FoundryLocal.as_str());
-    managed && warnings.iter().any(|warning| *warning == not_ready)
+    managed && warnings.contains(&not_ready)
 }
 
 #[cfg(test)]
