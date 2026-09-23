@@ -29,7 +29,7 @@ use crate::pipeline_session::{PipelineClock, PipelineToken};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
-use tauri::{AppHandle, Emitter};
+use tauri::{AppHandle, Emitter, Manager};
 use tokio::sync::watch;
 use tracing::{debug, error, info, warn};
 
@@ -204,6 +204,18 @@ impl Translator {
         }
     }
 
+    fn engine_is_managed(&self) -> bool {
+        self.app
+            .try_state::<crate::app_state::AppState>()
+            .is_some_and(|state| {
+                crate::sync_utils::lock_or_recover(&state.config)
+                    .translation
+                    .foundry_local
+                    .managed_runtime
+                    .is_some()
+            })
+    }
+
     async fn run(&self, frame: Frame, mut stop_rx: watch::Receiver<bool>) {
         let translation_id = self.clock.begin_translation();
 
@@ -249,6 +261,10 @@ impl Translator {
                 "Discarding stale in-flight translation result"
             );
             return;
+        }
+
+        if engine_needs_restart(self.engine_is_managed(), &warnings) {
+            crate::core_client::recover_transport();
         }
 
         self.set_last_backend_was_mock(backend_used == BackendId::Mock);
@@ -312,6 +328,15 @@ impl Translator {
     }
 }
 
+/// The manager never calls a backend that is not ready, so a managed engine
+/// that stopped mid-session - its process exited, or a CPU-only change replaced
+/// Core - stays stopped: no request fails and nothing else starts recovery
+/// (#245). Recovering and failed engines report other codes.
+fn engine_needs_restart(managed: bool, warnings: &[String]) -> bool {
+    let not_ready = format!("{}: not_ready", BackendId::FoundryLocal.as_str());
+    managed && warnings.iter().any(|warning| *warning == not_ready)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -343,5 +368,30 @@ mod tests {
             "the fixture must actually panic to prove anything"
         );
         assert!(!flag.load(Ordering::SeqCst));
+    }
+
+    fn warnings(codes: &[&str]) -> Vec<String> {
+        codes
+            .iter()
+            .map(|code| format!("{}: {code}", BackendId::FoundryLocal.as_str()))
+            .collect()
+    }
+
+    #[test]
+    fn a_stopped_managed_engine_is_asked_to_start_again() {
+        assert!(engine_needs_restart(true, &warnings(&["not_ready"])));
+    }
+
+    #[test]
+    fn a_recovering_or_failed_engine_is_left_alone() {
+        for code in ["engine_recovering", "engine_recovery_failed"] {
+            assert!(!engine_needs_restart(true, &warnings(&[code])), "{code}");
+        }
+        assert!(!engine_needs_restart(true, &[]));
+    }
+
+    #[test]
+    fn an_engine_the_app_does_not_manage_is_left_alone() {
+        assert!(!engine_needs_restart(false, &warnings(&["not_ready"])));
     }
 }
