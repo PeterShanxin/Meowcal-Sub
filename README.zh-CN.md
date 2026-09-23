@@ -34,12 +34,12 @@
 
 ## 下载
 
-**Windows 11 公开测试版 · v0.8.3** — [更新说明与全部安装文件](https://github.com/PeterShanxin/Meowcal-Sub/releases/tag/v0.8.3)。
+**Windows 11 公开测试版 · v0.8.4** — [更新说明与全部安装文件](https://github.com/PeterShanxin/Meowcal-Sub/releases/tag/v0.8.4)。
 
 | 你的电脑 | 安装包 |
 | --- | --- |
-| Intel / AMD Windows 电脑 | **[下载 x64（.exe）](https://github.com/PeterShanxin/Meowcal-Sub/releases/download/v0.8.3/Meowcal.Sub_0.8.3_x64-setup.exe)** |
-| 骁龙或其他 Windows on ARM 电脑 | **[下载 ARM64（.exe）](https://github.com/PeterShanxin/Meowcal-Sub/releases/download/v0.8.3/Meowcal.Sub_0.8.3_arm64-setup.exe)** |
+| Intel / AMD Windows 电脑 | **[下载 x64（.exe）](https://github.com/PeterShanxin/Meowcal-Sub/releases/download/v0.8.4/Meowcal.Sub_0.8.4_x64-setup.exe)** |
+| 骁龙或其他 Windows on ARM 电脑 | **[下载 ARM64（.exe）](https://github.com/PeterShanxin/Meowcal-Sub/releases/download/v0.8.4/Meowcal.Sub_0.8.4_arm64-setup.exe)** |
 
 MSI 安装包和 `SHA256SUMS.txt` 校验文件也在该发布页。
 更新版本请看[最新应用发布页](https://github.com/PeterShanxin/Meowcal-Sub/releases/latest)。
