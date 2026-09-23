@@ -90,6 +90,9 @@ Rules:
 
 - change all five in one pull request, with a `chore(release): prepare vX.Y.Z`
   commit that changes nothing else;
+- put the release notes (`docs/releases/vX.Y.Z.md`) and the README download
+  links in a separate `docs` commit in the same pull request, so the version
+  commit stays reviewable on its own and the published notes land with it;
 - never bump a version as a side effect of a feature or fix;
 - `npm run version:check -- --expected 0.6.9` asserts an exact value when a
   release workflow needs to prove which version it is building.
