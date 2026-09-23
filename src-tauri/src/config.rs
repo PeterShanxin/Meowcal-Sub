@@ -419,8 +419,8 @@ impl Default for TranslationConfig {
             enable_foundry_local: true,
             // Never present untranslated OCR as a successful translation.
             allow_mock_fallback: false,
-            enable_context_aware: true, // Enabled by default
-            context_level: ContextLevel::MemoryAndRecent,
+            enable_context_aware: false, // Recent-line context can be translated as the line (#243)
+            context_level: ContextLevel::Off,
             context_recent_count: default_context_recent_count(),
             context_budget_percent: default_context_budget_percent(),
             context_summary_cooldown_ms: default_context_summary_cooldown_ms(),
