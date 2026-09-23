@@ -55,8 +55,8 @@ fn test_translation_config_defaults() {
     let config = TranslationConfig::default();
     assert!(config.enable_foundry_local);
     assert!(!config.allow_mock_fallback);
-    assert!(config.enable_context_aware);
-    assert_eq!(config.context_level, ContextLevel::MemoryAndRecent);
+    assert!(!config.enable_context_aware);
+    assert_eq!(config.context_level, ContextLevel::Off);
     assert_eq!(config.context_recent_count, 3);
     assert_eq!(config.context_budget_percent, 15);
     assert_eq!(config.context_summary_cooldown_ms, 5_000);
@@ -95,7 +95,7 @@ fn test_translation_config_missing_field_uses_default() {
         "localEngine": {}
     }"#;
     let config: TranslationConfig = serde_json::from_str(json).unwrap();
-    assert!(config.enable_context_aware);
+    assert!(!config.enable_context_aware);
 }
 
 // Persisted settings from releases before the naming cleanup still parse: the
