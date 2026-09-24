@@ -1,11 +1,16 @@
 // =============================================================================
-// RECOGNITION_MODE.RS - which of the three recognition paths a frame takes
+// RECOGNITION_MODE.RS - which recognition path a frame takes
 // =============================================================================
 // The capture loop had this inline as a fifty-line three-way branch whose only
 // real content was the same handful of settings, three call shapes, and the
 // same error handling copied three times. Lifting it out leaves the loop
 // reading as what it is - capture, recognise, filter, translate - and puts the
 // settings that choose a path next to each other where they can be compared.
+//
+// Subtitle mode reads white glyphs first (see `glyph_mask`) and falls back to
+// the configured path only when that finds nothing, so coloured subtitles still
+// read as before. Translate any text keeps the configured path: page text is
+// usually dark on light, which the white-glyph mask would erase.
 // =============================================================================
 
 use super::{OcrError, OcrResult, PreprocessingConfig, WindowsOcr};
@@ -17,6 +22,7 @@ use crate::config::TranslationConfig;
 /// one session's frames incomparable with each other.
 #[derive(Debug, Clone, Copy)]
 pub struct RecognitionMode {
+    pub white_glyphs_first: bool,
     pub multi_pass: bool,
     pub multi_pass_count: u32,
     pub preprocessing: bool,
@@ -28,6 +34,7 @@ pub struct RecognitionMode {
 impl RecognitionMode {
     pub fn from_config(config: &TranslationConfig) -> Self {
         Self {
+            white_glyphs_first: !config.translate_all_ocr_text,
             multi_pass: config.ocr.enable_multi_pass,
             multi_pass_count: config.ocr.multi_pass_count,
             preprocessing: config.ocr.preprocessing_enabled,
@@ -48,6 +55,15 @@ impl RecognitionMode {
         width: u32,
         height: u32,
     ) -> Result<OcrResult, (OcrError, &'static str)> {
+        if self.white_glyphs_first {
+            let result = ocr
+                .recognize_white_glyphs(frame, width, height)
+                .await
+                .map_err(|error| (error, "OCR failed"))?;
+            if result.significant_chars() > 0 {
+                return Ok(result);
+            }
+        }
         if self.multi_pass {
             return ocr
                 .recognize_multi_pass(frame, width, height, self.multi_pass_count)
@@ -77,6 +93,7 @@ mod tests {
 
     fn mode() -> RecognitionMode {
         RecognitionMode {
+            white_glyphs_first: false,
             multi_pass: false,
             multi_pass_count: 2,
             preprocessing: false,
@@ -104,12 +121,18 @@ mod tests {
         assert!(!plain.multi_pass && !plain.preprocessing);
     }
 
-
     #[test]
-    fn settings_come_from_the_translation_config() {
-        let config = TranslationConfig::default();
-        let mode = RecognitionMode::from_config(&config);
-        assert_eq!(mode.binarize, config.ocr.binarize);
-        assert_eq!(mode.multi_pass, config.ocr.enable_multi_pass);
+    fn subtitle_mode_reads_white_glyphs_first_and_any_text_does_not() {
+        let subtitles = TranslationConfig::default();
+        let mode = RecognitionMode::from_config(&subtitles);
+        assert!(mode.white_glyphs_first);
+        assert_eq!(mode.binarize, subtitles.ocr.binarize);
+        assert_eq!(mode.multi_pass, subtitles.ocr.enable_multi_pass);
+
+        let any_text = TranslationConfig {
+            translate_all_ocr_text: true,
+            ..subtitles
+        };
+        assert!(!RecognitionMode::from_config(&any_text).white_glyphs_first);
     }
 }

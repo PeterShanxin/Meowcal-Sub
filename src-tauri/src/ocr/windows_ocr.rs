@@ -68,6 +68,24 @@ impl WindowsOcr {
         self.recognize_raw(processed, width, height).await
     }
 
+    /// Recognise only the frame's white glyphs; see `glyph_mask`.
+    pub async fn recognize_white_glyphs(
+        &self,
+        image_data: &[u8],
+        width: u32,
+        height: u32,
+    ) -> Result<OcrResult, OcrError> {
+        validate_frame(image_data, width, height)?;
+        let (image_data, width, height) =
+            super::frame_budget::fit_frame(image_data, width, height, self.capture_scale);
+        let (masked, padded_width, padded_height) =
+            super::glyph_mask::mask_white_glyphs(&image_data, width, height);
+        let result = self
+            .recognize_raw(masked, padded_width, padded_height)
+            .await?;
+        Ok(super::glyph_mask::remove_margin(result, width))
+    }
+
     async fn recognize_raw(
         &self,
         image_data: Vec<u8>,
