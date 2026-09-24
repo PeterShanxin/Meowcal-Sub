@@ -390,5 +390,9 @@ async fn a_configuration_restart_keeps_transport_recovery_available() {
         recovery_failed(),
         "a CPU-only or storage change must not leave the session unable to recover (#245)"
     );
+    assert!(
+        !recovering(),
+        "the flight must finish before readiness is released"
+    );
     recovery::clear_failure();
 }
