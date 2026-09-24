@@ -491,14 +491,7 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
         )
     };
 
-    let recognition_mode = crate::ocr::RecognitionMode {
-        multi_pass: translation_config.ocr.enable_multi_pass,
-        multi_pass_count: translation_config.ocr.multi_pass_count,
-        preprocessing: translation_config.ocr.preprocessing_enabled,
-        grayscale: translation_config.ocr.grayscale,
-        contrast_enhancement: translation_config.ocr.contrast_enhancement,
-        binarize: translation_config.ocr.binarize,
-    };
+    let recognition_mode = crate::ocr::RecognitionMode::from_config(&translation_config);
     let strictness = translation_config.ocr.validation_strictness;
     let min_chars = strictness.min_significant_chars();
     let eligibility = translation_config.eligibility();

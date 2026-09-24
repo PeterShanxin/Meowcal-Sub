@@ -9,6 +9,7 @@
 // =============================================================================
 
 use super::{OcrError, OcrResult, PreprocessingConfig, WindowsOcr};
+use crate::config::TranslationConfig;
 
 /// The recognition settings that decide which path a frame takes.
 ///
@@ -25,6 +26,17 @@ pub struct RecognitionMode {
 }
 
 impl RecognitionMode {
+    pub fn from_config(config: &TranslationConfig) -> Self {
+        Self {
+            multi_pass: config.ocr.enable_multi_pass,
+            multi_pass_count: config.ocr.multi_pass_count,
+            preprocessing: config.ocr.preprocessing_enabled,
+            grayscale: config.ocr.grayscale,
+            contrast_enhancement: config.ocr.contrast_enhancement,
+            binarize: config.ocr.binarize,
+        }
+    }
+
     /// Recognise one frame by whichever path the settings select.
     ///
     /// The caller decides what a failure means - the capture loop skips the
@@ -90,5 +102,14 @@ mod tests {
     fn the_plain_path_is_the_default() {
         let plain = mode();
         assert!(!plain.multi_pass && !plain.preprocessing);
+    }
+
+
+    #[test]
+    fn settings_come_from_the_translation_config() {
+        let config = TranslationConfig::default();
+        let mode = RecognitionMode::from_config(&config);
+        assert_eq!(mode.binarize, config.ocr.binarize);
+        assert_eq!(mode.multi_pass, config.ocr.enable_multi_pass);
     }
 }
