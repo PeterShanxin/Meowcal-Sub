@@ -78,12 +78,16 @@ impl WindowsOcr {
         validate_frame(image_data, width, height)?;
         let (image_data, width, height) =
             super::frame_budget::fit_frame(image_data, width, height, self.capture_scale);
-        let (masked, padded_width, padded_height) =
-            super::glyph_mask::mask_white_glyphs(&image_data, width, height);
+        let super::glyph_mask::MaskedFrame {
+            bgra,
+            width: padded_width,
+            height: padded_height,
+            margin,
+        } = super::glyph_mask::mask_white_glyphs(&image_data, width, height);
         let result = self
-            .recognize_raw(masked, padded_width, padded_height)
+            .recognize_raw(bgra, padded_width, padded_height)
             .await?;
-        Ok(super::glyph_mask::remove_margin(result, width))
+        Ok(super::glyph_mask::remove_margin(result, width, margin))
     }
 
     async fn recognize_raw(

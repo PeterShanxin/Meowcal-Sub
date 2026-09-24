@@ -27,23 +27,33 @@ const MIN_CHANNEL: u8 = 200;
 /// can pass `MIN_CHANNEL`; their blue channel keeps them out here.
 const MAX_SPREAD: u8 = 40;
 
-/// White border added on every side, in frame pixels.
-pub const MARGIN: u32 = 24;
+/// White border added on every side, in frame pixels, where Core's dimension
+/// limit leaves room for it.
+const MARGIN: u32 = 24;
 
 const GLYPH: u8 = 0;
 const PAPER: u8 = 255;
 
+pub struct MaskedFrame {
+    pub bgra: Vec<u8>,
+    pub width: u32,
+    pub height: u32,
+    pub margin: u32,
+}
+
 /// Paint bright, unsaturated pixels black on white and add the margin.
 ///
-/// Returns the padded BGRA frame and its dimensions. The caller must pass the
-/// recognised geometry through [`remove_margin`] before using it.
-pub fn mask_white_glyphs(bgra: &[u8], width: u32, height: u32) -> (Vec<u8>, u32, u32) {
-    let padded_width = width + 2 * MARGIN;
-    let padded_height = height + 2 * MARGIN;
+/// The caller must pass the recognised geometry through [`remove_margin`]
+/// with the frame's `margin` before using it.
+pub fn mask_white_glyphs(bgra: &[u8], width: u32, height: u32) -> MaskedFrame {
+    let room = meowcal_core::ocr::MAX_DIMENSION.saturating_sub(width.max(height));
+    let margin = MARGIN.min(room / 2);
+    let padded_width = width + 2 * margin;
+    let padded_height = height + 2 * margin;
     let mut out = vec![PAPER; (padded_width as usize) * (padded_height as usize) * 4];
     let row_bytes = width as usize * 4;
     for (row, source) in bgra.chunks_exact(row_bytes).enumerate() {
-        let start = ((row + MARGIN as usize) * padded_width as usize + MARGIN as usize) * 4;
+        let start = ((row + margin as usize) * padded_width as usize + margin as usize) * 4;
         let target = &mut out[start..start + row_bytes];
         for (pixel, dest) in source
             .as_chunks::<4>()
@@ -62,13 +72,18 @@ pub fn mask_white_glyphs(bgra: &[u8], width: u32, height: u32) -> (Vec<u8>, u32,
             dest[..3].fill(value);
         }
     }
-    (out, padded_width, padded_height)
+    MaskedFrame {
+        bgra: out,
+        width: padded_width,
+        height: padded_height,
+        margin,
+    }
 }
 
 /// Express a result recognised on a masked frame in the unpadded frame's
 /// pixels, so band selection sees the geometry it would have seen unmasked.
-pub fn remove_margin(result: OcrResult, width: u32) -> OcrResult {
-    let margin = MARGIN as f32;
+pub fn remove_margin(result: OcrResult, width: u32, margin: u32) -> OcrResult {
+    let margin = margin as f32;
     let boxes = result
         .boxes
         .iter()
@@ -115,8 +130,8 @@ mod tests {
 
     #[test]
     fn a_white_glyph_on_a_bright_scene_stays_solid() {
-        let (masked, width, _) = mask_white_glyphs(&outlined_glyph_on_yellow(), 9, 9);
-        let at = |x, y| pixel(&masked, width, x + MARGIN, y + MARGIN);
+        let masked = mask_white_glyphs(&outlined_glyph_on_yellow(), 9, 9);
+        let at = |x, y| pixel(&masked.bgra, masked.width, x + MARGIN, y + MARGIN);
         assert_eq!(at(4, 4), GLYPH, "glyph fill");
         assert_eq!(at(2, 2), PAPER, "outline");
         assert_eq!(at(0, 0), PAPER, "bright yellow scene");
@@ -124,10 +139,12 @@ mod tests {
 
     #[test]
     fn the_margin_is_blank_paper() {
-        let (masked, width, height) = mask_white_glyphs(&[255; 4], 1, 1);
+        let masked = mask_white_glyphs(&[255; 4], 1, 1);
+        let (width, height) = (masked.width, masked.height);
         assert_eq!((width, height), (1 + 2 * MARGIN, 1 + 2 * MARGIN));
-        assert_eq!(pixel(&masked, width, MARGIN, MARGIN), GLYPH);
+        assert_eq!(pixel(&masked.bgra, width, MARGIN, MARGIN), GLYPH);
         let blank = masked
+            .bgra
             .as_chunks::<4>()
             .0
             .iter()
@@ -137,7 +154,19 @@ mod tests {
     }
 
     #[test]
+    fn the_margin_never_takes_a_frame_past_cores_limit() {
+        let limit = meowcal_core::ocr::MAX_DIMENSION;
+        let masked = mask_white_glyphs(&vec![0; (limit as usize - 6) * 4], limit - 6, 1);
+        assert_eq!((masked.width, masked.height), (limit, 7));
+        assert_eq!(
+            mask_white_glyphs(&vec![0; limit as usize * 4], limit, 1).width,
+            limit
+        );
+    }
+
+    #[test]
     fn geometry_is_reported_in_unpadded_pixels() {
+        let masked = mask_white_glyphs(&vec![0; 500 * 4], 500, 1);
         let padded = OcrResult::with_boxes(
             vec!["line".into()],
             vec![LineBox {
@@ -148,7 +177,7 @@ mod tests {
             }],
             (500 + 2 * MARGIN) as f32,
         );
-        let restored = remove_margin(padded, 500);
+        let restored = remove_margin(padded, 500, masked.margin);
         assert_eq!(restored.frame_width, 500.0);
         let b = restored.boxes[0];
         assert_eq!(
