@@ -18,6 +18,7 @@ mod band_verdict;
 mod band_window;
 mod banding;
 pub mod frame_budget;
+mod glyph_mask;
 mod language;
 mod line_geometry;
 mod preprocessing;
