@@ -6,6 +6,17 @@ use std::path::Path;
 #[path = "../build_support/core_version.rs"]
 mod core_version;
 
+/// Readiness is process-global: a recovery flight marks it stale from its own
+/// thread and records a failure that the backend reports as its ready state. A
+/// test that asserts a ready snapshot must not overlap one that recovers.
+static READINESS: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+fn hold_readiness() -> std::sync::MutexGuard<'static, ()> {
+    READINESS
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+}
+
 #[test]
 fn readiness_deadline_covers_server_budget_and_handshake() {
     assert!(READY_TIMEOUT >= meowcal_core::protocol::READY_BUDGET + HELLO_TIMEOUT);
@@ -14,6 +25,7 @@ fn readiness_deadline_covers_server_budget_and_handshake() {
 #[test]
 fn managed_backend_snapshots_do_not_wait_for_an_active_core_request() {
     use crate::llm::{FoundryLocalBackend, ReadyState, TranslatorBackend};
+    let _readiness = hold_readiness();
     let status = CoreStatus {
         installed: true,
         ready: true,
@@ -357,6 +369,7 @@ fn binary_ocr_validates_dimensions_stride_size_and_timeout() {
 
 #[tokio::test]
 async fn a_configuration_restart_keeps_transport_recovery_available() {
+    let _readiness = hold_readiness();
     shutdown_owned();
     recover_transport();
     assert!(!recovering(), "exit and update handoff block late recovery");
@@ -364,11 +377,14 @@ async fn a_configuration_restart_keeps_transport_recovery_available() {
     restart_owned();
     recover_transport();
     // No Core is registered in unit tests, so the admitted flight fails fast.
+    // Wait for it to finish, not just to fail: it marks readiness stale after
+    // recording the failure. The flight runs on the blocking pool, so a
+    // blocking wait here does not starve it.
     for _ in 0..200 {
-        if recovery_failed() {
+        if recovery_failed() && !recovering() {
             break;
         }
-        tokio::time::sleep(Duration::from_millis(10)).await;
+        std::thread::sleep(Duration::from_millis(10));
     }
     assert!(
         recovery_failed(),
