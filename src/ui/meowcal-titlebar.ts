@@ -1,4 +1,4 @@
-import { LitElement, html, svg, type TemplateResult } from "lit";
+import { LitElement, html, nothing, svg, type TemplateResult } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { catLogo } from "./icons";
 
@@ -66,36 +66,43 @@ export class MeowcalTitlebar extends LitElement {
           ${catLogo()}
           <span data-tauri-drag-region>${this.label}${this.development ? " - Dev" : ""}</span>
         </div>
-        <div class="titlebar-controls">
-          <button
-            type="button"
-            class="titlebar-button"
-            aria-label="Minimize"
-            @click=${() => this.run("minimize")}
-          >
-            ${icon(GLYPH.minimize)}
-          </button>
-          ${
-            this.noMaximize
-              ? null
-              : html`<button
-                  type="button"
-                  class="titlebar-button"
-                  aria-label=${this.maximized ? "Restore" : "Maximize"}
-                  @click=${() => this.run("toggleMaximize")}
-                >
-                  ${icon(this.maximized ? GLYPH.restore : GLYPH.maximize)}
-                </button>`
-          }
-          <button
-            type="button"
-            class="titlebar-button titlebar-close"
-            aria-label="Close"
-            @click=${() => this.run("close")}
-          >
-            ${icon(GLYPH.close)}
-          </button>
-        </div>
+        ${window.TauriBridge?.windowControls ? this.renderControls() : nothing}
+      </div>
+    `;
+  }
+
+  /** Browser mode has no window to drive, so it gets no controls rather than dead ones. */
+  private renderControls(): TemplateResult {
+    return html`
+      <div class="titlebar-controls">
+        <button
+          type="button"
+          class="titlebar-button"
+          aria-label="Minimize"
+          @click=${() => this.run("minimize")}
+        >
+          ${icon(GLYPH.minimize)}
+        </button>
+        ${
+          this.noMaximize
+            ? null
+            : html`<button
+                type="button"
+                class="titlebar-button"
+                aria-label=${this.maximized ? "Restore" : "Maximize"}
+                @click=${() => this.run("toggleMaximize")}
+              >
+                ${icon(this.maximized ? GLYPH.restore : GLYPH.maximize)}
+              </button>`
+        }
+        <button
+          type="button"
+          class="titlebar-button titlebar-close"
+          aria-label="Close"
+          @click=${() => this.run("close")}
+        >
+          ${icon(GLYPH.close)}
+        </button>
       </div>
     `;
   }
