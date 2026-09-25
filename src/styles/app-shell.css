@@ -252,6 +252,15 @@ meowcal-setup {
   color: var(--text-2);
 }
 
+/* Keeps the end of a scrolling page reachable above a message, which would
+   otherwise sit over the last rows until it expires or is dismissed. A short
+   window moves the message over the navigation instead (below). */
+@media (min-height: 481px) {
+  .app-frame:has(.toast) .page {
+    padding-bottom: 64px;
+  }
+}
+
 .toast-dismiss {
   display: grid;
   flex: none;
