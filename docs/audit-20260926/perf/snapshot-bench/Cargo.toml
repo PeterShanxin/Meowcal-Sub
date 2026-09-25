@@ -1,0 +1,20 @@
+[package]
+name = "snapshot-bench"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+# Standalone so it builds on any host: src-tauri links Windows-only crates.
+[workspace]
+
+[dependencies]
+# Pinned to the versions src-tauri/Cargo.lock resolves.
+png = "=0.18.1"
+base64 = "=0.23.1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "=1.0.151"
+image = { version = "=0.25.10", default-features = false, features = ["jpeg"] }
+
+[profile.release]
+lto = true
+codegen-units = 1
