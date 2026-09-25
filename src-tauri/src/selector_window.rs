@@ -172,12 +172,17 @@ fn encode_snapshot(
         px.swap(0, 2);
     }
 
-    // Encode to PNG.
+    // Encode to PNG. The selector window is shown only after this returns, so
+    // encoding time is added directly to the wait after "Select subtitle area".
+    // The default zlib preset spends about a second on a 1080p video frame and
+    // four on a 4K one for roughly the same output size as `Fast`
+    // (docs/audit-20260926/perf).
     let mut png_bytes = Vec::new();
     {
         let mut encoder = png::Encoder::new(&mut png_bytes, capture.width, capture.height);
         encoder.set_color(png::ColorType::Rgba);
         encoder.set_depth(png::BitDepth::Eight);
+        encoder.set_compression(png::Compression::Fast);
 
         let mut writer = encoder
             .write_header()
