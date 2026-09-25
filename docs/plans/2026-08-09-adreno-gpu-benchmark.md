@@ -8,7 +8,8 @@ driver 31.0.148.0. Other ARM64 GPU/driver configurations use the prior CPU
 policy.
 
 The full report and the benchmark scripts are on the
-`archive/gpu-adreno-arm64-bench-2026-08-09` branch. Its
+`archive/gpu-adreno-arm64-bench-2026-08-09` branch at commit `9ed37ecb123e`
+(see `docs/archive/README.md`). Its
 `GPU_BENCHMARK_ARCHIVE.md` lists what each script does. The raw run
 directories contain OCR text and translations from real episodes, so they are
 kept out of this repository. They are in the owner's private Google Drive:
