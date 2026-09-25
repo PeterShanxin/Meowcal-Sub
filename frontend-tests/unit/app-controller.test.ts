@@ -684,3 +684,61 @@ describe("AppController automatic update checks", () => {
     expect(invoke).not.toHaveBeenCalledWith("save_settings", expect.anything());
   });
 });
+
+describe("AppController area selection", () => {
+  const saved = { x: 10, y: 800, width: 1200, height: 120 };
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  // The selector leaves the saved area in place while it is open, so polling
+  // must wait for a different area rather than report the saved one as new.
+  it("does not confirm a selection while the saved area is unchanged", async () => {
+    let region: typeof saved | null = saved;
+    const invoke = vi.fn(async (command: string) =>
+      command === "get_capture_region" ? region : undefined,
+    );
+    const { controller } = createController(invoke as TauriBridgeApi["invoke"]);
+    await controller.initialize();
+
+    await controller.selectRegion();
+    await vi.advanceTimersByTimeAsync(2000);
+
+    expect(controller.current().notice).toBeNull();
+
+    region = { ...saved, y: 760 };
+    await vi.advanceTimersByTimeAsync(250);
+
+    expect(controller.current()).toMatchObject({
+      region: { y: 760 },
+      notice: "Subtitle area selected",
+    });
+    controller.dispose();
+  });
+
+  it("confirms the first area found when none was saved", async () => {
+    let region: typeof saved | null = null;
+    const invoke = vi.fn(async (command: string) =>
+      command === "get_capture_region" ? region : undefined,
+    );
+    const { controller } = createController(invoke as TauriBridgeApi["invoke"]);
+    await controller.initialize();
+
+    await controller.selectRegion();
+    region = saved;
+    await vi.advanceTimersByTimeAsync(250);
+
+    expect(controller.current()).toMatchObject({
+      region: saved,
+      notice: "Subtitle area selected",
+    });
+    controller.dispose();
+  });
+});

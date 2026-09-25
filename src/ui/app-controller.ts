@@ -163,18 +163,20 @@ export class AppController {
   async selectRegion(): Promise<void> {
     try {
       await window.TauriBridge.invoke("open_area_selector");
-      this.startRegionPolling();
+      this.startRegionPolling(this.snapshot.region);
     } catch (error) {
       this.publish({ error: errorMessage(error) });
     }
   }
 
-  private startRegionPolling(): void {
+  // Backs up `region-selected`. The selector keeps the saved area, so only a new area counts.
+  private startRegionPolling(saved: CaptureRegion | null): void {
     this.stopRegionPolling();
     let attempts = 0;
     this.pollingId = window.setInterval(async () => {
       const region = await this.safeInvoke<CaptureRegion | null>("get_capture_region", null);
-      if (region) {
+      const same = (key: keyof CaptureRegion) => region?.[key] === saved?.[key];
+      if (region && !(saved && same("x") && same("y") && same("width") && same("height"))) {
         this.stopRegionPolling();
         this.publish({ region, notice: "Subtitle area selected" });
       } else if (++attempts >= 40) this.stopRegionPolling();
