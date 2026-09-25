@@ -12,6 +12,19 @@ function ocrReady(snapshot: UiSnapshot): boolean {
   );
 }
 
+/**
+ * The language pair and subtitle area feed the session, so they cannot change
+ * while one is starting, running, or stopping.
+ */
+export function isSessionLocked(snapshot: UiSnapshot): boolean {
+  return (
+    snapshot.running ||
+    snapshot.busy === "warming" ||
+    snapshot.busy === "starting" ||
+    snapshot.busy === "stopping"
+  );
+}
+
 export function deriveHomePresentation(snapshot: UiSnapshot): HomePresentation {
   if (snapshot.busy === "loading") {
     return {

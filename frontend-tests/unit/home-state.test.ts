@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type { UiSnapshot } from "../../src/ui/contracts";
-import { deriveHomePresentation } from "../../src/ui/home-state";
+import { deriveHomePresentation, isSessionLocked } from "../../src/ui/home-state";
 
 vi.stubGlobal("window", {
   OcrLanguageTags: {
@@ -153,4 +153,18 @@ describe("deriveHomePresentation", () => {
       expect(result).toMatchObject({ state: "ready", action: "start", statusLabel: "Ready" });
     },
   );
+});
+
+describe("Home session controls", () => {
+  it.each(["warming", "starting", "stopping"] as const)(
+    "locks the language pair and area while translation is %s",
+    (busy) => {
+      expect(isSessionLocked(snapshot({ busy, running: busy === "stopping" }))).toBe(true);
+    },
+  );
+
+  it("locks them while translation runs and unlocks them when it is ready", () => {
+    expect(isSessionLocked(snapshot({ running: true }))).toBe(true);
+    expect(isSessionLocked(snapshot())).toBe(false);
+  });
 });
