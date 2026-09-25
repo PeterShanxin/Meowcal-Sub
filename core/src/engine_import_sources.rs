@@ -1,3 +1,4 @@
+use crate::engine_artifact_io::file_matches;
 use crate::engine_manifest::{EngineManifest, RuntimeSpec};
 use crate::hy_mt_runtime::HyMtInstallPaths;
 use crate::storage_partitions::sibling_partitions;
@@ -56,6 +57,57 @@ pub fn assets_available_offline(
         && candidates
             .iter()
             .any(|candidate| sized(&candidate.paths.model, manifest.model.artifact.size_bytes))
+}
+
+/// Stages a Core-owned source as a hard link, so the import costs no disk
+/// space. Returns false when the volume cannot link, and the caller copies.
+pub(crate) async fn link_candidate(source: &Path, target: &Path) -> bool {
+    let Some(parent) = target.parent() else {
+        return false;
+    };
+    if tokio::fs::create_dir_all(parent).await.is_err() {
+        return false;
+    }
+    match tokio::fs::hard_link(source, target.with_extension("import-part")).await {
+        Ok(()) => true,
+        Err(error) => {
+            tracing::warn!("Cannot link {}, copying instead: {error}", source.display());
+            false
+        }
+    }
+}
+
+pub(crate) async fn promote_import(
+    source: &Path,
+    target: &Path,
+    size: u64,
+    hash: &str,
+    linked: bool,
+) -> Result<(), String> {
+    // Selection has already verified source. Verify the staged bytes instead
+    // of reading the same source twice; this also detects a changed source.
+    let parent = target.parent().ok_or("CORE_IMPORT_PARENT")?;
+    tokio::fs::create_dir_all(parent)
+        .await
+        .map_err(|error| format!("CORE_IMPORT_DIR: {error}"))?;
+    let candidate = target.with_extension("import-part");
+    if !linked {
+        tokio::fs::copy(source, &candidate)
+            .await
+            .map_err(|error| format!("CORE_IMPORT_COPY: {error}"))?;
+    }
+    if !file_matches(&candidate, size, hash).await? {
+        let _ = tokio::fs::remove_file(&candidate).await;
+        return Err("CORE_IMPORT_CHANGED: source changed while copying".into());
+    }
+    if target.exists() {
+        tokio::fs::remove_file(target)
+            .await
+            .map_err(|error| format!("CORE_IMPORT_REPLACE: {error}"))?;
+    }
+    tokio::fs::rename(candidate, target)
+        .await
+        .map_err(|error| format!("CORE_IMPORT_PROMOTE: {error}"))
 }
 
 #[cfg(test)]

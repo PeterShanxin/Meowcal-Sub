@@ -38,14 +38,16 @@ files.
 
 Once its engine is ready, Core reclaims space in the background:
 
-- it removes its own client's older versions, keeping the newest one besides
-  the running version for rollback;
+- it removes its own client's other versions, keeping the newest one whose
+  install state records a complete install, for rollback;
 - it replaces every remaining partition's model that matches its manifest hash
   with a hard link to its own, including other clients' partitions and the
   unpartitioned layout Core 0.1.0 to 0.1.3 wrote.
 
 A partition another process holds a lease on is skipped and retried on a later
-start. An application's uninstaller removes its own client directory when the
+start, and an import holds a shared lease on its source partition. Junctions and
+other reparse points are never treated as partitions, so reclaim cannot follow
+one out of Core storage. An application's uninstaller removes its own client directory when the
 user asks it to delete application data. It removes the unpartitioned layout
 only when the other application has never run on the machine.
 

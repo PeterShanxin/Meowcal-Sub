@@ -308,6 +308,15 @@ async fn import_from_another_core_partition_links_instead_of_copying() {
     std::fs::write(&source.runtime_archive, b"archive").unwrap();
     std::fs::write(&source.model, b"model").unwrap();
 
+    // A partition being installed or removed is not a source.
+    let exclusive = Lease::acquire(&source.root, true, Duration::ZERO)
+        .await
+        .unwrap();
+    assert!(import_legacy(&target, &[], &manifest, true)
+        .await
+        .unwrap_err()
+        .starts_with("CORE_ASSETS_UNVERIFIED"));
+    drop(exclusive);
     import_legacy(&target, &[], &manifest, true).await.unwrap();
 
     assert!(same_file(&source.model, &target.model).unwrap());

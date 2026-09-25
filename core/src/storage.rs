@@ -1,5 +1,5 @@
 use crate::engine_artifact_io::file_matches;
-use crate::engine_import_sources::import_candidates;
+use crate::engine_import_sources::{import_candidates, link_candidate, promote_import};
 use crate::engine_manifest::EngineManifest;
 use crate::hy_mt_runtime::HyMtInstallPaths;
 use crate::protocol::CORE_VERSION;
@@ -250,7 +250,20 @@ pub async fn import_legacy(
     };
     let mut archive = None;
     let mut model = None;
+    // Another Core's reclaim removes a partition only under its exclusive
+    // lease, so a shared lease keeps each chosen source in place until staged.
+    let mut source_leases = Vec::new();
     for candidate in candidates {
+        let lease = if candidate.core_owned && candidate.paths.root != paths.root {
+            match Lease::acquire(&candidate.paths.root, false, Duration::ZERO).await {
+                Ok(lease) => Some(lease),
+                Err(error) if error.starts_with("CORE_ASSETS_BUSY") => continue,
+                Err(error) => return Err(error),
+            }
+        } else {
+            None
+        };
+        let selected = (archive.is_some(), model.is_some());
         if archive.is_none()
             && file_matches(
                 &candidate.paths.runtime_archive,
@@ -273,6 +286,9 @@ pub async fn import_legacy(
             .await?
         {
             model = Some((candidate.paths.model, candidate.core_owned));
+        }
+        if (archive.is_some(), model.is_some()) != selected {
+            source_leases.extend(lease);
         }
         if archive.is_some() && model.is_some() {
             break;
@@ -331,57 +347,6 @@ async fn cleanup_staging(paths: &HyMtInstallPaths) -> Result<(), String> {
         crate::engine_install_transaction::reset_candidate(&path).await?;
     }
     Ok(())
-}
-
-/// Stages a Core-owned source as a hard link, so the import costs no disk
-/// space. Returns false when the volume cannot link, and the caller copies.
-async fn link_candidate(source: &Path, target: &Path) -> bool {
-    let Some(parent) = target.parent() else {
-        return false;
-    };
-    if tokio::fs::create_dir_all(parent).await.is_err() {
-        return false;
-    }
-    match tokio::fs::hard_link(source, target.with_extension("import-part")).await {
-        Ok(()) => true,
-        Err(error) => {
-            tracing::warn!("Cannot link {}, copying instead: {error}", source.display());
-            false
-        }
-    }
-}
-
-async fn promote_import(
-    source: &Path,
-    target: &Path,
-    size: u64,
-    hash: &str,
-    linked: bool,
-) -> Result<(), String> {
-    // Selection has already verified source. Verify the staged bytes instead
-    // of reading the same source twice; this also detects a changed source.
-    let parent = target.parent().ok_or("CORE_IMPORT_PARENT")?;
-    tokio::fs::create_dir_all(parent)
-        .await
-        .map_err(|error| format!("CORE_IMPORT_DIR: {error}"))?;
-    let candidate = target.with_extension("import-part");
-    if !linked {
-        tokio::fs::copy(source, &candidate)
-            .await
-            .map_err(|error| format!("CORE_IMPORT_COPY: {error}"))?;
-    }
-    if !file_matches(&candidate, size, hash).await? {
-        let _ = tokio::fs::remove_file(&candidate).await;
-        return Err("CORE_IMPORT_CHANGED: source changed while copying".into());
-    }
-    if target.exists() {
-        tokio::fs::remove_file(target)
-            .await
-            .map_err(|error| format!("CORE_IMPORT_REPLACE: {error}"))?;
-    }
-    tokio::fs::rename(candidate, target)
-        .await
-        .map_err(|error| format!("CORE_IMPORT_PROMOTE: {error}"))
 }
 
 #[cfg(test)]

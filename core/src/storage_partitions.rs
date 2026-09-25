@@ -63,7 +63,8 @@ fn versions(
                 .map(|part| part.parse::<u64>().ok())
                 .collect::<Option<Vec<_>>>()?;
             let partition = entry.path().join(architecture);
-            (version.len() == 3 && partition.is_dir()).then_some((version, partition))
+            (version.len() == 3 && plain_directory(&entry.path()) && plain_directory(&partition))
+                .then_some((version, partition))
         })
         .collect();
     partitions.sort_by(|left, right| right.0.cmp(&left.0));
@@ -71,6 +72,23 @@ fn versions(
         .into_iter()
         .map(|(_, partition)| partition)
         .collect()
+}
+
+/// A directory that is not a junction, symbolic link, or other reparse point.
+/// Reclaim deletes partitions, so it must never follow one out of Core storage.
+fn plain_directory(path: &Path) -> bool {
+    let Ok(metadata) = path.symlink_metadata() else {
+        return false;
+    };
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::MetadataExt;
+        const FILE_ATTRIBUTE_REPARSE_POINT: u32 = 0x400;
+        if metadata.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT != 0 {
+            return false;
+        }
+    }
+    metadata.is_dir()
 }
 
 #[cfg(test)]

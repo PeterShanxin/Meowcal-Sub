@@ -141,8 +141,8 @@ Core storage defaults to
 engines hold shared leases; install/repair requires exclusive access. Assets
 from other Core partitions are imported as hard links; legacy migration copies
 verified archives and models. Both reconstruct the runtime tree. Once ready,
-Core keeps its client's newest older version for rollback, removes the rest, and
-links identical models in other partitions to its own. Old application
+Core keeps its client's newest other complete install for rollback, removes the
+rest, and links identical models in other partitions to its own. Old application
 installations are left in place.
 
 Applications pin an exact version and archive digest. A new release cannot

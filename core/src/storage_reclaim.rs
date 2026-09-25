@@ -1,4 +1,5 @@
 use crate::engine_artifact_io::file_matches;
+use crate::engine_install_transaction::records_install;
 use crate::engine_manifest::EngineManifest;
 use crate::hy_mt_runtime::HyMtInstallPaths;
 use crate::storage::Lease;
@@ -8,7 +9,7 @@ use std::time::Duration;
 
 /// Frees disk space held by other Core partitions of the same profile and
 /// architecture, once this Core's install is verified and running. Keeps this
-/// client's newest other version for rollback and removes the older ones, then
+/// client's newest other completed install for rollback and removes the rest, then
 /// replaces every remaining identical model with a hard link to the current
 /// one. A partition another process holds a lease on is left untouched.
 pub async fn reclaim(current: &HyMtInstallPaths, manifest: &EngineManifest) {
@@ -19,9 +20,16 @@ pub async fn reclaim(current: &HyMtInstallPaths, manifest: &EngineManifest) {
     let siblings = tokio::task::spawn_blocking(move || sibling_partitions(&root))
         .await
         .unwrap_or_default();
-    let mut own = siblings.own.into_iter();
-    let previous = own.next();
-    for stale in own {
+    let mut previous = None;
+    let mut stale = Vec::new();
+    for partition in siblings.own {
+        if previous.is_none() && records_install(&partition).await {
+            previous = Some(partition);
+        } else {
+            stale.push(partition);
+        }
+    }
+    for stale in stale {
         match remove_partition(&stale).await {
             Ok(true) => tracing::info!("Removed Core partition {}", stale.display()),
             Ok(false) => {}

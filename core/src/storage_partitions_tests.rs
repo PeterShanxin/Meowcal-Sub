@@ -51,3 +51,37 @@ fn a_root_outside_the_client_layout_has_no_siblings() {
     assert!(siblings.shared.is_empty());
     std::fs::remove_dir_all(base).unwrap();
 }
+
+#[cfg(windows)]
+#[test]
+fn a_junctioned_partition_is_not_a_sibling() {
+    let base = temporary_base("junction");
+    let current = partition(&base, &["sub1", "production", "0.1.4"]);
+    let outside = partition(&base, &["outside", "0.1.3"]);
+    let version_link = base.join("sub1").join("production").join("0.1.2");
+    let architecture_link = base
+        .join("sub1")
+        .join("production")
+        .join("0.1.1")
+        .join(std::env::consts::ARCH);
+    std::fs::create_dir_all(architecture_link.parent().unwrap()).unwrap();
+    for (link, target) in [
+        (&version_link, outside.parent().unwrap()),
+        (&architecture_link, outside.as_path()),
+    ] {
+        let status = std::process::Command::new("cmd")
+            .args(["/C", "mklink", "/J"])
+            .arg(link)
+            .arg(target)
+            .output()
+            .unwrap()
+            .status;
+        assert!(status.success());
+    }
+
+    assert!(sibling_partitions(&current).own.is_empty());
+    for link in [&version_link, &architecture_link] {
+        std::fs::remove_dir(link).unwrap();
+    }
+    std::fs::remove_dir_all(base).unwrap();
+}
