@@ -97,13 +97,17 @@ async fn share_model(
     manifest: &EngineManifest,
 ) -> Result<(), String> {
     let artifact = &manifest.model.artifact;
-    let sized = target
-        .model
-        .metadata()
-        .is_ok_and(|metadata| metadata.is_file() && metadata.len() == artifact.size_bytes);
-    if !sized
-        || same_file(model, &target.model).map_err(|error| format!("CORE_SHARE_ID: {error}"))?
-    {
+    let (source, candidate, size) = (model.to_owned(), target.model.clone(), artifact.size_bytes);
+    let unshared = tokio::task::spawn_blocking(move || {
+        let sized = candidate
+            .metadata()
+            .is_ok_and(|metadata| metadata.is_file() && metadata.len() == size);
+        Ok::<_, std::io::Error>(sized && !same_file(&source, &candidate)?)
+    })
+    .await
+    .map_err(|error| format!("CORE_RECLAIM_TASK: {error}"))?
+    .map_err(|error| format!("CORE_SHARE_ID: {error}"))?;
+    if !unshared {
         return Ok(());
     }
     // Hash only a partition no process is using, then keep it locked while
