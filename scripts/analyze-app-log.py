@@ -4,7 +4,7 @@ distribution, outage/defer behavior, translation counts."""
 import re, sys, statistics
 from datetime import datetime
 
-TS_RE = re.compile(r"^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d+)Z")
+TS_RE = re.compile(r"^\s*(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d+)Z")
 FRAME_RE = re.compile(
     r"pipeline_frame_complete, session_id: (\d+), capture_id: (\d+), "
     r"capture_ms: (\d+), ocr_ms: (\d+), model_ms: (\d+), overlay_ms: (\d+), total_ms: (\d+)"
