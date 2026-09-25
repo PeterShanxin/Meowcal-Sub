@@ -76,20 +76,20 @@ async fn legacy_copy_is_verified_independent_and_preserves_source() {
     let target = root.join("core").join("asset.bin");
     std::fs::write(&source, b"asset").unwrap();
     let hash = crate::sha256::encode_hex(&Sha256::digest(b"asset").into());
-    copy_verified_source(&source, &target, 5, &hash)
+    promote_import(&source, &target, 5, &hash, false)
         .await
         .unwrap();
     assert_eq!(std::fs::read(&target).unwrap(), b"asset");
     std::fs::write(&source, b"other").unwrap();
     assert_eq!(std::fs::read(&target).unwrap(), b"asset");
     let refused = root.join("refused.bin");
-    assert!(copy_verified_source(&source, &refused, 5, &hash)
+    assert!(promote_import(&source, &refused, 5, &hash, false)
         .await
         .unwrap_err()
         .starts_with("CORE_IMPORT_CHANGED"));
     assert!(!refused.exists());
     std::fs::write(&refused, b"previous").unwrap();
-    assert!(copy_verified_source(&source, &refused, 5, &hash)
+    assert!(promote_import(&source, &refused, 5, &hash, false)
         .await
         .is_err());
     assert_eq!(std::fs::read(&refused).unwrap(), b"previous");

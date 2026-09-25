@@ -30,6 +30,7 @@ struct Session {
     gpu: bool,
     offline_scan: Option<tokio::task::JoinHandle<bool>>,
     inference: crate::inference_health::InferenceHealth,
+    reclaimed: bool,
 }
 
 #[derive(Default)]
@@ -170,7 +171,9 @@ impl Service {
                 "Core version does not match the consumer pin",
             ));
         }
-        if !matches!(hello.client.as_str(), "sub1" | "sub2") || hello.legacy_roots.len() > 8 {
+        if !crate::storage_partitions::CLIENTS.contains(&hello.client.as_str())
+            || hello.legacy_roots.len() > 8
+        {
             return Err(Error::new(
                 "INVALID_HELLO",
                 "Unsupported client or legacy root count",
@@ -179,7 +182,8 @@ impl Service {
         for root in &hello.legacy_roots {
             storage::validate_absolute(root)?;
         }
-        let root = storage::resolve_root(&hello.profile, hello.storage_root.as_deref())?;
+        let root =
+            storage::resolve_root(&hello.client, &hello.profile, hello.storage_root.as_deref())?;
         let manifest = EngineManifest::shipped().map_err(|error| Error::from(error.to_string()))?;
         let runtime = manifest
             .runtime_for_current_arch()
@@ -199,6 +203,7 @@ impl Service {
             gpu: false,
             offline_scan: None,
             inference: Default::default(),
+            reclaimed: false,
         });
         Ok(result)
     }
@@ -278,6 +283,12 @@ impl Session {
                 }
                 self.gpu = hy_mt_runtime::owned_acceleration() == Some("gpu");
                 self.endpoint = Some(endpoint);
+                if !std::mem::replace(&mut self.reclaimed, true) {
+                    let (paths, manifest) = (self.paths.clone(), self.manifest.clone());
+                    tokio::spawn(async move {
+                        crate::storage_reclaim::reclaim(&paths, &manifest).await
+                    });
+                }
                 Ok(())
             }
             Err(error) => {

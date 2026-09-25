@@ -136,7 +136,7 @@ async fn initialization_is_versioned_and_status_never_installs_or_starts() {
         .await
         .is_err());
     assert!(meowcal_core::hy_mt_runtime::owned_pid().is_none());
-    let root = resolve_root("development", Some(&base)).unwrap();
+    let root = resolve_root("sub1", "development", Some(&base)).unwrap();
     assert!(!root.join("runtime").exists());
     drop(service);
     std::fs::remove_dir_all(base).unwrap();
@@ -198,12 +198,19 @@ fn process_negotiates_and_exits_after_shutdown() {
 #[test]
 fn storage_profiles_and_versions_never_alias() {
     let base = temporary_root("paths");
-    let prod = resolve_root("production", Some(&base)).unwrap();
-    let dev = resolve_root("development", Some(&base)).unwrap();
+    let prod = resolve_root("sub1", "production", Some(&base)).unwrap();
+    let dev = resolve_root("sub1", "development", Some(&base)).unwrap();
+    let sub2 = resolve_root("sub2", "production", Some(&base)).unwrap();
     assert_ne!(prod, dev);
-    assert!(prod.starts_with(base.join("production").join(env!("CARGO_PKG_VERSION"))));
-    assert!(resolve_root("other", Some(&base)).is_err());
-    assert!(resolve_root("production", Some(std::path::Path::new("relative"))).is_err());
+    assert_ne!(prod, sub2);
+    assert!(prod.starts_with(
+        base.join("sub1")
+            .join("production")
+            .join(env!("CARGO_PKG_VERSION"))
+    ));
+    assert!(resolve_root("sub1", "other", Some(&base)).is_err());
+    assert!(resolve_root("sub3", "production", Some(&base)).is_err());
+    assert!(resolve_root("sub1", "production", Some(std::path::Path::new("relative"))).is_err());
 }
 
 #[cfg(windows)]
@@ -213,6 +220,7 @@ async fn offline_import_checks_disk_before_copy_and_never_adopts_dll_tree() {
     use meowcal_core::hy_mt_runtime::HyMtInstallPaths;
     use meowcal_core::sha256::encode_hex;
     use meowcal_core::storage::import_legacy;
+    use meowcal_core::storage_reclaim::same_file;
     use sha2::{Digest, Sha256};
     let base = temporary_root("migration");
     let mut manifest = EngineManifest::shipped().unwrap();
@@ -250,6 +258,7 @@ async fn offline_import_checks_disk_before_copy_and_never_adopts_dll_tree() {
     assert!(!target.executable.exists());
     assert!(source.executable.exists());
     assert!(source.model.exists());
+    assert!(!same_file(&source.model, &target.model).unwrap());
     std::fs::remove_file(&target.model).unwrap();
     std::fs::write(&source.model, b"wrong").unwrap();
     assert!(import_legacy(&target, &[source.root], &manifest, true)
@@ -260,10 +269,56 @@ async fn offline_import_checks_disk_before_copy_and_never_adopts_dll_tree() {
     std::fs::remove_dir_all(base).unwrap();
 }
 
+#[cfg(windows)]
+#[tokio::test]
+async fn import_from_another_core_partition_links_instead_of_copying() {
+    use meowcal_core::engine_manifest::EngineManifest;
+    use meowcal_core::hy_mt_runtime::HyMtInstallPaths;
+    use meowcal_core::sha256::encode_hex;
+    use meowcal_core::storage::import_legacy;
+    use meowcal_core::storage_reclaim::same_file;
+    use sha2::{Digest, Sha256};
+    let base = temporary_root("link");
+    let mut manifest = EngineManifest::shipped().unwrap();
+    for runtime in &mut manifest.runtimes {
+        runtime.archive.size_bytes = 7;
+        runtime.archive.sha256 = encode_hex(&Sha256::digest(b"archive").into());
+    }
+    manifest.model.artifact.size_bytes = 5;
+    manifest.model.artifact.sha256 = encode_hex(&Sha256::digest(b"model").into());
+    manifest.requirements.minimum_windows_build = 0;
+    manifest.requirements.minimum_ram_bytes = 0;
+    // A link needs no free space, so the copy-only disk requirement must not apply.
+    manifest.requirements.minimum_free_disk_bytes = u64::MAX;
+    let runtime = manifest.runtime_for_current_arch().unwrap();
+    let source = HyMtInstallPaths::from_cache_root(
+        base.join("production")
+            .join("0.1.3")
+            .join(std::env::consts::ARCH),
+        &manifest,
+        runtime,
+    );
+    let target = HyMtInstallPaths::from_cache_root(
+        resolve_root("sub1", "production", Some(&base)).unwrap(),
+        &manifest,
+        runtime,
+    );
+    std::fs::create_dir_all(source.runtime_archive.parent().unwrap()).unwrap();
+    std::fs::create_dir_all(&source.model_dir).unwrap();
+    std::fs::write(&source.runtime_archive, b"archive").unwrap();
+    std::fs::write(&source.model, b"model").unwrap();
+
+    import_legacy(&target, &[], &manifest, true).await.unwrap();
+
+    assert!(same_file(&source.model, &target.model).unwrap());
+    assert!(same_file(&source.runtime_archive, &target.runtime_archive).unwrap());
+    std::fs::remove_dir_all(base).unwrap();
+}
+
 #[tokio::test]
 async fn eof_cancels_install_waiting_on_another_process_lease() {
     let base = temporary_root("disconnect");
-    let root = resolve_root("development", Some(&base)).unwrap();
+    let root = resolve_root("sub1", "development", Some(&base)).unwrap();
     let lease = Lease::acquire(&root, false, Duration::ZERO).await.unwrap();
     let mut child = Command::new(env!("CARGO_BIN_EXE_meowcal-core"))
         .stdin(Stdio::piped())
