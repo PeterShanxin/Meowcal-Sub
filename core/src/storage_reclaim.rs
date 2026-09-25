@@ -21,21 +21,17 @@ pub async fn reclaim(current: &HyMtInstallPaths, manifest: &EngineManifest) {
         .await
         .unwrap_or_default();
     let mut previous = None;
-    let mut stale = Vec::new();
     for partition in siblings.own {
-        if previous.is_none() && records_install(&partition).await {
-            previous = Some(partition);
-        } else {
-            stale.push(partition);
-        }
-    }
-    for stale in stale {
-        match remove_partition(&stale).await {
-            Ok(true) => tracing::info!("Removed Core partition {}", stale.display()),
-            Ok(false) => {}
-            Err(error) => {
-                tracing::warn!("Cannot remove Core partition {}: {error}", stale.display())
+        match retain_or_remove(&partition, previous.is_none()).await {
+            Ok(Retention::Kept) => previous = Some(partition),
+            Ok(Retention::Removed) => {
+                tracing::info!("Removed Core partition {}", partition.display())
             }
+            Ok(Retention::Busy) => {}
+            Err(error) => tracing::warn!(
+                "Cannot remove Core partition {}: {error}",
+                partition.display()
+            ),
         }
     }
     for partition in previous.into_iter().chain(siblings.shared) {
@@ -61,10 +57,21 @@ async fn exclusive_lease(root: &Path) -> Result<Option<Lease>, String> {
     }
 }
 
-async fn remove_partition(root: &Path) -> Result<bool, String> {
+enum Retention {
+    Kept,
+    Removed,
+    Busy,
+}
+
+/// Decides under the partition's exclusive lease, so an install finishing in
+/// another process cannot turn a partition complete after it was judged stale.
+async fn retain_or_remove(root: &Path, keep_if_complete: bool) -> Result<Retention, String> {
     let Some(lease) = exclusive_lease(root).await? else {
-        return Ok(false);
+        return Ok(Retention::Busy);
     };
+    if keep_if_complete && records_install(root).await {
+        return Ok(Retention::Kept);
+    }
     let contents = root.to_owned();
     tokio::task::spawn_blocking(move || remove_contents_except_lock(&contents))
         .await
@@ -81,7 +88,7 @@ async fn remove_partition(root: &Path) -> Result<bool, String> {
     if let Some(version_dir) = root.parent() {
         let _ = tokio::fs::remove_dir(version_dir).await;
     }
-    Ok(true)
+    Ok(Retention::Removed)
 }
 
 fn remove_contents_except_lock(root: &Path) -> std::io::Result<()> {
