@@ -20,17 +20,18 @@ fn decode_png(data_url: &str) -> (Vec<u8>, u32, u32) {
 }
 
 /// The capture backends hand back BGRA to match the Windows APIs; a PNG that
-/// keeps that order renders with red and blue swapped.
+/// keeps that order renders with red and blue swapped. The alpha byte is
+/// dropped, so a GDI frame that leaves it zero still paints opaque.
 #[test]
-fn bgra_capture_bytes_are_written_as_rgba() {
-    // One opaque red pixel and one opaque blue pixel, in BGRA.
-    let capture = CaptureResult::new(vec![0, 0, 255, 255, 255, 0, 0, 255], 2, 1);
+fn bgra_capture_bytes_are_written_as_opaque_rgb() {
+    // A red pixel with alpha 255 and a blue pixel with alpha 0, in BGRA.
+    let capture = CaptureResult::new(vec![0, 0, 255, 255, 255, 0, 0, 0], 2, 1);
 
     let snapshot = encode_snapshot(capture, 2, 1).expect("encode");
     let (pixels, width, height) = decode_png(&snapshot.data_url);
 
     assert_eq!((width, height), (2, 1));
-    assert_eq!(pixels, vec![255, 0, 0, 255, 0, 0, 255, 255]);
+    assert_eq!(pixels, vec![255, 0, 0, 0, 0, 255]);
 }
 
 #[test]

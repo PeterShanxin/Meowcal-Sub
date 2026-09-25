@@ -165,12 +165,11 @@ fn encode_snapshot(
 ) -> Result<SelectorSnapshot, String> {
     use base64::Engine;
 
-    // Convert BGRA -> RGBA (swap red/blue channels).
-    // Our capture backends return BGRA to match Windows APIs.
-    let mut rgba = capture.data;
-    for px in rgba.as_chunks_mut::<4>().0 {
-        px.swap(0, 2);
-    }
+    // The capture backends return BGRA to match the Windows APIs. The snapshot
+    // is written as opaque RGB: a screenshot has nothing behind it to show
+    // through, GDI does not fill the alpha byte, and a quarter fewer bytes
+    // shortens both encoding and the webview's decode.
+    let rgb = bgra_to_rgb(capture.data);
 
     // Encode to PNG. The selector window is shown only after this returns, so
     // encoding time is added directly to the wait after "Select subtitle area".
@@ -180,7 +179,7 @@ fn encode_snapshot(
     let mut png_bytes = Vec::new();
     {
         let mut encoder = png::Encoder::new(&mut png_bytes, capture.width, capture.height);
-        encoder.set_color(png::ColorType::Rgba);
+        encoder.set_color(png::ColorType::Rgb);
         encoder.set_depth(png::BitDepth::Eight);
         encoder.set_compression(png::Compression::Fast);
 
@@ -189,7 +188,7 @@ fn encode_snapshot(
             .map_err(|e| format!("PNG header write failed: {}", e))?;
 
         writer
-            .write_image_data(&rgba)
+            .write_image_data(&rgb)
             .map_err(|e| format!("PNG encoding failed: {}", e))?;
     }
 
@@ -201,6 +200,18 @@ fn encode_snapshot(
         width,
         height,
     })
+}
+
+/// Repack BGRA pixels as RGB in place. Each pixel's write position is at or
+/// before its read position, so no source byte is overwritten before it is read.
+fn bgra_to_rgb(mut pixels: Vec<u8>) -> Vec<u8> {
+    let count = pixels.len() / 4;
+    for i in 0..count {
+        let (b, g, r) = (pixels[i * 4], pixels[i * 4 + 1], pixels[i * 4 + 2]);
+        pixels[i * 3..i * 3 + 3].copy_from_slice(&[r, g, b]);
+    }
+    pixels.truncate(count * 3);
+    pixels
 }
 
 /// The most recent selector background snapshot, if one is held.
