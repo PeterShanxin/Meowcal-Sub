@@ -53,11 +53,11 @@ export class AppController {
   private publish(patch: Partial<UiSnapshot>): void {
     if (this.disposed) return;
     this.snapshot = { ...this.snapshot, ...patch };
-    if (patch.notice) this.expireNotice(patch.notice);
+    if (patch.notice && this.snapshot.busy === "idle") this.expireNotice(patch.notice);
     this.subscriber(this.snapshot);
   }
 
-  /** Notices confirm something that already happened; errors stay until dismissed. */
+  /** Notices expire once the work they describe is done; errors stay until dismissed. */
   private expireNotice(notice: string): void {
     if (this.noticeTimer !== null) window.clearTimeout(this.noticeTimer);
     this.noticeTimer = window.setTimeout(() => {
@@ -201,7 +201,7 @@ export class AppController {
         notice: "OCR check complete",
       });
     } catch (error) {
-      this.publish({ busy: "idle", error: errorMessage(error) });
+      this.publish({ busy: "idle", notice: null, error: errorMessage(error) });
     }
   }
 
@@ -354,7 +354,7 @@ export class AppController {
       const latency = result.latencyMs ? ` · ${result.latencyMs} ms` : "";
       this.publish({ busy: "idle", notice: `Sample passed${latency}` });
     } catch (error) {
-      this.publish({ busy: "idle", error: errorMessage(error) });
+      this.publish({ busy: "idle", notice: null, error: errorMessage(error) });
     }
   }
 

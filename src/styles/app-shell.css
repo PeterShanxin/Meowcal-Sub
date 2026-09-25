@@ -248,6 +248,10 @@ meowcal-setup {
   color: var(--success);
 }
 
+.toast.notice > .icon.spin {
+  color: var(--text-2);
+}
+
 .toast-dismiss {
   display: grid;
   flex: none;

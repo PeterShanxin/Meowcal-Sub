@@ -742,3 +742,58 @@ describe("AppController area selection", () => {
     controller.dispose();
   });
 });
+
+describe("AppController progress messages", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  it("keeps the progress message for a slow sample translation until it finishes", async () => {
+    const invoke = vi.fn(async (command: string) => {
+      if (command === "refresh_engine_status") return { phase: "ready" };
+      if (command === "wizard_test_translation") {
+        await new Promise((resolve) => setTimeout(resolve, 9000));
+        return { translatedText: "sample" };
+      }
+      return undefined;
+    });
+    const { controller } = createController(invoke as TauriBridgeApi["invoke"]);
+
+    const running = controller.testTranslation();
+    await vi.advanceTimersByTimeAsync(6000);
+
+    expect(controller.current()).toMatchObject({
+      busy: "saving",
+      notice: "Running a private sample translation…",
+    });
+
+    await vi.advanceTimersByTimeAsync(3000);
+    await running;
+
+    expect(controller.current()).toMatchObject({ busy: "idle", notice: "Sample passed" });
+    controller.dispose();
+  });
+
+  it("drops the progress message when the sample translation fails", async () => {
+    const invoke = vi.fn(async (command: string) => {
+      if (command === "refresh_engine_status") return { phase: "ready" };
+      throw new Error("ENGINE_SAMPLE_TRANSLATION_FAILED");
+    });
+    const { controller } = createController(invoke as TauriBridgeApi["invoke"]);
+
+    await controller.testTranslation();
+
+    expect(controller.current()).toMatchObject({
+      busy: "idle",
+      notice: null,
+      error: "ENGINE_SAMPLE_TRANSLATION_FAILED",
+    });
+    controller.dispose();
+  });
+});

@@ -123,9 +123,12 @@ export class MeowcalApp extends LitElement {
     const message: MessagePresentation = error
       ? describeError(error)
       : { text: notice ?? "", action: null };
+    // A notice published while work is still running describes that work.
+    const working = !error && this.snapshot.busy !== "idle";
+    const glyph = error ? icon("alert") : working ? icon("spinner", "spin") : icon("check-circle");
     return html`
       <div class=${error ? "toast error" : "toast notice"} role=${error ? "alert" : "status"}>
-        ${icon(error ? "alert" : "check-circle")}
+        ${glyph}
         <span class="toast-message">${message.text}</span>
         ${
           message.action
