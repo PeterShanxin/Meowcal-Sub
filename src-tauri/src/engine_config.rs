@@ -68,7 +68,14 @@ pub(crate) fn core_storage_base(root: &Path) -> Option<&Path> {
     if !matches!(profile.file_name()?.to_str()?, "production" | "development") {
         return None;
     }
-    profile.parent()
+    let parent = profile.parent()?;
+    // Partitions from before Core storage had a client level sit directly under the base.
+    let client = parent.file_name().and_then(|name| name.to_str());
+    if client.is_some_and(|client| meowcal_core::storage_partitions::CLIENTS.contains(&client)) {
+        parent.parent()
+    } else {
+        Some(parent)
+    }
 }
 
 #[cfg(test)]
@@ -105,6 +112,16 @@ mod tests {
         assert_eq!(
             config.managed_cache_root(),
             Some(PathBuf::from(r"F:\shared"))
+        );
+
+        let runtime = config.managed_runtime.as_mut().unwrap();
+        runtime.executable_path =
+            r"G:\shared\sub1\production\0.1.4\x86_64\runtime\server.exe".to_string();
+        runtime.model_path =
+            r"G:\shared\sub1\production\0.1.4\x86_64\models\model.gguf".to_string();
+        assert_eq!(
+            config.managed_cache_root(),
+            Some(PathBuf::from(r"G:\shared"))
         );
     }
 
