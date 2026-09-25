@@ -1,0 +1,104 @@
+{
+  "runs": 10,
+  "p50": {
+    "domContentLoadedMs": 57.29999999993015,
+    "fcpMs": 116,
+    "lcpMs": 116,
+    "startButtonMs": 127.29999999993015,
+    "loadMs": 73.20000000006985,
+    "longTaskTotalMs": 0,
+    "transferBytes": 83658
+  },
+  "samples": [
+    {
+      "domContentLoadedMs": 67,
+      "loadMs": 84.30000000004657,
+      "fcpMs": null,
+      "lcpMs": 0,
+      "startButtonMs": 134.30000000004657,
+      "longTasks": [],
+      "transferBytes": 83658
+    },
+    {
+      "domContentLoadedMs": 59.800000000046566,
+      "loadMs": 73.20000000006985,
+      "fcpMs": 104,
+      "lcpMs": 104,
+      "startButtonMs": 120.90000000002328,
+      "longTasks": [],
+      "transferBytes": 83658
+    },
+    {
+      "domContentLoadedMs": 44.40000000002328,
+      "loadMs": 60.20000000006985,
+      "fcpMs": 116,
+      "lcpMs": 116,
+      "startButtonMs": 113.30000000004657,
+      "longTasks": [],
+      "transferBytes": 83658
+    },
+    {
+      "domContentLoadedMs": 62.39999999990687,
+      "loadMs": 80.59999999997672,
+      "fcpMs": 136,
+      "lcpMs": 136,
+      "startButtonMs": 140.39999999990687,
+      "longTasks": [],
+      "transferBytes": 83658
+    },
+    {
+      "domContentLoadedMs": 50.40000000002328,
+      "loadMs": 63.20000000006985,
+      "fcpMs": 104,
+      "lcpMs": 104,
+      "startButtonMs": 112.90000000002328,
+      "longTasks": [],
+      "transferBytes": 83658
+    },
+    {
+      "domContentLoadedMs": 54.5,
+      "loadMs": 74.5,
+      "fcpMs": 120,
+      "lcpMs": 120,
+      "startButtonMs": 129.30000000004657,
+      "longTasks": [],
+      "transferBytes": 83658
+    },
+    {
+      "domContentLoadedMs": 57.29999999993015,
+      "loadMs": 75.5,
+      "fcpMs": 120,
+      "lcpMs": 120,
+      "startButtonMs": 131.59999999997672,
+      "longTasks": [],
+      "transferBytes": 83658
+    },
+    {
+      "domContentLoadedMs": 57.59999999997672,
+      "loadMs": 70.90000000002328,
+      "fcpMs": 124,
+      "lcpMs": 124,
+      "startButtonMs": 127.29999999993015,
+      "longTasks": [],
+      "transferBytes": 83658
+    },
+    {
+      "domContentLoadedMs": 56.300000000046566,
+      "loadMs": 71,
+      "fcpMs": 108,
+      "lcpMs": 108,
+      "startButtonMs": 124.90000000002328,
+      "longTasks": [],
+      "transferBytes": 83658
+    },
+    {
+      "domContentLoadedMs": 54.59999999997672,
+      "loadMs": 67,
+      "fcpMs": 104,
+      "lcpMs": 104,
+      "startButtonMs": 118.59999999997672,
+      "longTasks": [],
+      "transferBytes": 83658
+    }
+  ]
+}

@@ -23,20 +23,22 @@ struct SelectorSnapshot {
 #[derive(Clone, Copy)]
 enum Variant {
     Baseline,
-    Png { rgb: bool, compression: png::Compression },
-    Jpeg { quality: u8 },
+    Png {
+        rgb: bool,
+        compression: png::Compression,
+    },
+    Jpeg {
+        quality: u8,
+    },
 }
 
 impl Variant {
     fn name(self) -> String {
         match self {
             Variant::Baseline => "baseline-rgba-balanced".into(),
-            Variant::Png { rgb, compression } => format!(
-                "{}-{:?}",
-                if rgb { "rgb" } else { "rgba" },
-                compression
-            )
-            .to_lowercase(),
+            Variant::Png { rgb, compression } => {
+                format!("{}-{:?}", if rgb { "rgb" } else { "rgba" }, compression).to_lowercase()
+            }
             Variant::Jpeg { quality } => format!("jpeg-q{quality}"),
         }
     }
@@ -60,17 +62,20 @@ fn encode_baseline(data: Vec<u8>, w: u32, h: u32) -> String {
     format!("data:image/png;base64,{}", b64)
 }
 
-fn bgra_to_rgb(data: &[u8]) -> Vec<u8> {
-    let mut rgb = Vec::with_capacity(data.len() / 4 * 3);
-    for px in data.as_chunks::<4>().0 {
-        rgb.extend_from_slice(&[px[2], px[1], px[0]]);
+/// Same body as `selector_window::bgra_to_rgb` on the candidate branch.
+fn bgra_to_rgb(mut pixels: Vec<u8>) -> Vec<u8> {
+    let count = pixels.len() / 4;
+    for i in 0..count {
+        let (b, g, r) = (pixels[i * 4], pixels[i * 4 + 1], pixels[i * 4 + 2]);
+        pixels[i * 3..i * 3 + 3].copy_from_slice(&[r, g, b]);
     }
-    rgb
+    pixels.truncate(count * 3);
+    pixels
 }
 
 fn encode_png(data: Vec<u8>, w: u32, h: u32, rgb: bool, compression: png::Compression) -> String {
     let (pixels, color) = if rgb {
-        (bgra_to_rgb(&data), png::ColorType::Rgb)
+        (bgra_to_rgb(data), png::ColorType::Rgb)
     } else {
         let mut rgba = data;
         for px in rgba.as_chunks_mut::<4>().0 {
@@ -92,7 +97,7 @@ fn encode_png(data: Vec<u8>, w: u32, h: u32, rgb: bool, compression: png::Compre
 }
 
 fn encode_jpeg(data: Vec<u8>, w: u32, h: u32, quality: u8) -> String {
-    let rgb = bgra_to_rgb(&data);
+    let rgb = bgra_to_rgb(data);
     let mut out = Vec::new();
     image::codecs::jpeg::JpegEncoder::new_with_quality(&mut out, quality)
         .encode(&rgb, w, h, image::ExtendedColorType::Rgb8)
@@ -112,8 +117,12 @@ fn encode(variant: Variant, data: Vec<u8>, w: u32, h: u32) -> String {
 /// Decode a PNG data URL back to RGB and compare with the source frame.
 fn png_is_lossless(data_url: &str, source_bgra: &[u8]) -> bool {
     let payload = data_url.split_once(',').unwrap().1;
-    let bytes = base64::engine::general_purpose::STANDARD.decode(payload).unwrap();
-    let mut reader = png::Decoder::new(std::io::Cursor::new(bytes)).read_info().unwrap();
+    let bytes = base64::engine::general_purpose::STANDARD
+        .decode(payload)
+        .unwrap();
+    let mut reader = png::Decoder::new(std::io::Cursor::new(bytes))
+        .read_info()
+        .unwrap();
     let mut buf = vec![0u8; reader.output_buffer_size().unwrap()];
     let info = reader.next_frame(&mut buf).unwrap();
     let channels = info.color_type.samples();
@@ -142,11 +151,26 @@ fn main() {
         serde_json::from_slice(&std::fs::read(dir.join("fixtures.json")).unwrap()).unwrap();
     let variants = [
         Variant::Baseline,
-        Variant::Png { rgb: false, compression: png::Compression::Fast },
-        Variant::Png { rgb: false, compression: png::Compression::Fastest },
-        Variant::Png { rgb: true, compression: png::Compression::Balanced },
-        Variant::Png { rgb: true, compression: png::Compression::Fast },
-        Variant::Png { rgb: true, compression: png::Compression::Fastest },
+        Variant::Png {
+            rgb: false,
+            compression: png::Compression::Fast,
+        },
+        Variant::Png {
+            rgb: false,
+            compression: png::Compression::Fastest,
+        },
+        Variant::Png {
+            rgb: true,
+            compression: png::Compression::Balanced,
+        },
+        Variant::Png {
+            rgb: true,
+            compression: png::Compression::Fast,
+        },
+        Variant::Png {
+            rgb: true,
+            compression: png::Compression::Fastest,
+        },
         Variant::Jpeg { quality: 85 },
     ];
     let only: Option<Vec<String>> = std::env::var("VARIANTS")
@@ -175,7 +199,11 @@ fn main() {
                 let t0 = Instant::now();
                 let data_url = encode(variant, frame, w, h);
                 let t1 = Instant::now();
-                let snapshot = SelectorSnapshot { data_url, width: w as i32, height: h as i32 };
+                let snapshot = SelectorSnapshot {
+                    data_url,
+                    width: w as i32,
+                    height: h as i32,
+                };
                 let json = serde_json::to_string(&snapshot).unwrap();
                 let t2 = Instant::now();
                 std::hint::black_box(&json);
@@ -189,10 +217,17 @@ fn main() {
                 Variant::Jpeg { .. } => false,
                 _ => png_is_lossless(&last, &source),
             };
-            let out_file = dir.join("out").join(format!("{name}.{}.json", variant.name()));
+            let out_file = dir
+                .join("out")
+                .join(format!("{name}.{}.json", variant.name()));
             std::fs::write(
                 &out_file,
-                serde_json::to_string(&SelectorSnapshot { data_url: last.clone(), width: w as i32, height: h as i32 }).unwrap(),
+                serde_json::to_string(&SelectorSnapshot {
+                    data_url: last.clone(),
+                    width: w as i32,
+                    height: h as i32,
+                })
+                .unwrap(),
             )
             .unwrap();
             let e = stats(encode_ms);

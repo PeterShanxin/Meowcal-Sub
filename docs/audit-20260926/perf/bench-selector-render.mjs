@@ -22,7 +22,12 @@ const resultsPath = process.argv[3] ?? join(here, "results/selector-render.json"
 const variants = (process.argv[4] ?? "baseline-rgba-balanced,rgb-fast,jpeg-q85").split(",");
 const fixtures = JSON.parse(readFileSync(join(here, "fixtures/fixtures.json"), "utf8"));
 
-const types = { ".html": "text/html", ".js": "text/javascript", ".css": "text/css", ".png": "image/png" };
+const types = {
+  ".html": "text/html",
+  ".js": "text/javascript",
+  ".css": "text/css",
+  ".png": "image/png",
+};
 let payload = "";
 const server = createServer((req, res) => {
   if (req.url === "/__snapshot") {
@@ -99,7 +104,13 @@ for (const fixture of fixtures) {
     console.error(
       `${fixture.name.padEnd(24)} ${variant.padEnd(24)} parse p50 ${median(parse).toFixed(1).padStart(7)} ms  decode+paint p50 ${median(paint).toFixed(1).padStart(7)} ms  total p50 ${median(total).toFixed(1).padStart(7)} ms  (${samples[0].naturalWidth}px)`,
     );
-    results.push({ fixture: fixture.name, variant, payloadBytes: payload.length, samples, p50: { parseMs: median(parse), decodePaintMs: median(paint), totalMs: median(total) } });
+    results.push({
+      fixture: fixture.name,
+      variant,
+      payloadBytes: payload.length,
+      samples,
+      p50: { parseMs: median(parse), decodePaintMs: median(paint), totalMs: median(total) },
+    });
   }
 }
 await browser.close();
