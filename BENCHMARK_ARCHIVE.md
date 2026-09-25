@@ -146,8 +146,20 @@ The historical architecture document says evaluation reports omit translated
 text. This experimental harness captures outputs for review, so that statement
 does not describe these reports. Treat them as private, as described above.
 
-Only safe aggregate data is included. Privacy-sensitive extraction/review
-scripts and raw artifacts are retained locally rather than published.
+Only safe aggregate data is included. The privacy-sensitive extraction and
+review scripts (`extract-sessions.ps1`, `build-session-datasets.ps1`,
+`make-review-pack.ps1`, `slice-blind-pack.ps1`, `score-review.ps1`) and the raw
+artifacts (`eval-results/`, including the session datasets and per-case
+outputs) are not published. They are stored privately in the owner's Google
+Drive:
+
+- File: `My Drive/Meowcal-Sub-archive/hy-mt2-benchmark-2026-08-08-private.zip`
+  (https://drive.google.com/file/d/1_Kc-lzHWkFcOKc6M07QXn-fG4iq4h8sx/view)
+- Size: 2,250,122 bytes
+- SHA-256: `2fc22855f0fef4fad1e80266f61f754632f668c2bebdc620a3f508692164af93`
+
+The zip also holds the working copies of the scripts and plans on this branch,
+as they stood on 2026-08-09.
 
 ## Validation scope
 
