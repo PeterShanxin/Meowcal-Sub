@@ -168,6 +168,20 @@ pub async fn recover_active(root: &Path) -> Option<HyMtInstallPaths> {
     fallback.paths(root).ok()
 }
 
+/// Whether `root` holds a completed install: its state records an active engine
+/// whose files are present at their recorded sizes. Sizes only, so a caller can
+/// ask about many partitions without hashing each model.
+pub async fn records_install(root: &Path) -> bool {
+    let Some(active) = load_state(root).await.ok().and_then(|state| state.active) else {
+        return false;
+    };
+    let Ok(paths) = active.paths(root) else {
+        return false;
+    };
+    let sized = |path: &Path, size: u64| path.metadata().is_ok_and(|file| file.len() == size);
+    sized(&paths.executable, active.executable_size) && sized(&paths.model, active.model_size)
+}
+
 async fn recover_interrupted_promotion(final_path: &Path) -> Result<(), String> {
     let backup = backup_path(final_path);
     if !backup.exists() {

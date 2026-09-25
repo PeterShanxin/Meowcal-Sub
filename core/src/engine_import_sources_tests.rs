@@ -18,13 +18,19 @@ fn offline_assets_are_found_in_a_previous_core_install() {
     )
     .unwrap();
     let runtime = manifest.runtime_for_current_arch().unwrap();
-    let partition = |version: &str| {
-        root.join("production")
-            .join(version)
+    let partition = |layout: &[&str]| {
+        layout
+            .iter()
+            .fold(root.clone(), |path, part| path.join(part))
             .join(std::env::consts::ARCH)
     };
-    let current = HyMtInstallPaths::from_cache_root(partition("0.1.2"), &manifest, runtime);
-    let previous = HyMtInstallPaths::from_cache_root(partition("0.1.1"), &manifest, runtime);
+    let current = HyMtInstallPaths::from_cache_root(
+        partition(&["sub1", "production", "0.1.4"]),
+        &manifest,
+        runtime,
+    );
+    let previous =
+        HyMtInstallPaths::from_cache_root(partition(&["production", "0.1.3"]), &manifest, runtime);
     // The application passes the shared storage base, not the old partition.
     let roots = vec![root.clone()];
 

@@ -19,4 +19,6 @@ pub mod protocol;
 pub mod service;
 pub mod sha256;
 pub mod storage;
+pub mod storage_partitions;
+pub mod storage_reclaim;
 pub mod windowless_command;

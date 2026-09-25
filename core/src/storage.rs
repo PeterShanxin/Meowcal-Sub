@@ -1,14 +1,18 @@
 use crate::engine_artifact_io::file_matches;
-use crate::engine_import_sources::import_candidates;
+use crate::engine_import_sources::{import_candidates, link_candidate, promote_import};
 use crate::engine_manifest::EngineManifest;
 use crate::hy_mt_runtime::HyMtInstallPaths;
 use crate::protocol::CORE_VERSION;
+use crate::storage_partitions::CLIENTS;
 use fs2::FileExt;
 use std::fs::{File, OpenOptions};
 use std::path::{Component, Path, PathBuf};
 use std::time::Duration;
 
-pub fn resolve_root(profile: &str, base: Option<&Path>) -> Result<PathBuf, String> {
+pub fn resolve_root(client: &str, profile: &str, base: Option<&Path>) -> Result<PathBuf, String> {
+    if !CLIENTS.contains(&client) {
+        return Err("INVALID_CLIENT".into());
+    }
     if !matches!(profile, "production" | "development") {
         return Err("INVALID_PROFILE".into());
     }
@@ -20,6 +24,7 @@ pub fn resolve_root(profile: &str, base: Option<&Path>) -> Result<PathBuf, Strin
     };
     validate_absolute(&base)?;
     Ok(base
+        .join(client)
         .join(profile)
         .join(CORE_VERSION)
         .join(std::env::consts::ARCH))
@@ -245,26 +250,45 @@ pub async fn import_legacy(
     };
     let mut archive = None;
     let mut model = None;
+    // Another Core's reclaim removes a partition only under its exclusive
+    // lease, so a shared lease keeps each chosen source in place until staged.
+    let mut source_leases = Vec::new();
     for candidate in candidates {
+        let lease = if candidate.core_owned && candidate.paths.root != paths.root {
+            match Lease::acquire(&candidate.paths.root, false, Duration::ZERO).await {
+                Ok(lease) => Some(lease),
+                Err(error) if error.starts_with("CORE_ASSETS_BUSY") => continue,
+                Err(error) => return Err(error),
+            }
+        } else {
+            None
+        };
+        let selected = (archive.is_some(), model.is_some());
         if archive.is_none()
             && file_matches(
-                &candidate.runtime_archive,
+                &candidate.paths.runtime_archive,
                 runtime.archive.size_bytes,
                 &runtime.archive.sha256,
             )
             .await?
         {
-            archive = Some(candidate.runtime_archive);
+            archive = Some((
+                candidate.paths.runtime_archive.clone(),
+                candidate.core_owned,
+            ));
         }
         if model.is_none()
             && file_matches(
-                &candidate.model,
+                &candidate.paths.model,
                 manifest.model.artifact.size_bytes,
                 &manifest.model.artifact.sha256,
             )
             .await?
         {
-            model = Some(candidate.model);
+            model = Some((candidate.paths.model, candidate.core_owned));
+        }
+        if (archive.is_some(), model.is_some()) != selected {
+            source_leases.extend(lease);
         }
         if archive.is_some() && model.is_some() {
             break;
@@ -273,30 +297,35 @@ pub async fn import_legacy(
     if require_complete && (archive.is_none() || model.is_none()) {
         return Err("CORE_ASSETS_UNVERIFIED: verified local archive and model are required; run install or repair".into());
     }
-    let copying = archive
-        .as_ref()
-        .is_some_and(|source| source != &paths.runtime_archive)
-        || model.as_ref().is_some_and(|source| source != &paths.model);
-    if copying {
-        crate::engine_preflight::run(&paths.root, &manifest.requirements, true).await?;
-    }
-    if let Some(source) = archive {
-        copy_verified_source(
-            &source,
-            &paths.runtime_archive,
-            runtime.archive.size_bytes,
-            &runtime.archive.sha256,
-        )
-        .await?;
-    }
-    if let Some(source) = model {
-        copy_verified_source(
-            &source,
-            &paths.model,
-            manifest.model.artifact.size_bytes,
-            &manifest.model.artifact.sha256,
-        )
-        .await?;
+    let imports = [
+        archive.map(|source| {
+            (
+                source,
+                &paths.runtime_archive,
+                runtime.archive.size_bytes,
+                &runtime.archive.sha256,
+            )
+        }),
+        model.map(|source| {
+            (
+                source,
+                &paths.model,
+                manifest.model.artifact.size_bytes,
+                &manifest.model.artifact.sha256,
+            )
+        }),
+    ];
+    let mut disk_checked = false;
+    for ((source, core_owned), target, size, hash) in imports.into_iter().flatten() {
+        if source == *target {
+            continue;
+        }
+        let linked = core_owned && link_candidate(&source, target).await;
+        if !linked && !disk_checked {
+            crate::engine_preflight::run(&paths.root, &manifest.requirements, true).await?;
+            disk_checked = true;
+        }
+        promote_import(&source, target, size, hash, linked).await?;
     }
     Ok(())
 }
@@ -318,39 +347,6 @@ async fn cleanup_staging(paths: &HyMtInstallPaths) -> Result<(), String> {
         crate::engine_install_transaction::reset_candidate(&path).await?;
     }
     Ok(())
-}
-
-async fn copy_verified_source(
-    source: &Path,
-    target: &Path,
-    size: u64,
-    hash: &str,
-) -> Result<(), String> {
-    // Selection has already verified source. Verify the copied bytes instead
-    // of reading the same source twice; this also detects a changed source.
-    if source == target {
-        return Ok(());
-    }
-    let parent = target.parent().ok_or("CORE_IMPORT_PARENT")?;
-    tokio::fs::create_dir_all(parent)
-        .await
-        .map_err(|error| format!("CORE_IMPORT_DIR: {error}"))?;
-    let candidate = target.with_extension("import-part");
-    tokio::fs::copy(source, &candidate)
-        .await
-        .map_err(|error| format!("CORE_IMPORT_COPY: {error}"))?;
-    if !file_matches(&candidate, size, hash).await? {
-        let _ = tokio::fs::remove_file(&candidate).await;
-        return Err("CORE_IMPORT_CHANGED: source changed while copying".into());
-    }
-    if target.exists() {
-        tokio::fs::remove_file(target)
-            .await
-            .map_err(|error| format!("CORE_IMPORT_REPLACE: {error}"))?;
-    }
-    tokio::fs::rename(candidate, target)
-        .await
-        .map_err(|error| format!("CORE_IMPORT_PROMOTE: {error}"))
 }
 
 #[cfg(test)]

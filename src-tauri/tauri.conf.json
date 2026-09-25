@@ -127,6 +127,7 @@
         "headerImage": null,
         "sidebarImage": null,
         "installMode": "currentUser",
+        "installerHooks": "./windows/hooks.nsh",
         "languages": ["English"],
         "displayLanguageSelector": false
       }
