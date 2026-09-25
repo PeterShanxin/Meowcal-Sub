@@ -61,12 +61,11 @@ the message contract; semantic versions describe the implementation. A new Core
 release does not silently opt either consumer into changed behavior. Updating a
 pin requires that consumer's contract and integration tests.
 
-Shared data is partitioned by profile, Core version, and architecture under
-`%LOCALAPPDATA%/Meowcal/Core`. A custom storage base retains those partitions.
-Installation takes an exclusive cross-process lock; running engines retain a
-read lease. One process cannot repair files that another process is executing.
-Older version directories are retained for rollback; neither application
-automatically removes another version or rewrites another application's pin.
+[ADR-0005](0005-client-partitioned-core-storage.md) replaces this section's
+storage layout and retention rules. Installation takes an exclusive
+cross-process lock; running engines retain a read lease. One process cannot
+repair files that another process is executing. Neither application rewrites
+another application's pin.
 
 Migration accepts explicit legacy installation candidates. Only verified
 artifacts are copied into Core-owned storage. Runtime archives are re-extracted
@@ -94,10 +93,9 @@ Core and license material, not the downloaded HY-MT weights.
 ## Consequences
 
 Stable infrastructure has one implementation and one verification suite across
-Rust and Python. Version isolation costs additional disk space; separate
-application-owned inference processes may each load the model. Sharing model
-residency would require a broker, leases, quotas, and crash recovery across
-applications, and is outside this decision.
+Rust and Python. Separate application-owned inference processes may each load
+the model. Sharing model residency would require a broker, leases, quotas, and
+crash recovery across applications, and is outside this decision.
 
 Preserving product preprocessing and translation policies avoids changing
 recognition or translation quality as a side effect of extraction. Future policy

@@ -47,10 +47,13 @@ its capture and preprocessing pipeline, including Sub 1's frame budgets and
 line geometry and Sub 2's corroborated white-text pass. Core does not select a
 subtitle band, match a subtitle file, or decide which text belongs on screen.
 
-Core storage is partitioned by profile, version, and architecture. Cross-process
-leases prevent installation from replacing files in use. Legacy import copies
-verified archives and models; it leaves the previous application installation
-available for rollback. Neither application's update changes the other's pin.
+Core storage is partitioned by client, profile, version, and architecture
+([ADR-0005](adr/0005-client-partitioned-core-storage.md)). Cross-process leases
+prevent installation from replacing files in use. Other Core partitions supply
+verified assets as hard links; legacy import copies, leaving the previous
+application installation available for rollback. `core/src/storage_reclaim.rs`
+removes a client's stale versions and links identical models. Neither
+application's update changes the other's pin.
 
 ## Live pipeline
 

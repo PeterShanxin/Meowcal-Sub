@@ -40,9 +40,9 @@ The first request pins the exact Core version `X.Y.Z` and the client profile:
 }
 ```
 
-Optional `storageRoot` is an absolute storage base. Core appends profile, version,
-and architecture. Optional `legacyRoots` lists up to eight absolute import roots.
-Neither field authorizes running an arbitrary executable or changing artifact
+Optional `storageRoot` is an absolute storage base. Core appends client, profile,
+version, and architecture. Optional `legacyRoots` lists up to eight absolute
+import roots. Neither field authorizes running an arbitrary executable or changing artifact
 metadata.
 
 Replies are `{"id":1,"result":{...}}` or
@@ -137,10 +137,13 @@ assets. Remote manifest refresh is disabled. Its schema retains the historical
 the Core API/version negotiation contract.
 
 Core storage defaults to
-`%LOCALAPPDATA%/Meowcal/Core/<profile>/<version>/<architecture>`. Running engines
-hold shared leases; install/repair requires exclusive access. Legacy migration
-copies verified archives and models and reconstructs the runtime tree. Old
-application installations and older Core versions are retained for rollback.
+`%LOCALAPPDATA%/Meowcal/Core/<client>/<profile>/<version>/<architecture>`. Running
+engines hold shared leases; install/repair requires exclusive access. Assets
+from other Core partitions are imported as hard links; legacy migration copies
+verified archives and models. Both reconstruct the runtime tree. Once ready,
+Core keeps its client's newest older version for rollback, removes the rest, and
+links identical models in other partitions to its own. Old application
+installations are left in place.
 
 Applications pin an exact version and archive digest. A new release cannot
 silently replace another application's selected version. Runtime archives use
@@ -148,5 +151,6 @@ silently replace another application's selected version. Runtime archives use
 tags. Core releases do not update the application's `latest.json`.
 
 See [ADR-0004](../docs/adr/0004-versioned-meowcal-core.md) for ownership and
-distribution decisions. Native OCR, model inference, coexistence, migration,
+distribution decisions and [ADR-0005](../docs/adr/0005-client-partitioned-core-storage.md)
+for the storage layout. Native OCR, model inference, coexistence, migration,
 and rollback require real Windows verification in addition to contract tests.

@@ -76,6 +76,7 @@ exist for anyone who did not write it.
 | [0002](0002-shipped-engine-manifest-authenticity.md) | Accepted | Shipped engine manifest and application-release trust boundary |
 | [0003](0003-incremental-lit-frontend.md)             | Accepted | Incremental Vite, TypeScript, and Lit frontend architecture    |
 | [0004](0004-versioned-meowcal-core.md)               | Accepted | Independent, versioned Core runtime shared by Sub 1 and Sub 2  |
+| [0005](0005-client-partitioned-core-storage.md)      | Accepted | Client-partitioned Core storage sharing one model by hard link |
 
 ## Superseded direction
 
