@@ -1,0 +1,290 @@
+[
+  {
+    "dataUrlBytes": 5136634,
+    "encodeMs": {
+      "max": 1013.7975459999999,
+      "mean": 982.3806282000002,
+      "min": 963.732435,
+      "n": 15,
+      "p50": 977.021132,
+      "p95": 1005.8009830000001
+    },
+    "fixture": "fullscreen-video-1080p",
+    "height": 1080,
+    "jsonSerializeMs": {
+      "max": 9.985327,
+      "mean": 6.7704505333333325,
+      "min": 4.895189,
+      "n": 15,
+      "p50": 7.3117149999999995,
+      "p95": 8.508607
+    },
+    "lossless": true,
+    "variant": "baseline-rgba-balanced",
+    "width": 1920
+  },
+  {
+    "dataUrlBytes": 5089562,
+    "encodeMs": {
+      "max": 26.137137000000003,
+      "mean": 23.726590866666665,
+      "min": 22.776626,
+      "n": 15,
+      "p50": 23.640554,
+      "p95": 24.057833000000002
+    },
+    "fixture": "fullscreen-video-1080p",
+    "height": 1080,
+    "jsonSerializeMs": {
+      "max": 4.667464,
+      "mean": 4.527710933333333,
+      "min": 4.429022000000001,
+      "n": 15,
+      "p50": 4.5150049999999995,
+      "p95": 4.5989580000000005
+    },
+    "lossless": true,
+    "variant": "rgba-fast",
+    "width": 1920
+  },
+  {
+    "dataUrlBytes": 4423230,
+    "encodeMs": {
+      "max": 21.482995000000003,
+      "mean": 19.272544666666665,
+      "min": 18.212233,
+      "n": 15,
+      "p50": 19.03175,
+      "p95": 20.1679
+    },
+    "fixture": "fullscreen-video-1080p",
+    "height": 1080,
+    "jsonSerializeMs": {
+      "max": 4.262261,
+      "mean": 3.9339404000000004,
+      "min": 3.7911680000000003,
+      "n": 15,
+      "p50": 3.886987,
+      "p95": 4.232374
+    },
+    "lossless": true,
+    "variant": "rgb-fast",
+    "width": 1920
+  },
+  {
+    "dataUrlBytes": 5503090,
+    "encodeMs": {
+      "max": 975.1023210000001,
+      "mean": 874.5003842666666,
+      "min": 836.6951310000001,
+      "n": 15,
+      "p50": 859.2888810000001,
+      "p95": 969.502336
+    },
+    "fixture": "windowed-video-1440p",
+    "height": 1440,
+    "jsonSerializeMs": {
+      "max": 9.876025,
+      "mean": 5.422417733333333,
+      "min": 4.611714,
+      "n": 15,
+      "p50": 5.128826,
+      "p95": 6.159535
+    },
+    "lossless": true,
+    "variant": "baseline-rgba-balanced",
+    "width": 2560
+  },
+  {
+    "dataUrlBytes": 5498666,
+    "encodeMs": {
+      "max": 40.386371,
+      "mean": 35.93506353333334,
+      "min": 31.520723,
+      "n": 15,
+      "p50": 37.055605,
+      "p95": 39.285253
+    },
+    "fixture": "windowed-video-1440p",
+    "height": 1440,
+    "jsonSerializeMs": {
+      "max": 5.066989,
+      "mean": 4.582692866666666,
+      "min": 4.414836,
+      "n": 15,
+      "p50": 4.502821,
+      "p95": 4.865808
+    },
+    "lossless": true,
+    "variant": "rgba-fast",
+    "width": 2560
+  },
+  {
+    "dataUrlBytes": 4768046,
+    "encodeMs": {
+      "max": 33.517554999999994,
+      "mean": 29.7571658,
+      "min": 26.025071,
+      "n": 15,
+      "p50": 30.797736,
+      "p95": 32.847442
+    },
+    "fixture": "windowed-video-1440p",
+    "height": 1440,
+    "jsonSerializeMs": {
+      "max": 3.98004,
+      "mean": 3.8420148666666667,
+      "min": 3.755827,
+      "n": 15,
+      "p50": 3.824389,
+      "p95": 3.9519919999999997
+    },
+    "lossless": true,
+    "variant": "rgb-fast",
+    "width": 2560
+  },
+  {
+    "dataUrlBytes": 20244758,
+    "encodeMs": {
+      "max": 4101.708893999999,
+      "mean": 3917.0504200000005,
+      "min": 3811.3623,
+      "n": 15,
+      "p50": 3905.719056,
+      "p95": 3969.095279
+    },
+    "fixture": "fullscreen-video-4k",
+    "height": 2160,
+    "jsonSerializeMs": {
+      "max": 19.907237000000002,
+      "mean": 18.832150333333335,
+      "min": 17.852073,
+      "n": 15,
+      "p50": 18.747426,
+      "p95": 19.848028
+    },
+    "lossless": true,
+    "variant": "baseline-rgba-balanced",
+    "width": 3840
+  },
+  {
+    "dataUrlBytes": 20095358,
+    "encodeMs": {
+      "max": 144.308687,
+      "mean": 128.0344556,
+      "min": 115.18133399999999,
+      "n": 15,
+      "p50": 130.857427,
+      "p95": 143.147782
+    },
+    "fixture": "fullscreen-video-4k",
+    "height": 2160,
+    "jsonSerializeMs": {
+      "max": 24.180688999999997,
+      "mean": 21.40644213333333,
+      "min": 20.41878,
+      "n": 15,
+      "p50": 20.994507,
+      "p95": 24.134857999999998
+    },
+    "lossless": true,
+    "variant": "rgba-fast",
+    "width": 3840
+  },
+  {
+    "dataUrlBytes": 17470318,
+    "encodeMs": {
+      "max": 116.97766800000001,
+      "mean": 90.85958946666666,
+      "min": 80.107711,
+      "n": 15,
+      "p50": 86.432256,
+      "p95": 109.090577
+    },
+    "fixture": "fullscreen-video-4k",
+    "height": 2160,
+    "jsonSerializeMs": {
+      "max": 17.595,
+      "mean": 16.0434226,
+      "min": 14.074341,
+      "n": 15,
+      "p50": 16.199991,
+      "p95": 16.939785
+    },
+    "lossless": true,
+    "variant": "rgb-fast",
+    "width": 3840
+  },
+  {
+    "dataUrlBytes": 321134,
+    "encodeMs": {
+      "max": 91.994078,
+      "mean": 89.9359726,
+      "min": 88.117631,
+      "n": 15,
+      "p50": 89.878339,
+      "p95": 91.787349
+    },
+    "fixture": "flat-desktop-1080p",
+    "height": 1080,
+    "jsonSerializeMs": {
+      "max": 0.29329,
+      "mean": 0.25302946666666665,
+      "min": 0.223913,
+      "n": 15,
+      "p50": 0.243194,
+      "p95": 0.290112
+    },
+    "lossless": true,
+    "variant": "baseline-rgba-balanced",
+    "width": 1920
+  },
+  {
+    "dataUrlBytes": 665402,
+    "encodeMs": {
+      "max": 9.538711,
+      "mean": 8.993391733333334,
+      "min": 8.712312,
+      "n": 15,
+      "p50": 8.967019,
+      "p95": 9.200203
+    },
+    "fixture": "flat-desktop-1080p",
+    "height": 1080,
+    "jsonSerializeMs": {
+      "max": 0.690856,
+      "mean": 0.5440974666666667,
+      "min": 0.48868100000000003,
+      "n": 15,
+      "p50": 0.5314300000000001,
+      "p95": 0.604402
+    },
+    "lossless": true,
+    "variant": "rgba-fast",
+    "width": 1920
+  },
+  {
+    "dataUrlBytes": 560402,
+    "encodeMs": {
+      "max": 8.81119,
+      "mean": 8.6189522,
+      "min": 8.263107,
+      "n": 15,
+      "p50": 8.628268,
+      "p95": 8.748898
+    },
+    "fixture": "flat-desktop-1080p",
+    "height": 1080,
+    "jsonSerializeMs": {
+      "max": 0.478388,
+      "mean": 0.4550479333333332,
+      "min": 0.43118300000000004,
+      "n": 15,
+      "p50": 0.458355,
+      "p95": 0.47221799999999997
+    },
+    "lossless": true,
+    "variant": "rgb-fast",
+    "width": 1920
+  }
+]

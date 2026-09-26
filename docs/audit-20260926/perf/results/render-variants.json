@@ -1,0 +1,162 @@
+[
+  {
+    "fixture": "fullscreen-video-1080p",
+    "variant": "baseline-rgba-balanced",
+    "payloadBytes": 5136675,
+    "p50": {
+      "parseMs": 6.400000000023283,
+      "decodePaintMs": 275.79999999998836,
+      "totalMs": 282.1000000000349
+    }
+  },
+  {
+    "fixture": "fullscreen-video-1080p",
+    "variant": "rgb-fast",
+    "payloadBytes": 4423271,
+    "p50": {
+      "parseMs": 5.5,
+      "decodePaintMs": 200.70000000001164,
+      "totalMs": 206.20000000001164
+    }
+  },
+  {
+    "fixture": "fullscreen-video-1080p",
+    "variant": "rgb-fastest",
+    "payloadBytes": 4706951,
+    "p50": {
+      "parseMs": 6,
+      "decodePaintMs": 235.69999999995343,
+      "totalMs": 241.5
+    }
+  },
+  {
+    "fixture": "fullscreen-video-1080p",
+    "variant": "jpeg-q85",
+    "payloadBytes": 264028,
+    "p50": {
+      "parseMs": 0.3999999999650754,
+      "decodePaintMs": 89.19999999995343,
+      "totalMs": 89.79999999998836
+    }
+  },
+  {
+    "fixture": "windowed-video-1440p",
+    "variant": "baseline-rgba-balanced",
+    "payloadBytes": 5503131,
+    "p50": {
+      "parseMs": 8.599999999976717,
+      "decodePaintMs": 352.0999999999767,
+      "totalMs": 361.29999999998836
+    }
+  },
+  {
+    "fixture": "windowed-video-1440p",
+    "variant": "rgb-fast",
+    "payloadBytes": 4768087,
+    "p50": {
+      "parseMs": 6.399999999965075,
+      "decodePaintMs": 243.40000000002328,
+      "totalMs": 249.5
+    }
+  },
+  {
+    "fixture": "windowed-video-1440p",
+    "variant": "rgb-fastest",
+    "payloadBytes": 5128607,
+    "p50": {
+      "parseMs": 6.7999999999883585,
+      "decodePaintMs": 239.40000000002328,
+      "totalMs": 246
+    }
+  },
+  {
+    "fixture": "windowed-video-1440p",
+    "variant": "jpeg-q85",
+    "payloadBytes": 372336,
+    "p50": {
+      "parseMs": 0.9000000000232831,
+      "decodePaintMs": 67.79999999998836,
+      "totalMs": 68.5
+    }
+  },
+  {
+    "fixture": "fullscreen-video-4k",
+    "variant": "baseline-rgba-balanced",
+    "payloadBytes": 20244799,
+    "p50": {
+      "parseMs": 27,
+      "decodePaintMs": 1074.7000000000116,
+      "totalMs": 1101.2999999999884
+    }
+  },
+  {
+    "fixture": "fullscreen-video-4k",
+    "variant": "rgb-fast",
+    "payloadBytes": 17470359,
+    "p50": {
+      "parseMs": 24.400000000023283,
+      "decodePaintMs": 714.2999999999884,
+      "totalMs": 738.7000000000116
+    }
+  },
+  {
+    "fixture": "fullscreen-video-4k",
+    "variant": "rgb-fastest",
+    "payloadBytes": 18503399,
+    "p50": {
+      "parseMs": 25.599999999976717,
+      "decodePaintMs": 710.7999999999884,
+      "totalMs": 735.9000000000233
+    }
+  },
+  {
+    "fixture": "fullscreen-video-4k",
+    "variant": "jpeg-q85",
+    "payloadBytes": 1023752,
+    "p50": {
+      "parseMs": 1.2999999999883585,
+      "decodePaintMs": 139.39999999996508,
+      "totalMs": 143.39999999996508
+    }
+  },
+  {
+    "fixture": "flat-desktop-1080p",
+    "variant": "baseline-rgba-balanced",
+    "payloadBytes": 321175,
+    "p50": {
+      "parseMs": 0.40000000002328306,
+      "decodePaintMs": 75.29999999998836,
+      "totalMs": 75.59999999997672
+    }
+  },
+  {
+    "fixture": "flat-desktop-1080p",
+    "variant": "rgb-fast",
+    "payloadBytes": 560443,
+    "p50": {
+      "parseMs": 1,
+      "decodePaintMs": 83.59999999997672,
+      "totalMs": 84.69999999995343
+    }
+  },
+  {
+    "fixture": "flat-desktop-1080p",
+    "variant": "rgb-fastest",
+    "payloadBytes": 826403,
+    "p50": {
+      "parseMs": 1.1000000000349246,
+      "decodePaintMs": 86.40000000002328,
+      "totalMs": 87.70000000001164
+    }
+  },
+  {
+    "fixture": "flat-desktop-1080p",
+    "variant": "jpeg-q85",
+    "payloadBytes": 221324,
+    "p50": {
+      "parseMs": 0.40000000002328306,
+      "decodePaintMs": 62,
+      "totalMs": 62.70000000001164
+    }
+  }
+]

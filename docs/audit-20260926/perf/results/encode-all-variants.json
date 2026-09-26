@@ -1,0 +1,674 @@
+[
+  {
+    "dataUrlBytes": 5136634,
+    "encodeMs": {
+      "max": 1060.895,
+      "mean": 1006.1226413750001,
+      "min": 967.147892,
+      "n": 8,
+      "p50": 1006.138242,
+      "p95": 1060.895
+    },
+    "fixture": "fullscreen-video-1080p",
+    "height": 1080,
+    "jsonSerializeMs": {
+      "max": 11.098289000000001,
+      "mean": 6.671407250000001,
+      "min": 4.318394,
+      "n": 8,
+      "p50": 5.495558,
+      "p95": 11.098289000000001
+    },
+    "lossless": true,
+    "variant": "baseline-rgba-balanced",
+    "width": 1920
+  },
+  {
+    "dataUrlBytes": 5089562,
+    "encodeMs": {
+      "max": 25.264018999999998,
+      "mean": 23.787292375,
+      "min": 23.001572000000003,
+      "n": 8,
+      "p50": 23.561777999999997,
+      "p95": 25.264018999999998
+    },
+    "fixture": "fullscreen-video-1080p",
+    "height": 1080,
+    "jsonSerializeMs": {
+      "max": 5.579632,
+      "mean": 4.88870575,
+      "min": 4.5665569999999995,
+      "n": 8,
+      "p50": 4.8902529999999995,
+      "p95": 5.579632
+    },
+    "lossless": true,
+    "variant": "rgba-fast",
+    "width": 1920
+  },
+  {
+    "dataUrlBytes": 5382818,
+    "encodeMs": {
+      "max": 31.436613,
+      "mean": 20.3258905,
+      "min": 18.14852,
+      "n": 8,
+      "p50": 18.77662,
+      "p95": 31.436613
+    },
+    "fixture": "fullscreen-video-1080p",
+    "height": 1080,
+    "jsonSerializeMs": {
+      "max": 5.573105,
+      "mean": 4.913884125,
+      "min": 4.748617,
+      "n": 8,
+      "p50": 4.843603,
+      "p95": 5.573105
+    },
+    "lossless": true,
+    "variant": "rgba-fastest",
+    "width": 1920
+  },
+  {
+    "dataUrlBytes": 4445066,
+    "encodeMs": {
+      "max": 434.45041699999996,
+      "mean": 400.17616125,
+      "min": 382.793157,
+      "n": 8,
+      "p50": 402.701544,
+      "p95": 434.45041699999996
+    },
+    "fixture": "fullscreen-video-1080p",
+    "height": 1080,
+    "jsonSerializeMs": {
+      "max": 7.316508,
+      "mean": 5.008537875,
+      "min": 4.177205,
+      "n": 8,
+      "p50": 4.662846,
+      "p95": 7.316508
+    },
+    "lossless": true,
+    "variant": "rgb-balanced",
+    "width": 1920
+  },
+  {
+    "dataUrlBytes": 4423230,
+    "encodeMs": {
+      "max": 20.95741,
+      "mean": 20.677797875000003,
+      "min": 20.436421,
+      "n": 8,
+      "p50": 20.638918,
+      "p95": 20.95741
+    },
+    "fixture": "fullscreen-video-1080p",
+    "height": 1080,
+    "jsonSerializeMs": {
+      "max": 4.174842,
+      "mean": 3.9362005,
+      "min": 3.8210610000000003,
+      "n": 8,
+      "p50": 3.9099929999999996,
+      "p95": 4.174842
+    },
+    "lossless": true,
+    "variant": "rgb-fast",
+    "width": 1920
+  },
+  {
+    "dataUrlBytes": 4706910,
+    "encodeMs": {
+      "max": 20.409947000000003,
+      "mean": 18.302511250000002,
+      "min": 17.024059,
+      "n": 8,
+      "p50": 18.07814,
+      "p95": 20.409947000000003
+    },
+    "fixture": "fullscreen-video-1080p",
+    "height": 1080,
+    "jsonSerializeMs": {
+      "max": 4.581801,
+      "mean": 4.297033375,
+      "min": 4.1191889999999995,
+      "n": 8,
+      "p50": 4.313492,
+      "p95": 4.581801
+    },
+    "lossless": true,
+    "variant": "rgb-fastest",
+    "width": 1920
+  },
+  {
+    "dataUrlBytes": 263987,
+    "encodeMs": {
+      "max": 83.00126900000001,
+      "mean": 64.85488199999999,
+      "min": 55.599268,
+      "n": 8,
+      "p50": 65.164695,
+      "p95": 83.00126900000001
+    },
+    "fixture": "fullscreen-video-1080p",
+    "height": 1080,
+    "jsonSerializeMs": {
+      "max": 0.35935900000000004,
+      "mean": 0.23743262500000004,
+      "min": 0.207242,
+      "n": 8,
+      "p50": 0.22355000000000003,
+      "p95": 0.35935900000000004
+    },
+    "lossless": false,
+    "variant": "jpeg-q85",
+    "width": 1920
+  },
+  {
+    "dataUrlBytes": 5503090,
+    "encodeMs": {
+      "max": 862.964491,
+      "mean": 839.3233373749999,
+      "min": 817.539732,
+      "n": 8,
+      "p50": 846.916018,
+      "p95": 862.964491
+    },
+    "fixture": "windowed-video-1440p",
+    "height": 1440,
+    "jsonSerializeMs": {
+      "max": 5.829943,
+      "mean": 5.41753775,
+      "min": 5.1415619999999995,
+      "n": 8,
+      "p50": 5.421265,
+      "p95": 5.829943
+    },
+    "lossless": true,
+    "variant": "baseline-rgba-balanced",
+    "width": 2560
+  },
+  {
+    "dataUrlBytes": 5498666,
+    "encodeMs": {
+      "max": 32.406352,
+      "mean": 31.14153275,
+      "min": 30.073351000000002,
+      "n": 8,
+      "p50": 31.003780000000003,
+      "p95": 32.406352
+    },
+    "fixture": "windowed-video-1440p",
+    "height": 1440,
+    "jsonSerializeMs": {
+      "max": 4.799263,
+      "mean": 4.622900999999999,
+      "min": 4.52458,
+      "n": 8,
+      "p50": 4.586754999999999,
+      "p95": 4.799263
+    },
+    "lossless": true,
+    "variant": "rgba-fast",
+    "width": 2560
+  },
+  {
+    "dataUrlBytes": 5883666,
+    "encodeMs": {
+      "max": 25.971432,
+      "mean": 23.401217999999997,
+      "min": 22.547859,
+      "n": 8,
+      "p50": 22.920796,
+      "p95": 25.971432
+    },
+    "fixture": "windowed-video-1440p",
+    "height": 1440,
+    "jsonSerializeMs": {
+      "max": 5.568872,
+      "mean": 5.407258,
+      "min": 5.160839,
+      "n": 8,
+      "p50": 5.457804,
+      "p95": 5.568872
+    },
+    "lossless": true,
+    "variant": "rgba-fastest",
+    "width": 2560
+  },
+  {
+    "dataUrlBytes": 4757410,
+    "encodeMs": {
+      "max": 416.686397,
+      "mean": 405.17143525,
+      "min": 395.659711,
+      "n": 8,
+      "p50": 402.328475,
+      "p95": 416.686397
+    },
+    "fixture": "windowed-video-1440p",
+    "height": 1440,
+    "jsonSerializeMs": {
+      "max": 4.930408,
+      "mean": 4.65926975,
+      "min": 4.275005,
+      "n": 8,
+      "p50": 4.742433,
+      "p95": 4.930408
+    },
+    "lossless": true,
+    "variant": "rgb-balanced",
+    "width": 2560
+  },
+  {
+    "dataUrlBytes": 4768046,
+    "encodeMs": {
+      "max": 38.263446,
+      "mean": 32.852915625,
+      "min": 29.051174999999997,
+      "n": 8,
+      "p50": 31.838373000000004,
+      "p95": 38.263446
+    },
+    "fixture": "windowed-video-1440p",
+    "height": 1440,
+    "jsonSerializeMs": {
+      "max": 5.080052,
+      "mean": 4.186747875,
+      "min": 3.839551,
+      "n": 8,
+      "p50": 4.063586,
+      "p95": 5.080052
+    },
+    "lossless": true,
+    "variant": "rgb-fast",
+    "width": 2560
+  },
+  {
+    "dataUrlBytes": 5128566,
+    "encodeMs": {
+      "max": 25.818730000000002,
+      "mean": 25.185668874999998,
+      "min": 24.266314,
+      "n": 8,
+      "p50": 25.277658000000002,
+      "p95": 25.818730000000002
+    },
+    "fixture": "windowed-video-1440p",
+    "height": 1440,
+    "jsonSerializeMs": {
+      "max": 4.47767,
+      "mean": 4.286255624999999,
+      "min": 4.100257,
+      "n": 8,
+      "p50": 4.259360999999999,
+      "p95": 4.47767
+    },
+    "lossless": true,
+    "variant": "rgb-fastest",
+    "width": 2560
+  },
+  {
+    "dataUrlBytes": 372295,
+    "encodeMs": {
+      "max": 103.52376100000001,
+      "mean": 98.446078375,
+      "min": 94.863221,
+      "n": 8,
+      "p50": 98.348675,
+      "p95": 103.52376100000001
+    },
+    "fixture": "windowed-video-1440p",
+    "height": 1440,
+    "jsonSerializeMs": {
+      "max": 0.326753,
+      "mean": 0.303618625,
+      "min": 0.283483,
+      "n": 8,
+      "p50": 0.30053399999999997,
+      "p95": 0.326753
+    },
+    "lossless": false,
+    "variant": "jpeg-q85",
+    "width": 2560
+  },
+  {
+    "dataUrlBytes": 20244758,
+    "encodeMs": {
+      "max": 4054.5899480000003,
+      "mean": 3959.2282351249996,
+      "min": 3847.7038329999996,
+      "n": 8,
+      "p50": 3958.589222,
+      "p95": 4054.5899480000003
+    },
+    "fixture": "fullscreen-video-4k",
+    "height": 2160,
+    "jsonSerializeMs": {
+      "max": 23.853055,
+      "mean": 19.959012875000003,
+      "min": 18.328044000000002,
+      "n": 8,
+      "p50": 19.348651,
+      "p95": 23.853055
+    },
+    "lossless": true,
+    "variant": "baseline-rgba-balanced",
+    "width": 3840
+  },
+  {
+    "dataUrlBytes": 20095358,
+    "encodeMs": {
+      "max": 141.834392,
+      "mean": 117.676010125,
+      "min": 100.660639,
+      "n": 8,
+      "p50": 122.35013000000001,
+      "p95": 141.834392
+    },
+    "fixture": "fullscreen-video-4k",
+    "height": 2160,
+    "jsonSerializeMs": {
+      "max": 24.109528,
+      "mean": 20.774208125000005,
+      "min": 19.720158,
+      "n": 8,
+      "p50": 20.483833,
+      "p95": 24.109528
+    },
+    "lossless": true,
+    "variant": "rgba-fast",
+    "width": 3840
+  },
+  {
+    "dataUrlBytes": 21163630,
+    "encodeMs": {
+      "max": 139.232032,
+      "mean": 114.6516185,
+      "min": 83.983365,
+      "n": 8,
+      "p50": 121.10924200000001,
+      "p95": 139.232032
+    },
+    "fixture": "fullscreen-video-4k",
+    "height": 2160,
+    "jsonSerializeMs": {
+      "max": 30.031314,
+      "mean": 24.652623374999997,
+      "min": 22.02658,
+      "n": 8,
+      "p50": 24.185605,
+      "p95": 30.031314
+    },
+    "lossless": true,
+    "variant": "rgba-fastest",
+    "width": 3840
+  },
+  {
+    "dataUrlBytes": 17506514,
+    "encodeMs": {
+      "max": 1573.9918770000002,
+      "mean": 1531.44944,
+      "min": 1487.6065199999998,
+      "n": 8,
+      "p50": 1552.653196,
+      "p95": 1573.9918770000002
+    },
+    "fixture": "fullscreen-video-4k",
+    "height": 2160,
+    "jsonSerializeMs": {
+      "max": 17.387193,
+      "mean": 16.119049125,
+      "min": 15.660571000000001,
+      "n": 8,
+      "p50": 16.012936,
+      "p95": 17.387193
+    },
+    "lossless": true,
+    "variant": "rgb-balanced",
+    "width": 3840
+  },
+  {
+    "dataUrlBytes": 17470318,
+    "encodeMs": {
+      "max": 95.15065799999999,
+      "mean": 91.57874425,
+      "min": 88.22415,
+      "n": 8,
+      "p50": 91.172012,
+      "p95": 95.15065799999999
+    },
+    "fixture": "fullscreen-video-4k",
+    "height": 2160,
+    "jsonSerializeMs": {
+      "max": 19.90929,
+      "mean": 16.6248975,
+      "min": 15.791131,
+      "n": 8,
+      "p50": 16.262165,
+      "p95": 19.90929
+    },
+    "lossless": true,
+    "variant": "rgb-fast",
+    "width": 3840
+  },
+  {
+    "dataUrlBytes": 18503358,
+    "encodeMs": {
+      "max": 79.26267200000001,
+      "mean": 78.39493712500001,
+      "min": 76.83922799999999,
+      "n": 8,
+      "p50": 78.96782300000001,
+      "p95": 79.26267200000001
+    },
+    "fixture": "fullscreen-video-4k",
+    "height": 2160,
+    "jsonSerializeMs": {
+      "max": 17.494109,
+      "mean": 16.927760625,
+      "min": 16.560776999999998,
+      "n": 8,
+      "p50": 16.894762,
+      "p95": 17.494109
+    },
+    "lossless": true,
+    "variant": "rgb-fastest",
+    "width": 3840
+  },
+  {
+    "dataUrlBytes": 1023711,
+    "encodeMs": {
+      "max": 291.273055,
+      "mean": 232.97958849999998,
+      "min": 221.871214,
+      "n": 8,
+      "p50": 225.693795,
+      "p95": 291.273055
+    },
+    "fixture": "fullscreen-video-4k",
+    "height": 2160,
+    "jsonSerializeMs": {
+      "max": 0.872174,
+      "mean": 0.8388867500000001,
+      "min": 0.820567,
+      "n": 8,
+      "p50": 0.832191,
+      "p95": 0.872174
+    },
+    "lossless": false,
+    "variant": "jpeg-q85",
+    "width": 3840
+  },
+  {
+    "dataUrlBytes": 321134,
+    "encodeMs": {
+      "max": 95.8267,
+      "mean": 91.527215,
+      "min": 90.32183,
+      "n": 8,
+      "p50": 91.25259199999999,
+      "p95": 95.8267
+    },
+    "fixture": "flat-desktop-1080p",
+    "height": 1080,
+    "jsonSerializeMs": {
+      "max": 0.306301,
+      "mean": 0.2710075,
+      "min": 0.232659,
+      "n": 8,
+      "p50": 0.27830900000000003,
+      "p95": 0.306301
+    },
+    "lossless": true,
+    "variant": "baseline-rgba-balanced",
+    "width": 1920
+  },
+  {
+    "dataUrlBytes": 665402,
+    "encodeMs": {
+      "max": 24.771592,
+      "mean": 16.521988375,
+      "min": 9.101309,
+      "n": 8,
+      "p50": 16.060092,
+      "p95": 24.771592
+    },
+    "fixture": "flat-desktop-1080p",
+    "height": 1080,
+    "jsonSerializeMs": {
+      "max": 0.8190959999999999,
+      "mean": 0.67990325,
+      "min": 0.49569,
+      "n": 8,
+      "p50": 0.7357899999999999,
+      "p95": 0.8190959999999999
+    },
+    "lossless": true,
+    "variant": "rgba-fast",
+    "width": 1920
+  },
+  {
+    "dataUrlBytes": 968966,
+    "encodeMs": {
+      "max": 6.84535,
+      "mean": 6.573492999999999,
+      "min": 6.3366810000000005,
+      "n": 8,
+      "p50": 6.609976,
+      "p95": 6.84535
+    },
+    "fixture": "flat-desktop-1080p",
+    "height": 1080,
+    "jsonSerializeMs": {
+      "max": 0.840135,
+      "mean": 0.8044248749999999,
+      "min": 0.774969,
+      "n": 8,
+      "p50": 0.811048,
+      "p95": 0.840135
+    },
+    "lossless": true,
+    "variant": "rgba-fastest",
+    "width": 1920
+  },
+  {
+    "dataUrlBytes": 294342,
+    "encodeMs": {
+      "max": 88.35975499999999,
+      "mean": 86.30594024999999,
+      "min": 85.104709,
+      "n": 8,
+      "p50": 86.278515,
+      "p95": 88.35975499999999
+    },
+    "fixture": "flat-desktop-1080p",
+    "height": 1080,
+    "jsonSerializeMs": {
+      "max": 0.298697,
+      "mean": 0.27003187500000003,
+      "min": 0.25303800000000004,
+      "n": 8,
+      "p50": 0.271567,
+      "p95": 0.298697
+    },
+    "lossless": true,
+    "variant": "rgb-balanced",
+    "width": 1920
+  },
+  {
+    "dataUrlBytes": 560402,
+    "encodeMs": {
+      "max": 10.502547,
+      "mean": 10.352587374999999,
+      "min": 10.220054,
+      "n": 8,
+      "p50": 10.346048,
+      "p95": 10.502547
+    },
+    "fixture": "flat-desktop-1080p",
+    "height": 1080,
+    "jsonSerializeMs": {
+      "max": 0.47946,
+      "mean": 0.44525075,
+      "min": 0.411309,
+      "n": 8,
+      "p50": 0.45068199999999997,
+      "p95": 0.47946
+    },
+    "lossless": true,
+    "variant": "rgb-fast",
+    "width": 1920
+  },
+  {
+    "dataUrlBytes": 826362,
+    "encodeMs": {
+      "max": 9.655489999999999,
+      "mean": 8.897025750000001,
+      "min": 8.142999,
+      "n": 8,
+      "p50": 9.240326999999999,
+      "p95": 9.655489999999999
+    },
+    "fixture": "flat-desktop-1080p",
+    "height": 1080,
+    "jsonSerializeMs": {
+      "max": 2.462531,
+      "mean": 0.903140625,
+      "min": 0.6178429999999999,
+      "n": 8,
+      "p50": 0.7157640000000001,
+      "p95": 2.462531
+    },
+    "lossless": true,
+    "variant": "rgb-fastest",
+    "width": 1920
+  },
+  {
+    "dataUrlBytes": 221283,
+    "encodeMs": {
+      "max": 56.225024999999995,
+      "mean": 52.626724374999995,
+      "min": 51.424751,
+      "n": 8,
+      "p50": 52.225863999999994,
+      "p95": 56.225024999999995
+    },
+    "fixture": "flat-desktop-1080p",
+    "height": 1080,
+    "jsonSerializeMs": {
+      "max": 0.195772,
+      "mean": 0.18123912500000003,
+      "min": 0.172863,
+      "n": 8,
+      "p50": 0.177736,
+      "p95": 0.195772
+    },
+    "lossless": false,
+    "variant": "jpeg-q85",
+    "width": 1920
+  }
+]

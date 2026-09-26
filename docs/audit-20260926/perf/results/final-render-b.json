@@ -1,0 +1,122 @@
+[
+  {
+    "fixture": "fullscreen-video-1080p",
+    "variant": "rgb-fast",
+    "payloadBytes": 4423271,
+    "p50": {
+      "parseMs": 5.599999999976717,
+      "decodePaintMs": 201.69999999995343,
+      "totalMs": 207.59999999997672
+    }
+  },
+  {
+    "fixture": "fullscreen-video-1080p",
+    "variant": "rgba-fast",
+    "payloadBytes": 5089603,
+    "p50": {
+      "parseMs": 6.5,
+      "decodePaintMs": 228.29999999993015,
+      "totalMs": 235.29999999993015
+    }
+  },
+  {
+    "fixture": "fullscreen-video-1080p",
+    "variant": "baseline-rgba-balanced",
+    "payloadBytes": 5136675,
+    "p50": {
+      "parseMs": 6.400000000023283,
+      "decodePaintMs": 260,
+      "totalMs": 267.5999999999767
+    }
+  },
+  {
+    "fixture": "windowed-video-1440p",
+    "variant": "rgb-fast",
+    "payloadBytes": 4768087,
+    "p50": {
+      "parseMs": 6.100000000093132,
+      "decodePaintMs": 237.5,
+      "totalMs": 243.29999999993015
+    }
+  },
+  {
+    "fixture": "windowed-video-1440p",
+    "variant": "rgba-fast",
+    "payloadBytes": 5498707,
+    "p50": {
+      "parseMs": 7,
+      "decodePaintMs": 260.5,
+      "totalMs": 267.69999999995343
+    }
+  },
+  {
+    "fixture": "windowed-video-1440p",
+    "variant": "baseline-rgba-balanced",
+    "payloadBytes": 5503131,
+    "p50": {
+      "parseMs": 6.900000000023283,
+      "decodePaintMs": 288.5999999999767,
+      "totalMs": 295.5
+    }
+  },
+  {
+    "fixture": "fullscreen-video-4k",
+    "variant": "rgb-fast",
+    "payloadBytes": 17470359,
+    "p50": {
+      "parseMs": 23.70000000006985,
+      "decodePaintMs": 690,
+      "totalMs": 713.8000000000466
+    }
+  },
+  {
+    "fixture": "fullscreen-video-4k",
+    "variant": "rgba-fast",
+    "payloadBytes": 20095399,
+    "p50": {
+      "parseMs": 26.20000000006985,
+      "decodePaintMs": 784,
+      "totalMs": 810.6000000000931
+    }
+  },
+  {
+    "fixture": "fullscreen-video-4k",
+    "variant": "baseline-rgba-balanced",
+    "payloadBytes": 20244799,
+    "p50": {
+      "parseMs": 27,
+      "decodePaintMs": 886.8000000000466,
+      "totalMs": 914.0999999999767
+    }
+  },
+  {
+    "fixture": "flat-desktop-1080p",
+    "variant": "rgb-fast",
+    "payloadBytes": 560443,
+    "p50": {
+      "parseMs": 0.7999999999301508,
+      "decodePaintMs": 93.90000000002328,
+      "totalMs": 94.59999999997672
+    }
+  },
+  {
+    "fixture": "flat-desktop-1080p",
+    "variant": "rgba-fast",
+    "payloadBytes": 665443,
+    "p50": {
+      "parseMs": 1.1999999999534339,
+      "decodePaintMs": 109.69999999995343,
+      "totalMs": 110.89999999990687
+    }
+  },
+  {
+    "fixture": "flat-desktop-1080p",
+    "variant": "baseline-rgba-balanced",
+    "payloadBytes": 321175,
+    "p50": {
+      "parseMs": 0.5,
+      "decodePaintMs": 83.5,
+      "totalMs": 84.5
+    }
+  }
+]

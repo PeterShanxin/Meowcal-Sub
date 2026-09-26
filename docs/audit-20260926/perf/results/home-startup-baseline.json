@@ -1,0 +1,12 @@
+{
+  "runs": 10,
+  "p50": {
+    "domContentLoadedMs": 57.29999999993015,
+    "fcpMs": 116,
+    "lcpMs": 116,
+    "startButtonMs": 127.29999999993015,
+    "loadMs": 73.20000000006985,
+    "longTaskTotalMs": 0,
+    "transferBytes": 83658
+  }
+}
