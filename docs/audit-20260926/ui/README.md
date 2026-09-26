@@ -38,3 +38,6 @@ browser is not installed.
 | J5 Settings | Progress message still shown 4.8 s into a 6 s test | Fail | Pass |
 | J5 Settings | Last row clear of a message at the end of the page | Fail | Pass |
 | Browser mode | No dead window controls | Fail | Pass |
+| J6 Home | Fallback capture report shown while running, at 680 and 560 | Fail | Pass |
+| J6 Home | Capture error still shown after the window regains focus | Fail | Pass |
+| Browser mode | Home and Settings say "Backend offline", not "Needs repair" | Fail | Pass |

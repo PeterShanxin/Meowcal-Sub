@@ -171,12 +171,60 @@ for (const [size, viewport] of [
   await close();
 }
 
+// J6 Capture reports during a session: a fallback warning while running, and
+// an error raised while the player had focus, then the window regains focus.
+for (const [size, viewport] of [
+  ["desktop", DESKTOP],
+  ["compact", COMPACT],
+]) {
+  const region = { x: 320, y: 820, width: 1280, height: 120 };
+  const { page, close } = await open("/", { phase: "ready", region }, viewport);
+  await page.getByRole("button", { name: "Start translation" }).click();
+  await page.getByRole("heading", { name: "Subtitles are live" }).waitFor();
+  await page.evaluate(() =>
+    window.__MOCK_EMIT__("capture-status", {
+      isError: false,
+      usingFallback: true,
+      message: "Using GDI fallback - video content may not capture correctly",
+    }),
+  );
+  await page.waitForTimeout(4500); // past the "Translation started" message
+  await shot(page, `j6-home-capture-warning-${size}`);
+  record(
+    "J6",
+    `${size} support line with a fallback`,
+    await page.locator(".support-line").innerText(),
+  );
+  await page.evaluate(() => {
+    window.__MOCK_EMIT__("capture-status", {
+      isError: true,
+      usingFallback: false,
+      message: "Capture failed: the capture item was closed",
+    });
+    window.dispatchEvent(new Event("focus"));
+  });
+  await page.waitForTimeout(400);
+  await shot(page, `j6-home-capture-error-after-focus-${size}`);
+  record("J6", `${size} message after regaining focus`, await toast(page));
+  await close();
+}
+
 // Browser mode as a developer runs it: no Tauri runtime and no backend.
 {
   const { page, close } = await open("/", {}, DESKTOP, { tauri: false });
   await page.waitForTimeout(800);
   await shot(page, "browser-mode-desktop");
   record("Browser", "window controls shown", await page.locator(".titlebar-button").count());
+  record(
+    "Browser",
+    "Home status without a backend",
+    await page.locator(".status-pill").innerText(),
+  );
+  await page.getByRole("button", { name: "Settings" }).click();
+  await page.waitForTimeout(300);
+  await shot(page, "browser-mode-settings-desktop");
+  const engine = page.locator(".list-row", { hasText: "Translation engine" });
+  record("Browser", "Settings engine chip", await engine.locator(".status-chip").innerText());
   await close();
 }
 
