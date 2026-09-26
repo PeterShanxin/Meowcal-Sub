@@ -331,6 +331,20 @@ describe("AppController settings persistence", () => {
     controller.dispose();
   });
 
+  it("keeps a capture error reported while away when the window regains focus", async () => {
+    const invoke = vi.fn().mockResolvedValue(undefined);
+    const { controller, listeners } = createController(invoke);
+    await controller.initialize();
+
+    listeners.get("capture-status")?.({
+      payload: { isError: true, message: "Capture failed: lost" },
+    });
+    await controller.refresh();
+
+    expect(controller.current().error).toBe("Capture failed: lost");
+    controller.dispose();
+  });
+
   it("takes appearance saved by the overlay menu back when the window regains focus", async () => {
     const invoke = vi.fn(async (command: string) =>
       command === "get_settings" ? { overlay: { fontSize: 36, lightBackground: true } } : undefined,

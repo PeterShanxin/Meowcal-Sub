@@ -219,7 +219,9 @@ export class AppController {
       this.safeInvoke<CaptureRegion | null>("get_capture_region", this.snapshot.region),
       this.safeInvoke<Partial<AppSettings> | null>("get_settings", null),
     ]);
-    const patch: Partial<UiSnapshot> = { engine, region, error: null };
+    // Errors stay: this re-reads engine and area, not capture, so it cannot tell
+    // whether a failure reported while another window had focus is over.
+    const patch: Partial<UiSnapshot> = { engine, region };
     // The overlay's quick menu saves appearance itself. Take its values back,
     // unless an edit made in this window is still waiting to be saved.
     if (stored && this.overlaySaveId === null) {
