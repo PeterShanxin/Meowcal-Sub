@@ -21,7 +21,7 @@ fn decode_png(data_url: &str) -> (Vec<u8>, u32, u32) {
 
 /// The capture backends hand back BGRA to match the Windows APIs; a PNG that
 /// keeps that order renders with red and blue swapped. The alpha byte is
-/// dropped, so a GDI frame that leaves it zero still paints opaque.
+/// dropped, so the snapshot is opaque whatever value the backend left there.
 #[test]
 fn bgra_capture_bytes_are_written_as_opaque_rgb() {
     // A red pixel with alpha 255 and a blue pixel with alpha 0, in BGRA.

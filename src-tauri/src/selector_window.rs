@@ -167,8 +167,8 @@ fn encode_snapshot(
 
     // The capture backends return BGRA to match the Windows APIs. The snapshot
     // is written as opaque RGB: a screenshot has nothing behind it to show
-    // through, GDI does not fill the alpha byte, and a quarter fewer bytes
-    // shortens both encoding and the webview's decode.
+    // through, and a quarter fewer bytes shortens both encoding and the
+    // webview's decode.
     let rgb = bgra_to_rgb(capture.data);
 
     // Encode to PNG. The selector window is shown only after this returns, so
