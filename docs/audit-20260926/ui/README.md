@@ -41,3 +41,4 @@ browser is not installed.
 | J6 Home | Fallback capture report shown while running, at 680 and 560 | Fail | Pass |
 | J6 Home | Capture error still shown after the window regains focus | Fail | Pass |
 | Browser mode | Home and Settings say "Backend offline", not "Needs repair" | Fail | Pass |
+| Browser mode | Settings does not offer engine repair while the backend is offline | Fail | Pass |

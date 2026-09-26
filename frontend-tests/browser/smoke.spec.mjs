@@ -58,6 +58,17 @@ test("browser bridge reads backend health, settings, and readiness", async ({ pa
   expect(pageErrors).toEqual([]);
 });
 
+test("offline browser backend does not offer engine repair", async ({ page }) => {
+  await page.route("**/api/engine/status", (route) => route.abort());
+  await page.goto("/");
+  await expect(page.locator(".status-pill")).toContainText("Backend offline");
+
+  await page.getByRole("button", { name: "Settings" }).click();
+  const engine = page.locator(".list-row", { hasText: "Translation engine" });
+  await expect(engine).toContainText("Backend offline");
+  await expect(engine.getByRole("button", { name: "Repair" })).toHaveCount(0);
+});
+
 test("browser mode reports Tauri-only capture as unavailable", async ({ request }) => {
   const response = await request.post(`${backendOrigin}/api/area-selector`);
 

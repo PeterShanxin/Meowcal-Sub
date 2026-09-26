@@ -24,7 +24,7 @@ interface EngineRow {
   tone: Tone;
   chip: string;
   detail: string;
-  actionLabel: string;
+  actionLabel: string | null;
   actionIsPrimary: boolean;
   canTest: boolean;
 }
@@ -64,7 +64,7 @@ function engineRow(snapshot: UiSnapshot): EngineRow {
       tone: "danger",
       chip: "Backend offline",
       detail: "Start the browser backend to check the engine",
-      actionLabel: "Repair",
+      actionLabel: null,
       actionIsPrimary: false,
       canTest: false,
     };
@@ -131,13 +131,17 @@ function renderEngineAndUpdates(snapshot: UiSnapshot, actions: SettingsActions):
           >
             Test
           </button>
-          <button
-            class=${engine.actionIsPrimary ? "primary-button compact" : "secondary-button"}
-            type="button"
-            @click=${actions.onRepair}
-          >
-            ${icon("wrench")}${engine.actionLabel}
-          </button>
+          ${
+            engine.actionLabel
+              ? html`<button
+                  class=${engine.actionIsPrimary ? "primary-button compact" : "secondary-button"}
+                  type="button"
+                  @click=${actions.onRepair}
+                >
+                  ${icon("wrench")}${engine.actionLabel}
+                </button>`
+              : nothing
+          }
         </span>
       </div>
       ${switchRow(

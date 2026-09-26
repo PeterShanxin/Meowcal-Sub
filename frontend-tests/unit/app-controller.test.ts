@@ -217,6 +217,34 @@ describe("AppController settings persistence", () => {
     controller.dispose();
   });
 
+  it.each([
+    ["browser mode", true, "backendUnavailable"],
+    ["Tauri", false, "ready"],
+  ])("handles a lost engine status after startup in %s", async (_mode, browser, phase) => {
+    let online = true;
+    const invoke = vi.fn(async (command: string) => {
+      if (command === "get_engine_status") return { phase: "ready" };
+      if (command === "refresh_engine_status") {
+        if (!online) throw new Error("Failed to fetch");
+        return { phase: "ready" };
+      }
+      return undefined;
+    });
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const { controller } = createController(invoke as TauriBridgeApi["invoke"], undefined, browser);
+    await controller.initialize();
+    expect(controller.current().engine?.phase).toBe("ready");
+
+    online = false;
+    await controller.refresh();
+    expect(controller.current().engine?.phase).toBe(phase);
+
+    online = true;
+    await controller.refresh();
+    expect(controller.current().engine?.phase).toBe("ready");
+    controller.dispose();
+  });
+
   it("updates a preparing engine when background startup finishes", async () => {
     let ready!: (value: unknown) => void;
     const pending = new Promise((resolve) => {

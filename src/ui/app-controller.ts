@@ -219,8 +219,11 @@ export class AppController {
   }
 
   async refresh(): Promise<void> {
+    const engineFallback = window.TauriBridge.isBrowserMode()
+      ? { phase: backendUnavailablePhase }
+      : (this.snapshot.engine ?? {});
     const [engine, region, stored] = await Promise.all([
-      this.safeInvoke<EngineStatus>("refresh_engine_status", this.snapshot.engine ?? {}),
+      this.safeInvoke<EngineStatus>("refresh_engine_status", engineFallback),
       this.safeInvoke<CaptureRegion | null>("get_capture_region", this.snapshot.region),
       this.safeInvoke<Partial<AppSettings> | null>("get_settings", null),
     ]);
