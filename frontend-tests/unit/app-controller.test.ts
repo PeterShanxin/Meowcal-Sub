@@ -345,6 +345,28 @@ describe("AppController settings persistence", () => {
     controller.dispose();
   });
 
+  // Fallback reports arrive while the user watches the video, so a timed
+  // notice would expire unseen.
+  it("keeps a non-fatal capture report for the session until the next start", async () => {
+    const invoke = vi.fn(async (command: string) =>
+      command === "refresh_engine_status" ? { phase: "ready" } : undefined,
+    );
+    const { controller, listeners } = createController(invoke as TauriBridgeApi["invoke"]);
+    await controller.initialize();
+
+    listeners.get("capture-status")?.({
+      payload: { isError: false, usingFallback: true, message: "Using GDI fallback" },
+    });
+    expect(controller.current()).toMatchObject({
+      captureWarning: "Using GDI fallback",
+      error: null,
+    });
+
+    await controller.start();
+    expect(controller.current()).toMatchObject({ captureWarning: null, running: true });
+    controller.dispose();
+  });
+
   it("takes appearance saved by the overlay menu back when the window regains focus", async () => {
     const invoke = vi.fn(async (command: string) =>
       command === "get_settings" ? { overlay: { fontSize: 36, lightBackground: true } } : undefined,

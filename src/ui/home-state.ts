@@ -1,4 +1,5 @@
 import type { HomePresentation, UiSnapshot } from "./contracts";
+import { describeCaptureWarning } from "./error-copy";
 
 const repairPhases = new Set(["error", "noModels", "nomodels", "damaged", "invalid"]);
 const missingPhases = new Set(["notInstalled", "notinstalled"]);
@@ -42,6 +43,7 @@ export function deriveHomePresentation(snapshot: UiSnapshot): HomePresentation {
   }
 
   if (snapshot.running) {
+    const warning = snapshot.captureWarning;
     return {
       state: "running",
       statusLabel: "Running",
@@ -51,8 +53,8 @@ export function deriveHomePresentation(snapshot: UiSnapshot): HomePresentation {
       actionLabel: snapshot.busy === "stopping" ? "Stopping…" : "Stop translation",
       actionIcon: "stop",
       actionDisabled: snapshot.busy !== "idle",
-      supportLine: "Overlay active · Local processing",
-      supportTone: "success",
+      supportLine: warning ? describeCaptureWarning(warning) : "Overlay active · Local processing",
+      supportTone: warning ? "warning" : "success",
     };
   }
 

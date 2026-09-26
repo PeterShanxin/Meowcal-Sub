@@ -61,6 +61,7 @@ function snapshot(patch: Partial<UiSnapshot> = {}): UiSnapshot {
     running: false,
     error: null,
     notice: null,
+    captureWarning: null,
     developerMode: false,
     update: { kind: "idle" },
     appVersion: "0.6.6",
@@ -153,6 +154,23 @@ describe("deriveHomePresentation", () => {
       expect(result).toMatchObject({ state: "ready", action: "start", statusLabel: "Ready" });
     },
   );
+});
+
+describe("Home capture warnings", () => {
+  it("shows a non-fatal capture report on a running session", () => {
+    const result = deriveHomePresentation(
+      snapshot({
+        running: true,
+        captureWarning: "Using GDI fallback - video content may not capture correctly",
+      }),
+    );
+
+    expect(result).toMatchObject({
+      state: "running",
+      supportLine: "Compatibility capture · Protected video may not be read",
+      supportTone: "warning",
+    });
+  });
 });
 
 describe("Home session controls", () => {

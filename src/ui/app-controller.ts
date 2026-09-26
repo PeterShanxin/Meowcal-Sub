@@ -35,6 +35,7 @@ export class AppController {
     running: false,
     error: null,
     notice: null,
+    captureWarning: null,
     developerMode: localStorage.getItem("meowcal.developerMode") === "true",
     update: { kind: "idle" },
     appVersion: null,
@@ -127,6 +128,7 @@ export class AppController {
     const captureUnlisten = await window.TauriBridge.event.listen("capture-status", (event) => {
       const payload = event.payload as { isError?: boolean; message?: string };
       if (payload.isError) this.publish({ error: payload.message ?? "Screen capture failed" });
+      else if (payload.message) this.publish({ captureWarning: payload.message });
     });
     // Setup opens by itself only until the user has closed it once, finished or
     // not. After that Home's setup action is the way back, so a cancelled setup
@@ -232,7 +234,7 @@ export class AppController {
   }
 
   async start(): Promise<void> {
-    this.publish({ busy: "warming", error: null, notice: null });
+    this.publish({ busy: "warming", error: null, notice: null, captureWarning: null });
     try {
       await this.saveSettings(true);
       const engine = await this.readyEngine();
