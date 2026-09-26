@@ -12,6 +12,17 @@ export const defaultOcr: OcrConfig = {
   validationStrictness: "moderate",
 };
 
+export const recognitionPresets = {
+  fast: { ...defaultOcr, preprocessingEnabled: false, validationStrictness: "permissive" },
+  balanced: defaultOcr,
+  accurate: {
+    ...defaultOcr,
+    enableMultiPass: true,
+    multiPassCount: 2,
+    validationStrictness: "strict",
+  },
+} satisfies Record<string, OcrConfig>;
+
 export const defaultSettings: AppSettings = {
   sourceLanguage: "zh-CN",
   targetLanguage: "en-US",

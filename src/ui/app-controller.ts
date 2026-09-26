@@ -1,7 +1,7 @@
 import type { AppScreen, AppSettings, CaptureRegion, EngineStatus, UiSnapshot } from "./contracts";
 import { pickSampleTranslation } from "./sample-translations";
 import { applyLanguageSelection } from "./languages";
-import { defaultOcr, defaultSettings, mergeSettings } from "./settings-defaults";
+import { defaultSettings, mergeSettings, recognitionPresets } from "./settings-defaults";
 import { UpdateController } from "./update-controller";
 
 type Subscriber = (snapshot: UiSnapshot) => void;
@@ -288,19 +288,9 @@ export class AppController {
     await this.persistSettingsInBackground();
   }
 
-  async setRecognitionPreset(value: "fast" | "balanced" | "accurate"): Promise<void> {
-    const overrides = {
-      fast: { preprocessingEnabled: false, validationStrictness: "permissive" as const },
-      balanced: {},
-      accurate: {
-        enableMultiPass: true,
-        multiPassCount: 2,
-        validationStrictness: "strict" as const,
-      },
-    };
-    await this.editSettings(
-      (settings) => (settings.translation.ocr = { ...defaultOcr, ...overrides[value] }),
-    );
+  async setRecognitionPreset(value: keyof typeof recognitionPresets): Promise<void> {
+    const ocr = recognitionPresets[value];
+    await this.editSettings((settings) => (settings.translation.ocr = { ...ocr }));
   }
 
   async setTranslateAllOcrText(enabled: boolean): Promise<void> {
