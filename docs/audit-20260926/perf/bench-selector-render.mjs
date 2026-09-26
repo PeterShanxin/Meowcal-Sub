@@ -10,12 +10,12 @@
 // Usage: node bench-selector-render.mjs <runs> <results.json> [variant,...]
 import { createServer } from "node:http";
 import { readFileSync, writeFileSync, existsSync } from "node:fs";
-import { join, extname, dirname } from "node:path";
+import { join, extname, dirname, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { chromium } from "@playwright/test";
 
 const here = dirname(fileURLToPath(import.meta.url));
-const dist = join(here, "../../../dist");
+const dist = resolve(here, "../../../dist");
 const outDir = join(here, "fixtures/out");
 const runs = Number(process.argv[2] ?? 5);
 const resultsPath = process.argv[3] ?? join(here, "results/selector-render.json");
@@ -34,15 +34,16 @@ const server = createServer((req, res) => {
     res.writeHead(200, { "content-type": "application/json" });
     return res.end(payload);
   }
-  const path = join(dist, decodeURIComponent(req.url.split("?")[0]));
-  if (!existsSync(path)) {
+  // Resolve inside dist only: a "..%2f" request must not read other files.
+  const path = resolve(dist, `.${decodeURIComponent(req.url.split("?")[0])}`);
+  if (!path.startsWith(dist + sep) || !existsSync(path)) {
     res.writeHead(404);
     return res.end();
   }
   res.writeHead(200, { "content-type": types[extname(path)] ?? "application/octet-stream" });
   res.end(readFileSync(path));
 });
-await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+await new Promise((listening) => server.listen(0, "127.0.0.1", listening));
 const origin = `http://127.0.0.1:${server.address().port}`;
 
 const stub = () => {
