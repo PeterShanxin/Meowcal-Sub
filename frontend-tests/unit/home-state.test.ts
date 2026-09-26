@@ -87,6 +87,7 @@ describe("deriveHomePresentation", () => {
     [snapshot({ engine: { phase: "preparing" } }), "none", "Preparing"],
     [snapshot({ engine: { phase: "unknown" } }), "repair", "Needs repair"],
     [snapshot({ engine: { phase: "unexpected" } }), "repair", "Needs repair"],
+    [snapshot({ engine: { phase: "backendUnavailable" } }), "none", "Backend offline"],
     [snapshot({ error: "save failed" }), "start", "Ready"],
     [snapshot({ ocrLanguages: new Set() }), "installOcr", "Almost ready"],
     [snapshot({ region: null }), "selectRegion", "Almost ready"],

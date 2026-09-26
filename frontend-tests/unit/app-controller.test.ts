@@ -203,6 +203,20 @@ describe("AppController settings persistence", () => {
     expect(invoke).not.toHaveBeenCalledWith("open_engine_wizard");
   });
 
+  it.each([
+    ["browser mode", true, "backendUnavailable"],
+    ["Tauri", false, "unknown"],
+  ])("marks an unanswered engine status in %s as %s", async (_mode, browser, phase) => {
+    const invoke = vi.fn().mockRejectedValue(new Error("Failed to fetch"));
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const { controller } = createController(invoke, undefined, browser);
+
+    await controller.initialize();
+
+    expect(controller.current().engine).toEqual({ phase });
+    controller.dispose();
+  });
+
   it("updates a preparing engine when background startup finishes", async () => {
     let ready!: (value: unknown) => void;
     const pending = new Promise((resolve) => {

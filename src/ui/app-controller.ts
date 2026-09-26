@@ -1,6 +1,7 @@
 import type { AppScreen, AppSettings, CaptureRegion, EngineStatus, UiSnapshot } from "./contracts";
 import { pickSampleTranslation } from "./sample-translations";
 import { applyLanguageSelection } from "./languages";
+import { backendUnavailablePhase } from "./home-state";
 import { defaultSettings, mergeSettings, recognitionPresets } from "./settings-defaults";
 import { UpdateController } from "./update-controller";
 
@@ -77,7 +78,9 @@ export class AppController {
     const [settings, languages, engine, region, running] = await Promise.all([
       this.safeInvoke<Partial<AppSettings> | null>("get_settings", null),
       this.safeInvoke<string[]>("get_ocr_languages", []),
-      this.safeInvoke<EngineStatus>("get_engine_status", { phase: "unknown" }),
+      this.safeInvoke<EngineStatus>("get_engine_status", {
+        phase: browserMode ? backendUnavailablePhase : "unknown",
+      }),
       this.safeInvoke<CaptureRegion | null>("get_capture_region", null),
       browserMode ? false : this.safeInvoke<boolean>("is_translation_running", false),
     ]);

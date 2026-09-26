@@ -1,6 +1,7 @@
 import { html, nothing, type TemplateResult } from "lit";
 import type { Tone, UiSnapshot } from "./contracts";
 import { icon } from "./icons";
+import { backendUnavailablePhase } from "./home-state";
 import { deriveUpdatePresentation } from "./update-state";
 
 type Recognition = "fast" | "balanced" | "accurate";
@@ -56,6 +57,16 @@ function engineRow(snapshot: UiSnapshot): EngineRow {
       actionLabel: "Repair",
       actionIsPrimary: false,
       canTest: true,
+    };
+  }
+  if (phase === backendUnavailablePhase) {
+    return {
+      tone: "danger",
+      chip: "Backend offline",
+      detail: "Start the browser backend to check the engine",
+      actionLabel: "Repair",
+      actionIsPrimary: false,
+      canTest: false,
     };
   }
   if (phase === "notInstalled" || phase === "notinstalled") {

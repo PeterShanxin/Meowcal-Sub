@@ -5,6 +5,8 @@ const repairPhases = new Set(["error", "noModels", "nomodels", "damaged", "inval
 const missingPhases = new Set(["notInstalled", "notinstalled"]);
 const preparingPhases = new Set(["preparing"]);
 const readyPhases = new Set(["ready", "notRunning", "notrunning"]);
+/** Browser mode only: its HTTP backend did not answer. Core never reports it. */
+export const backendUnavailablePhase = "backendUnavailable";
 
 function ocrReady(snapshot: UiSnapshot): boolean {
   return window.OcrLanguageTags.isOcrLanguageAvailable(
@@ -74,6 +76,21 @@ export function deriveHomePresentation(snapshot: UiSnapshot): HomePresentation {
   }
 
   const phase = snapshot.engine?.phase ?? "unknown";
+  if (phase === backendUnavailablePhase) {
+    return {
+      state: "attention",
+      statusLabel: "Backend offline",
+      title: "Start the browser backend",
+      description: "Browser mode reads the engine through the local HTTP backend.",
+      action: "none",
+      actionLabel: "Backend unavailable",
+      actionIcon: "alert",
+      actionDisabled: true,
+      supportLine: "Run dev-browser.cmd to start the page with its backend",
+      supportTone: "danger",
+    };
+  }
+
   if (missingPhases.has(phase)) {
     return {
       state: "notReady",
