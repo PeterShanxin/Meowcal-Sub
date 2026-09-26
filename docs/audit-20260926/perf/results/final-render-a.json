@@ -3,53 +3,6 @@
     "fixture": "fullscreen-video-1080p",
     "variant": "baseline-rgba-balanced",
     "payloadBytes": 5136675,
-    "samples": [
-      {
-        "parseMs": 13.70000000006985,
-        "decodePaintMs": 262,
-        "naturalWidth": 1920
-      },
-      {
-        "parseMs": 6,
-        "decodePaintMs": 234.40000000002328,
-        "naturalWidth": 1920
-      },
-      {
-        "parseMs": 6.099999999976717,
-        "decodePaintMs": 253.90000000002328,
-        "naturalWidth": 1920
-      },
-      {
-        "parseMs": 6.300000000046566,
-        "decodePaintMs": 243,
-        "naturalWidth": 1920
-      },
-      {
-        "parseMs": 6.400000000023283,
-        "decodePaintMs": 247.69999999995343,
-        "naturalWidth": 1920
-      },
-      {
-        "parseMs": 6.299999999930151,
-        "decodePaintMs": 251.5,
-        "naturalWidth": 1920
-      },
-      {
-        "parseMs": 6.5,
-        "decodePaintMs": 243.09999999997672,
-        "naturalWidth": 1920
-      },
-      {
-        "parseMs": 6.800000000046566,
-        "decodePaintMs": 248.5,
-        "naturalWidth": 1920
-      },
-      {
-        "parseMs": 6.900000000023283,
-        "decodePaintMs": 256.29999999993015,
-        "naturalWidth": 1920
-      }
-    ],
     "p50": {
       "parseMs": 6.400000000023283,
       "decodePaintMs": 248.5,
@@ -60,53 +13,6 @@
     "fixture": "fullscreen-video-1080p",
     "variant": "rgba-fast",
     "payloadBytes": 5089603,
-    "samples": [
-      {
-        "parseMs": 6,
-        "decodePaintMs": 223.30000000004657,
-        "naturalWidth": 1920
-      },
-      {
-        "parseMs": 5.800000000046566,
-        "decodePaintMs": 220.90000000002328,
-        "naturalWidth": 1920
-      },
-      {
-        "parseMs": 6.099999999976717,
-        "decodePaintMs": 219.19999999995343,
-        "naturalWidth": 1920
-      },
-      {
-        "parseMs": 6.800000000046566,
-        "decodePaintMs": 216.79999999993015,
-        "naturalWidth": 1920
-      },
-      {
-        "parseMs": 6.099999999976717,
-        "decodePaintMs": 244.5,
-        "naturalWidth": 1920
-      },
-      {
-        "parseMs": 6.299999999930151,
-        "decodePaintMs": 224.09999999997672,
-        "naturalWidth": 1920
-      },
-      {
-        "parseMs": 6.599999999976717,
-        "decodePaintMs": 228,
-        "naturalWidth": 1920
-      },
-      {
-        "parseMs": 6.299999999930151,
-        "decodePaintMs": 217.70000000006985,
-        "naturalWidth": 1920
-      },
-      {
-        "parseMs": 6.399999999906868,
-        "decodePaintMs": 262.70000000006985,
-        "naturalWidth": 1920
-      }
-    ],
     "p50": {
       "parseMs": 6.299999999930151,
       "decodePaintMs": 223.30000000004657,
@@ -117,53 +23,6 @@
     "fixture": "fullscreen-video-1080p",
     "variant": "rgb-fast",
     "payloadBytes": 4423271,
-    "samples": [
-      {
-        "parseMs": 6.800000000046566,
-        "decodePaintMs": 199.29999999993015,
-        "naturalWidth": 1920
-      },
-      {
-        "parseMs": 5.900000000023283,
-        "decodePaintMs": 192.59999999997672,
-        "naturalWidth": 1920
-      },
-      {
-        "parseMs": 5.599999999976717,
-        "decodePaintMs": 204.20000000006985,
-        "naturalWidth": 1920
-      },
-      {
-        "parseMs": 5.300000000046566,
-        "decodePaintMs": 208.5,
-        "naturalWidth": 1920
-      },
-      {
-        "parseMs": 5.5,
-        "decodePaintMs": 211.59999999997672,
-        "naturalWidth": 1920
-      },
-      {
-        "parseMs": 5.400000000023283,
-        "decodePaintMs": 210.19999999995343,
-        "naturalWidth": 1920
-      },
-      {
-        "parseMs": 5.400000000023283,
-        "decodePaintMs": 185.09999999997672,
-        "naturalWidth": 1920
-      },
-      {
-        "parseMs": 5.699999999953434,
-        "decodePaintMs": 199.69999999995343,
-        "naturalWidth": 1920
-      },
-      {
-        "parseMs": 5.399999999906868,
-        "decodePaintMs": 203.40000000002328,
-        "naturalWidth": 1920
-      }
-    ],
     "p50": {
       "parseMs": 5.5,
       "decodePaintMs": 203.40000000002328,
@@ -174,53 +33,6 @@
     "fixture": "windowed-video-1440p",
     "variant": "baseline-rgba-balanced",
     "payloadBytes": 5503131,
-    "samples": [
-      {
-        "parseMs": 6.699999999953434,
-        "decodePaintMs": 270.5,
-        "naturalWidth": 2560
-      },
-      {
-        "parseMs": 6.800000000046566,
-        "decodePaintMs": 273.29999999993015,
-        "naturalWidth": 2560
-      },
-      {
-        "parseMs": 6.700000000069849,
-        "decodePaintMs": 264.79999999993015,
-        "naturalWidth": 2560
-      },
-      {
-        "parseMs": 6.399999999906868,
-        "decodePaintMs": 271,
-        "naturalWidth": 2560
-      },
-      {
-        "parseMs": 7.300000000046566,
-        "decodePaintMs": 278.29999999993015,
-        "naturalWidth": 2560
-      },
-      {
-        "parseMs": 7.400000000023283,
-        "decodePaintMs": 282,
-        "naturalWidth": 2560
-      },
-      {
-        "parseMs": 7.5,
-        "decodePaintMs": 270.4000000000233,
-        "naturalWidth": 2560
-      },
-      {
-        "parseMs": 6.599999999976717,
-        "decodePaintMs": 267.5,
-        "naturalWidth": 2560
-      },
-      {
-        "parseMs": 7,
-        "decodePaintMs": 282,
-        "naturalWidth": 2560
-      }
-    ],
     "p50": {
       "parseMs": 6.800000000046566,
       "decodePaintMs": 271,
@@ -231,53 +43,6 @@
     "fixture": "windowed-video-1440p",
     "variant": "rgba-fast",
     "payloadBytes": 5498707,
-    "samples": [
-      {
-        "parseMs": 6.600000000093132,
-        "decodePaintMs": 240,
-        "naturalWidth": 2560
-      },
-      {
-        "parseMs": 6.599999999976717,
-        "decodePaintMs": 251.80000000004657,
-        "naturalWidth": 2560
-      },
-      {
-        "parseMs": 6.700000000069849,
-        "decodePaintMs": 251.79999999993015,
-        "naturalWidth": 2560
-      },
-      {
-        "parseMs": 10.599999999976717,
-        "decodePaintMs": 246.80000000004657,
-        "naturalWidth": 2560
-      },
-      {
-        "parseMs": 6.699999999953434,
-        "decodePaintMs": 260.5,
-        "naturalWidth": 2560
-      },
-      {
-        "parseMs": 6.799999999930151,
-        "decodePaintMs": 259.9000000000233,
-        "naturalWidth": 2560
-      },
-      {
-        "parseMs": 6.700000000069849,
-        "decodePaintMs": 263.79999999993015,
-        "naturalWidth": 2560
-      },
-      {
-        "parseMs": 11.5,
-        "decodePaintMs": 271.60000000009313,
-        "naturalWidth": 2560
-      },
-      {
-        "parseMs": 6.799999999930151,
-        "decodePaintMs": 242.80000000004657,
-        "naturalWidth": 2560
-      }
-    ],
     "p50": {
       "parseMs": 6.700000000069849,
       "decodePaintMs": 251.80000000004657,
@@ -288,53 +53,6 @@
     "fixture": "windowed-video-1440p",
     "variant": "rgb-fast",
     "payloadBytes": 4768087,
-    "samples": [
-      {
-        "parseMs": 6.5,
-        "decodePaintMs": 231,
-        "naturalWidth": 2560
-      },
-      {
-        "parseMs": 6.5,
-        "decodePaintMs": 235.29999999993015,
-        "naturalWidth": 2560
-      },
-      {
-        "parseMs": 5.900000000023283,
-        "decodePaintMs": 250.09999999997672,
-        "naturalWidth": 2560
-      },
-      {
-        "parseMs": 6,
-        "decodePaintMs": 250.69999999995343,
-        "naturalWidth": 2560
-      },
-      {
-        "parseMs": 6.100000000093132,
-        "decodePaintMs": 279,
-        "naturalWidth": 2560
-      },
-      {
-        "parseMs": 6.800000000046566,
-        "decodePaintMs": 230.89999999990687,
-        "naturalWidth": 2560
-      },
-      {
-        "parseMs": 7.400000000023283,
-        "decodePaintMs": 231,
-        "naturalWidth": 2560
-      },
-      {
-        "parseMs": 8.100000000093132,
-        "decodePaintMs": 224,
-        "naturalWidth": 2560
-      },
-      {
-        "parseMs": 6.899999999906868,
-        "decodePaintMs": 229.20000000006985,
-        "naturalWidth": 2560
-      }
-    ],
     "p50": {
       "parseMs": 6.5,
       "decodePaintMs": 231,
@@ -345,53 +63,6 @@
     "fixture": "fullscreen-video-4k",
     "variant": "baseline-rgba-balanced",
     "payloadBytes": 20244799,
-    "samples": [
-      {
-        "parseMs": 26.20000000006985,
-        "decodePaintMs": 1247.0999999999767,
-        "naturalWidth": 3840
-      },
-      {
-        "parseMs": 26,
-        "decodePaintMs": 887.4000000000233,
-        "naturalWidth": 3840
-      },
-      {
-        "parseMs": 27.599999999976717,
-        "decodePaintMs": 1368.7000000000698,
-        "naturalWidth": 3840
-      },
-      {
-        "parseMs": 27.5,
-        "decodePaintMs": 1042.5999999999767,
-        "naturalWidth": 3840
-      },
-      {
-        "parseMs": 31.600000000093132,
-        "decodePaintMs": 869.7999999999302,
-        "naturalWidth": 3840
-      },
-      {
-        "parseMs": 26,
-        "decodePaintMs": 853.5,
-        "naturalWidth": 3840
-      },
-      {
-        "parseMs": 26.599999999976717,
-        "decodePaintMs": 1388.0999999999767,
-        "naturalWidth": 3840
-      },
-      {
-        "parseMs": 39.300000000046566,
-        "decodePaintMs": 896.2000000000698,
-        "naturalWidth": 3840
-      },
-      {
-        "parseMs": 26.5,
-        "decodePaintMs": 857.3999999999069,
-        "naturalWidth": 3840
-      }
-    ],
     "p50": {
       "parseMs": 26.599999999976717,
       "decodePaintMs": 896.2000000000698,
@@ -402,53 +73,6 @@
     "fixture": "fullscreen-video-4k",
     "variant": "rgba-fast",
     "payloadBytes": 20095399,
-    "samples": [
-      {
-        "parseMs": 26.099999999976717,
-        "decodePaintMs": 1005.0999999999767,
-        "naturalWidth": 3840
-      },
-      {
-        "parseMs": 26,
-        "decodePaintMs": 777.3000000000466,
-        "naturalWidth": 3840
-      },
-      {
-        "parseMs": 30.100000000093132,
-        "decodePaintMs": 808.0999999999767,
-        "naturalWidth": 3840
-      },
-      {
-        "parseMs": 24.79999999993015,
-        "decodePaintMs": 894.9000000000233,
-        "naturalWidth": 3840
-      },
-      {
-        "parseMs": 26.100000000093132,
-        "decodePaintMs": 785.3999999999069,
-        "naturalWidth": 3840
-      },
-      {
-        "parseMs": 31.100000000093132,
-        "decodePaintMs": 757.3999999999069,
-        "naturalWidth": 3840
-      },
-      {
-        "parseMs": 28,
-        "decodePaintMs": 807.8000000000466,
-        "naturalWidth": 3840
-      },
-      {
-        "parseMs": 26.899999999906868,
-        "decodePaintMs": 766.5,
-        "naturalWidth": 3840
-      },
-      {
-        "parseMs": 27.400000000023283,
-        "decodePaintMs": 807.6999999999534,
-        "naturalWidth": 3840
-      }
-    ],
     "p50": {
       "parseMs": 26.899999999906868,
       "decodePaintMs": 807.6999999999534,
@@ -459,53 +83,6 @@
     "fixture": "fullscreen-video-4k",
     "variant": "rgb-fast",
     "payloadBytes": 17470359,
-    "samples": [
-      {
-        "parseMs": 23.300000000046566,
-        "decodePaintMs": 731.4000000000233,
-        "naturalWidth": 3840
-      },
-      {
-        "parseMs": 22.400000000023283,
-        "decodePaintMs": 687.5,
-        "naturalWidth": 3840
-      },
-      {
-        "parseMs": 22.900000000023283,
-        "decodePaintMs": 717.4000000000233,
-        "naturalWidth": 3840
-      },
-      {
-        "parseMs": 22.900000000023283,
-        "decodePaintMs": 660.4000000000233,
-        "naturalWidth": 3840
-      },
-      {
-        "parseMs": 22.800000000046566,
-        "decodePaintMs": 700.2999999999302,
-        "naturalWidth": 3840
-      },
-      {
-        "parseMs": 26.199999999953434,
-        "decodePaintMs": 684.5,
-        "naturalWidth": 3840
-      },
-      {
-        "parseMs": 22.199999999953434,
-        "decodePaintMs": 1005,
-        "naturalWidth": 3840
-      },
-      {
-        "parseMs": 24.400000000023283,
-        "decodePaintMs": 727.1999999999534,
-        "naturalWidth": 3840
-      },
-      {
-        "parseMs": 24.400000000023283,
-        "decodePaintMs": 670.0999999999767,
-        "naturalWidth": 3840
-      }
-    ],
     "p50": {
       "parseMs": 22.900000000023283,
       "decodePaintMs": 700.2999999999302,
@@ -516,53 +93,6 @@
     "fixture": "flat-desktop-1080p",
     "variant": "baseline-rgba-balanced",
     "payloadBytes": 321175,
-    "samples": [
-      {
-        "parseMs": 0.5,
-        "decodePaintMs": 77.5,
-        "naturalWidth": 1920
-      },
-      {
-        "parseMs": 0.39999999990686774,
-        "decodePaintMs": 69.80000000004657,
-        "naturalWidth": 1920
-      },
-      {
-        "parseMs": 0.6000000000931323,
-        "decodePaintMs": 73.5,
-        "naturalWidth": 1920
-      },
-      {
-        "parseMs": 0.8000000000465661,
-        "decodePaintMs": 94,
-        "naturalWidth": 1920
-      },
-      {
-        "parseMs": 0.7999999999301508,
-        "decodePaintMs": 83.40000000002328,
-        "naturalWidth": 1920
-      },
-      {
-        "parseMs": 0.5999999999767169,
-        "decodePaintMs": 78.19999999995343,
-        "naturalWidth": 1920
-      },
-      {
-        "parseMs": 0.40000000002328306,
-        "decodePaintMs": 75,
-        "naturalWidth": 1920
-      },
-      {
-        "parseMs": 0.39999999990686774,
-        "decodePaintMs": 79.90000000002328,
-        "naturalWidth": 1920
-      },
-      {
-        "parseMs": 3.199999999953434,
-        "decodePaintMs": 76.60000000009313,
-        "naturalWidth": 1920
-      }
-    ],
     "p50": {
       "parseMs": 0.5999999999767169,
       "decodePaintMs": 77.5,
@@ -573,53 +103,6 @@
     "fixture": "flat-desktop-1080p",
     "variant": "rgba-fast",
     "payloadBytes": 665443,
-    "samples": [
-      {
-        "parseMs": 0.9000000000232831,
-        "decodePaintMs": 97.90000000002328,
-        "naturalWidth": 1920
-      },
-      {
-        "parseMs": 0.8000000000465661,
-        "decodePaintMs": 94,
-        "naturalWidth": 1920
-      },
-      {
-        "parseMs": 0.9000000000232831,
-        "decodePaintMs": 85.90000000002328,
-        "naturalWidth": 1920
-      },
-      {
-        "parseMs": 6,
-        "decodePaintMs": 105.20000000006985,
-        "naturalWidth": 1920
-      },
-      {
-        "parseMs": 0.9000000000232831,
-        "decodePaintMs": 95.79999999993015,
-        "naturalWidth": 1920
-      },
-      {
-        "parseMs": 0.9000000000232831,
-        "decodePaintMs": 107.30000000004657,
-        "naturalWidth": 1920
-      },
-      {
-        "parseMs": 0.8000000000465661,
-        "decodePaintMs": 92,
-        "naturalWidth": 1920
-      },
-      {
-        "parseMs": 0.8000000000465661,
-        "decodePaintMs": 92.09999999997672,
-        "naturalWidth": 1920
-      },
-      {
-        "parseMs": 0.8000000000465661,
-        "decodePaintMs": 90.30000000004657,
-        "naturalWidth": 1920
-      }
-    ],
     "p50": {
       "parseMs": 0.9000000000232831,
       "decodePaintMs": 94,
@@ -630,53 +113,6 @@
     "fixture": "flat-desktop-1080p",
     "variant": "rgb-fast",
     "payloadBytes": 560443,
-    "samples": [
-      {
-        "parseMs": 0.9000000000232831,
-        "decodePaintMs": 81.59999999997672,
-        "naturalWidth": 1920
-      },
-      {
-        "parseMs": 0.9000000000232831,
-        "decodePaintMs": 90,
-        "naturalWidth": 1920
-      },
-      {
-        "parseMs": 0.5,
-        "decodePaintMs": 82.19999999995343,
-        "naturalWidth": 1920
-      },
-      {
-        "parseMs": 0.6999999999534339,
-        "decodePaintMs": 99.40000000002328,
-        "naturalWidth": 1920
-      },
-      {
-        "parseMs": 0.5999999999767169,
-        "decodePaintMs": 95.30000000004657,
-        "naturalWidth": 1920
-      },
-      {
-        "parseMs": 0.6999999999534339,
-        "decodePaintMs": 100.59999999997672,
-        "naturalWidth": 1920
-      },
-      {
-        "parseMs": 1.3000000000465661,
-        "decodePaintMs": 91,
-        "naturalWidth": 1920
-      },
-      {
-        "parseMs": 1.099999999976717,
-        "decodePaintMs": 91.40000000002328,
-        "naturalWidth": 1920
-      },
-      {
-        "parseMs": 0.6000000000931323,
-        "decodePaintMs": 67.79999999993015,
-        "naturalWidth": 1920
-      }
-    ],
     "p50": {
       "parseMs": 0.6999999999534339,
       "decodePaintMs": 91,

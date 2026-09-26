@@ -48,7 +48,7 @@ await new Promise((listening) => server.listen(0, "127.0.0.1", listening));
 const origin = `http://127.0.0.1:${server.address().port}`;
 
 const median = (xs) => [...xs].sort((a, b) => a - b)[Math.floor(xs.length / 2)];
-const browser = await chromium.launch({ executablePath: "/opt/pw-browsers/chromium" });
+const browser = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH });
 const samples = [];
 for (let i = 0; i < runs + 1; i++) {
   const context = await browser.newContext({ viewport: { width: 900, height: 680 } });

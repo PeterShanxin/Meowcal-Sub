@@ -68,7 +68,7 @@ const stub = () => {
 };
 
 const median = (xs) => [...xs].sort((a, b) => a - b)[Math.floor(xs.length / 2)];
-const browser = await chromium.launch({ executablePath: "/opt/pw-browsers/chromium" });
+const browser = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH });
 const results = [];
 for (const fixture of fixtures) {
   for (const variant of variants) {
