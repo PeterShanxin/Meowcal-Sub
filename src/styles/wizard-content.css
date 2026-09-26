@@ -159,9 +159,25 @@
   stroke-width: 1.6;
 }
 
+/* Sized so a failed setup, with its error and actions, fits the minimum window
+   without scrolling. */
 @media (max-height: 470px) {
   .wizard-content {
-    padding-top: 12px;
+    padding-top: 8px;
+  }
+
+  .setup-stages li {
+    min-height: 26px;
+    padding-block: 1px;
+  }
+
+  .error-actions {
+    margin-top: 2px;
+  }
+
+  /* The error says what happened and what to do; the lead only repeats the heading. */
+  .wizard-content:has(.error-box) .wizard-lead {
+    display: none;
   }
 
   .wizard-body {

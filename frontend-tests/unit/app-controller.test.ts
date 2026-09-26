@@ -203,6 +203,48 @@ describe("AppController settings persistence", () => {
     expect(invoke).not.toHaveBeenCalledWith("open_engine_wizard");
   });
 
+  it.each([
+    ["browser mode", true, "backendUnavailable"],
+    ["Tauri", false, "unknown"],
+  ])("marks an unanswered engine status in %s as %s", async (_mode, browser, phase) => {
+    const invoke = vi.fn().mockRejectedValue(new Error("Failed to fetch"));
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const { controller } = createController(invoke, undefined, browser);
+
+    await controller.initialize();
+
+    expect(controller.current().engine).toEqual({ phase });
+    controller.dispose();
+  });
+
+  it.each([
+    ["browser mode", true, "backendUnavailable"],
+    ["Tauri", false, "ready"],
+  ])("handles a lost engine status after startup in %s", async (_mode, browser, phase) => {
+    let online = true;
+    const invoke = vi.fn(async (command: string) => {
+      if (command === "get_engine_status") return { phase: "ready" };
+      if (command === "refresh_engine_status") {
+        if (!online) throw new Error("Failed to fetch");
+        return { phase: "ready" };
+      }
+      return undefined;
+    });
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const { controller } = createController(invoke as TauriBridgeApi["invoke"], undefined, browser);
+    await controller.initialize();
+    expect(controller.current().engine?.phase).toBe("ready");
+
+    online = false;
+    await controller.refresh();
+    expect(controller.current().engine?.phase).toBe(phase);
+
+    online = true;
+    await controller.refresh();
+    expect(controller.current().engine?.phase).toBe("ready");
+    controller.dispose();
+  });
+
   it("updates a preparing engine when background startup finishes", async () => {
     let ready!: (value: unknown) => void;
     const pending = new Promise((resolve) => {
@@ -328,6 +370,42 @@ describe("AppController settings persistence", () => {
     await vi.advanceTimersByTimeAsync(3000);
 
     expect(controller.current().notice).toBe("Settings saved");
+    controller.dispose();
+  });
+
+  it("keeps a capture error reported while away when the window regains focus", async () => {
+    const invoke = vi.fn().mockResolvedValue(undefined);
+    const { controller, listeners } = createController(invoke);
+    await controller.initialize();
+
+    listeners.get("capture-status")?.({
+      payload: { isError: true, message: "Capture failed: lost" },
+    });
+    await controller.refresh();
+
+    expect(controller.current().error).toBe("Capture failed: lost");
+    controller.dispose();
+  });
+
+  // Fallback reports arrive while the user watches the video, so a timed
+  // notice would expire unseen.
+  it("keeps a non-fatal capture report for the session until the next start", async () => {
+    const invoke = vi.fn(async (command: string) =>
+      command === "refresh_engine_status" ? { phase: "ready" } : undefined,
+    );
+    const { controller, listeners } = createController(invoke as TauriBridgeApi["invoke"]);
+    await controller.initialize();
+
+    listeners.get("capture-status")?.({
+      payload: { isError: false, usingFallback: true, message: "Using GDI fallback" },
+    });
+    expect(controller.current()).toMatchObject({
+      captureWarning: "Using GDI fallback",
+      error: null,
+    });
+
+    await controller.start();
+    expect(controller.current()).toMatchObject({ captureWarning: null, running: true });
     controller.dispose();
   });
 
@@ -682,5 +760,118 @@ describe("AppController automatic update checks", () => {
     expect(check).toHaveBeenCalledTimes(1);
     expect(snapshots.at(-1)?.settings.lastUpdateCheckTimeMs).toBe(now);
     expect(invoke).not.toHaveBeenCalledWith("save_settings", expect.anything());
+  });
+});
+
+describe("AppController area selection", () => {
+  const saved = { x: 10, y: 800, width: 1200, height: 120 };
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  // The selector leaves the saved area in place while it is open, so polling
+  // must wait for a different area rather than report the saved one as new.
+  it("does not confirm a selection while the saved area is unchanged", async () => {
+    let region: typeof saved | null = saved;
+    const invoke = vi.fn(async (command: string) =>
+      command === "get_capture_region" ? region : undefined,
+    );
+    const { controller } = createController(invoke as TauriBridgeApi["invoke"]);
+    await controller.initialize();
+
+    await controller.selectRegion();
+    await vi.advanceTimersByTimeAsync(2000);
+
+    expect(controller.current().notice).toBeNull();
+
+    region = { ...saved, y: 760 };
+    await vi.advanceTimersByTimeAsync(250);
+
+    expect(controller.current()).toMatchObject({
+      region: { y: 760 },
+      notice: "Subtitle area selected",
+    });
+    controller.dispose();
+  });
+
+  it("confirms the first area found when none was saved", async () => {
+    let region: typeof saved | null = null;
+    const invoke = vi.fn(async (command: string) =>
+      command === "get_capture_region" ? region : undefined,
+    );
+    const { controller } = createController(invoke as TauriBridgeApi["invoke"]);
+    await controller.initialize();
+
+    await controller.selectRegion();
+    region = saved;
+    await vi.advanceTimersByTimeAsync(250);
+
+    expect(controller.current()).toMatchObject({
+      region: saved,
+      notice: "Subtitle area selected",
+    });
+    controller.dispose();
+  });
+});
+
+describe("AppController progress messages", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  it("keeps the progress message for a slow sample translation until it finishes", async () => {
+    const invoke = vi.fn(async (command: string) => {
+      if (command === "refresh_engine_status") return { phase: "ready" };
+      if (command === "wizard_test_translation") {
+        await new Promise((resolve) => setTimeout(resolve, 9000));
+        return { translatedText: "sample" };
+      }
+      return undefined;
+    });
+    const { controller } = createController(invoke as TauriBridgeApi["invoke"]);
+
+    const running = controller.testTranslation();
+    await vi.advanceTimersByTimeAsync(6000);
+
+    expect(controller.current()).toMatchObject({
+      busy: "saving",
+      notice: "Running a private sample translation…",
+    });
+
+    await vi.advanceTimersByTimeAsync(3000);
+    await running;
+
+    expect(controller.current()).toMatchObject({ busy: "idle", notice: "Sample passed" });
+    controller.dispose();
+  });
+
+  it("drops the progress message when the sample translation fails", async () => {
+    const invoke = vi.fn(async (command: string) => {
+      if (command === "refresh_engine_status") return { phase: "ready" };
+      throw new Error("ENGINE_SAMPLE_TRANSLATION_FAILED");
+    });
+    const { controller } = createController(invoke as TauriBridgeApi["invoke"]);
+
+    await controller.testTranslation();
+
+    expect(controller.current()).toMatchObject({
+      busy: "idle",
+      notice: null,
+      error: "ENGINE_SAMPLE_TRANSLATION_FAILED",
+    });
+    controller.dispose();
   });
 });

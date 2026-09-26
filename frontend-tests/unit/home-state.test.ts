@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type { UiSnapshot } from "../../src/ui/contracts";
-import { deriveHomePresentation } from "../../src/ui/home-state";
+import { deriveHomePresentation, isSessionLocked } from "../../src/ui/home-state";
 
 vi.stubGlobal("window", {
   OcrLanguageTags: {
@@ -61,6 +61,7 @@ function snapshot(patch: Partial<UiSnapshot> = {}): UiSnapshot {
     running: false,
     error: null,
     notice: null,
+    captureWarning: null,
     developerMode: false,
     update: { kind: "idle" },
     appVersion: "0.6.6",
@@ -86,6 +87,7 @@ describe("deriveHomePresentation", () => {
     [snapshot({ engine: { phase: "preparing" } }), "none", "Preparing"],
     [snapshot({ engine: { phase: "unknown" } }), "repair", "Needs repair"],
     [snapshot({ engine: { phase: "unexpected" } }), "repair", "Needs repair"],
+    [snapshot({ engine: { phase: "backendUnavailable" } }), "none", "Backend offline"],
     [snapshot({ error: "save failed" }), "start", "Ready"],
     [snapshot({ ocrLanguages: new Set() }), "installOcr", "Almost ready"],
     [snapshot({ region: null }), "selectRegion", "Almost ready"],
@@ -153,4 +155,35 @@ describe("deriveHomePresentation", () => {
       expect(result).toMatchObject({ state: "ready", action: "start", statusLabel: "Ready" });
     },
   );
+});
+
+describe("Home capture warnings", () => {
+  it("shows a non-fatal capture report on a running session", () => {
+    const result = deriveHomePresentation(
+      snapshot({
+        running: true,
+        captureWarning: "Using GDI fallback - video content may not capture correctly",
+      }),
+    );
+
+    expect(result).toMatchObject({
+      state: "running",
+      supportLine: "Compatibility capture · Protected video may not be read",
+      supportTone: "warning",
+    });
+  });
+});
+
+describe("Home session controls", () => {
+  it.each(["warming", "starting", "stopping"] as const)(
+    "locks the language pair and area while translation is %s",
+    (busy) => {
+      expect(isSessionLocked(snapshot({ busy, running: busy === "stopping" }))).toBe(true);
+    },
+  );
+
+  it("locks them while translation runs and unlocks them when it is ready", () => {
+    expect(isSessionLocked(snapshot({ running: true }))).toBe(true);
+    expect(isSessionLocked(snapshot())).toBe(false);
+  });
 });

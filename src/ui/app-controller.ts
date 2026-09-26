@@ -1,7 +1,8 @@
 import type { AppScreen, AppSettings, CaptureRegion, EngineStatus, UiSnapshot } from "./contracts";
 import { pickSampleTranslation } from "./sample-translations";
 import { applyLanguageSelection } from "./languages";
-import { defaultOcr, defaultSettings, mergeSettings } from "./settings-defaults";
+import { backendUnavailablePhase } from "./home-state";
+import { defaultSettings, mergeSettings, recognitionPresets } from "./settings-defaults";
 import { UpdateController } from "./update-controller";
 
 type Subscriber = (snapshot: UiSnapshot) => void;
@@ -35,6 +36,7 @@ export class AppController {
     running: false,
     error: null,
     notice: null,
+    captureWarning: null,
     developerMode: localStorage.getItem("meowcal.developerMode") === "true",
     update: { kind: "idle" },
     appVersion: null,
@@ -53,11 +55,11 @@ export class AppController {
   private publish(patch: Partial<UiSnapshot>): void {
     if (this.disposed) return;
     this.snapshot = { ...this.snapshot, ...patch };
-    if (patch.notice) this.expireNotice(patch.notice);
+    if (patch.notice && this.snapshot.busy === "idle") this.expireNotice(patch.notice);
     this.subscriber(this.snapshot);
   }
 
-  /** Notices confirm something that already happened; errors stay until dismissed. */
+  /** Notices expire once the work they describe is done; errors stay until dismissed. */
   private expireNotice(notice: string): void {
     if (this.noticeTimer !== null) window.clearTimeout(this.noticeTimer);
     this.noticeTimer = window.setTimeout(() => {
@@ -76,7 +78,9 @@ export class AppController {
     const [settings, languages, engine, region, running] = await Promise.all([
       this.safeInvoke<Partial<AppSettings> | null>("get_settings", null),
       this.safeInvoke<string[]>("get_ocr_languages", []),
-      this.safeInvoke<EngineStatus>("get_engine_status", { phase: "unknown" }),
+      this.safeInvoke<EngineStatus>("get_engine_status", {
+        phase: browserMode ? backendUnavailablePhase : "unknown",
+      }),
       this.safeInvoke<CaptureRegion | null>("get_capture_region", null),
       browserMode ? false : this.safeInvoke<boolean>("is_translation_running", false),
     ]);
@@ -127,6 +131,7 @@ export class AppController {
     const captureUnlisten = await window.TauriBridge.event.listen("capture-status", (event) => {
       const payload = event.payload as { isError?: boolean; message?: string };
       if (payload.isError) this.publish({ error: payload.message ?? "Screen capture failed" });
+      else if (payload.message) this.publish({ captureWarning: payload.message });
     });
     // Setup opens by itself only until the user has closed it once, finished or
     // not. After that Home's setup action is the way back, so a cancelled setup
@@ -163,18 +168,20 @@ export class AppController {
   async selectRegion(): Promise<void> {
     try {
       await window.TauriBridge.invoke("open_area_selector");
-      this.startRegionPolling();
+      this.startRegionPolling(this.snapshot.region);
     } catch (error) {
       this.publish({ error: errorMessage(error) });
     }
   }
 
-  private startRegionPolling(): void {
+  // Backs up `region-selected`. The selector keeps the saved area, so only a new area counts.
+  private startRegionPolling(saved: CaptureRegion | null): void {
     this.stopRegionPolling();
     let attempts = 0;
     this.pollingId = window.setInterval(async () => {
       const region = await this.safeInvoke<CaptureRegion | null>("get_capture_region", null);
-      if (region) {
+      const same = (key: keyof CaptureRegion) => region?.[key] === saved?.[key];
+      if (region && !(saved && same("x") && same("y") && same("width") && same("height"))) {
         this.stopRegionPolling();
         this.publish({ region, notice: "Subtitle area selected" });
       } else if (++attempts >= 40) this.stopRegionPolling();
@@ -199,7 +206,7 @@ export class AppController {
         notice: "OCR check complete",
       });
     } catch (error) {
-      this.publish({ busy: "idle", error: errorMessage(error) });
+      this.publish({ busy: "idle", notice: null, error: errorMessage(error) });
     }
   }
 
@@ -212,12 +219,17 @@ export class AppController {
   }
 
   async refresh(): Promise<void> {
+    const engineFallback = window.TauriBridge.isBrowserMode()
+      ? { phase: backendUnavailablePhase }
+      : (this.snapshot.engine ?? {});
     const [engine, region, stored] = await Promise.all([
-      this.safeInvoke<EngineStatus>("refresh_engine_status", this.snapshot.engine ?? {}),
+      this.safeInvoke<EngineStatus>("refresh_engine_status", engineFallback),
       this.safeInvoke<CaptureRegion | null>("get_capture_region", this.snapshot.region),
       this.safeInvoke<Partial<AppSettings> | null>("get_settings", null),
     ]);
-    const patch: Partial<UiSnapshot> = { engine, region, error: null };
+    // Errors stay: this re-reads engine and area, not capture, so it cannot tell
+    // whether a failure reported while another window had focus is over.
+    const patch: Partial<UiSnapshot> = { engine, region };
     // The overlay's quick menu saves appearance itself. Take its values back,
     // unless an edit made in this window is still waiting to be saved.
     if (stored && this.overlaySaveId === null) {
@@ -228,7 +240,7 @@ export class AppController {
   }
 
   async start(): Promise<void> {
-    this.publish({ busy: "warming", error: null, notice: null });
+    this.publish({ busy: "warming", error: null, notice: null, captureWarning: null });
     try {
       await this.saveSettings(true);
       const engine = await this.readyEngine();
@@ -286,19 +298,9 @@ export class AppController {
     await this.persistSettingsInBackground();
   }
 
-  async setRecognitionPreset(value: "fast" | "balanced" | "accurate"): Promise<void> {
-    const overrides = {
-      fast: { preprocessingEnabled: false, validationStrictness: "permissive" as const },
-      balanced: {},
-      accurate: {
-        enableMultiPass: true,
-        multiPassCount: 2,
-        validationStrictness: "strict" as const,
-      },
-    };
-    await this.editSettings(
-      (settings) => (settings.translation.ocr = { ...defaultOcr, ...overrides[value] }),
-    );
+  async setRecognitionPreset(value: keyof typeof recognitionPresets): Promise<void> {
+    const ocr = recognitionPresets[value];
+    await this.editSettings((settings) => (settings.translation.ocr = { ...ocr }));
   }
 
   async setTranslateAllOcrText(enabled: boolean): Promise<void> {
@@ -352,7 +354,7 @@ export class AppController {
       const latency = result.latencyMs ? ` · ${result.latencyMs} ms` : "";
       this.publish({ busy: "idle", notice: `Sample passed${latency}` });
     } catch (error) {
-      this.publish({ busy: "idle", error: errorMessage(error) });
+      this.publish({ busy: "idle", notice: null, error: errorMessage(error) });
     }
   }
 

@@ -1,6 +1,7 @@
 import { html, nothing, type TemplateResult } from "lit";
 import type { HomePresentation, Tone, UiSnapshot } from "./contracts";
 import { icon } from "./icons";
+import { isSessionLocked } from "./home-state";
 import { languages } from "./languages";
 
 interface HomeActions {
@@ -54,6 +55,7 @@ export function renderHome(
 ): TemplateResult {
   const tone = stateTone[presentation.state];
   const busy = presentation.actionIcon === "spinner";
+  const locked = isSessionLocked(snapshot);
 
   return html`
     <main class="screen home-screen" aria-labelledby="home-title">
@@ -74,7 +76,7 @@ export function renderHome(
             "Original subtitles",
             "Original subtitle language",
             snapshot.settings.sourceLanguage,
-            snapshot.running,
+            locked,
             actions.onSource,
           )}
           ${icon("arrow-right", "language-arrow")}
@@ -82,17 +84,12 @@ export function renderHome(
             "Translate into",
             "Translation language",
             snapshot.settings.targetLanguage,
-            snapshot.running,
+            locked,
             actions.onTarget,
           )}
         </div>
 
-        <button
-          class="region-row"
-          type="button"
-          @click=${actions.onRegion}
-          ?disabled=${snapshot.running}
-        >
+        <button class="region-row" type="button" @click=${actions.onRegion} ?disabled=${locked}>
           <span class="region-icon">${icon("area")}</span>
           <span class="region-label">
             ${snapshot.region ? "Subtitle area selected" : "No subtitle area yet"}
