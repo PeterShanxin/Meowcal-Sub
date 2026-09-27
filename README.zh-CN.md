@@ -32,6 +32,8 @@
 > **识别画面文字，不识别语音。** 视频需要有可见字幕。
 > Meowcal Sub 不会听取音频，也不会为完全没有画面文字的视频生成字幕。
 
+https://github.com/user-attachments/assets/58fbac67-9032-42e2-8d4d-8e4df6c01e59
+
 ## 下载
 
 **Windows 11 公开测试版 · v0.8.6** — [更新说明与全部安装文件](https://github.com/PeterShanxin/Meowcal-Sub/releases/tag/v0.8.6)。

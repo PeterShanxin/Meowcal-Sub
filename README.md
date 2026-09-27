@@ -33,6 +33,8 @@ overlay. No subtitle file, cloud account, or API key is needed for normal use.
 > **Screen text, not speech.** The video needs visible subtitles. Meowcal Sub
 > does not listen to audio or generate captions for a video without on-screen text.
 
+https://github.com/user-attachments/assets/58fbac67-9032-42e2-8d4d-8e4df6c01e59
+
 ## Download
 
 **Windows 11 public beta · v0.8.6** — [release notes and all files](https://github.com/PeterShanxin/Meowcal-Sub/releases/tag/v0.8.6).
