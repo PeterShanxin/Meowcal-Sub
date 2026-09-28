@@ -152,10 +152,15 @@ async fn a_rejected_output_fails_without_retry_and_keeps_the_quality_code() {
         )
         .await;
 
-    let err = expect_failed(outcome);
-    let LlmError::TranslationError(message) = err else {
-        panic!("expected TranslationError, got {err:?}");
+    let AttemptOutcome::Rejected {
+        translated,
+        error: LlmError::TranslationError(message),
+        ..
+    } = outcome
+    else {
+        panic!("expected rejected output, got {outcome:?}");
     };
+    assert_eq!(translated, "a".repeat(150));
     assert_eq!(
         message,
         "Translation output rejected as corrupted (overlong output)."
@@ -209,7 +214,11 @@ async fn output_is_judged_against_the_clipped_source_the_model_saw() {
         )
         .await;
 
-    let LlmError::TranslationError(message) = expect_failed(outcome) else {
+    let AttemptOutcome::Rejected {
+        error: LlmError::TranslationError(message),
+        ..
+    } = outcome
+    else {
         panic!("expected a rejected translation");
     };
     assert_eq!(

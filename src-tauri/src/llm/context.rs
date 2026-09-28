@@ -122,7 +122,7 @@ impl TranslationContext {
 
     /// Record an OCR line into the rolling cache (call after OCR, before translation).
     ///
-    /// Stores source-only (no translated output) to prevent error propagation.
+    /// Stores source only. Returns whether a scene gap reset the context.
     pub fn add_ocr_line(
         &mut self,
         source_text: &str,
@@ -130,27 +130,26 @@ impl TranslationContext {
         max_entries: usize,
         max_entry_chars: usize,
         reset_gap: std::time::Duration,
-    ) {
+    ) -> bool {
         if !self.enabled {
-            return;
+            return false;
         }
 
         let cleaned = source_text.trim();
         if cleaned.is_empty() {
-            return;
+            return false;
         }
 
-        if !reset_gap.is_zero() {
-            if let Some(last) = self.history.back() {
-                if now.duration_since(last.timestamp) > reset_gap {
-                    self.reset();
-                }
-            }
+        let reset = self.history.back().is_some_and(|last| {
+            !reset_gap.is_zero() && now.duration_since(last.timestamp) > reset_gap
+        });
+        if reset {
+            self.reset();
         }
 
         let normalized_new = Self::normalize_for_dedup(cleaned);
         if Self::is_noise_line(&normalized_new) {
-            return;
+            return reset;
         }
 
         // De-jitter: update timestamp if duplicate-ish, and replace last entry if the new line is a strict superset.
@@ -160,7 +159,7 @@ impl TranslationContext {
             if normalized_new == normalized_last {
                 last_entry.timestamp = now;
                 self.last_ocr_hash = Some(Self::hash_text(&last_entry.text));
-                return;
+                return reset;
             }
 
             if normalized_new.contains(&normalized_last)
@@ -176,7 +175,7 @@ impl TranslationContext {
                 self.history_tokens += last_entry.token_estimate;
                 self.last_ocr_hash = Some(Self::hash_text(&last_entry.text));
                 self.check_compression_threshold();
-                return;
+                return reset;
             }
 
             if normalized_last.contains(&normalized_new)
@@ -185,7 +184,7 @@ impl TranslationContext {
                 // OCR regression (lost characters): keep the longer previous line but refresh timestamp.
                 last_entry.timestamp = now;
                 self.last_ocr_hash = Some(Self::hash_text(&last_entry.text));
-                return;
+                return reset;
             }
         }
 
@@ -212,6 +211,7 @@ impl TranslationContext {
 
         // Check if we need compression
         self.check_compression_threshold();
+        reset
     }
 
     /// Build the context prompt to prepend to translation requests

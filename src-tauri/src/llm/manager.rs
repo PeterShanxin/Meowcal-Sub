@@ -88,7 +88,6 @@ impl TranslationManager {
 
     /// Detect appropriate context budget based on model
     fn detect_context_budget(config: &TranslationConfig) -> usize {
-        // Try to detect from Foundry Local model if available
         if config.enable_foundry_local {
             if let Some(ref model) = config.foundry_local.model {
                 if let Some(window) = FoundryLocalBackend::get_model_context_window(model) {
@@ -106,7 +105,6 @@ impl TranslationManager {
             debug!("No Foundry Local model configured; using default context budget");
         }
 
-        // Default budget if detection fails
         debug!("Using default context budget: 500 tokens");
         500
     }
@@ -541,20 +539,22 @@ impl TranslationManager {
         self.context_read().is_duplicate(text)
     }
 
-    /// Record a successful translation in context
+    /// Record source context and expire replay evidence at the same scene gap.
     pub fn record_ocr_line(&self, source_text: &str) {
         if !self.config.enable_context_aware {
             return;
         }
 
         let reset_gap = Duration::from_millis(self.config.context_reset_gap_ms as u64);
-        self.context_write().add_ocr_line(
+        if self.context_write().add_ocr_line(
             source_text,
             Instant::now(),
             self.config.context_buffer_size,
             self.config.prompt_max_source_chars,
             reset_gap,
-        );
+        ) {
+            lock_or_recover(&self.recent_translations).clear();
+        }
     }
 
     /// Get context prompt to enhance translation request

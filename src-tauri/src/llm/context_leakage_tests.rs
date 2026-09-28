@@ -7,13 +7,6 @@ use crate::sync_utils::lock_or_recover;
 use std::sync::{Arc, Mutex};
 
 fn manager(answers: &[&str], enabled: bool) -> (TranslationManager, ScriptedBackend) {
-    let backend = ScriptedBackend::new(
-        BackendId::FoundryLocal,
-        answers
-            .iter()
-            .map(|answer| ScriptedStep::Ok((*answer).into()))
-            .collect(),
-    );
     let config = TranslationConfig {
         enable_context_aware: enabled,
         context_level: if enabled {
@@ -23,6 +16,20 @@ fn manager(answers: &[&str], enabled: bool) -> (TranslationManager, ScriptedBack
         },
         ..TranslationConfig::default()
     };
+    manager_with_config(answers, config)
+}
+
+fn manager_with_config(
+    answers: &[&str],
+    config: TranslationConfig,
+) -> (TranslationManager, ScriptedBackend) {
+    let backend = ScriptedBackend::new(
+        BackendId::FoundryLocal,
+        answers
+            .iter()
+            .map(|answer| ScriptedStep::Ok((*answer).into()))
+            .collect(),
+    );
     let manager = TranslationManager::with_backends(
         config,
         vec![Box::new(backend.clone())],
@@ -41,6 +48,73 @@ fn context_flags(backend: &ScriptedBackend) -> Vec<bool> {
                 .is_some_and(|options| options.enable_context)
         })
         .collect()
+}
+
+#[tokio::test]
+async fn context_leakage_recovers_a_replay_rejected_by_the_length_validator() {
+    let previous = "房间是空的。";
+    let replay = format!("{previous}{}", "我们只有十分钟，必须立刻离开这里。".repeat(3));
+    let rejection = crate::llm::output_validation::validate_translation_output(
+        "Not yet.",
+        &replay,
+        "en",
+        "zh",
+        crate::translation_eligibility::Eligibility::SubtitleLike,
+    );
+    assert_eq!(
+        rejection,
+        Err(crate::llm::output_validation::TranslationOutputRejection::TooLong)
+    );
+    let (manager, backend) = manager(&[previous, &replay, "还没有。"], true);
+    manager
+        .translate_with_fallback("The room is empty.", "en", "zh")
+        .await;
+    let result = manager
+        .translate_with_context("Not yet.", "en", "zh", Some("The room is empty."))
+        .await;
+    assert_eq!(result.translated, "还没有。");
+    assert_eq!(result.display_state, TranslationDisplayState::Translated);
+    assert_eq!(context_flags(&backend), vec![false, true, false]);
+}
+
+#[tokio::test]
+async fn context_leakage_short_cjk_fragments_preserve_context() {
+    let (manager, backend) = manager(&["是", "是的", "还没有。"], true);
+    manager
+        .translate_with_fallback("It is.", "en", "zh")
+        .await;
+    let result = manager
+        .translate_with_context("Agreed.", "en", "zh", Some("It is."))
+        .await;
+    assert_eq!(result.translated, "是的");
+    manager
+        .translate_with_context("Not yet.", "en", "zh", Some("Agreed."))
+        .await;
+    assert_eq!(context_flags(&backend), vec![false, true, true]);
+}
+
+#[tokio::test]
+async fn context_leakage_scene_gap_expires_previous_translation_evidence() {
+    let config = TranslationConfig {
+        enable_context_aware: true,
+        context_level: ContextLevel::MemoryAndRecent,
+        context_reset_gap_ms: 1,
+        ..TranslationConfig::default()
+    };
+    let (manager, backend) = manager_with_config(&["还没有。", "还没有。", "以后再说。"], config);
+    manager.record_ocr_line("Not yet.");
+    manager
+        .translate_with_fallback("Not yet.", "en", "zh")
+        .await;
+    tokio::time::sleep(std::time::Duration::from_millis(15)).await;
+    manager.record_ocr_line("We should wait.");
+    let context = manager.get_context_prompt().unwrap();
+    assert!(!context.contains("Not yet."));
+    let result = manager
+        .translate_with_context("Not now.", "en", "zh", Some(&context))
+        .await;
+    assert_eq!(result.translated, "还没有。");
+    assert_eq!(context_flags(&backend), vec![false, true]);
 }
 
 #[tokio::test]

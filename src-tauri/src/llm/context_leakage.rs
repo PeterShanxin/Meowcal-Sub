@@ -78,6 +78,11 @@ fn normalize(text: &str) -> String {
 }
 
 fn contains_phrase(text: &str, phrase: &str) -> bool {
+    // A short CJK answer such as "是" is ordinary text inside "是的".
+    // Only a whole-answer match justifies confirmation for these short cues.
+    if phrase.chars().count() < 4 && phrase.chars().any(super::text_utils::is_cjk_char) {
+        return text == phrase;
+    }
     !phrase.is_empty()
         && text.match_indices(phrase).any(|(start, matched)| {
             let end = start + matched.len();

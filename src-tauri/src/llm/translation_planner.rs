@@ -196,38 +196,54 @@ impl TranslationPlanner {
                 )
                 .await;
 
+            let output = match &result {
+                AttemptOutcome::Succeeded {
+                    translated,
+                    latency_ms,
+                    ..
+                }
+                | AttemptOutcome::Rejected {
+                    translated,
+                    latency_ms,
+                    ..
+                } => Some((translated, *latency_ms)),
+                _ => None,
+            };
+            if let Some((translated, latency_ms)) = output {
+                let leaked = context_used
+                    && self.history.as_ref().is_some_and(|history| {
+                        lock_or_recover(history).repeats_other_source(
+                            &sent,
+                            translated,
+                            plan.source_language,
+                            plan.target_language,
+                        )
+                    });
+                if leaked {
+                    lock_or_recover(&self.diagnostics).record_error(
+                        id,
+                        "context_leakage",
+                        Some(latency_ms),
+                    );
+                    warn!(
+                        backend_id = id.as_str(),
+                        latency_ms,
+                        error_code = "context_leakage",
+                        "Context output repeated another subtitle; retrying without context"
+                    );
+                    warnings.push(format!("{}: context_leakage", id.as_str()));
+                    tier = ContextTier::None;
+                    plan.tier_store.store(tier as u8, Ordering::SeqCst);
+                    continue;
+                }
+            }
+
             match result {
                 AttemptOutcome::Succeeded {
                     translated,
                     latency_ms,
                     recovered_after_retry,
                 } => {
-                    let leaked = context_used
-                        && self.history.as_ref().is_some_and(|history| {
-                            lock_or_recover(history).repeats_other_source(
-                                &sent,
-                                &translated,
-                                plan.source_language,
-                                plan.target_language,
-                            )
-                        });
-                    if leaked {
-                        lock_or_recover(&self.diagnostics).record_error(
-                            id,
-                            "context_leakage",
-                            Some(latency_ms),
-                        );
-                        warn!(
-                            backend_id = id.as_str(),
-                            latency_ms,
-                            error_code = "context_leakage",
-                            "Context output repeated another subtitle; retrying without context"
-                        );
-                        warnings.push(format!("{}: context_leakage", id.as_str()));
-                        tier = ContextTier::None;
-                        plan.tier_store.store(tier as u8, Ordering::SeqCst);
-                        continue;
-                    }
                     if let Some(history) = &self.history {
                         lock_or_recover(history).record(
                             &sent,
@@ -281,7 +297,7 @@ impl TranslationPlanner {
                     }
                     break;
                 }
-                AttemptOutcome::Failed(err) => {
+                AttemptOutcome::Failed(err) | AttemptOutcome::Rejected { error: err, .. } => {
                     last_error = Some(err);
                     break;
                 }

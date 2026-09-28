@@ -117,8 +117,11 @@ Shared contracts have one owner before parallel decomposition begins:
   `llm/translation_planner.rs` discards it and retries with no context under
   the original deadline, retaining the no-context tier for the session.
   Punctuation and case differences are ignored; unchanged source cues and
-  matching fragments inside Latin words are exempt. The retry can confirm
-  that two different cues legitimately share a translation. This is a replay
+  matching fragments inside Latin words are exempt. CJK answers shorter than
+  four characters require a whole-answer match. A scene-gap context reset also
+  clears comparison history. Even output rejected by the generic validator is
+  checked for replay before choosing fallback. The retry can confirm that two
+  different cues legitimately share a translation. This is a replay
   guard, not a semantic detector for paraphrases or previously unseen leakage.
 - Configuration: Rust `config` is canonical. Frontend code may present or
   submit settings but cannot invent defaults, migrations, or readiness rules.
