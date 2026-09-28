@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "issue": 243,
-  "testedCommit": "19702c05251f64df4a6da943b2189dc8891225c0",
+  "testedCommit": "7ae2777c798e043d12cd3c5f21f75cf610914e5d",
   "date": "2026-09-28",
   "platform": {
     "architecture": "ARM64",
@@ -16,7 +16,7 @@
     "model": "HY-MT1.5-1.8B-Q4_K_M",
     "device": "CPU"
   },
-  "binarySha256": "6df2ecd36526d0193606094d2e3f000051281c6d6173f18af4a1cae2a44e3965",
+  "binarySha256": "d0acb87c4062699b4136f724bdec779a04f0c5d9ac1f6eb1d4515d7f87400722",
   "method": {
     "fixture": "evals/band-gate/index.html",
     "report": "evals/band-gate/report.mjs",
@@ -89,13 +89,21 @@
       "negativeCoverage": [],
       "latencyMs": {
         "sampleCount": 30,
-        "p50": 500.5,
-        "p95": 1369.4499999999994,
-        "max": 2301
+        "p50": 192,
+        "p95": 378.04999999999995,
+        "max": 629
       },
       "warnings": {
         "local_engine: context_leakage": 1
       },
+      "warningEvents": [
+        {
+          "cueID": "ew-03",
+          "warnings": ["local_engine: context_leakage"],
+          "displayState": "translated",
+          "totalMs": 629
+        }
+      ],
       "manuallyObservedPreviousCueLeakCount": 0
     },
     {
@@ -147,11 +155,12 @@
       "negativeCoverage": [],
       "latencyMs": {
         "sampleCount": 30,
-        "p50": 410.5,
-        "p95": 1067.6499999999987,
-        "max": 1685
+        "p50": 193.5,
+        "p95": 397.59999999999997,
+        "max": 407
       },
       "warnings": {},
+      "warningEvents": [],
       "manuallyObservedPreviousCueLeakCount": 0
     },
     {
@@ -180,9 +189,9 @@
           "segmentId": "nb-watermark-band",
           "cycle": 0,
           "expectedPostWarmupSeconds": 34,
-          "observedPostWarmupFrames": 130,
-          "observedSpanSeconds": 33.695,
-          "coverageFraction": 0.9910294117647059,
+          "observedPostWarmupFrames": 131,
+          "observedSpanSeconds": 33.557,
+          "coverageFraction": 0.9869705882352942,
           "missing": false,
           "sufficient": true
         },
@@ -191,8 +200,8 @@
           "cycle": 0,
           "expectedPostWarmupSeconds": 34,
           "observedPostWarmupFrames": 127,
-          "observedSpanSeconds": 33.606,
-          "coverageFraction": 0.9884117647058824,
+          "observedSpanSeconds": 33.51,
+          "coverageFraction": 0.9855882352941175,
           "missing": false,
           "sufficient": true
         },
@@ -200,25 +209,32 @@
           "segmentId": "nb-credits-band",
           "cycle": 0,
           "expectedPostWarmupSeconds": 17,
-          "observedPostWarmupFrames": 65,
-          "observedSpanSeconds": 16.483,
-          "coverageFraction": 0.9695882352941176,
+          "observedPostWarmupFrames": 66,
+          "observedSpanSeconds": 16.747,
+          "coverageFraction": 0.9851176470588235,
           "missing": false,
           "sufficient": true
         }
       ],
       "latencyMs": {
         "sampleCount": 5,
-        "p50": 673,
-        "p95": 3636.7999999999993,
-        "max": 4349
+        "p50": 216,
+        "p95": 632.5999999999999,
+        "max": 733
       },
       "warnings": {
         "bandHeld": 3,
         "untranslatable": 1,
-        "local_engine: timeout": 1,
-        "local_engine: context_degraded": 1
+        "local_engine: context_leakage": 1
       },
+      "warningEvents": [
+        {
+          "cueID": "nb-dialogue-05",
+          "warnings": ["local_engine: context_leakage"],
+          "displayState": "translated",
+          "totalMs": 733
+        }
+      ],
       "manuallyObservedPreviousCueLeakCount": 0
     },
     {
@@ -247,9 +263,9 @@
           "segmentId": "nb-watermark-band",
           "cycle": 0,
           "expectedPostWarmupSeconds": 34,
-          "observedPostWarmupFrames": 130,
-          "observedSpanSeconds": 33.576,
-          "coverageFraction": 0.9875294117647059,
+          "observedPostWarmupFrames": 131,
+          "observedSpanSeconds": 33.491,
+          "coverageFraction": 0.9850294117647058,
           "missing": false,
           "sufficient": true
         },
@@ -258,8 +274,8 @@
           "cycle": 0,
           "expectedPostWarmupSeconds": 34,
           "observedPostWarmupFrames": 127,
-          "observedSpanSeconds": 33.466,
-          "coverageFraction": 0.9842941176470589,
+          "observedSpanSeconds": 33.528,
+          "coverageFraction": 0.9861176470588235,
           "missing": false,
           "sufficient": true
         },
@@ -268,35 +284,39 @@
           "cycle": 0,
           "expectedPostWarmupSeconds": 17,
           "observedPostWarmupFrames": 66,
-          "observedSpanSeconds": 16.689,
-          "coverageFraction": 0.9817058823529412,
+          "observedSpanSeconds": 16.773,
+          "coverageFraction": 0.9866470588235294,
           "missing": false,
           "sufficient": true
         }
       ],
       "latencyMs": {
         "sampleCount": 5,
-        "p50": 267,
-        "p95": 408.79999999999995,
-        "max": 429
+        "p50": 172,
+        "p95": 267.2,
+        "max": 283
       },
       "warnings": {
-        "bandHeld": 3,
+        "bandHeld": 4,
         "untranslatable": 1
       },
+      "warningEvents": [],
       "manuallyObservedPreviousCueLeakCount": 0
     }
   ],
   "observations": [
-    "Equal-width/context-on emitted one context_leakage warning on ew-03, then returned the correct current-cue translation in 1260 ms. Raw rejected output is not published, so this is a suspected-replay recovery observation, not a semantic proof of the rejected answer.",
-    "Negative recovery/context-on emitted timeout and context_degraded warnings for nb-dialogue-05; recovery succeeded at 4349 ms. Its five-sample p95 was 3636.8 ms. This is functional recovery evidence, not a tail-latency improvement claim.",
-    "Both negative runs admitted the initial authored watermark during the allowed warmup. Zero post-warmup admissions does not imply that bandHeld always clears an earlier overlay.",
-    "An initial equal-width/context-off attempt produced 30 translations but the report counted 29 because the first capture preceded the fixture clock by 224 ms. That attempt is excluded; starting the fixture before capture produced the complete 30/30 result without changing report rules.",
-    "An earlier interrupted run is excluded. The accepted context-on equal-width run initially had the fixture above the overlay; removing topmost exposed the overlay, and its later native screenshot was inspected. Subsequent runs kept the fixture non-topmost.",
-    "One 120-second cycle per final case on one ARM64 CPU host. No native x64, GPU, Linux capture, installer, or sustained multi-cycle claim. The replay guard is lexical and cannot detect every semantic leak."
+    "Fresh runs validate the scene-age follow-up at 7ae2777; the earlier native evidence remains available at commit 65065bb.",
+    "Four deterministic regressions cover complete history eviction, manager memory/replay expiry, duplicate/noise observation timing, and restoration of older entries. The eviction and manager-expiry tests both failed before the fix; all 537 application unit tests pass after it.",
+    "Warning events identify authored cue IDs and recovery timing without publishing raw rejected text. A context_leakage warning is suspected-replay recovery evidence, not a semantic proof of the rejected answer.",
+    "Negative segments permit initial warmup admissions: both final runs translated the initial watermark, and context-off also translated one credits name during credits warmup. Zero post-warmup admissions does not imply that bandHeld always clears an earlier overlay.",
+    "The interrupted follow-up run and the launch attempt with no fixture page are excluded. All four final cases were rerun from the beginning after the desktop became available.",
+    "The fixture clock starts before capture in all four fresh runs. Report rules are unchanged.",
+    "One 120-second cycle per final case on one ARM64 CPU host. Event timing is not display-paint latency or a general performance improvement claim. No native x64, GPU, Linux capture, installer, or sustained multi-cycle claim. The guard cannot detect every semantic leak."
   ],
   "screenshots": [
     "2026-09-28-context-leakage-equal-width-arm64.png",
     "2026-09-28-context-leakage-recovery-arm64.png"
-  ]
+  ],
+  "previousEvidenceCommit": "65065bb045c3e99ce80779aa25b22bd575973f74",
+  "recordedAtUtc": "2026-09-28T19:02:05.139Z"
 }

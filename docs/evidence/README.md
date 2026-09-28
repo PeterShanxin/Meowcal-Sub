@@ -129,11 +129,12 @@ coverage. Emulation runs one way only, so the reverse does not hold and an x64
 host cannot stand in for this one.
 
 `2026-09-28-context-leakage-arm64.json` records issue #243 native capture,
-OCR, managed HY-MT, and overlay validation at runtime commit `19702c0`.
+OCR, managed HY-MT, and overlay validation at runtime commit `7ae2777`.
 Both authored 120-second fixtures passed at 1x with context enabled and disabled:
 30/30 equal-width cues and 5/5 recovery cues per setting. All 70 subtitle
 translations were manually checked without observed previous-cue leakage.
 The matching equal-width and recovery PNGs show only authored fixture content.
-One suspected replay recovered successfully; one timeout recovery took 4,349 ms.
-The report preserves those limits, the allowed negative warmup admission, and
-the excluded clock-skew attempt. It makes no general latency improvement claim.
+Two suspected replays recovered successfully in 629 ms and 733 ms. The report
+records allowed negative warmup admissions and excluded interrupted attempts.
+Earlier native evidence remains available at commit `65065bb`. The final runs
+make no general latency improvement claim.
