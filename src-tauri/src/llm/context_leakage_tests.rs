@@ -35,14 +35,20 @@ fn manager(answers: &[&str], enabled: bool) -> (TranslationManager, ScriptedBack
 fn context_flags(backend: &ScriptedBackend) -> Vec<bool> {
     lock_or_recover(&backend.options_seen)
         .iter()
-        .map(|options| options.as_ref().is_some_and(|options| options.enable_context))
+        .map(|options| {
+            options
+                .as_ref()
+                .is_some_and(|options| options.enable_context)
+        })
         .collect()
 }
 
 #[tokio::test]
 async fn context_leakage_retries_without_context_and_persists_safe_tier() {
-    let (manager, backend) =
-        manager(&["房间是空的。", "房间是空的。", "还没有。", "走吧。"], true);
+    let (manager, backend) = manager(
+        &["房间是空的。", "房间是空的。", "还没有。", "走吧。"],
+        true,
+    );
     manager
         .translate_with_fallback("The room is empty.", "en", "zh")
         .await;
@@ -63,13 +69,20 @@ async fn context_leakage_retries_without_context_and_persists_safe_tier() {
 
 #[tokio::test]
 async fn context_leakage_rejects_a_previous_translation_prepended_to_the_current_one() {
-    let (manager, backend) =
-        manager(&["房间是空的。", "房间是空的，还有十分钟。", "还有十分钟。"], true);
+    let (manager, backend) = manager(
+        &["房间是空的。", "房间是空的，还有十分钟。", "还有十分钟。"],
+        true,
+    );
     manager
         .translate_with_fallback("The room is empty.", "en", "zh")
         .await;
     let result = manager
-        .translate_with_context("We have ten minutes.", "en", "zh", Some("The room is empty."))
+        .translate_with_context(
+            "We have ten minutes.",
+            "en",
+            "zh",
+            Some("The room is empty."),
+        )
         .await;
     assert_eq!(result.translated, "还有十分钟。");
     assert_eq!(context_flags(&backend), vec![false, true, false]);
@@ -77,8 +90,7 @@ async fn context_leakage_rejects_a_previous_translation_prepended_to_the_current
 
 #[tokio::test]
 async fn context_leakage_allows_an_unchanged_source_and_ordinary_context_success() {
-    let (manager, backend) =
-        manager(&["房间是空的。", "房间是空的。", "还有十分钟。"], true);
+    let (manager, backend) = manager(&["房间是空的。", "房间是空的。", "还有十分钟。"], true);
     manager
         .translate_with_fallback("The room is empty.", "en", "zh")
         .await;
@@ -87,7 +99,12 @@ async fn context_leakage_allows_an_unchanged_source_and_ordinary_context_success
         .await;
     assert_eq!(repeated.translated, "房间是空的。");
     let result = manager
-        .translate_with_context("We have ten minutes.", "en", "zh", Some("The room is empty."))
+        .translate_with_context(
+            "We have ten minutes.",
+            "en",
+            "zh",
+            Some("The room is empty."),
+        )
         .await;
     assert_eq!(result.translated, "还有十分钟。");
     assert_eq!(context_flags(&backend), vec![false, true, true]);
