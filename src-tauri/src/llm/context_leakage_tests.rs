@@ -53,7 +53,10 @@ fn context_flags(backend: &ScriptedBackend) -> Vec<bool> {
 #[tokio::test]
 async fn context_leakage_recovers_a_replay_rejected_by_the_length_validator() {
     let previous = "房间是空的。";
-    let replay = format!("{previous}{}", "我们只有十分钟，必须立刻离开这里。".repeat(3));
+    let replay = format!(
+        "{previous}{}",
+        "我们只有十分钟，必须立刻离开这里。".repeat(3)
+    );
     let rejection = crate::llm::output_validation::validate_translation_output(
         "Not yet.",
         &replay,
@@ -80,9 +83,7 @@ async fn context_leakage_recovers_a_replay_rejected_by_the_length_validator() {
 #[tokio::test]
 async fn context_leakage_short_cjk_fragments_preserve_context() {
     let (manager, backend) = manager(&["是", "是的", "还没有。"], true);
-    manager
-        .translate_with_fallback("It is.", "en", "zh")
-        .await;
+    manager.translate_with_fallback("It is.", "en", "zh").await;
     let result = manager
         .translate_with_context("Agreed.", "en", "zh", Some("It is."))
         .await;
