@@ -1,5 +1,21 @@
 use super::*;
 use crate::engine_manifest::Architecture;
+
+#[cfg(not(windows))]
+#[test]
+fn managed_runtime_cannot_start_without_windows_process_ownership() {
+    let runtime = ManagedLocalRuntimeConfig {
+        kind: "hy-mt".into(),
+        executable_path: "unused-runtime".into(),
+        model_path: "unused-model".into(),
+        port: 11436,
+    };
+    assert!(start(&runtime)
+        .unwrap_err()
+        .starts_with("ENGINE_UNSUPPORTED_PLATFORM:"));
+    assert!(owned_pid().is_none());
+}
+
 #[test]
 fn install_layout_is_stable_and_port_is_local_only() {
     let manifest = EngineManifest::shipped().expect("manifest should be valid");

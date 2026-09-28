@@ -2,7 +2,7 @@ use crate::engine_manifest::{EngineManifest, RuntimeSpec};
 use crate::hy_mt_runtime::HyMtInstallPaths;
 use crate::sha256::digest_file_hex;
 use serde::{Deserialize, Serialize};
-use std::path::{Component, Path, PathBuf};
+use std::path::{Path, PathBuf};
 use tokio::fs;
 
 const STATE_FILE: &str = "install-state.v1.json";
@@ -298,14 +298,12 @@ fn relative_to_root(root: &Path, path: &Path) -> Result<PathBuf, String> {
 }
 
 fn validate_relative(path: &Path) -> Result<(), String> {
-    if path.as_os_str().is_empty()
-        || path.is_absolute()
-        || path.components().any(|component| {
-            matches!(
-                component,
-                Component::ParentDir | Component::RootDir | Component::Prefix(_)
-            )
-        })
+    // State describes Windows artifacts even when validated on Linux.
+    let value = path.to_string_lossy();
+    if value.is_empty()
+        || value.starts_with(['/', '\\'])
+        || value.contains(':')
+        || value.split(['/', '\\']).any(|part| part == "..")
     {
         return Err("ENGINE_STATE_PATH_INVALID".to_string());
     }

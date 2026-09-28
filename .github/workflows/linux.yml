@@ -1,0 +1,50 @@
+name: Linux development
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: linux-development-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  verify:
+    name: Linux development tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+      - name: Install Linux build and browser dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes build-essential pkg-config libssl-dev
+          rustup toolchain install stable --profile minimal --component rustfmt --component clippy
+          rustup default stable
+          npm ci --ignore-scripts
+          npm exec -- playwright install-deps chromium
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          workspaces: core -> target
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      - name: Verify the Linux development target
+        run: bash scripts/verify-linux.sh
+      - name: Preserve browser failure evidence
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: linux-browser-failures
+          path: test-results/
+          if-no-files-found: ignore
+          retention-days: 7

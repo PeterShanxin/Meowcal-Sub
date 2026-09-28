@@ -45,7 +45,7 @@ export default [
     },
   },
   {
-    files: ["frontend-tests/**/*.{js,mjs}", "scripts/*.mjs", "*.config.mjs"],
+    files: ["frontend-tests/**/*.{js,mjs}", "scripts/**/*.mjs", "*.config.mjs"],
     languageOptions: {
       ecmaVersion: "latest",
       sourceType: "module",
