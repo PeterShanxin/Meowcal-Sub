@@ -246,9 +246,8 @@ fn unsupported_ocr_returns_errors_without_ending_the_protocol_session() {
     let hello = process.response();
     assert!(hello.get("error").is_none(), "{hello}");
     for method in ["ocrLanguages", "ocrInitialize"] {
-        process.send(
-            format!("{}\n", json!({"id":2,"api":1,"method":method,"params":{}})).as_bytes(),
-        );
+        process
+            .send(format!("{}\n", json!({"id":2,"api":1,"method":method,"params":{}})).as_bytes());
         let reply = process.response();
         assert_eq!(reply["error"]["code"], "OCR_UNSUPPORTED_PLATFORM");
         assert!(reply.get("result").is_none());
