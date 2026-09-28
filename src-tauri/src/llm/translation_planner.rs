@@ -305,6 +305,9 @@ impl TranslationPlanner {
                     break;
                 }
                 AttemptOutcome::Failed(err) | AttemptOutcome::Rejected { error: err, .. } => {
+                    if let LlmError::RejectedContextOutput(rejected) = &err {
+                        rejected.report();
+                    }
                     last_error = Some(err);
                     break;
                 }

@@ -202,6 +202,18 @@ impl TranslationAttemptRunner {
                         recovered_after_retry: attempt > 1,
                     };
                 }
+                Ok(Err(LlmError::RejectedContextOutput(rejected))) => {
+                    lock_or_recover(&self.diagnostics).record_error(
+                        id,
+                        "low_quality_output",
+                        Some(latency_ms),
+                    );
+                    return AttemptOutcome::Rejected {
+                        translated: rejected.output.clone(),
+                        latency_ms,
+                        error: LlmError::RejectedContextOutput(rejected),
+                    };
+                }
                 Ok(Err(err)) => {
                     let should_retry =
                         attempt < max_attempts && crate::llm::transport_errors::is_transient(&err);

@@ -23,13 +23,20 @@ fn manager_with_config(
     answers: &[&str],
     config: TranslationConfig,
 ) -> (TranslationManager, ScriptedBackend) {
-    let backend = ScriptedBackend::new(
-        BackendId::FoundryLocal,
+    manager_with_steps(
         answers
             .iter()
             .map(|answer| ScriptedStep::Ok((*answer).into()))
             .collect(),
-    );
+        config,
+    )
+}
+
+fn manager_with_steps(
+    steps: Vec<ScriptedStep>,
+    config: TranslationConfig,
+) -> (TranslationManager, ScriptedBackend) {
+    let backend = ScriptedBackend::new(BackendId::FoundryLocal, steps);
     let manager = TranslationManager::with_backends(
         config,
         vec![Box::new(backend.clone())],
@@ -78,6 +85,63 @@ async fn context_leakage_recovers_a_replay_rejected_by_the_length_validator() {
     assert_eq!(result.translated, "还没有。");
     assert_eq!(result.display_state, TranslationDisplayState::Translated);
     assert_eq!(context_flags(&backend), vec![false, true, false]);
+}
+
+#[tokio::test]
+async fn context_leakage_recovers_replay_rejected_by_managed_prevalidation() {
+    let previous = "房间是空的。";
+    let replay = format!(
+        "{previous}{}",
+        "我们只有十分钟，必须立刻离开这里。".repeat(3)
+    );
+    let (manager, backend) = manager_with_steps(
+        [previous, &replay, "还没有。"]
+            .iter()
+            .map(|answer| ScriptedStep::ManagedOk((*answer).into()))
+            .collect(),
+        TranslationConfig {
+            enable_context_aware: true,
+            context_level: ContextLevel::MemoryAndRecent,
+            ..TranslationConfig::default()
+        },
+    );
+    manager
+        .translate_with_fallback("The room is empty.", "en", "zh")
+        .await;
+    let result = manager
+        .translate_with_context("Not yet.", "en", "zh", Some("The room is empty."))
+        .await;
+    assert_eq!(result.translated, "还没有。");
+    assert_eq!(result.display_state, TranslationDisplayState::Translated);
+    assert_eq!(context_flags(&backend), vec![false, true, false]);
+}
+
+#[tokio::test]
+async fn context_leakage_managed_rejection_without_replay_does_not_retry() {
+    let output = "我们只有十分钟，必须立刻离开这里。".repeat(3);
+    let (manager, backend) = manager_with_steps(
+        vec![
+            ScriptedStep::ManagedOk("房间是空的。".into()),
+            ScriptedStep::ManagedOk(output),
+        ],
+        TranslationConfig {
+            enable_context_aware: true,
+            context_level: ContextLevel::MemoryAndRecent,
+            ..TranslationConfig::default()
+        },
+    );
+    manager
+        .translate_with_fallback("The room is empty.", "en", "zh")
+        .await;
+    let result = manager
+        .translate_with_context("Not yet.", "en", "zh", Some("The room is empty."))
+        .await;
+    assert_ne!(result.display_state, TranslationDisplayState::Translated);
+    assert_eq!(context_flags(&backend), vec![false, true]);
+    assert!(!result
+        .warnings
+        .iter()
+        .any(|warning| warning.contains("context_leakage")));
 }
 
 #[tokio::test]

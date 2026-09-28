@@ -122,7 +122,10 @@ Shared contracts have one owner before parallel decomposition begins:
   and comparison history before the next prompt is built. Reset advances the
   comparison generation, so an in-flight request from the previous scene cannot
   repopulate history. Even output rejected by the generic validator is
-  checked for replay before choosing fallback. The retry can confirm that two
+  checked for replay before choosing fallback. Managed contextual length
+  rejections retain their raw output and recovery receipt until replay is
+  classified; unrelated rejection still reports to Core, and stronger corruption
+  signals retain immediate recovery. The retry can confirm that two
   different cues legitimately share a translation. This is a replay
   guard, not a semantic detector for paraphrases or previously unseen leakage.
 - Configuration: Rust `config` is canonical. Frontend code may present or
