@@ -20,11 +20,8 @@ use tokio::time::{timeout, Duration};
 use tracing::{debug, info, warn};
 
 const DEFAULT_BACKEND_TIMEOUT_MS: u64 = 2500;
-/// Per-attempt ceiling with no context attached. Comfortably above the measured
-/// p99 of 2291ms on a warm local model, so ordinary slow lines still land; far
-/// below the total budget, so a stall is abandoned in time to retry it.
-///
-/// Two attempts and fallback must fit inside the outer pipeline deadline.
+/// No-context ceiling exceeds the measured warm-model p99 (2291ms).
+/// It leaves room for two attempts and fallback within the pipeline deadline.
 const UNCONTEXTED_ATTEMPT_TIMEOUT_MS: u64 = DEFAULT_BACKEND_TIMEOUT_MS;
 
 use crate::pipeline_deadline::backend_budget;
@@ -33,13 +30,9 @@ const MAX_TRANSLATION_INPUT_CHARS: usize = 2000;
 const FOUNDRY_TRANSIENT_MAX_RETRIES: usize = 2;
 const FOUNDRY_TRANSIENT_RETRY_DELAY_MS: u64 = 600;
 
-// =============================================================================
-// TRANSLATION MANAGER - Backend selection + fallback, context storage
-// =============================================================================
 // Context-tier progression (degradation on timeout/slow success, effective
 // tier persistence) lives in `llm/translation_planner.rs`; this module owns
 // the tier store, context storage, backend fallback, and display mapping.
-// =============================================================================
 
 /// Manages available translation backends and fallback selection
 pub struct TranslationManager {
@@ -563,14 +556,19 @@ impl TranslationManager {
             return None;
         }
 
+        let mut context = self.context_write();
+        let reset_gap = Duration::from_millis(self.config.context_reset_gap_ms as u64);
+        if context.reset_if_stale(Instant::now(), reset_gap) {
+            lock_or_recover(&self.recent_translations).clear();
+        }
         match ContextTier::from_u8(self.context_tier.load(Ordering::SeqCst)) {
-            ContextTier::Full => self.context_read().build_context_prompt_with_recent_limit(
+            ContextTier::Full => context.build_context_prompt_with_recent_limit(
                 self.config.context_recent_count,
                 self.config.prompt_max_context_chars,
             ),
-            ContextTier::MemoryOnly => self
-                .context_read()
-                .build_memory_prompt(self.config.prompt_max_context_chars),
+            ContextTier::MemoryOnly => {
+                context.build_memory_prompt(self.config.prompt_max_context_chars)
+            }
             ContextTier::None => None,
         }
     }

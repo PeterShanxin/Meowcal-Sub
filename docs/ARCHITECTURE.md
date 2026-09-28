@@ -117,9 +117,11 @@ Shared contracts have one owner before parallel decomposition begins:
   `llm/translation_planner.rs` discards it and retries with no context under
   the original deadline, retaining the no-context tier for the session.
   Punctuation and case differences are ignored; unchanged source cues and
-  matching fragments inside Latin words are exempt. CJK answers shorter than
-  four characters require a whole-answer match. A scene-gap context reset also
-  clears comparison history. Even output rejected by the generic validator is
+  matching fragments inside Unicode words are exempt. CJK answers shorter than
+  four characters require a whole-answer match. Scene gaps expire source context
+  and comparison history before the next prompt is built. Reset advances the
+  comparison generation, so an in-flight request from the previous scene cannot
+  repopulate history. Even output rejected by the generic validator is
   checked for replay before choosing fallback. The retry can confirm that two
   different cues legitimately share a translation. This is a replay
   guard, not a semantic detector for paraphrases or previously unseen leakage.

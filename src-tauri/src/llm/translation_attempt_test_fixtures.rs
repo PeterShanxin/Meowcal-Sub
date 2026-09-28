@@ -14,6 +14,8 @@ use tokio::time::Instant as VirtualInstant;
 pub(crate) enum ScriptedStep {
     Ok(String),
     Err(LlmError),
+    /// Controlled completion for requests that outlive a context reset.
+    Wait(Arc<tokio::sync::Notify>, String),
     /// Sleeps far beyond any attempt cap, so the runner's timeout fires.
     Hang,
 }
@@ -102,6 +104,10 @@ impl TranslatorBackend for ScriptedBackend {
         match self.step_for(call_index) {
             ScriptedStep::Ok(translated) => Ok(translated),
             ScriptedStep::Err(err) => Err(err),
+            ScriptedStep::Wait(release, translated) => {
+                release.notified().await;
+                Ok(translated)
+            }
             ScriptedStep::Hang => {
                 tokio::time::sleep(Duration::from_secs(3_600)).await;
                 Ok(String::new())

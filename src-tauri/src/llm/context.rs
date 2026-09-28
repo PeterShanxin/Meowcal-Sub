@@ -120,8 +120,17 @@ impl TranslationContext {
         false
     }
 
-    /// Record an OCR line into the rolling cache (call after OCR, before translation).
-    ///
+    /// Expire the previous scene before either reading or recording source context.
+    pub fn reset_if_stale(&mut self, now: Instant, reset_gap: std::time::Duration) -> bool {
+        let reset = self.history.back().is_some_and(|last| {
+            !reset_gap.is_zero() && now.duration_since(last.timestamp) > reset_gap
+        });
+        if reset {
+            self.reset();
+        }
+        reset
+    }
+
     /// Stores source only. Returns whether a scene gap reset the context.
     pub fn add_ocr_line(
         &mut self,
@@ -131,21 +140,11 @@ impl TranslationContext {
         max_entry_chars: usize,
         reset_gap: std::time::Duration,
     ) -> bool {
-        if !self.enabled {
-            return false;
-        }
-
         let cleaned = source_text.trim();
-        if cleaned.is_empty() {
+        if !self.enabled || cleaned.is_empty() {
             return false;
         }
-
-        let reset = self.history.back().is_some_and(|last| {
-            !reset_gap.is_zero() && now.duration_since(last.timestamp) > reset_gap
-        });
-        if reset {
-            self.reset();
-        }
+        let reset = self.reset_if_stale(now, reset_gap);
 
         let normalized_new = Self::normalize_for_dedup(cleaned);
         if Self::is_noise_line(&normalized_new) {
@@ -206,10 +205,7 @@ impl TranslationContext {
         });
         self.history_tokens += token_estimate;
 
-        // Update last OCR hash
         self.last_ocr_hash = Some(Self::hash_text(cleaned));
-
-        // Check if we need compression
         self.check_compression_threshold();
         reset
     }

@@ -164,6 +164,10 @@ impl TranslationPlanner {
         let id = backend.id();
         let runner =
             TranslationAttemptRunner::new(self.policy.clone(), Arc::clone(&self.diagnostics));
+        let history = self
+            .history
+            .as_ref()
+            .map(|history| (history, lock_or_recover(history).generation()));
 
         let sent = super::prompt_router::truncate_chars(
             &super::prompt_router::clean_source_text(plan.text),
@@ -211,13 +215,15 @@ impl TranslationPlanner {
             };
             if let Some((translated, latency_ms)) = output {
                 let leaked = context_used
-                    && self.history.as_ref().is_some_and(|history| {
-                        lock_or_recover(history).repeats_other_source(
-                            &sent,
-                            translated,
-                            plan.source_language,
-                            plan.target_language,
-                        )
+                    && history.is_some_and(|(history, generation)| {
+                        let history = lock_or_recover(history);
+                        history.generation() == generation
+                            && history.repeats_other_source(
+                                &sent,
+                                translated,
+                                plan.source_language,
+                                plan.target_language,
+                            )
                     });
                 if leaked {
                     lock_or_recover(&self.diagnostics).record_error(
@@ -244,12 +250,13 @@ impl TranslationPlanner {
                     latency_ms,
                     recovered_after_retry,
                 } => {
-                    if let Some(history) = &self.history {
+                    if let Some((history, generation)) = history {
                         lock_or_recover(history).record(
                             &sent,
                             &translated,
                             plan.source_language,
                             plan.target_language,
+                            generation,
                         );
                     }
                     if recovered_after_retry {

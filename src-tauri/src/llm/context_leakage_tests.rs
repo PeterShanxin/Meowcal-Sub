@@ -108,11 +108,53 @@ async fn context_leakage_scene_gap_expires_previous_translation_evidence() {
         .translate_with_fallback("Not yet.", "en", "zh")
         .await;
     tokio::time::sleep(std::time::Duration::from_millis(15)).await;
+    // The capture loop builds the prompt before it records the next OCR line.
+    assert!(manager.get_context_prompt().is_none());
     manager.record_ocr_line("We should wait.");
     let context = manager.get_context_prompt().unwrap();
     assert!(!context.contains("Not yet."));
     let result = manager
         .translate_with_context("Not now.", "en", "zh", Some(&context))
+        .await;
+    assert_eq!(result.translated, "还没有。");
+    assert_eq!(context_flags(&backend), vec![false, true]);
+}
+
+#[tokio::test]
+async fn context_leakage_reset_ignores_an_in_flight_previous_scene() {
+    let release = Arc::new(tokio::sync::Notify::new());
+    let backend = ScriptedBackend::new(
+        BackendId::FoundryLocal,
+        vec![
+            ScriptedStep::Wait(release.clone(), "还没有。".into()),
+            ScriptedStep::Ok("还没有。".into()),
+            ScriptedStep::Ok("以后再说。".into()),
+        ],
+    );
+    let config = TranslationConfig {
+        enable_context_aware: true,
+        context_level: ContextLevel::MemoryAndRecent,
+        ..TranslationConfig::default()
+    };
+    let manager = TranslationManager::with_backends(
+        config,
+        vec![Box::new(backend.clone())],
+        Arc::new(Mutex::new(TranslationDiagnosticsState::default())),
+        500,
+    );
+    let stale = manager.translate_with_fallback("Not yet.", "en", "zh");
+    tokio::pin!(stale);
+    tokio::select! {
+        biased;
+        _ = &mut stale => panic!("previous scene must wait for release"),
+        _ = tokio::task::yield_now() => {}
+    }
+    assert_eq!(context_flags(&backend), vec![false]);
+    manager.reset_context();
+    release.notify_one();
+    assert_eq!(stale.await.translated, "还没有。");
+    let result = manager
+        .translate_with_context("Not now.", "en", "zh", Some("New scene"))
         .await;
     assert_eq!(result.translated, "还没有。");
     assert_eq!(context_flags(&backend), vec![false, true]);
