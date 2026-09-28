@@ -9,6 +9,7 @@
 
 mod chat_wire;
 mod context;
+mod context_leakage;
 mod context_summarization;
 mod core_translation;
 mod foundry_local;
@@ -346,3 +347,6 @@ pub trait TranslatorBackend: Send + Sync {
             .await
     }
 }
+
+#[cfg(test)]
+mod context_leakage_tests;

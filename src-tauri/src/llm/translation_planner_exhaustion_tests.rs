@@ -22,7 +22,7 @@ async fn all_tiers_timeout_then_the_sequence_exhausts() {
         vec![ScriptedStep::Hang],
     ));
     let store = tier_store(ContextTier::Full);
-    let planner = TranslationPlanner::new(default_policy(3), diagnostics());
+    let planner = TranslationPlanner::new(default_policy(3), diagnostics(), None);
     let mut warnings = Vec::new();
 
     let outcome = planner
@@ -69,7 +69,7 @@ async fn a_validation_rejection_exhausts_the_sequence_without_retry() {
     ));
     let store = tier_store(ContextTier::Full);
     let diagnostics = diagnostics();
-    let planner = TranslationPlanner::new(default_policy(3), diagnostics.clone());
+    let planner = TranslationPlanner::new(default_policy(3), diagnostics.clone(), None);
     let mut warnings = Vec::new();
 
     let outcome = planner
@@ -107,7 +107,7 @@ async fn an_exhausted_budget_at_entry_never_calls_the_backend() {
         vec![ScriptedStep::Hang],
     ));
     let store = tier_store(ContextTier::Full);
-    let planner = TranslationPlanner::new(default_policy(3), diagnostics());
+    let planner = TranslationPlanner::new(default_policy(3), diagnostics(), None);
     let mut warnings = Vec::new();
 
     let outcome = planner
@@ -134,7 +134,7 @@ async fn a_success_records_diagnostics_from_the_shared_clock() {
     ));
     let store = tier_store(ContextTier::Full);
     let diagnostics = diagnostics();
-    let planner = TranslationPlanner::new(default_policy(3), diagnostics.clone());
+    let planner = TranslationPlanner::new(default_policy(3), diagnostics.clone(), None);
     let mut warnings = Vec::new();
 
     let outcome = planner

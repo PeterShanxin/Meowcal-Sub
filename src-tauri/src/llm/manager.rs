@@ -2,6 +2,7 @@
 // MANAGER.RS - Translation Backend Selection + Fallback
 // =============================================================================
 
+use super::context_leakage::RecentTranslations;
 use super::translation_attempt::{AttemptBudget, AttemptPolicy};
 use super::translation_planner::{ContextTier, TieredOutcome, TieredPlan, TranslationPlanner};
 use crate::config::{ContextLevel, TranslationConfig};
@@ -23,17 +24,7 @@ const DEFAULT_BACKEND_TIMEOUT_MS: u64 = 2500;
 /// p99 of 2291ms on a warm local model, so ordinary slow lines still land; far
 /// below the total budget, so a stall is abandoned in time to retry it.
 ///
-/// The whole chain - two attempts and the passthrough - has to finish inside
-/// `pipeline_deadline::TRANSLATION_DEADLINE`, which abandons the line outright.
-/// At the previous 6500 the first attempt alone outlived it, so for anyone with
-/// context-aware translation off the retry and the Mock source-passthrough below
-/// were unreachable: a viewer who would have seen the untranslated source line
-/// saw nothing at all.
-///
-/// The old value was larger than the contexted cap on purpose - without context
-/// there is no tier to degrade to, so a retry is the only recourse and each
-/// attempt was given more room. Under an outer deadline that no longer fits, and
-/// two attempts that both finish beat one that gets cut off.
+/// Two attempts and fallback must fit inside the outer pipeline deadline.
 const UNCONTEXTED_ATTEMPT_TIMEOUT_MS: u64 = DEFAULT_BACKEND_TIMEOUT_MS;
 
 use crate::pipeline_deadline::backend_budget;
@@ -61,6 +52,7 @@ pub struct TranslationManager {
     /// Effective context tier to use for Foundry Local requests.
     /// Stored as u8 for atomic operations, use ContextTier::from_u8() to read.
     context_tier: AtomicU8,
+    recent_translations: Arc<Mutex<RecentTranslations>>,
 }
 
 impl TranslationManager {
@@ -90,6 +82,7 @@ impl TranslationManager {
             backend_timeout_ms: DEFAULT_BACKEND_TIMEOUT_MS,
             context: Arc::new(RwLock::new(context)),
             context_tier: AtomicU8::new(context_tier as u8),
+            recent_translations: Arc::new(Mutex::new(RecentTranslations::default())),
         }
     }
 
@@ -136,6 +129,7 @@ impl TranslationManager {
             backend_timeout_ms,
             context: Arc::new(RwLock::new(context)),
             context_tier: AtomicU8::new(context_tier as u8),
+            recent_translations: Arc::new(Mutex::new(RecentTranslations::default())),
         }
     }
 
@@ -609,6 +603,7 @@ impl TranslationManager {
     /// Reset context (call when capture session ends)
     pub fn reset_context(&self) {
         self.context_write().reset();
+        lock_or_recover(&self.recent_translations).clear();
     }
 
     /// Get context usage stats (for diagnostics)
@@ -677,7 +672,12 @@ impl TranslationManager {
             started,
             total_timeout,
         };
-        let planner = TranslationPlanner::new(attempt_policy, Arc::clone(&self.diagnostics));
+        let history = self
+            .config
+            .enable_context_aware
+            .then(|| Arc::clone(&self.recent_translations));
+        let planner =
+            TranslationPlanner::new(attempt_policy, Arc::clone(&self.diagnostics), history);
 
         // Load current tier from atomic storage, and pre-build the memory-only
         // prompt here (the planner operates on prebuilt prompts only).

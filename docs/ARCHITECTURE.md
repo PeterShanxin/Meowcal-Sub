@@ -110,6 +110,16 @@ Shared contracts have one owner before parallel decomposition begins:
   Core and interpreted by `core/src/engine_manifest.rs`. Remote refresh is
   disabled. ADR-0002 defines manifest authenticity; ADR-0004 transfers the
   release and implementation boundary to Core.
+- Context safety: recent-line context remains off by default. When enabled,
+  `llm/context_leakage.rs` keeps up to 12 accepted source/target pairs in
+  session memory solely for comparison; targets never enter a prompt or disk.
+  If a contextual answer repeats a different source's whole translation,
+  `llm/translation_planner.rs` discards it and retries with no context under
+  the original deadline, retaining the no-context tier for the session.
+  Punctuation and case differences are ignored; unchanged source cues and
+  matching fragments inside Latin words are exempt. The retry can confirm
+  that two different cues legitimately share a translation. This is a replay
+  guard, not a semantic detector for paraphrases or previously unseen leakage.
 - Configuration: Rust `config` is canonical. Frontend code may present or
   submit settings but cannot invent defaults, migrations, or readiness rules.
 - Commands and events: Rust payload types and `ipc/protocol.rs` are canonical.

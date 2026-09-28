@@ -13,14 +13,16 @@
 // one Foundry Local sequence.
 // =============================================================================
 
+use super::context_leakage::RecentTranslations;
 use super::translation_attempt::{
     AttemptBudget, AttemptOutcome, AttemptPolicy, AttemptRequest, TranslationAttemptRunner,
 };
 use crate::config::ContextLevel;
 use crate::llm::{LlmError, ReadyState, TranslationDiagnosticsState, TranslatorBackend};
+use crate::sync_utils::lock_or_recover;
 use std::sync::atomic::{AtomicU8, Ordering};
 use std::sync::{Arc, Mutex};
-use tracing::info;
+use tracing::{info, warn};
 
 /// A success slower than this (ms, measured against the shared budget clock)
 /// degrades the stored context tier for future requests.
@@ -93,6 +95,7 @@ impl ContextTier {
 pub(super) struct TranslationPlanner {
     policy: AttemptPolicy,
     diagnostics: Arc<Mutex<TranslationDiagnosticsState>>,
+    history: Option<Arc<Mutex<RecentTranslations>>>,
     slow_degrade_ms: u128,
 }
 
@@ -120,10 +123,12 @@ impl TranslationPlanner {
     pub(super) fn new(
         policy: AttemptPolicy,
         diagnostics: Arc<Mutex<TranslationDiagnosticsState>>,
+        history: Option<Arc<Mutex<RecentTranslations>>>,
     ) -> Self {
         Self {
             policy,
             diagnostics,
+            history,
             slow_degrade_ms: CONTEXT_SLOW_DEGRADE_MS,
         }
     }
@@ -139,6 +144,7 @@ impl TranslationPlanner {
         Self {
             policy,
             diagnostics,
+            history: None,
             slow_degrade_ms,
         }
     }
@@ -158,6 +164,11 @@ impl TranslationPlanner {
         let id = backend.id();
         let runner =
             TranslationAttemptRunner::new(self.policy.clone(), Arc::clone(&self.diagnostics));
+
+        let sent = super::prompt_router::truncate_chars(
+            &super::prompt_router::clean_source_text(plan.text),
+            self.policy.prompt_max_source_chars,
+        );
 
         let mut tier = plan.initial_tier;
         let mut last_error: Option<LlmError> = None;
@@ -191,6 +202,40 @@ impl TranslationPlanner {
                     latency_ms,
                     recovered_after_retry,
                 } => {
+                    let leaked = context_used
+                        && self.history.as_ref().is_some_and(|history| {
+                            lock_or_recover(history).repeats_other_source(
+                                &sent,
+                                &translated,
+                                plan.source_language,
+                                plan.target_language,
+                            )
+                        });
+                    if leaked {
+                        lock_or_recover(&self.diagnostics).record_error(
+                            id,
+                            "context_leakage",
+                            Some(latency_ms),
+                        );
+                        warn!(
+                            backend_id = id.as_str(),
+                            latency_ms,
+                            error_code = "context_leakage",
+                            "Context output repeated another subtitle; retrying without context"
+                        );
+                        warnings.push(format!("{}: context_leakage", id.as_str()));
+                        tier = ContextTier::None;
+                        plan.tier_store.store(tier as u8, Ordering::SeqCst);
+                        continue;
+                    }
+                    if let Some(history) = &self.history {
+                        lock_or_recover(history).record(
+                            &sent,
+                            &translated,
+                            plan.source_language,
+                            plan.target_language,
+                        );
+                    }
                     if recovered_after_retry {
                         warnings.push(format!("{}: recovered_after_retry", id.as_str()));
                     }
