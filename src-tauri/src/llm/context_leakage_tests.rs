@@ -99,15 +99,18 @@ async fn context_leakage_scene_gap_expires_previous_translation_evidence() {
     let config = TranslationConfig {
         enable_context_aware: true,
         context_level: ContextLevel::MemoryAndRecent,
-        context_reset_gap_ms: 1,
+        context_reset_gap_ms: 6_000,
         ..TranslationConfig::default()
     };
     let (manager, backend) = manager_with_config(&["还没有。", "还没有。", "以后再说。"], config);
-    manager.record_ocr_line("Not yet.");
+    manager.restore_history_entries(vec![crate::llm::HistoryEntry {
+        text: "Not yet.".into(),
+        timestamp: std::time::Instant::now() - std::time::Duration::from_secs(60),
+        token_estimate: 3,
+    }]);
     manager
         .translate_with_fallback("Not yet.", "en", "zh")
         .await;
-    tokio::time::sleep(std::time::Duration::from_millis(15)).await;
     // The capture loop builds the prompt before it records the next OCR line.
     assert!(manager.get_context_prompt().is_none());
     manager.record_ocr_line("We should wait.");
