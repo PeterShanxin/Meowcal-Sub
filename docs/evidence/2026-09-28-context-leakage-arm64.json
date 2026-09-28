@@ -1,0 +1,302 @@
+{
+  "schemaVersion": 1,
+  "issue": 243,
+  "testedCommit": "19702c05251f64df4a6da943b2189dc8891225c0",
+  "date": "2026-09-28",
+  "platform": {
+    "architecture": "ARM64",
+    "os": "Windows 11 Pro",
+    "build": 26200,
+    "cpu": "Snapdragon X Elite X1E80100",
+    "displayScale": 1.25
+  },
+  "engine": {
+    "backend": "managed HY-MT through Meowcal Core",
+    "coreVersion": "0.1.4",
+    "model": "HY-MT1.5-1.8B-Q4_K_M",
+    "device": "CPU"
+  },
+  "binarySha256": "6df2ecd36526d0193606094d2e3f000051281c6d6173f18af4a1cae2a44e3965",
+  "method": {
+    "fixture": "evals/band-gate/index.html",
+    "report": "evals/band-gate/report.mjs",
+    "speed": 1,
+    "repeat": false,
+    "sourceLanguage": "en-US",
+    "targetLanguage": "zh-CN",
+    "contextLevel": "memoryAndRecent",
+    "captureLogicalPixels": {
+      "width": 760,
+      "height": 117
+    },
+    "path": [
+      "Windows capture",
+      "Windows OCR",
+      "native band gate",
+      "managed local HY-MT",
+      "native Tauri overlay"
+    ],
+    "manualInspection": "All 70 authored subtitle translations were checked against their current cue; no previous-cue content was found. Native screenshots show current source and translated overlay.",
+    "latencyDefinition": "translation-event totalMs, using the unchanged report.mjs percentile calculation; not display-paint timing"
+  },
+  "cases": [
+    {
+      "scenario": "equal-width-120s",
+      "contextEnabled": true,
+      "durationSeconds": 120,
+      "gateOk": true,
+      "endToEndOk": true,
+      "partial": false,
+      "expectedSubtitleCount": 30,
+      "translatedCueIDs": [
+        "ew-01",
+        "ew-02",
+        "ew-03",
+        "ew-04",
+        "ew-05",
+        "ew-06",
+        "ew-07",
+        "ew-08",
+        "ew-09",
+        "ew-10",
+        "ew-11",
+        "ew-12",
+        "ew-13",
+        "ew-14",
+        "ew-15",
+        "ew-16",
+        "ew-17",
+        "ew-18",
+        "ew-19",
+        "ew-20",
+        "ew-21",
+        "ew-22",
+        "ew-23",
+        "ew-24",
+        "ew-25",
+        "ew-26",
+        "ew-27",
+        "ew-28",
+        "ew-29",
+        "ew-30"
+      ],
+      "missedOCRcueIDs": [],
+      "missedAdmissionCueIDs": [],
+      "missedTranslationCueIDs": [],
+      "rejectedNonemptyCount": 0,
+      "negativePostWarmupAdmittedFrameCount": 0,
+      "blankAdmittedFrameCount": 0,
+      "negativeCoverage": [],
+      "latencyMs": {
+        "sampleCount": 30,
+        "p50": 500.5,
+        "p95": 1369.4499999999994,
+        "max": 2301
+      },
+      "warnings": {
+        "local_engine: context_leakage": 1
+      },
+      "manuallyObservedPreviousCueLeakCount": 0
+    },
+    {
+      "scenario": "equal-width-120s",
+      "contextEnabled": false,
+      "durationSeconds": 120,
+      "gateOk": true,
+      "endToEndOk": true,
+      "partial": false,
+      "expectedSubtitleCount": 30,
+      "translatedCueIDs": [
+        "ew-01",
+        "ew-02",
+        "ew-03",
+        "ew-04",
+        "ew-05",
+        "ew-06",
+        "ew-07",
+        "ew-08",
+        "ew-09",
+        "ew-10",
+        "ew-11",
+        "ew-12",
+        "ew-13",
+        "ew-14",
+        "ew-15",
+        "ew-16",
+        "ew-17",
+        "ew-18",
+        "ew-19",
+        "ew-20",
+        "ew-21",
+        "ew-22",
+        "ew-23",
+        "ew-24",
+        "ew-25",
+        "ew-26",
+        "ew-27",
+        "ew-28",
+        "ew-29",
+        "ew-30"
+      ],
+      "missedOCRcueIDs": [],
+      "missedAdmissionCueIDs": [],
+      "missedTranslationCueIDs": [],
+      "rejectedNonemptyCount": 0,
+      "negativePostWarmupAdmittedFrameCount": 0,
+      "blankAdmittedFrameCount": 0,
+      "negativeCoverage": [],
+      "latencyMs": {
+        "sampleCount": 30,
+        "p50": 410.5,
+        "p95": 1067.6499999999987,
+        "max": 1685
+      },
+      "warnings": {},
+      "manuallyObservedPreviousCueLeakCount": 0
+    },
+    {
+      "scenario": "negative-band-recovery-120s",
+      "contextEnabled": true,
+      "durationSeconds": 120,
+      "gateOk": true,
+      "endToEndOk": true,
+      "partial": false,
+      "expectedSubtitleCount": 5,
+      "translatedCueIDs": [
+        "nb-dialogue-01",
+        "nb-dialogue-02",
+        "nb-dialogue-03",
+        "nb-dialogue-04",
+        "nb-dialogue-05"
+      ],
+      "missedOCRcueIDs": [],
+      "missedAdmissionCueIDs": [],
+      "missedTranslationCueIDs": [],
+      "rejectedNonemptyCount": 0,
+      "negativePostWarmupAdmittedFrameCount": 0,
+      "blankAdmittedFrameCount": 0,
+      "negativeCoverage": [
+        {
+          "segmentId": "nb-watermark-band",
+          "cycle": 0,
+          "expectedPostWarmupSeconds": 34,
+          "observedPostWarmupFrames": 130,
+          "observedSpanSeconds": 33.695,
+          "coverageFraction": 0.9910294117647059,
+          "missing": false,
+          "sufficient": true
+        },
+        {
+          "segmentId": "nb-timer-band",
+          "cycle": 0,
+          "expectedPostWarmupSeconds": 34,
+          "observedPostWarmupFrames": 127,
+          "observedSpanSeconds": 33.606,
+          "coverageFraction": 0.9884117647058824,
+          "missing": false,
+          "sufficient": true
+        },
+        {
+          "segmentId": "nb-credits-band",
+          "cycle": 0,
+          "expectedPostWarmupSeconds": 17,
+          "observedPostWarmupFrames": 65,
+          "observedSpanSeconds": 16.483,
+          "coverageFraction": 0.9695882352941176,
+          "missing": false,
+          "sufficient": true
+        }
+      ],
+      "latencyMs": {
+        "sampleCount": 5,
+        "p50": 673,
+        "p95": 3636.7999999999993,
+        "max": 4349
+      },
+      "warnings": {
+        "bandHeld": 3,
+        "untranslatable": 1,
+        "local_engine: timeout": 1,
+        "local_engine: context_degraded": 1
+      },
+      "manuallyObservedPreviousCueLeakCount": 0
+    },
+    {
+      "scenario": "negative-band-recovery-120s",
+      "contextEnabled": false,
+      "durationSeconds": 120,
+      "gateOk": true,
+      "endToEndOk": true,
+      "partial": false,
+      "expectedSubtitleCount": 5,
+      "translatedCueIDs": [
+        "nb-dialogue-01",
+        "nb-dialogue-02",
+        "nb-dialogue-03",
+        "nb-dialogue-04",
+        "nb-dialogue-05"
+      ],
+      "missedOCRcueIDs": [],
+      "missedAdmissionCueIDs": [],
+      "missedTranslationCueIDs": [],
+      "rejectedNonemptyCount": 0,
+      "negativePostWarmupAdmittedFrameCount": 0,
+      "blankAdmittedFrameCount": 0,
+      "negativeCoverage": [
+        {
+          "segmentId": "nb-watermark-band",
+          "cycle": 0,
+          "expectedPostWarmupSeconds": 34,
+          "observedPostWarmupFrames": 130,
+          "observedSpanSeconds": 33.576,
+          "coverageFraction": 0.9875294117647059,
+          "missing": false,
+          "sufficient": true
+        },
+        {
+          "segmentId": "nb-timer-band",
+          "cycle": 0,
+          "expectedPostWarmupSeconds": 34,
+          "observedPostWarmupFrames": 127,
+          "observedSpanSeconds": 33.466,
+          "coverageFraction": 0.9842941176470589,
+          "missing": false,
+          "sufficient": true
+        },
+        {
+          "segmentId": "nb-credits-band",
+          "cycle": 0,
+          "expectedPostWarmupSeconds": 17,
+          "observedPostWarmupFrames": 66,
+          "observedSpanSeconds": 16.689,
+          "coverageFraction": 0.9817058823529412,
+          "missing": false,
+          "sufficient": true
+        }
+      ],
+      "latencyMs": {
+        "sampleCount": 5,
+        "p50": 267,
+        "p95": 408.79999999999995,
+        "max": 429
+      },
+      "warnings": {
+        "bandHeld": 3,
+        "untranslatable": 1
+      },
+      "manuallyObservedPreviousCueLeakCount": 0
+    }
+  ],
+  "observations": [
+    "Equal-width/context-on emitted one context_leakage warning on ew-03, then returned the correct current-cue translation in 1260 ms. Raw rejected output is not published, so this is a suspected-replay recovery observation, not a semantic proof of the rejected answer.",
+    "Negative recovery/context-on emitted timeout and context_degraded warnings for nb-dialogue-05; recovery succeeded at 4349 ms. Its five-sample p95 was 3636.8 ms. This is functional recovery evidence, not a tail-latency improvement claim.",
+    "Both negative runs admitted the initial authored watermark during the allowed warmup. Zero post-warmup admissions does not imply that bandHeld always clears an earlier overlay.",
+    "An initial equal-width/context-off attempt produced 30 translations but the report counted 29 because the first capture preceded the fixture clock by 224 ms. That attempt is excluded; starting the fixture before capture produced the complete 30/30 result without changing report rules.",
+    "An earlier interrupted run is excluded. The accepted context-on equal-width run initially had the fixture above the overlay; removing topmost exposed the overlay, and its later native screenshot was inspected. Subsequent runs kept the fixture non-topmost.",
+    "One 120-second cycle per final case on one ARM64 CPU host. No native x64, GPU, Linux capture, installer, or sustained multi-cycle claim. The replay guard is lexical and cannot detect every semantic leak."
+  ],
+  "screenshots": [
+    "2026-09-28-context-leakage-equal-width-arm64.png",
+    "2026-09-28-context-leakage-recovery-arm64.png"
+  ]
+}

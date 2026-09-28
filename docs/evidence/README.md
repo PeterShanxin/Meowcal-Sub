@@ -127,3 +127,13 @@ The same file records the second half of the answer: an x64 Rust test binary
 x64 coverage the hosted runners used to provide instead of trading it for ARM64
 coverage. Emulation runs one way only, so the reverse does not hold and an x64
 host cannot stand in for this one.
+
+`2026-09-28-context-leakage-arm64.json` records issue #243 native capture,
+OCR, managed HY-MT, and overlay validation at runtime commit `19702c0`.
+Both authored 120-second fixtures passed at 1x with context enabled and disabled:
+30/30 equal-width cues and 5/5 recovery cues per setting. All 70 subtitle
+translations were manually checked without observed previous-cue leakage.
+The matching equal-width and recovery PNGs show only authored fixture content.
+One suspected replay recovered successfully; one timeout recovery took 4,349 ms.
+The report preserves those limits, the allowed negative warmup admission, and
+the excluded clock-skew attempt. It makes no general latency improvement claim.
