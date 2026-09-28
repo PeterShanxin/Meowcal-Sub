@@ -188,6 +188,47 @@ async fn context_leakage_scene_gap_expires_previous_translation_evidence() {
 }
 
 #[tokio::test]
+async fn context_leakage_scene_gap_expires_compacted_memory_and_evidence() {
+    let config = TranslationConfig {
+        enable_context_aware: true,
+        context_level: ContextLevel::MemoryAndRecent,
+        context_reset_gap_ms: 6_000,
+        prompt_max_source_chars: 2_000,
+        ..TranslationConfig::default()
+    };
+    let (manager, backend) = manager_with_config(&["还没有。", "还没有。", "以后再说。"], config);
+    manager.restore_history_entries(vec![crate::llm::HistoryEntry {
+        text: "旧场景".repeat(200),
+        timestamp: std::time::Instant::now() - std::time::Duration::from_secs(60),
+        token_estimate: 600,
+    }]);
+    manager.update_context_memory("Previous scene characters and setting.".into());
+    assert!(
+        manager.context_usage().0 < 100,
+        "only summarized memory remains"
+    );
+    manager
+        .translate_with_fallback("Not yet.", "en", "zh")
+        .await;
+    assert!(
+        manager.get_context_prompt().is_none(),
+        "compacted memory expired"
+    );
+    manager.record_ocr_line("We should wait.");
+    let context = manager.get_context_prompt().unwrap();
+    assert!(!context.contains("Previous scene"));
+    let result = manager
+        .translate_with_context("Not now.", "en", "zh", Some(&context))
+        .await;
+    assert_eq!(result.translated, "还没有。");
+    assert_eq!(
+        context_flags(&backend),
+        vec![false, true],
+        "old replay evidence expired"
+    );
+}
+
+#[tokio::test]
 async fn context_leakage_reset_ignores_an_in_flight_previous_scene() {
     let release = Arc::new(tokio::sync::Notify::new());
     let backend = ScriptedBackend::new(

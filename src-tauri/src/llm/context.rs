@@ -44,6 +44,8 @@ pub struct TranslationContext {
     memory: Option<String>,
     /// Recent OCR history (ring buffer, deduplicated)
     history: VecDeque<HistoryEntry>,
+    /// Last valid OCR observation, independent of history eviction or compression.
+    last_observed_at: Option<Instant>,
     /// Hash of last OCR text for fast duplicate detection
     last_ocr_hash: Option<u64>,
     /// Total estimated tokens in history
@@ -63,6 +65,7 @@ impl TranslationContext {
         Self {
             memory: None,
             history: VecDeque::with_capacity(12),
+            last_observed_at: None,
             last_ocr_hash: None,
             history_tokens: 0,
             budget_tokens: budget,
@@ -122,9 +125,9 @@ impl TranslationContext {
 
     /// Expire the previous scene before either reading or recording source context.
     pub fn reset_if_stale(&mut self, now: Instant, reset_gap: std::time::Duration) -> bool {
-        let reset = self.history.back().is_some_and(|last| {
-            !reset_gap.is_zero() && now.duration_since(last.timestamp) > reset_gap
-        });
+        let reset = self
+            .last_observed_at
+            .is_some_and(|last| !reset_gap.is_zero() && now.duration_since(last) > reset_gap);
         if reset {
             self.reset();
         }
@@ -150,6 +153,7 @@ impl TranslationContext {
         if Self::is_noise_line(&normalized_new) {
             return reset;
         }
+        self.last_observed_at = Some(now);
 
         // De-jitter: update timestamp if duplicate-ish, and replace last entry if the new line is a strict superset.
         if let Some(last_entry) = self.history.back_mut() {
@@ -340,6 +344,9 @@ impl TranslationContext {
         if entries.is_empty() {
             return;
         }
+        // Restoring old entries must neither lose nor rewind the latest observation.
+        let restored_latest = entries.iter().map(|entry| entry.timestamp).max();
+        self.last_observed_at = self.last_observed_at.max(restored_latest);
 
         for entry in entries.into_iter().rev() {
             self.history.push_front(entry);
@@ -422,6 +429,7 @@ impl TranslationContext {
     pub fn reset(&mut self) {
         self.memory = None;
         self.history.clear();
+        self.last_observed_at = None;
         self.last_ocr_hash = None;
         self.history_tokens = 0;
         self.needs_compression = false;
@@ -604,125 +612,9 @@ impl TranslationContext {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use std::time::Duration;
+#[path = "context_scene_tests.rs"]
+mod scene_tests;
 
-    #[test]
-    fn test_new_context() {
-        let ctx = TranslationContext::new(500, true);
-        assert_eq!(ctx.budget_tokens, 500);
-        assert!(ctx.enabled);
-        assert!(ctx.memory.is_none());
-        assert!(ctx.history.is_empty());
-    }
-
-    #[test]
-    fn test_duplicate_detection() {
-        let mut ctx = TranslationContext::new(500, true);
-
-        // First text is not a duplicate
-        assert!(!ctx.is_duplicate("Hello world"));
-
-        // Add it to history
-        ctx.add_ocr_line(
-            "Hello world",
-            Instant::now(),
-            12,
-            300,
-            Duration::from_secs(10),
-        );
-
-        // Same text should be duplicate
-        assert!(ctx.is_duplicate("Hello world"));
-
-        // Similar text should be duplicate
-        assert!(ctx.is_duplicate("hello world"));
-
-        // Different text should not be duplicate
-        assert!(!ctx.is_duplicate("Goodbye world"));
-    }
-
-    #[test]
-    fn test_context_prompt() {
-        let mut ctx = TranslationContext::new(500, true);
-
-        // No context initially
-        assert!(ctx.build_context_prompt().is_none());
-
-        // Add some history
-        let now = Instant::now();
-        ctx.add_ocr_line("Hello", now, 12, 300, Duration::from_secs(10));
-        ctx.add_ocr_line("World", now, 12, 300, Duration::from_secs(10));
-
-        let prompt = ctx.build_context_prompt();
-        assert!(prompt.is_some());
-        let prompt = prompt.unwrap();
-        assert!(prompt.contains("Hello"));
-        assert!(prompt.contains("World"));
-    }
-
-    #[test]
-    fn test_disabled_context() {
-        let mut ctx = TranslationContext::new(500, false);
-
-        // When disabled, nothing should accumulate
-        assert!(!ctx.is_duplicate("Hello"));
-        ctx.add_ocr_line("Hello", Instant::now(), 12, 300, Duration::from_secs(10));
-        assert!(ctx.history.is_empty());
-        assert!(ctx.build_context_prompt().is_none());
-    }
-
-    #[test]
-    fn test_memory_prompt_excludes_recent() {
-        let mut ctx = TranslationContext::new(500, true);
-        ctx.set_memory("Genre: drama. Names: X->Y".to_string());
-        ctx.add_ocr_line("Hello", Instant::now(), 12, 300, Duration::from_secs(10));
-
-        let prompt = ctx.build_memory_prompt(600).unwrap();
-        assert!(prompt.contains("Genre:"));
-        assert!(!prompt.contains("Hello"));
-    }
-
-    #[test]
-    fn test_memory_truncation_hard_cap() {
-        let mut ctx = TranslationContext::new(200, true);
-        let long = "a".repeat(2000);
-        ctx.set_memory(long);
-
-        let mem = ctx.memory().unwrap_or_default();
-        let budget = ctx.memory_token_budget();
-        assert!(TranslationContext::estimate_tokens(mem) <= budget);
-    }
-
-    #[test]
-    fn test_token_estimation() {
-        // ASCII text
-        let ascii_tokens = TranslationContext::estimate_tokens("Hello world");
-        assert!(ascii_tokens > 0 && ascii_tokens < 10);
-
-        // CJK text (each char ~1 token)
-        let cjk_tokens = TranslationContext::estimate_tokens("你好世界");
-        assert_eq!(cjk_tokens, 4);
-    }
-
-    #[test]
-    fn test_compression_threshold() {
-        // Budget is clamped to MIN_TOKEN_BUDGET (200), so ensure we exceed the threshold.
-        let mut ctx = TranslationContext::new(200, true);
-
-        // Add entries until we hit threshold
-        for i in 0..40 {
-            ctx.add_ocr_line(
-                &format!("Source text number {}", i),
-                Instant::now(),
-                100,
-                300,
-                Duration::from_secs(10),
-            );
-        }
-
-        // Should need compression now
-        assert!(ctx.needs_compression());
-    }
-}
+#[cfg(test)]
+#[path = "context_tests.rs"]
+mod tests;

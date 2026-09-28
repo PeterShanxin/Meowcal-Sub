@@ -119,7 +119,9 @@ Shared contracts have one owner before parallel decomposition begins:
   Punctuation and case differences are ignored; unchanged source cues and
   matching fragments inside Unicode words are exempt. CJK answers shorter than
   four characters require a whole-answer match. Scene gaps expire source context
-  and comparison history before the next prompt is built. Reset advances the
+  and comparison history before the next prompt is built. Scene age uses the
+  last valid OCR observation independently of history eviction or compression.
+  Reset advances the
   comparison generation, so an in-flight request from the previous scene cannot
   repopulate history. Even output rejected by the generic validator is
   checked for replay before choosing fallback. Managed contextual length
