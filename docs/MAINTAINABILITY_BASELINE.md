@@ -148,6 +148,7 @@ Run:
 
 For focused work, `npm run maintainability`, `npm run lint`, and
 `npm run test:frontend` exercise line ceilings, the warning budget, and the
-configured frontend coverage floors respectively. The root command remains the
-handoff gate because it also proves stage ordering, Rust checks, browser bridge
-behavior, and dependency audit.
+configured frontend coverage floors respectively. The Windows root command remains the
+full application gate because it also proves stage ordering, Rust checks, browser
+bridge behavior, and dependency audit. Linux contributors use the scoped
+[development target](../CONTRIBUTING.md#linux-development-and-test-target).

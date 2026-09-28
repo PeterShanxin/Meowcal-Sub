@@ -163,11 +163,18 @@ fn file_id(path: &Path) -> std::io::Result<(u32, u64)> {
     ))
 }
 
-#[cfg(not(windows))]
+#[cfg(unix)]
+fn file_id(path: &Path) -> std::io::Result<(u64, u64)> {
+    use std::os::unix::fs::MetadataExt;
+    let metadata = std::fs::File::open(path)?.metadata()?;
+    Ok((metadata.dev(), metadata.ino()))
+}
+
+#[cfg(not(any(windows, unix)))]
 fn file_id(_path: &Path) -> std::io::Result<(u32, u64)> {
     Err(std::io::Error::new(
         std::io::ErrorKind::Unsupported,
-        "Windows is required",
+        "File identity is unsupported on this platform",
     ))
 }
 

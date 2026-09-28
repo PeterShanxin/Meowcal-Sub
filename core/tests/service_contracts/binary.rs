@@ -227,3 +227,43 @@ fn initialized_process_recognizes_binary_blank_frame_with_language_and_geometry(
     process.exits(Duration::from_secs(3));
     assert!(!root.exists());
 }
+
+#[cfg(not(windows))]
+#[test]
+fn unsupported_ocr_returns_errors_without_ending_the_protocol_session() {
+    let mut process = Process::new();
+    let root = super::temporary_root("unsupported-ocr");
+    process.send(
+        format!(
+            "{}\n",
+            json!({"id":1,"api":1,"method":"hello","params":{
+                "client":"sub1","profile":"development",
+                "expectedVersion":env!("CARGO_PKG_VERSION"),"storageRoot":root
+            }})
+        )
+        .as_bytes(),
+    );
+    let hello = process.response();
+    assert!(hello.get("error").is_none(), "{hello}");
+    for method in ["ocrLanguages", "ocrInitialize"] {
+        process.send(
+            format!("{}\n", json!({"id":2,"api":1,"method":method,"params":{}})).as_bytes(),
+        );
+        let reply = process.response();
+        assert_eq!(reply["error"]["code"], "OCR_UNSUPPORTED_PLATFORM");
+        assert!(reply.get("result").is_none());
+    }
+    process.send(&header(8));
+    process.send(&[255; 8]);
+    let reply = process.response();
+    assert_eq!(reply["error"]["code"], "OCR_UNSUPPORTED_PLATFORM");
+    assert!(reply.get("result").is_none());
+    process.send(b"{\"id\":3,\"api\":1,\"method\":\"status\",\"params\":{}}\n");
+    let status = process.response();
+    assert_eq!(status["result"]["ready"], false);
+    assert_eq!(status["result"]["installed"], false);
+    process.send(b"{\"id\":4,\"api\":1,\"method\":\"shutdown\",\"params\":{}}\n");
+    assert_eq!(process.response()["result"]["stopped"], true);
+    process.exits(Duration::from_secs(3));
+    assert!(!root.exists());
+}

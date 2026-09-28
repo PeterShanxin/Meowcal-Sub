@@ -61,6 +61,58 @@ given machine may not have. To build somewhere else - a faster disk, or an
 existing build cache you want to keep - set `MEOWCAL_CARGO_TARGET_DIR`. An
 explicit `CARGO_TARGET_DIR` overrides both.
 
+## Linux development and test target
+
+Linux is a development/CI target, not a supported product platform. Windows
+remains authoritative for native capture/OCR, WebView2, selector/overlay/tray,
+engine process integration, installers, and updates. Linux produces no release
+artifacts. PRs crossing those boundaries still need the relevant Windows evidence.
+
+On Ubuntu 24.04, install Node.js 24/npm 11 and Rust stable with `rustfmt` and
+`clippy`, then install the native build and Chromium prerequisites once:
+
+```bash
+sudo apt-get update
+sudo apt-get install --yes build-essential pkg-config libssl-dev
+rustup component add rustfmt clippy
+npm ci --ignore-scripts
+npm exec -- playwright install-deps chromium
+```
+
+From a fresh checkout with those prerequisites, run:
+
+```bash
+bash scripts/verify-linux.sh
+```
+
+The command installs the locked npm graph and pinned Playwright Chromium, then
+fails on any failing check. It needs package-registry/browser-download access,
+but no model downloads, Windows services, release credentials, or display server.
+Missing tools/development headers and browser dependencies are errors, not skips.
+Use `backend` or `frontend` as the optional argument for focused iteration; only
+the default `all` run covers the complete Linux target.
+
+| Existing verification surface | Linux coverage | Windows authority |
+| --- | --- | --- |
+| Core crate | Locked Clippy and all-target tests; real protocol process, framing, leases, integrity and storage tests | Native OCR, GPU/model execution, job objects, Windows filesystem semantics |
+| Application library | Original source and unit tests for OCR corruption/stability/recent lines, pacing, repeat policy, eligibility, environment flags and HTTP ports via `scripts/linux-app-tests.rs` | Full Tauri library, IPC and command integration tests |
+| Tauri shell | Rust formatting only; no Linux compile claim | Compile, link, commands, WebView2, native windows and lifecycle |
+| Frontend | Formatting, lint, types, production web build, coverage-enforced unit tests | Same checks plus native WebView2 behavior |
+| Browser | Real served main/setup pages with the backend offline; navigation and failure presentation in Chromium | Existing `test:browser` runs the real browser-to-Rust bridge |
+| Repository checks | Version sync, docs links, workflow policy, maintainability, dependency audit and Linux gate contracts | PowerShell verification, packaging, upgrade and environment contracts |
+| Release/installer/update | Not run | Windows packaging/preflight and manual validation |
+
+Core's Linux build explicitly rejects native OCR with
+`OCR_UNSUPPORTED_PLATFORM`; its existing preflight rejects Windows engine use.
+Neither an empty OCR result nor a successful native operation is simulated.
+The application harness imports the same production files and their unit tests;
+it does not compile the Tauri composition root or replace the full Windows suite.
+
+For visual iteration, `npm run dev:browser` serves the actual UI without starting
+Windows services. Expect **Backend offline** until a real backend is available.
+`npm run test:browser:linux` exercises that offline state; it does not establish
+working translation, persisted backend settings, or native capture.
+
 ## Isolated work
 
 Use one Git worktree per branch. Do not modify another task's checkout or reuse
@@ -105,7 +157,8 @@ Run the authoritative repository gate from the root:
 ```
 
 Use `-Stage Lint`, `-Stage Test`, or `-Stage Frontend` only for focused local
-iteration. The default `All` stage is the contributor handoff gate. It runs
+iteration. The default `All` stage is the Windows contributor handoff gate. Linux-only
+contributors run the Linux target above and report hosted Windows CI separately. It runs
 against your host architecture; CI additionally repeats the Rust lint and test
 stages for the other shipped architecture, so a green local run is the handoff
 bar rather than a promise that CI will agree. The frontend stage installs
@@ -171,9 +224,13 @@ those named logins, not write access in general. A fork PR, Dependabot, or any
 other login does **not** schedule them.
 
 The **Change Contract** check stays on hosted Ubuntu.
+`.github/workflows/linux.yml` also runs the Linux development target on
+`ubuntu-24.04` for every PR and push to `main`, including forks. It uses read-only
+permissions and supplements the Windows merge gates.
 
-`scripts/verify.ps1` is your local equivalent of the hosted gate. Run it before
-opening a pull request; it is the same script CI runs. See
+`scripts/verify.ps1` is your local equivalent of the hosted gate. Windows contributors run it before
+opening a pull request; Linux contributors run `scripts/verify-linux.sh` and rely
+on the hosted Windows gate for the full application checks. See
 [`docs/RELEASE_PACKAGING.md`](docs/RELEASE_PACKAGING.md) for the runner policy.
 
 ## Manual Windows validation
