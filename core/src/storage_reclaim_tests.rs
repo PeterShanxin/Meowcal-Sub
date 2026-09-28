@@ -108,3 +108,22 @@ async fn reclaim_keeps_the_newest_complete_version_and_shares_identical_models()
     drop(leases);
     std::fs::remove_dir_all(base).unwrap();
 }
+
+#[cfg(any(windows, unix))]
+#[test]
+fn file_identity_distinguishes_equal_contents_from_hard_links() {
+    let base = temporary_base();
+    std::fs::create_dir_all(&base).unwrap();
+    let source = base.join("source");
+    let copy = base.join("copy");
+    let linked = base.join("linked");
+    std::fs::write(&source, b"model").unwrap();
+    std::fs::write(&copy, b"model").unwrap();
+    std::fs::hard_link(&source, &linked).unwrap();
+
+    assert!(same_file(&source, &linked).unwrap());
+    assert!(!same_file(&source, &copy).unwrap());
+    assert!(same_file(&source, &base.join("missing")).is_err());
+
+    std::fs::remove_dir_all(base).unwrap();
+}

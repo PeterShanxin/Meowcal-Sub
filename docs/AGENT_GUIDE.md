@@ -104,7 +104,14 @@ local branch and worktree survive; remove a finished worktree deliberately with
 
 ## Verification
 
-Run the authoritative gate from the repository root:
+Windows is the production/native validation target. Linux is a development/CI
+target only; it ships no installers or supported native application. Run the
+[Linux prerequisites and coverage contract](../CONTRIBUTING.md#linux-development-and-test-target),
+then `bash scripts/verify-linux.sh` on a Linux agent VM. The default `all` run
+is required for the Linux handoff; report Windows CI and any native/manual gap
+separately. Do not describe Linux success as a full application or Windows pass.
+
+Run the authoritative Windows gate from the repository root:
 
 ```powershell
 .\scripts\verify.ps1
@@ -128,7 +135,7 @@ an x64 host rather than silently building something it cannot execute.
 .\scripts\verify.ps1 -Stage Test -Target x86_64-pc-windows-msvc
 ```
 
-The default `All` stage is required before handoff. It runs its own contract
+The default `All` stage is required before a Windows handoff. It runs its own contract
 tests, prepares validation resources, uses the tracked Cargo and npm lockfiles,
 and includes the real browser-to-Rust bridge smoke.
 
@@ -191,6 +198,12 @@ does not prove Windows OCR, capture, selector, overlay, tray, installer, or
 DPI/window behavior.
 
 ## Continuous integration
+
+- `.github/workflows/linux.yml` runs `scripts/verify-linux.sh` on
+  `ubuntu-24.04` for PRs and pushes to `main`. It is additional development
+  feedback; keep all Windows merge gates and native evidence requirements.
+  The Linux browser tests serve real pages with no backend and assert the offline
+  state. They never substitute for the Windows browser-to-Rust bridge smoke.
 
 - The Stage 2 merge gate is `.github/workflows/test.yml`. Runtime, build, and
   workflow changes, and every push to `main`, run `scripts/verify.ps1` on

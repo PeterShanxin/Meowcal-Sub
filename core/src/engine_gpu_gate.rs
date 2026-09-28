@@ -14,7 +14,9 @@
 /// The validated machine's DXGI adapter description is
 /// `Qualcomm(R) Adreno(TM) X1-85 GPU`; the `(TM)` sits between the words, so
 /// the match is on both tokens rather than one contiguous substring.
+#[cfg(target_os = "windows")]
 const VALIDATED_ADAPTER_TOKENS: &[&str] = &["Adreno", "X1-85"];
+#[cfg(target_os = "windows")]
 const VALIDATED_DRIVER_VERSION: [u16; 4] = [31, 0, 148, 0];
 
 // A GPU load on the validated host drove available memory from about 3 GB to

@@ -223,6 +223,7 @@ impl OcrService {
 
 fn map_error(error: OcrError) -> Error {
     let code = match error {
+        OcrError::UnsupportedPlatform => "OCR_UNSUPPORTED_PLATFORM",
         OcrError::Init(_) => "OCR_INIT_FAILED",
         OcrError::Language(_) => "OCR_LANGUAGE_UNAVAILABLE",
         OcrError::Frame(_) => "INVALID_IMAGE",

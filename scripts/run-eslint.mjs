@@ -14,7 +14,7 @@ const result = spawnSync(
     eslintEntry,
     "src",
     "frontend-tests",
-    "scripts/*.mjs",
+    "scripts/**/*.mjs",
     "*.config.{mjs,mts}",
     "--max-warnings",
     String(baseline.eslintMaxWarnings),
