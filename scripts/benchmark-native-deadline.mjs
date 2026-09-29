@@ -7,6 +7,7 @@ const main = await connectNativePage("http://tauri.localhost/", port);
 try {
   const result = await main.evaluate(
     `(${async function () {
+      const { window } = globalThis;
       const rows = [];
       const long =
         "When we arrived at the station, the last train had already left. We decided to walk back through the empty streets, carrying our heavy bags and wondering whether anyone would still be awake to open the door. The rain was getting stronger, and neither of us had brought an umbrella for the journey.";

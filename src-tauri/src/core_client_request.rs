@@ -110,7 +110,7 @@ fn call_locked<T: DeserializeOwned>(
     }
     let mut request_timeout = request_budget(deadline, method)?;
     if method == "complete" {
-        params.params["timeoutMs"] = json!(request_timeout.as_millis().max(1).min(90_000) as u64);
+        params.params["timeoutMs"] = json!(request_timeout.as_millis().clamp(1, 90_000) as u64);
         // Drain the bounded Core response after caller expiry, preserving both
         // the warm process and response framing for the next request.
         request_timeout += Duration::from_secs(2);
