@@ -24,7 +24,7 @@ test("setup stays recoverable when initialization fails", async ({ page }) => {
   await page.getByRole("button", { name: "Try again", exact: true }).click();
   await page.getByRole("button", { name: "Continue", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Choose your languages" })).toBeFocused();
-  await expect(page.getByRole("button", { name: "Prepare translation" })).toBeEnabled();
+  await expect(page.getByRole("button", { name: "Prepare translation" })).toBeDisabled();
 });
 
 test("failed settings edits can be retried and survive reload", async ({ page }) => {
