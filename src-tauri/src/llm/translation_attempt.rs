@@ -64,6 +64,12 @@ pub(super) enum AttemptOutcome {
     /// Timed out. `total_exhausted` tells the tier planner whether the whole
     /// budget is gone (stop degrading) or only the attempt was lost.
     TimedOut { total_exhausted: bool },
+    /// Preserve rejected output so the planner can identify contextual replay.
+    Rejected {
+        translated: String,
+        latency_ms: u128,
+        error: LlmError,
+    },
     /// Non-retryable error, or retries exhausted.
     Failed(LlmError),
 }
@@ -182,9 +188,11 @@ impl TranslationAttemptRunner {
                             "Translation output rejected"
                         );
 
-                        return AttemptOutcome::Failed(LlmError::TranslationError(
-                            quality_issue_message(reason),
-                        ));
+                        return AttemptOutcome::Rejected {
+                            translated,
+                            latency_ms,
+                            error: LlmError::TranslationError(quality_issue_message(reason)),
+                        };
                     }
 
                     lock_or_recover(&self.diagnostics).record_success(id, latency_ms);
@@ -192,6 +200,18 @@ impl TranslationAttemptRunner {
                         translated,
                         latency_ms,
                         recovered_after_retry: attempt > 1,
+                    };
+                }
+                Ok(Err(LlmError::RejectedContextOutput(rejected))) => {
+                    lock_or_recover(&self.diagnostics).record_error(
+                        id,
+                        "low_quality_output",
+                        Some(latency_ms),
+                    );
+                    return AttemptOutcome::Rejected {
+                        translated: rejected.output.clone(),
+                        latency_ms,
+                        error: LlmError::RejectedContextOutput(rejected),
                     };
                 }
                 Ok(Err(err)) => {

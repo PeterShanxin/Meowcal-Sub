@@ -2,7 +2,10 @@ import { createRequire } from "node:module";
 import { describe, expect, it } from "vitest";
 
 const require = createRequire(import.meta.url);
-const { updateSubtitleHint } = require("../../src/scripts/overlay-subtitle-hint.js");
+const {
+  clearSubtitleHint,
+  updateSubtitleHint,
+} = require("../../src/scripts/overlay-subtitle-hint.js");
 
 function hintElements() {
   const classes = new Set();
@@ -19,6 +22,21 @@ function hintElements() {
 }
 
 describe("overlay subtitle hints", () => {
+  it("explains successful replay recovery without an error or internal code", () => {
+    const elements = hintElements();
+
+    updateSubtitleHint(elements.hint, elements.text, "local_engine", [
+      "local_engine: context_leakage",
+    ]);
+
+    expect(elements.text.textContent).toBe(
+      "Local Translation Engine · Retranslated — context off for this session",
+    );
+    expect(elements.classes.has("hint-ok")).toBe(true);
+    expect(elements.classes.has("hint-error")).toBe(false);
+    clearSubtitleHint(elements.hint, elements.text);
+  });
+
   it("keeps the overlay clean when the local engine translated normally", () => {
     const elements = hintElements();
     elements.classes.add("visible");

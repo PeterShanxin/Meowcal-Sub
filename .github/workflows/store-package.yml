@@ -1,0 +1,94 @@
+name: Microsoft Store Packages
+
+on:
+  workflow_dispatch:
+    inputs:
+      architecture:
+        description: Native Windows architecture
+        required: true
+        default: arm64
+        type: choice
+        options: [arm64, x64]
+      package_name:
+        description: Partner Center Package/Identity/Name
+        required: true
+        type: string
+      publisher:
+        description: Partner Center Package/Identity/Publisher
+        required: true
+        type: string
+      publisher_display_name:
+        description: Partner Center PublisherDisplayName
+        required: true
+        type: string
+      package_version:
+        description: Store package version (nonzero major, fourth component 0)
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    if: github.actor == 'PeterShanxin' || github.actor == 'ianmeowmeow'
+    runs-on: ${{ inputs.architecture == 'arm64' && 'windows-11-arm' || 'windows-2025' }}
+    timeout-minutes: 180
+    steps:
+      - name: Validate actor and native architecture
+        shell: pwsh
+        env:
+          PACKAGE_ARCHITECTURE: ${{ inputs.architecture }}
+        run: |
+          if ($env:GITHUB_ACTOR -notin @('PeterShanxin', 'ianmeowmeow')) { throw 'Untrusted packaging actor.' }
+          $expected = switch ($env:PACKAGE_ARCHITECTURE) {
+            'arm64' { 'Arm64' }
+            'x64' { 'X64' }
+            default { throw 'Unknown architecture.' }
+          }
+          if ([Runtime.InteropServices.RuntimeInformation]::OSArchitecture -ne $expected) { throw 'Packaging requires a native runner.' }
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+      - name: Install native Rust toolchain
+        shell: pwsh
+        env:
+          PACKAGE_ARCHITECTURE: ${{ inputs.architecture }}
+        run: |
+          rustup toolchain install stable --profile minimal
+          rustup default stable
+          $target = if ($env:PACKAGE_ARCHITECTURE -eq 'arm64') { 'aarch64-pc-windows-msvc' } else { 'x86_64-pc-windows-msvc' }
+          rustup target add $target
+      - name: Install locked frontend dependencies
+        shell: pwsh
+        run: npm ci --ignore-scripts
+      - name: Validate package contracts
+        shell: pwsh
+        run: |
+          npm run version:check
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          ./scripts/tests/store-package.Tests.ps1
+      - name: Build unsigned Store package
+        shell: pwsh
+        env:
+          PACKAGE_ARCHITECTURE: ${{ inputs.architecture }}
+          STORE_PACKAGE_NAME: ${{ inputs.package_name }}
+          STORE_PUBLISHER: ${{ inputs.publisher }}
+          STORE_PUBLISHER_DISPLAY_NAME: ${{ inputs.publisher_display_name }}
+          STORE_PACKAGE_VERSION: ${{ inputs.package_version }}
+        run: |
+          ./scripts/build-store.ps1 -Architecture $env:PACKAGE_ARCHITECTURE `
+            -PackageName $env:STORE_PACKAGE_NAME -Publisher $env:STORE_PUBLISHER `
+            -PublisherDisplayName $env:STORE_PUBLISHER_DISPLAY_NAME -PackageVersion $env:STORE_PACKAGE_VERSION `
+            -CargoTargetDir "$env:GITHUB_WORKSPACE/store-target" -OutputDirectory "$env:GITHUB_WORKSPACE/store-output"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: meowcal-sub-store-${{ inputs.architecture }}
+          path: |
+            store-output/*.msix
+            store-output/SHA256.json
+          if-no-files-found: error

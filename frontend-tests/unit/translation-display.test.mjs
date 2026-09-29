@@ -8,6 +8,19 @@ const {
 } = require("../../src/scripts/translation-display.js");
 
 describe("translation display states", () => {
+  it("keeps failed replay recovery unavailable rather than claiming success", () => {
+    expect(
+      getTranslationPresentation("temporarilyUnavailable", "mock", [
+        "local_engine: context_leakage",
+        "local_engine: timeout",
+      ]),
+    ).toMatchObject({
+      replaceText: false,
+      hint: "Translation temporarily unavailable",
+      severity: "error",
+    });
+  });
+
   it.each([
     ["translated", true, false],
     ["warming", false, false],

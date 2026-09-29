@@ -1,7 +1,12 @@
 //! Native recognition of tightly packed BGRA8 frames. Capture, preprocessing,
 //! text cleanup and pass selection belong to the consuming product.
 
+#[cfg(windows)]
 mod geometry;
+#[cfg(windows)]
+mod native;
+#[cfg(not(windows))]
+#[path = "unsupported.rs"]
 mod native;
 
 pub use native::NativeOcr;
@@ -13,6 +18,8 @@ pub const MAX_FRAME_BYTES: usize = 64 * 1024 * 1024;
 
 #[derive(Debug, Error)]
 pub enum OcrError {
+    #[error("Native OCR requires Windows")]
+    UnsupportedPlatform,
     #[error("Failed to initialize OCR: {0}")]
     Init(String),
     #[error("OCR language unavailable: {0}")]

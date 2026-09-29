@@ -81,19 +81,38 @@ pub(super) async fn complete_translation(
     source_language: &str,
     target_language: &str,
     max_source_chars: usize,
+    used_context: bool,
 ) -> Result<ChatCompletionResponse, LlmError> {
     let source = super::prompt_router::truncate_chars(
         &super::prompt_router::clean_source_text(text),
         max_source_chars,
     );
     let response = complete(request, timeout_ms).await?;
+    validate_completion(
+        response,
+        request.max_tokens,
+        &source,
+        source_language,
+        target_language,
+        used_context,
+    )
+}
+
+pub(super) fn validate_completion(
+    response: ChatCompletionResponse,
+    max_tokens: u32,
+    source: &str,
+    source_language: &str,
+    target_language: &str,
+    used_context: bool,
+) -> Result<ChatCompletionResponse, LlmError> {
     let choice = response.choices.first();
     let output = choice
         .map(|choice| choice.message.content.trim())
         .unwrap_or_default();
-    let result = validate_response(&source, output, source_language, target_language);
+    let result = validate_response(source, output, source_language, target_language);
     tracing::info!(finish_reason = ?choice.and_then(|choice| choice.finish_reason.as_deref()),
-        completion_tokens = response.completion_tokens(), max_tokens = request.max_tokens,
+        completion_tokens = response.completion_tokens(), max_tokens,
         source_chars = source.chars().count(), output_chars = output.chars().count(),
         receipt = ?response.inference_receipt, "Managed inference result");
     if let Err(reason) = result {
@@ -102,6 +121,15 @@ pub(super) async fn complete_translation(
             quality_issue = reason.code(),
             "Managed inference rejected"
         );
+        if used_context && reason == super::output_validation::TranslationOutputRejection::TooLong {
+            // Replay recovery must run before a corruption report makes the
+            // engine unavailable to the no-context retry.
+            return Err(super::RejectedContextOutput::new(
+                output.to_owned(),
+                response.inference_receipt,
+            )
+            .into());
+        }
         if let Some(receipt) = response.inference_receipt.as_ref() {
             crate::core_client::recover_inference(receipt.clone(), reason.code());
         }
@@ -150,6 +178,33 @@ fn validate_response(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn only_contextual_length_rejection_defers_corruption_reporting() {
+        let long = "我们只有十分钟，必须立刻离开这里。".repeat(3);
+        for (output, used_context, deferred) in [
+            (long.as_str(), true, true),
+            (long.as_str(), false, false),
+            ("房间是空的。\n\n---+", true, false),
+            (
+                "你好你好你好你好你好你好你好你好你好你好你好你好",
+                true,
+                false,
+            ),
+        ] {
+            let response = serde_json::from_value(serde_json::json!({
+                "choices": [{"message": {"role": "assistant", "content": output}}]
+            }))
+            .unwrap();
+            let error = validate_completion(response, 120, "Not yet.", "en", "zh", used_context)
+                .unwrap_err();
+            assert_eq!(
+                matches!(error, LlmError::RejectedContextOutput(_)),
+                deferred
+            );
+        }
+    }
+
     #[test]
     fn rejects_debris_before_sanitization_can_hide_it() {
         assert!(validate_response("The ferry leaves.", "渡轮离开。\n\n---+", "en", "zh").is_err());

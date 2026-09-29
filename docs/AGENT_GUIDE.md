@@ -39,6 +39,11 @@ Do not silently choose the more convenient interpretation.
 - Stage only scoped files.
 - Never use destructive reset or checkout commands to erase unknown changes.
 - Identify exact PIDs before stopping repository processes.
+- Prefer hosted Windows runners for package lifecycle tests. Batch local VM
+  checks in one stable session; do not overlap Sandbox clients or repeatedly
+  recreate guests. If a guest hangs, shutdown times out, or the host crashes,
+  stop lifecycle retries and preserve evidence before reassessing. Do not
+  change host power state, virtualization features, or drivers to unblock tests.
 
 ## Delivery
 
@@ -69,6 +74,12 @@ local branch and worktree survive; remove a finished worktree deliberately with
 `git worktree remove`.
 
 ## Release and update contract
+
+- Store builds use `scripts/build-store.ps1` and the `store` Cargo feature.
+  They exclude the Tauri updater and experimental WinUI helper, and isolate
+  default config/engine storage from direct installations. Follow
+  [Store distribution](STORE_DISTRIBUTION.md); never publish debug/local
+  identities or treat loose registration as signed install/upgrade evidence.
 
 - The Tauri CLI is pinned in `package.json`. It is versioned independently of
   the `tauri` crate - the two numbers are different series and are not expected
@@ -104,7 +115,14 @@ local branch and worktree survive; remove a finished worktree deliberately with
 
 ## Verification
 
-Run the authoritative gate from the repository root:
+Windows is the production/native validation target. Linux is a development/CI
+target only; it ships no installers or supported native application. Run the
+[Linux prerequisites and coverage contract](../CONTRIBUTING.md#linux-development-and-test-target),
+then `bash scripts/verify-linux.sh` on a Linux agent VM. The default `all` run
+is required for the Linux handoff; report Windows CI and any native/manual gap
+separately. Do not describe Linux success as a full application or Windows pass.
+
+Run the authoritative Windows gate from the repository root:
 
 ```powershell
 .\scripts\verify.ps1
@@ -128,7 +146,7 @@ an x64 host rather than silently building something it cannot execute.
 .\scripts\verify.ps1 -Stage Test -Target x86_64-pc-windows-msvc
 ```
 
-The default `All` stage is required before handoff. It runs its own contract
+The default `All` stage is required before a Windows handoff. It runs its own contract
 tests, prepares validation resources, uses the tracked Cargo and npm lockfiles,
 and includes the real browser-to-Rust bridge smoke.
 
@@ -191,6 +209,12 @@ does not prove Windows OCR, capture, selector, overlay, tray, installer, or
 DPI/window behavior.
 
 ## Continuous integration
+
+- `.github/workflows/linux.yml` runs `scripts/verify-linux.sh` on
+  `ubuntu-24.04` for PRs and pushes to `main`. It is additional development
+  feedback; keep all Windows merge gates and native evidence requirements.
+  The Linux browser tests serve real pages with no backend and assert the offline
+  state. They never substitute for the Windows browser-to-Rust bridge smoke.
 
 - The Stage 2 merge gate is `.github/workflows/test.yml`. Runtime, build, and
   workflow changes, and every push to `main`, run `scripts/verify.ps1` on

@@ -7,6 +7,7 @@
  */
 
 export type UpdateStatus =
+  | { kind: "store" }
   | { kind: "unsupported" }
   | { kind: "idle" }
   | { kind: "checking" }
@@ -86,6 +87,15 @@ export function deriveUpdatePresentation(
   currentVersion: string | null,
 ): UpdatePresentation {
   switch (status.kind) {
+    case "store":
+      return {
+        headline: "Microsoft Store updates",
+        detail: `${installedLine(currentVersion)}. Get updates from the Microsoft Store Library.`,
+        action: "none",
+        actionLabel: "Managed by Microsoft Store",
+        actionDisabled: true,
+        notes: null,
+      };
     case "unsupported":
       return {
         headline: "Updates",

@@ -137,6 +137,9 @@ fn start_with_policy(
     manifest: &EngineManifest,
     policy: &LaunchPolicy,
 ) -> Result<String, String> {
+    if !cfg!(windows) {
+        return Err("ENGINE_UNSUPPORTED_PLATFORM: managed translation requires Windows".into());
+    }
     if runtime.kind != "hy-mt" {
         return Err(format!(
             "Unsupported managed runtime kind '{}'",
@@ -208,9 +211,11 @@ fn start_with_policy(
             "manifest acceleration"
         }
     );
-    let mut child = command
+    let child = command
         .spawn()
         .map_err(|error| format!("Failed to start HY-MT runtime: {}", error))?;
+    #[cfg(target_os = "windows")]
+    let mut child = child;
     // `shutdown_owned` below only runs when the app exits cleanly. This is what
     // ends the engine when it does not - a crash, the installer replacing a
     // running app, Task Manager. See `process_lifetime`.

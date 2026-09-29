@@ -2,6 +2,7 @@
 // MANAGER.RS - Translation Backend Selection + Fallback
 // =============================================================================
 
+use super::context_leakage::RecentTranslations;
 use super::translation_attempt::{AttemptBudget, AttemptPolicy};
 use super::translation_planner::{ContextTier, TieredOutcome, TieredPlan, TranslationPlanner};
 use crate::config::{ContextLevel, TranslationConfig};
@@ -19,21 +20,8 @@ use tokio::time::{timeout, Duration};
 use tracing::{debug, info, warn};
 
 const DEFAULT_BACKEND_TIMEOUT_MS: u64 = 2500;
-/// Per-attempt ceiling with no context attached. Comfortably above the measured
-/// p99 of 2291ms on a warm local model, so ordinary slow lines still land; far
-/// below the total budget, so a stall is abandoned in time to retry it.
-///
-/// The whole chain - two attempts and the passthrough - has to finish inside
-/// `pipeline_deadline::TRANSLATION_DEADLINE`, which abandons the line outright.
-/// At the previous 6500 the first attempt alone outlived it, so for anyone with
-/// context-aware translation off the retry and the Mock source-passthrough below
-/// were unreachable: a viewer who would have seen the untranslated source line
-/// saw nothing at all.
-///
-/// The old value was larger than the contexted cap on purpose - without context
-/// there is no tier to degrade to, so a retry is the only recourse and each
-/// attempt was given more room. Under an outer deadline that no longer fits, and
-/// two attempts that both finish beat one that gets cut off.
+/// No-context ceiling exceeds the measured warm-model p99 (2291ms).
+/// It leaves room for two attempts and fallback within the pipeline deadline.
 const UNCONTEXTED_ATTEMPT_TIMEOUT_MS: u64 = DEFAULT_BACKEND_TIMEOUT_MS;
 
 use crate::pipeline_deadline::backend_budget;
@@ -42,13 +30,9 @@ const MAX_TRANSLATION_INPUT_CHARS: usize = 2000;
 const FOUNDRY_TRANSIENT_MAX_RETRIES: usize = 2;
 const FOUNDRY_TRANSIENT_RETRY_DELAY_MS: u64 = 600;
 
-// =============================================================================
-// TRANSLATION MANAGER - Backend selection + fallback, context storage
-// =============================================================================
 // Context-tier progression (degradation on timeout/slow success, effective
 // tier persistence) lives in `llm/translation_planner.rs`; this module owns
 // the tier store, context storage, backend fallback, and display mapping.
-// =============================================================================
 
 /// Manages available translation backends and fallback selection
 pub struct TranslationManager {
@@ -61,6 +45,7 @@ pub struct TranslationManager {
     /// Effective context tier to use for Foundry Local requests.
     /// Stored as u8 for atomic operations, use ContextTier::from_u8() to read.
     context_tier: AtomicU8,
+    recent_translations: Arc<Mutex<RecentTranslations>>,
 }
 
 impl TranslationManager {
@@ -90,12 +75,12 @@ impl TranslationManager {
             backend_timeout_ms: DEFAULT_BACKEND_TIMEOUT_MS,
             context: Arc::new(RwLock::new(context)),
             context_tier: AtomicU8::new(context_tier as u8),
+            recent_translations: Arc::new(Mutex::new(RecentTranslations::default())),
         }
     }
 
     /// Detect appropriate context budget based on model
     fn detect_context_budget(config: &TranslationConfig) -> usize {
-        // Try to detect from Foundry Local model if available
         if config.enable_foundry_local {
             if let Some(ref model) = config.foundry_local.model {
                 if let Some(window) = FoundryLocalBackend::get_model_context_window(model) {
@@ -113,7 +98,6 @@ impl TranslationManager {
             debug!("No Foundry Local model configured; using default context budget");
         }
 
-        // Default budget if detection fails
         debug!("Using default context budget: 500 tokens");
         500
     }
@@ -136,6 +120,7 @@ impl TranslationManager {
             backend_timeout_ms,
             context: Arc::new(RwLock::new(context)),
             context_tier: AtomicU8::new(context_tier as u8),
+            recent_translations: Arc::new(Mutex::new(RecentTranslations::default())),
         }
     }
 
@@ -547,20 +532,22 @@ impl TranslationManager {
         self.context_read().is_duplicate(text)
     }
 
-    /// Record a successful translation in context
+    /// Record source context and expire replay evidence at the same scene gap.
     pub fn record_ocr_line(&self, source_text: &str) {
         if !self.config.enable_context_aware {
             return;
         }
 
         let reset_gap = Duration::from_millis(self.config.context_reset_gap_ms as u64);
-        self.context_write().add_ocr_line(
+        if self.context_write().add_ocr_line(
             source_text,
             Instant::now(),
             self.config.context_buffer_size,
             self.config.prompt_max_source_chars,
             reset_gap,
-        );
+        ) {
+            lock_or_recover(&self.recent_translations).clear();
+        }
     }
 
     /// Get context prompt to enhance translation request
@@ -569,14 +556,19 @@ impl TranslationManager {
             return None;
         }
 
+        let mut context = self.context_write();
+        let reset_gap = Duration::from_millis(self.config.context_reset_gap_ms as u64);
+        if context.reset_if_stale(Instant::now(), reset_gap) {
+            lock_or_recover(&self.recent_translations).clear();
+        }
         match ContextTier::from_u8(self.context_tier.load(Ordering::SeqCst)) {
-            ContextTier::Full => self.context_read().build_context_prompt_with_recent_limit(
+            ContextTier::Full => context.build_context_prompt_with_recent_limit(
                 self.config.context_recent_count,
                 self.config.prompt_max_context_chars,
             ),
-            ContextTier::MemoryOnly => self
-                .context_read()
-                .build_memory_prompt(self.config.prompt_max_context_chars),
+            ContextTier::MemoryOnly => {
+                context.build_memory_prompt(self.config.prompt_max_context_chars)
+            }
             ContextTier::None => None,
         }
     }
@@ -609,6 +601,7 @@ impl TranslationManager {
     /// Reset context (call when capture session ends)
     pub fn reset_context(&self) {
         self.context_write().reset();
+        lock_or_recover(&self.recent_translations).clear();
     }
 
     /// Get context usage stats (for diagnostics)
@@ -677,7 +670,12 @@ impl TranslationManager {
             started,
             total_timeout,
         };
-        let planner = TranslationPlanner::new(attempt_policy, Arc::clone(&self.diagnostics));
+        let history = self
+            .config
+            .enable_context_aware
+            .then(|| Arc::clone(&self.recent_translations));
+        let planner =
+            TranslationPlanner::new(attempt_policy, Arc::clone(&self.diagnostics), history);
 
         // Load current tier from atomic storage, and pre-build the memory-only
         // prompt here (the planner operates on prebuilt prompts only).

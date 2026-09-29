@@ -1,5 +1,29 @@
 import { backendOrigin, expect, test } from "./fixtures.mjs";
 
+test("title bar distinguishes development builds in both distribution channels", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await page.waitForFunction(() => customElements.get("meowcal-titlebar"));
+  for (const [identifier, expected] of [
+    ["com.meowcal.sub", "Meowcal Sub"],
+    ["com.meowcal.sub.dev", "Meowcal Sub - Dev"],
+    ["com.meowcal.sub.store", "Meowcal Sub"],
+    ["com.meowcal.sub.store.dev", "Meowcal Sub - Dev"],
+  ]) {
+    await page.evaluate((profile) => {
+      window.TauriBridge.appIdentifier = async () => profile;
+      document.querySelector('[data-testid="profile-titlebar"]')?.remove();
+      const titlebar = document.createElement("meowcal-titlebar");
+      titlebar.dataset.testid = "profile-titlebar";
+      document.body.append(titlebar);
+    }, identifier);
+    await expect(page.getByTestId("profile-titlebar").locator(".titlebar-identity")).toHaveText(
+      expected,
+    );
+  }
+});
+
 test("status notices do not intercept the primary action in a compact window", async ({ page }) => {
   await page.setViewportSize({ width: 544, height: 400 });
   await page.goto("/");
@@ -148,4 +172,22 @@ test("guided engine setup has one install action and no infrastructure choices",
   await expect(page.getByRole("heading", { name: "Choose your languages" })).toBeVisible();
   await expect(page.getByLabel("Original subtitles")).toBeVisible();
   await expect(page.getByLabel("Translate into")).toBeVisible();
+  const consent = page.getByRole("checkbox", { name: /I agree to the model license/ });
+  await expect(consent).not.toBeChecked();
+  await expect(page.getByText(/Meowcal Sub is provided by Shanxin Li/)).toBeVisible();
+  await page.getByText("Read model license and use restrictions", { exact: true }).click();
+  await expect(page.getByLabel("Tencent HY Community License Agreement")).toContainText(
+    "ACCEPTABLE USE POLICY",
+  );
+  // Exercise the UI gate without downloading a model or accepting terms for a real user.
+  await page.evaluate(() => {
+    const setup = document.querySelector("meowcal-setup");
+    setup.ocrLanguages = new Set([setup.settings.sourceLanguage]);
+  });
+  const prepare = page.getByRole("button", { name: "Prepare translation" });
+  await expect(prepare).toBeDisabled();
+  await consent.check();
+  await expect(prepare).toBeEnabled();
+  await consent.uncheck();
+  await expect(prepare).toBeDisabled();
 });

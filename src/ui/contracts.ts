@@ -160,6 +160,7 @@ export interface TauriBridgeApi {
   isBrowserMode(): boolean;
   /** The identifier from Tauri's merged config; browser mode returns null. */
   appIdentifier?(): Promise<string | null>;
+  appVersion?(): Promise<string | null>;
   event: {
     listen(eventName: string, callback: (event: { payload: unknown }) => void): Promise<() => void>;
     emit(eventName: string, payload: unknown): Promise<void>;

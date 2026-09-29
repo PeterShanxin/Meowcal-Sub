@@ -68,7 +68,18 @@ fn main() {
     }
 
     // --- Step 2: Build and run the Tauri app ---
-    let app = tauri::Builder::default()
+    let mut context = tauri::generate_context!();
+    if cfg!(feature = "store") {
+        context.config_mut().identifier = meowcal_sub::app_profile::AppProfile::current()
+            .identifier()
+            .into();
+    }
+    let builder = tauri::Builder::default();
+    #[cfg(not(feature = "store"))]
+    let builder = builder
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_process::init());
+    let app = builder
         // Register our custom commands (functions that JavaScript can call)
         .invoke_handler(tauri::generate_handler![
             commands::get_settings,
@@ -110,10 +121,6 @@ fn main() {
         ])
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
-        // The update check and its apply step. `process` is what restarts the
-        // app into the version the installer just wrote.
-        .plugin(tauri_plugin_updater::Builder::new().build())
-        .plugin(tauri_plugin_process::init())
         .manage(AppState::default())
         .on_page_load(meowcal_sub::window_lifecycle::handle_page_load)
         // Set up the system tray icon
@@ -121,8 +128,7 @@ fn main() {
             info!("Setting up system tray...");
 
             // Register the shared Core before reading migration settings or starting it.
-            meowcal_sub::core_client::register(app.handle())
-                .map_err(std::io::Error::other)?;
+            meowcal_sub::core_client::register(app.handle()).map_err(std::io::Error::other)?;
 
             // Preserve old install locations so Core can verify and import them.
             let mut loaded_config = meowcal_sub::engine_recovery::load_with_engine(app.handle());
@@ -178,9 +184,7 @@ fn main() {
                 // Store IPC server in app state
                 app.manage(ipc_server);
             } else {
-                info!(
-                    "Skipping OverlayHost + IPC server (premium legacy). Set MEOWCAL_USE_WINUI_SELECTOR=1 or MEOWCAL_USE_WINUI_OVERLAY=1 to enable."
-                );
+                info!("Using the Tauri selector and overlay.");
                 app.manage(meowcal_sub::overlay_host_process::OverlayHostProcess::new(
                     None,
                 ));
@@ -203,13 +207,11 @@ fn main() {
                 tauri::WindowEvent::CloseRequested { api, .. } => {
                     meowcal_sub::window_lifecycle::handle_close_requested(window, api);
                 }
-                tauri::WindowEvent::Destroyed => {
-                    meowcal_sub::overlay_host_process::stop(window)
-                }
+                tauri::WindowEvent::Destroyed => meowcal_sub::overlay_host_process::stop(window),
                 _ => {}
             }
         })
-        .build(tauri::generate_context!())
+        .build(context)
         .expect("Failed to build Meowcal Sub");
 
     app.run(|app_handle, event| {

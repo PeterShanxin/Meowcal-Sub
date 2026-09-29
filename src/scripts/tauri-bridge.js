@@ -334,6 +334,7 @@
         isTauri,
         isBrowserMode,
         appIdentifier,
+        appVersion: async () => window.__TAURI__?.app?.getVersion?.() ?? null,
 
         // Event system
         event: {

@@ -1,0 +1,130 @@
+name: Store Validation
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  x64:
+    if: >-
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      (github.actor == 'PeterShanxin' || github.actor == 'ianmeowmeow')
+    runs-on: windows-2025
+    timeout-minutes: 180
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+      - name: Require native x64
+        run: |
+          if ([Runtime.InteropServices.RuntimeInformation]::OSArchitecture -ne 'X64') { throw 'Native x64 is required.' }
+          rustup toolchain install stable --profile minimal
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          rustup default stable
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          rustup target add x86_64-pc-windows-msvc
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          npm ci --ignore-scripts
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+      - name: Check Store package contracts
+        run: |
+          npm run version:check
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          ./scripts/tests/store-package.Tests.ps1
+      - name: Build native x64 Store Release
+        run: |
+          ./scripts/build-store.ps1 -Architecture x64 `
+            -PackageName 'MeowcalSub.StoreCITest' `
+            -Publisher 'CN=Meowcal Sub CI Validation' `
+            -PublisherDisplayName 'Meowcal Sub CI Validation' `
+            -PackageVersion '1.0.0.0' `
+            -CargoTargetDir "$env:RUNNER_TEMP/store-target" `
+            -OutputDirectory "$env:GITHUB_WORKSPACE/store-output"
+      - name: Verify empty-cache Core download and CPU translation
+        run: node scripts/tests/store-core-smoke.mjs
+      - name: Collect WACK diagnostics on the x64 runner
+        shell: powershell
+        run: ./scripts/tests/store-wack.ps1 -PackageDirectory "$env:GITHUB_WORKSPACE/store-output" -OutputDirectory "$env:RUNNER_TEMP/store-wack"
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: store-x64-validation
+          path: |
+            store-output/*.msix
+            store-output/SHA256.json
+            ${{ runner.temp }}/meowcal-store-core-smoke/result.json
+            ${{ runner.temp }}/meowcal-store-core-smoke/progress.json
+            ${{ runner.temp }}/meowcal-store-core-smoke/stderr.log
+            ${{ runner.temp }}/store-wack/**
+          if-no-files-found: warn
+
+  arm64-lifecycle:
+    if: >-
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      (github.actor == 'PeterShanxin' || github.actor == 'ianmeowmeow')
+    runs-on: windows-11-arm
+    timeout-minutes: 180
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+      - name: Require native ARM64
+        run: |
+          if ([Runtime.InteropServices.RuntimeInformation]::OSArchitecture -ne 'Arm64') { throw 'Native ARM64 is required.' }
+          $env:CARGO_BUILD_JOBS = [Environment]::ProcessorCount.ToString()
+          "CARGO_BUILD_JOBS=$env:CARGO_BUILD_JOBS" >> $env:GITHUB_ENV
+          rustup toolchain install stable --profile minimal
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          rustup default stable
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          rustup target add aarch64-pc-windows-msvc
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          npm ci --ignore-scripts
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+      - name: Check Store package contracts
+        run: |
+          npm run version:check
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          ./scripts/tests/store-package.Tests.ps1
+      - name: Build native ARM64 Store Release
+        run: |
+          ./scripts/build-store.ps1 -Architecture arm64 `
+            -PackageName 'MeowcalSub.StoreCITest' `
+            -Publisher 'CN=Meowcal Sub CI Validation' `
+            -PublisherDisplayName 'Meowcal Sub CI Validation' `
+            -PackageVersion '1.0.0.0' `
+            -CargoTargetDir "$env:RUNNER_TEMP/store-target" `
+            -OutputDirectory "$env:GITHUB_WORKSPACE/store-output"
+      - name: Prepare signed lifecycle fixtures
+        run: ./scripts/tests/prepare-store-lifecycle.ps1 -PackageDirectory "$env:GITHUB_WORKSPACE/store-output" -OutputDirectory "$env:RUNNER_TEMP/store-fixtures"
+      - name: Install, download, translate, upgrade and uninstall
+        shell: powershell
+        run: ./scripts/tests/store-lifecycle.ps1 -InputDirectory "$env:RUNNER_TEMP/store-fixtures" -OutputDirectory "$env:RUNNER_TEMP/store-lifecycle"
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: store-arm64-lifecycle
+          path: |
+            store-output/*.msix
+            store-output/SHA256.json
+            ${{ runner.temp }}/store-lifecycle/**
+            ${{ runner.temp }}/store-fixtures/packages.json
+            ${{ runner.temp }}/store-fixtures/*.msix
+          if-no-files-found: warn

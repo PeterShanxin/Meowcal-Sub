@@ -56,6 +56,11 @@ cache: a release build starts cold.
 
 ## What a release run produces
 
+Microsoft Store MSIX builds use a separate artifact-only workflow and explicit
+Partner Center identity. See [Store distribution](STORE_DISTRIBUTION.md) for
+builds, channel isolation and certification gates. They do not enter the GitHub
+release/updater asset set described below.
+
 `.github/workflows/release.yml` reserves the tag, calls `package.yml` once per
 architecture, then merges the artifacts and validates them. Each architecture
 must contribute exactly one MSI, one NSIS setup executable, and one updater

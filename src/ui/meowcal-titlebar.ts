@@ -49,7 +49,9 @@ export class MeowcalTitlebar extends LitElement {
   }
 
   private async syncProfile(): Promise<void> {
-    this.development = (await window.TauriBridge?.appIdentifier?.()) === "com.meowcal.sub.dev";
+    const identifier = await window.TauriBridge?.appIdentifier?.();
+    this.development =
+      identifier === "com.meowcal.sub.dev" || identifier === "com.meowcal.sub.store.dev";
   }
 
   private async run(action: "minimize" | "toggleMaximize" | "close"): Promise<void> {

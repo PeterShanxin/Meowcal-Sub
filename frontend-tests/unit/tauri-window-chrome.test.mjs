@@ -116,6 +116,7 @@ describe("tauri window chrome", () => {
   it("shows the dev suffix from the effective Tauri identifier", () => {
     expect(titlebar).toContain("appIdentifier");
     expect(titlebar).toContain('=== "com.meowcal.sub.dev"');
+    expect(titlebar).toContain('=== "com.meowcal.sub.store.dev"');
     expect(titlebar).toContain('" - Dev"');
     expect(titlebar).not.toContain("import.meta.env.DEV");
     expect(trayRs).toContain("AppProfile::current()");

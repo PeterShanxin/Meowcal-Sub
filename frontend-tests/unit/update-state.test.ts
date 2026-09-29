@@ -10,6 +10,13 @@ import {
 } from "../../src/ui/update-state";
 
 describe("download progress", () => {
+  it("explains Store ownership without offering an installer action", () => {
+    const result = deriveUpdatePresentation({ kind: "store" }, "0.8.6");
+    expect(result.detail).toContain("0.8.6");
+    expect(result.detail).toContain("Microsoft Store Library");
+    expect(result.action).toBe("none");
+    expect(result.actionDisabled).toBe(true);
+  });
   // `Progress` carries one chunk's length, not a running total. Treating it as
   // a position pins the bar near zero for the whole download.
   it("accumulates chunk lengths rather than replacing the position", () => {

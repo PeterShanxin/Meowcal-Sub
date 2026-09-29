@@ -123,8 +123,22 @@ async fn corrupt_active_engine_falls_back_to_last_known_good() {
 
 #[test]
 fn state_paths_cannot_escape_engine_root() {
-    assert!(validate_relative(Path::new(r"..\outside.exe")).is_err());
-    assert!(validate_relative(Path::new(r"runtime\engine.exe")).is_ok());
+    for path in [
+        "",
+        "../outside.exe",
+        r"..\outside.exe",
+        r"runtime/..\outside.exe",
+        "/outside.exe",
+        r"\outside.exe",
+        r"C:\outside.exe",
+        "C:outside.exe",
+        r"\\server\share\engine.exe",
+    ] {
+        assert!(validate_relative(Path::new(path)).is_err(), "{path}");
+    }
+    for path in [r"runtime\engine.exe", "runtime/engine.exe"] {
+        assert!(validate_relative(Path::new(path)).is_ok(), "{path}");
+    }
 }
 
 fn fixture_root(label: &str) -> PathBuf {

@@ -34,6 +34,7 @@ fn header_validation_accepts_maximum_and_rejects_length_overflow() {
     );
 }
 
+#[cfg(windows)]
 #[tokio::test]
 async fn initialization_recognition_and_language_changes_share_one_worker() {
     let service = OcrService::default();
@@ -138,8 +139,9 @@ async fn timed_out_worker_cannot_accept_another_operation_or_restore_cache() {
     let service = OcrService::default();
     let (entered, started) = tokio::sync::oneshot::channel();
     let (release, blocked) = std::sync::mpsc::channel();
-    let operation = service.bounded_worker(Duration::from_millis(50), move |worker| {
-        worker.engine(None)?;
+    let operation = service.bounded_worker(Duration::from_millis(50), move |_worker| {
+        #[cfg(windows)]
+        _worker.engine(None)?;
         let _ = entered.send(());
         let _ = blocked.recv_timeout(Duration::from_secs(1));
         Ok(serde_json::json!({}))
@@ -166,6 +168,34 @@ async fn timed_out_worker_cannot_accept_another_operation_or_restore_cache() {
             .await
             .unwrap()
     );
+}
+
+#[cfg(not(windows))]
+#[tokio::test]
+async fn native_ocr_is_explicitly_unsupported_without_poisoning_the_worker() {
+    let service = OcrService::default();
+    for (method, params, bytes) in [
+        ("ocrLanguages", serde_json::json!({}), Vec::new()),
+        (
+            "ocrInitialize",
+            serde_json::json!({"language":null}),
+            Vec::new(),
+        ),
+        (
+            "ocrRecognizeBgra",
+            serde_json::json!({"width":1,"height":1,"stride":4,"timeoutMs":1000}),
+            vec![255; 4],
+        ),
+        ("ocrLanguages", serde_json::json!({}), Vec::new()),
+    ] {
+        let error = service
+            .dispatch(method, params.as_object().unwrap(), bytes)
+            .await
+            .unwrap_err();
+        assert_eq!(error.code, "OCR_UNSUPPORTED_PLATFORM");
+        assert!(error.message.contains("Windows"));
+        assert!(service.worker.lock().unwrap().cached.is_none());
+    }
 }
 
 #[tokio::test]
