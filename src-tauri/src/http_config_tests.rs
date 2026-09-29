@@ -289,11 +289,14 @@ fn development_standalone_config_has_a_distinct_fallback() {
 #[test]
 fn a_debug_standalone_server_uses_the_development_namespace() {
     let path = standalone_config_path();
+    let (identifier, fallback) = if cfg!(feature = "store") {
+        ("com.meowcal.sub.store.dev", "config.store.dev.json")
+    } else {
+        ("com.meowcal.sub.dev", "config.dev.json")
+    };
     let expected = match std::env::var_os("APPDATA") {
-        Some(appdata) => PathBuf::from(appdata)
-            .join("com.meowcal.sub.dev")
-            .join("config.json"),
-        None => PathBuf::from("config.dev.json"),
+        Some(appdata) => PathBuf::from(appdata).join(identifier).join("config.json"),
+        None => PathBuf::from(fallback),
     };
     assert_eq!(path, expected);
 }
