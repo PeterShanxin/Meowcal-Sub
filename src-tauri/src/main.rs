@@ -185,9 +185,7 @@ fn main() {
                 // Store IPC server in app state
                 app.manage(ipc_server);
             } else {
-                info!(
-                    "Skipping OverlayHost + IPC server (premium legacy). Set MEOWCAL_USE_WINUI_SELECTOR=1 or MEOWCAL_USE_WINUI_OVERLAY=1 to enable."
-                );
+                info!("Using the Tauri selector and overlay.");
                 app.manage(meowcal_sub::overlay_host_process::OverlayHostProcess::new(
                     None,
                 ));
