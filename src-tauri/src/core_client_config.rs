@@ -16,7 +16,21 @@ pub fn register<R: Runtime>(app: &tauri::AppHandle<R>) -> Result<(), String> {
         .path()
         .resource_dir()
         .map_err(|error| format!("CORE_RESOURCE_DIR: {error}"))?;
-    set_launch(resolve_executable(profile, &resource_dir)?, profile)
+    let store_root = if cfg!(feature = "store") {
+        Some(
+            app.path()
+                .app_cache_dir()
+                .map_err(|error| format!("CORE_STORAGE_PATH: {error}"))?
+                .join("Core"),
+        )
+    } else {
+        None
+    };
+    set_launch(
+        resolve_executable(profile, &resource_dir)?,
+        profile,
+        store_root,
+    )
 }
 
 pub fn register_headless(
@@ -26,11 +40,16 @@ pub fn register_headless(
     set_launch(
         resolve_executable("development", Path::new(env!("CARGO_MANIFEST_DIR")))?,
         "development",
+        None,
     )?;
     configure_storage(storage_root, legacy_roots)
 }
 
-fn set_launch(executable: PathBuf, profile: &'static str) -> Result<(), String> {
+fn set_launch(
+    executable: PathBuf,
+    profile: &'static str,
+    default_storage_root: Option<PathBuf>,
+) -> Result<(), String> {
     if !executable.is_file() {
         return Err(format!("CORE_EXECUTABLE_MISSING: {}", executable.display()));
     }
@@ -48,7 +67,8 @@ fn set_launch(executable: PathBuf, profile: &'static str) -> Result<(), String> 
     *config = Some(super::LaunchConfig {
         executable,
         profile,
-        storage_root: None,
+        storage_root: default_storage_root.clone(),
+        default_storage_root,
         legacy_roots: Vec::new(),
         force_cpu: false,
     });
@@ -70,7 +90,7 @@ pub fn configure_storage(
     let config = guard
         .as_mut()
         .ok_or_else(|| "CORE_NOT_REGISTERED".to_string())?;
-    config.storage_root = storage_root;
+    config.storage_root = config.resolve_storage_root(storage_root);
     config.legacy_roots = dedupe_paths(legacy_roots);
     Ok(())
 }
@@ -89,9 +109,9 @@ pub fn select_storage_root(storage_root: Option<PathBuf>) -> Result<(), String> 
         .get()
         .and_then(|config| config.lock().ok())
         .and_then(|config| {
-            config
-                .as_ref()
-                .map(|config| config.storage_root == storage_root)
+            config.as_ref().map(|config| {
+                config.storage_root == config.resolve_storage_root(storage_root.clone())
+            })
         })
         .unwrap_or(false);
     if unchanged {
@@ -105,7 +125,7 @@ pub fn select_storage_root(storage_root: Option<PathBuf>) -> Result<(), String> 
     let config = guard
         .as_mut()
         .ok_or_else(|| "CORE_NOT_REGISTERED".to_string())?;
-    config.storage_root = storage_root;
+    config.storage_root = config.resolve_storage_root(storage_root);
     Ok(())
 }
 

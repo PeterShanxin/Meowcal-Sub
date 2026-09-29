@@ -40,8 +40,15 @@ struct LaunchConfig {
     executable: PathBuf,
     profile: &'static str,
     storage_root: Option<PathBuf>,
+    default_storage_root: Option<PathBuf>,
     legacy_roots: Vec<PathBuf>,
     force_cpu: bool,
+}
+
+impl LaunchConfig {
+    fn resolve_storage_root(&self, selected: Option<PathBuf>) -> Option<PathBuf> {
+        selected.or_else(|| self.default_storage_root.clone())
+    }
 }
 
 static CONFIG: OnceLock<Mutex<Option<LaunchConfig>>> = OnceLock::new();

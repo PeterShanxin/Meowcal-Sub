@@ -1,0 +1,22 @@
+{
+  "identifier": "com.meowcal.sub.store",
+  "app": {
+    "security": {
+      "capabilities": ["default", "overlay-selector"]
+    }
+  },
+  "bundle": {
+    "active": false,
+    "createUpdaterArtifacts": false,
+    "resources": [
+      "resources/core/meowcal-core.exe",
+      "resources/core/meowcal-core.json",
+      "resources/core/LICENSE"
+    ]
+  },
+  "plugins": {
+    "updater": {
+      "endpoints": []
+    }
+  }
+}

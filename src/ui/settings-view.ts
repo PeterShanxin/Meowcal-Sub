@@ -150,24 +150,32 @@ function renderEngineAndUpdates(snapshot: UiSnapshot, actions: SettingsActions):
         snapshot.settings.translation.localEngine.cpuOnly,
         actions.onCpuOnly,
       )}
-      ${switchRow(
-        "Automatically check for updates",
-        "At most once a day, after startup",
-        snapshot.settings.autoCheckUpdates !== false,
-        actions.onAutoCheckUpdates,
-      )}
+      ${
+        snapshot.update.kind === "store"
+          ? nothing
+          : switchRow(
+              "Automatically check for updates",
+              "At most once a day, after startup",
+              snapshot.settings.autoCheckUpdates !== false,
+              actions.onAutoCheckUpdates,
+            )
+      }
       <div class="list-row">
         <span><strong>${update.headline}</strong><small>${update.detail}</small></span>
-        <button
-          class="secondary-button"
-          type="button"
-          @click=${() => {
-            if (update.action !== "none") runUpdate();
-          }}
-          ?disabled=${update.actionDisabled}
-        >
-          ${icon(update.action === "install" ? "download" : "update")}${update.actionLabel}
-        </button>
+        ${
+          snapshot.update.kind === "store"
+            ? nothing
+            : html`<button
+                class="secondary-button"
+                type="button"
+                @click=${() => {
+                  if (update.action !== "none") runUpdate();
+                }}
+                ?disabled=${update.actionDisabled}
+              >
+                ${icon(update.action === "install" ? "download" : "update")}${update.actionLabel}
+              </button>`
+        }
       </div>
     </div>
     ${update.notes ? html`<pre class="update-notes">${update.notes}</pre>` : nothing}

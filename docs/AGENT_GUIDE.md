@@ -70,6 +70,12 @@ local branch and worktree survive; remove a finished worktree deliberately with
 
 ## Release and update contract
 
+- Store builds use `scripts/build-store.ps1` and the `store` Cargo feature.
+  They exclude the Tauri updater and experimental WinUI helper, and isolate
+  default config/engine storage from direct installations. Follow
+  [Store distribution](STORE_DISTRIBUTION.md); never publish debug/local
+  identities or treat loose registration as signed install/upgrade evidence.
+
 - The Tauri CLI is pinned in `package.json`. It is versioned independently of
   the `tauri` crate - the two numbers are different series and are not expected
   to match - but it must be recent enough to patch `__TAURI_BUNDLE_TYPE` into

@@ -1,4 +1,4 @@
-/// The two application identities owned by this repository.
+/// Application data identities for direct and Microsoft Store distributions.
 ///
 /// Normal debug development builds use the development namespace. Release
 /// builds retain the installed application's production namespace.
@@ -6,12 +6,20 @@
 pub enum AppProfile {
     Production,
     Development,
+    Store,
+    StoreDevelopment,
 }
 
 impl AppProfile {
     /// Resolve the profile for the build running this process.
     pub const fn current() -> Self {
-        if cfg!(debug_assertions) {
+        if cfg!(feature = "store") {
+            if cfg!(debug_assertions) {
+                Self::StoreDevelopment
+            } else {
+                Self::Store
+            }
+        } else if cfg!(debug_assertions) {
             Self::Development
         } else {
             Self::Production
@@ -23,14 +31,16 @@ impl AppProfile {
         match self {
             Self::Production => "com.meowcal.sub",
             Self::Development => "com.meowcal.sub.dev",
+            Self::Store => "com.meowcal.sub.store",
+            Self::StoreDevelopment => "com.meowcal.sub.store.dev",
         }
     }
 
     /// The compact name used on existing app surfaces.
     pub const fn display_name(self) -> &'static str {
         match self {
-            Self::Production => "Meowcal Sub",
-            Self::Development => "Meowcal Sub - Dev",
+            Self::Production | Self::Store => "Meowcal Sub",
+            Self::Development | Self::StoreDevelopment => "Meowcal Sub - Dev",
         }
     }
 }
@@ -43,6 +53,11 @@ mod tests {
     fn profiles_have_distinct_namespaces() {
         assert_eq!(AppProfile::Production.identifier(), "com.meowcal.sub");
         assert_eq!(AppProfile::Development.identifier(), "com.meowcal.sub.dev");
+        assert_eq!(AppProfile::Store.identifier(), "com.meowcal.sub.store");
+        assert_eq!(
+            AppProfile::StoreDevelopment.identifier(),
+            "com.meowcal.sub.store.dev"
+        );
     }
 
     #[test]
@@ -53,7 +68,13 @@ mod tests {
 
     #[test]
     fn current_profile_matches_the_build_kind() {
-        let expected = if cfg!(debug_assertions) {
+        let expected = if cfg!(feature = "store") {
+            if cfg!(debug_assertions) {
+                AppProfile::StoreDevelopment
+            } else {
+                AppProfile::Store
+            }
+        } else if cfg!(debug_assertions) {
             AppProfile::Development
         } else {
             AppProfile::Production

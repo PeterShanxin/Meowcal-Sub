@@ -173,9 +173,24 @@ fn launch_config(force_cpu: bool) -> LaunchConfig {
         executable: PathBuf::from(r"C:\core\meowcal-core.exe"),
         profile: "production",
         storage_root: None,
+        default_storage_root: None,
         legacy_roots: Vec::new(),
         force_cpu,
     }
+}
+
+#[test]
+fn clearing_custom_storage_restores_the_channel_default() {
+    let mut config = launch_config(false);
+    assert_eq!(config.resolve_storage_root(None), None);
+    let store_default = PathBuf::from(r"C:\cache\com.meowcal.sub.store\Core");
+    config.default_storage_root = Some(store_default.clone());
+    let custom = PathBuf::from(r"D:\MyModels");
+    assert_eq!(
+        config.resolve_storage_root(Some(custom.clone())),
+        Some(custom)
+    );
+    assert_eq!(config.resolve_storage_root(None), Some(store_default));
 }
 
 #[test]

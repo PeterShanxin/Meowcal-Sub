@@ -18,6 +18,7 @@ export type UpdateCheckIntent = "manual" | "automatic";
  */
 export class UpdateController {
   private pending: PendingUpdate | null = null;
+  private storeManaged = false;
   private inFlightCheck: Promise<void> | null = null;
   private inFlightIntent: UpdateCheckIntent = "manual";
 
@@ -29,6 +30,13 @@ export class UpdateController {
 
   /** What the Settings screen should show before the user asks for anything. */
   async initialState(): Promise<Pick<UiSnapshot, "update" | "appVersion">> {
+    const identifier = await window.TauriBridge.appIdentifier?.().catch(() => null);
+    this.storeManaged =
+      identifier === "com.meowcal.sub.store" || identifier === "com.meowcal.sub.store.dev";
+    if (this.storeManaged) {
+      const appVersion = (await window.TauriBridge.appVersion?.().catch(() => null)) ?? null;
+      return { update: { kind: "store" }, appVersion };
+    }
     const updates = window.TauriBridge.updates;
     if (!updates) return { update: { kind: "unsupported" }, appVersion: null };
     try {
@@ -41,7 +49,7 @@ export class UpdateController {
 
   async check(intent: UpdateCheckIntent = "manual"): Promise<void> {
     const updates = window.TauriBridge.updates;
-    if (!updates) return;
+    if (this.storeManaged || !updates) return;
 
     if (this.inFlightCheck) {
       if (intent === "manual" && this.inFlightIntent === "automatic") {
@@ -91,7 +99,7 @@ export class UpdateController {
     clock: () => number = () => Date.now(),
   ): Promise<number | null> {
     const updates = window.TauriBridge.updates;
-    if (window.TauriBridge.isBrowserMode() || !updates) return null;
+    if (this.storeManaged || window.TauriBridge.isBrowserMode() || !updates) return null;
     if (!shouldCheckForUpdatesAutomatically(settings, clock())) return null;
     await this.check("automatic");
     return clock();
@@ -110,7 +118,7 @@ export class UpdateController {
   async install(): Promise<void> {
     const updates = window.TauriBridge.updates;
     const update = this.pending;
-    if (!updates || !update) return;
+    if (this.storeManaged || !updates || !update) return;
 
     this.publish({ update: { kind: "downloading", version: update.version, percent: null } });
     try {
