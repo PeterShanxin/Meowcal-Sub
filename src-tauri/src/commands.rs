@@ -16,6 +16,7 @@ use crate::overlay;
 use crate::overlay_ipc::send_overlay_message;
 use crate::pipeline_repeat_policy as repeat_policy;
 use crate::selector_window::{self, OpenAreaSelectorResult, SelectorSnapshot};
+use crate::session_lifecycle::sleep_until_stopped;
 use crate::sync_utils::lock_or_recover;
 use crate::system_info::SystemInfo;
 use crate::wizard_contracts::WizardTranslationTest;
@@ -680,7 +681,7 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
                     }
                     None => {
                         warn!("⚠️ No capture region set, skipping frame");
-                        tokio::time::sleep(pacer.period()).await;
+                        sleep_until_stopped(pacer.period(), &mut stop_rx).await;
                         continue;
                     }
                 }
@@ -712,7 +713,7 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
                 match try_capture(&current_capture_region, &mut capture_state, &app) {
                     CaptureAttemptResult::Success(result) => result,
                     CaptureAttemptResult::RetryAfterDelay => {
-                        tokio::time::sleep(pacer.remaining_for(frame_started)).await;
+                        sleep_until_stopped(pacer.remaining_for(frame_started), &mut stop_rx).await;
                         continue;
                     }
                 };
@@ -746,7 +747,7 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
                 Ok(result) => result,
                 Err((error, what)) => {
                     warn!("⚠️ {}: {}", what, error);
-                    tokio::time::sleep(pacer.remaining_for(frame_started)).await;
+                    sleep_until_stopped(pacer.remaining_for(frame_started), &mut stop_rx).await;
                     continue;
                 }
             };
@@ -779,7 +780,7 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
                     let _ = app.emit("translation-update", quiet);
                 }
 
-                tokio::time::sleep(pacer.remaining_for(frame_started)).await;
+                sleep_until_stopped(pacer.remaining_for(frame_started), &mut stop_rx).await;
                 continue;
             }
 
@@ -802,7 +803,7 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
                 {
                     let _ = app.emit("translation-update", notice);
                 }
-                tokio::time::sleep(pacer.remaining_for(frame_started)).await;
+                sleep_until_stopped(pacer.remaining_for(frame_started), &mut stop_rx).await;
                 continue;
             }
 
@@ -817,7 +818,7 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
                     repeat_policy::RepeatAction::Skip(reason) => {
                         debug!("[FILTER: {reason}] OCR text");
                         translation_manager.record_ocr_line(&current_text);
-                        tokio::time::sleep(pacer.remaining_for(frame_started)).await;
+                        sleep_until_stopped(pacer.remaining_for(frame_started), &mut stop_rx).await;
                         continue;
                     }
                     repeat_policy::RepeatAction::RetryPassthrough => force_retry_duplicate = true,
@@ -830,7 +831,7 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
             {
                 debug!("[FILTER: duplicate_context] OCR text");
                 translation_manager.record_ocr_line(&current_text);
-                tokio::time::sleep(pacer.remaining_for(frame_started)).await;
+                sleep_until_stopped(pacer.remaining_for(frame_started), &mut stop_rx).await;
                 continue;
             }
             // Deliberately no "is this read worse than the last?" check here: a
@@ -856,7 +857,7 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
             );
             if !taken {
                 debug!("[DEFER: translating] OCR text");
-                tokio::time::sleep(pacer.remaining_for(frame_started)).await;
+                sleep_until_stopped(pacer.remaining_for(frame_started), &mut stop_rx).await;
                 continue;
             }
 
@@ -877,7 +878,7 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
                 .as_millis() as u64;
             context_compression.schedule_if_needed(now_ms, stop_rx.clone());
 
-            tokio::time::sleep(pacer.remaining_for(frame_started)).await;
+            sleep_until_stopped(pacer.remaining_for(frame_started), &mut stop_rx).await;
         }
 
         if pipeline_clock.is_session_current(session_id) {
@@ -914,7 +915,6 @@ pub async fn stop_translation(state: State<'_, AppState>, app: AppHandle) -> Res
         }
     }
 
-    // Clear the stop signal sender
     {
         let mut stop_signal = lock_or_recover(&state.stop_signal);
         *stop_signal = None;

@@ -77,6 +77,10 @@ pub(crate) async fn until_stopped<F: Future>(
     }
 }
 
+pub(crate) async fn sleep_until_stopped(duration: Duration, stop: &mut watch::Receiver<bool>) {
+    until_stopped(tokio::time::sleep(duration), stop).await;
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -127,5 +131,19 @@ mod tests {
         assert_eq!(until_stopped(async { 7 }, &mut receiver).await, Some(7));
         stop.send(true).unwrap();
         assert_eq!(until_stopped(async { 8 }, &mut receiver).await, None);
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn stop_interrupts_the_capture_interval() {
+        let (stop, mut receiver) = watch::channel(false);
+        let started = tokio::time::Instant::now();
+        let waiting = tokio::spawn(async move {
+            sleep_until_stopped(Duration::from_millis(250), &mut receiver).await;
+        });
+        tokio::task::yield_now().await;
+        tokio::time::advance(Duration::from_millis(30)).await;
+        stop.send(true).unwrap();
+        waiting.await.unwrap();
+        assert_eq!(started.elapsed(), Duration::from_millis(30));
     }
 }
