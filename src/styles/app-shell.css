@@ -5,9 +5,9 @@
 html,
 body {
   width: 100%;
-  min-width: 560px;
+  min-width: 0;
   height: 100%;
-  min-height: 430px;
+  min-height: 0;
   margin: 0;
   overflow: hidden;
   color: var(--text-1);
@@ -143,6 +143,7 @@ meowcal-setup {
 }
 
 .screen {
+  min-width: 0;
   min-height: 0;
   overflow: auto;
   scrollbar-color: rgba(141, 154, 180, 0.45) transparent;
@@ -203,21 +204,24 @@ meowcal-setup {
    MESSAGES
    ============================================================================= */
 
-/* Only the message's own buttons take input, so a message sitting over a
-   compact window never blocks the controls beneath it. */
+/* Reserve a row for feedback so errors never cover content or navigation. */
+.app-frame:has(.toast) {
+  grid-template-rows: 32px minmax(0, 1fr) auto 44px;
+}
+
+.app-frame:has(.toast) .app-nav {
+  grid-row: 4;
+}
+
 .toast {
-  pointer-events: none;
-  position: absolute;
-  right: 20px;
-  bottom: 54px;
-  left: 20px;
-  z-index: 10;
+  grid-row: 3;
   display: flex;
   align-items: center;
   gap: 10px;
+  width: calc(100% - 24px);
   max-width: 640px;
   min-height: 44px;
-  margin-inline: auto;
+  margin: 6px auto;
   padding: 6px 8px 6px 12px;
   color: var(--text-1);
   background: var(--surface-menu);
@@ -227,13 +231,10 @@ meowcal-setup {
   font-size: 13px;
 }
 
-.toast button {
-  pointer-events: auto;
-}
-
 .toast-message {
   flex: 1;
   min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .toast.error {
@@ -250,15 +251,6 @@ meowcal-setup {
 
 .toast.notice > .icon.spin {
   color: var(--text-2);
-}
-
-/* Keeps the end of a scrolling page reachable above a message, which would
-   otherwise sit over the last rows until it expires or is dismissed. A short
-   window moves the message over the navigation instead (below). */
-@media (min-height: 481px) {
-  .app-frame:has(.toast) .page {
-    padding-bottom: 64px;
-  }
 }
 
 .toast-dismiss {
@@ -280,21 +272,24 @@ meowcal-setup {
   background: var(--surface-hover);
 }
 
-/* In a short window the message would cover Home's primary action, so it
-   covers the navigation instead until it expires or is dismissed. */
-@media (max-height: 480px) {
-  .toast {
-    bottom: 4px;
-    min-height: 36px;
-    padding-block: 2px;
-  }
-}
-
 /* Shared by every shell page. The setup wizard animates its stage spinner with
    this name but does not load home-next.css, so defining it there left the
    "Working…" spinner frozen and made a slow install look like a hang. */
 @keyframes meowcal-spin {
   to {
     transform: rotate(360deg);
+  }
+}
+
+.screen h1:focus {
+  outline: none;
+}
+
+@media (max-width: 559px) {
+  .nav-button {
+    gap: 5px;
+    height: 40px;
+    padding-inline: 9px;
+    font-size: 12px;
   }
 }

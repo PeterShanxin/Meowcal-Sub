@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+  <meta charset="utf-8" /><title>Meowcal UI audit</title>
+  <style>
+    body {
+      margin: 0;
+      background: #23252b;
+      color: #eee;
+      font: 14px system-ui;
+    }
+    header {
+      display: flex;
+      gap: 14px;
+      padding: 12px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+    select,
+    button {
+      font: inherit;
+      padding: 5px;
+    }
+    iframe {
+      display: block;
+      border: 1px solid #737b88;
+      margin: 0 auto;
+      background: #08090c;
+    }
+    p {
+      margin: 0;
+    }
+    label {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+  </style>
+  <header>
+    <strong>UI audit · fixture backend</strong
+    ><label
+      >Viewport<select id="size">
+        <option value="1000,700">Desktop 1000 × 700</option>
+        <option value="560,430">Minimum desktop 560 × 430</option>
+        <option value="390,844">Mobile-sized 390 × 844</option>
+        <option value="320,740">Narrow 320 × 740</option>
+      </select></label
+    ><label
+      >Page<select id="page">
+        <option value="/">Main</option>
+        <option value="/wizard.html">Setup</option>
+      </select></label
+    ><label
+      >Backend<select id="mode">
+        <option value="ready">Available</option>
+        <option value="offline">Offline</option>
+        <option value="save-error">Save error</option>
+        <option value="slow">Slow settings</option>
+      </select></label
+    ><button id="reload">Reload app</button>
+    <p>
+      Actual frontend; in-memory settings only. No OCR, translation, downloads, or native windows.
+    </p>
+  </header>
+  <iframe title="Meowcal Sub audit viewport" id="app" width="1000" height="700" src="/"></iframe>
+  <script>
+    const app = document.querySelector("#app");
+    document.querySelector("#size").onchange = (e) => {
+      const [w, h] = e.target.value.split(",");
+      app.width = w;
+      app.height = h;
+    };
+    document.querySelector("#page").onchange = (e) => {
+      app.src = e.target.selectedIndex === 1 ? "/wizard.html" : "/";
+    };
+    document.querySelector("#reload").onclick = () => app.contentWindow.location.reload();
+    document.querySelector("#mode").onchange = async (e) => {
+      await fetch("/__ui-audit/mode", {
+        method: "POST",
+        body: JSON.stringify({ mode: e.target.value }),
+      });
+      document.querySelector("strong").textContent =
+        "UI audit · fixture backend · " + e.target.selectedOptions[0].text;
+    };
+  </script>
+</html>

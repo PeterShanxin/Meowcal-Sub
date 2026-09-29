@@ -67,18 +67,17 @@ test("setup navigation never claims OCR installation or translation readiness of
   await expect(page.getByRole("alert")).toBeVisible();
   await expect(page.getByRole("alert")).not.toBeEmpty();
 
-  const next = page.getByRole("button", { name: "Continue", exact: true });
-  await expect(next).toBeInViewport();
-  await next.focus();
-  await expect(next).toBeFocused();
+  const retry = page.getByRole("button", { name: "Try again", exact: true });
+  await expect(retry).toBeInViewport();
+  await retry.focus();
+  await expect(retry).toBeFocused();
   await page.keyboard.press("Enter");
-  await expect(
-    page.getByRole("button", { name: "Install recognition", exact: true }),
-  ).toBeDisabled();
+  await expect(page.getByRole("alert")).toBeVisible();
+  await expect(retry).toBeEnabled();
+  await expect(page.getByRole("button", { name: "Continue", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Install recognition" })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Prepare translation" })).toHaveCount(0);
   await expect(page.getByRole("heading", { name: "Ready to watch" })).toHaveCount(0);
   await expect(page.locator(".status-chip.tone-success")).toHaveCount(0);
-  await page.getByRole("button", { name: "Back", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Welcome to Meowcal Sub" })).toBeVisible();
-  await expect(page.getByRole("alert")).toBeVisible();
 });

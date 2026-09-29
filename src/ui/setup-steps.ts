@@ -15,6 +15,7 @@ export type CopyState = "idle" | "copied" | "failed";
 export interface SetupView {
   step: number;
   settings: AppSettings | null;
+  loading: boolean;
   ocrReady: boolean;
   installingOcr: boolean;
   working: boolean;
@@ -28,6 +29,7 @@ export interface SetupView {
 }
 
 export interface SetupActions {
+  retryLoad(): void;
   setLanguage(kind: "source" | "target", value: string): void;
   installOcr(): void;
   prepare(): void;
@@ -254,8 +256,14 @@ function quietAction(view: SetupView, actions: SetupActions): TemplateResult {
 
 function primaryAction(view: SetupView, actions: SetupActions): TemplateResult {
   if (view.step === 1) {
-    return html`<button class="primary-button compact" type="button" @click=${actions.next}>
-      Continue ${icon("arrow-right")}
+    return html`<button
+      class="primary-button compact"
+      type="button"
+      ?disabled=${view.loading}
+      @click=${view.settings ? actions.next : actions.retryLoad}
+    >
+      ${view.loading ? "Checking this PC…" : view.settings ? "Continue" : "Try again"}
+      ${icon(view.loading ? "spinner" : view.settings ? "arrow-right" : "redo", view.loading ? "spin" : "")}
     </button>`;
   }
   if (view.step === 2 && view.ocrReady) {
@@ -292,7 +300,7 @@ function primaryAction(view: SetupView, actions: SetupActions): TemplateResult {
 }
 
 export function renderFooter(view: SetupView, actions: SetupActions): TemplateResult {
-  return html`<footer class="wizard-footer">
+  return html`<footer class="wizard-footer" aria-label=${`Step ${view.step} of 4`}>
     ${quietAction(view, actions)}
     <div class="step-indicator">
       <span>Step ${view.step} of 4</span>

@@ -4,6 +4,7 @@ import { applyLanguageSelection } from "./languages";
 import { backendUnavailablePhase } from "./home-state";
 import { defaultSettings, mergeSettings, recognitionPresets } from "./settings-defaults";
 import { UpdateController } from "./update-controller";
+import { SettingsWriter } from "./settings-writer";
 
 type Subscriber = (snapshot: UiSnapshot) => void;
 
@@ -27,6 +28,7 @@ export class AppController {
   private settingsLoaded = false;
   private disposed = false;
   private snapshot: UiSnapshot = {
+    settingsSave: { kind: "idle" },
     screen: "home",
     busy: "loading",
     settings: structuredClone(defaultSettings),
@@ -42,6 +44,7 @@ export class AppController {
     appVersion: null,
   };
   private updates = new UpdateController((patch) => this.publish(patch));
+  private settingsWriter = new SettingsWriter((settingsSave) => this.publish({ settingsSave }));
 
   constructor(
     private readonly subscriber: Subscriber,
@@ -232,7 +235,7 @@ export class AppController {
     const patch: Partial<UiSnapshot> = { engine, region };
     // The overlay's quick menu saves appearance itself. Take its values back,
     // unless an edit made in this window is still waiting to be saved.
-    if (stored && this.overlaySaveId === null) {
+    if (stored && this.overlaySaveId === null && this.snapshot.settingsSave.kind === "idle") {
       patch.settings = { ...this.snapshot.settings, overlay: mergeSettings(stored).overlay };
     }
     this.publish(patch);
@@ -274,21 +277,16 @@ export class AppController {
 
   async saveSettings(silent = false): Promise<void> {
     try {
-      await window.TauriBridge.invoke("save_settings", { settings: this.snapshot.settings });
+      await this.settingsWriter.save(this.snapshot.settings);
       this.settingsLoaded = true;
-      if (!silent) this.publish({ notice: "Settings saved", error: null });
+      if (!silent) this.publish({ notice: "Settings saved" });
     } catch (error) {
-      if (!silent) this.publish({ error: errorMessage(error) });
-      else throw error;
+      if (silent) throw error;
     }
   }
 
   private async persistSettingsInBackground(): Promise<void> {
-    try {
-      await this.saveSettings(true);
-    } catch (error) {
-      this.publish({ error: errorMessage(error) });
-    }
+    await this.saveSettings(true).catch(() => {});
   }
 
   private async editSettings(edit: (settings: AppSettings) => void): Promise<void> {
@@ -322,6 +320,7 @@ export class AppController {
     const settings = structuredClone(this.snapshot.settings);
     settings.overlay = { ...settings.overlay, ...patch };
     this.publish({ settings });
+    this.settingsWriter.markPending();
     try {
       await window.TauriBridge.event.emit("overlay-settings-updated", settings.overlay);
     } catch (error) {

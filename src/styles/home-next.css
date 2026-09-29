@@ -109,8 +109,3 @@
   color: var(--text-3);
   font-size: var(--type-caption);
 }
-
-/* A message sits where the support line is; showing both overlaps them. */
-.app-frame:has(.toast) .support-line {
-  visibility: hidden;
-}
