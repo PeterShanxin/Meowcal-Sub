@@ -10,12 +10,23 @@
 /// Unset, empty, and unrecognised values are all false: an experiment stays
 /// off unless it was deliberately enabled.
 pub fn env_truthy(name: &str) -> bool {
-    std::env::var(name).map(|v| is_truthy(&v)).unwrap_or(false)
+    std::env::var(name)
+        .map(|v| is_truthy(name, &v))
+        .unwrap_or(false)
 }
 
 /// The reading itself, separated from the lookup so it can be tested without
 /// mutating the process environment out from under parallel tests.
-fn is_truthy(value: &str) -> bool {
+fn is_truthy(name: &str, value: &str) -> bool {
+    // Store packages ship only the Tauri surfaces; every caller must agree.
+    if cfg!(feature = "store")
+        && matches!(
+            name,
+            "MEOWCAL_USE_WINUI_SELECTOR" | "MEOWCAL_USE_WINUI_OVERLAY"
+        )
+    {
+        return false;
+    }
     matches!(
         value.trim().to_ascii_lowercase().as_str(),
         "1" | "true" | "yes" | "on"
@@ -29,14 +40,20 @@ mod tests {
     #[test]
     fn the_accepted_spellings_are_on() {
         for value in ["1", "true", "TRUE", "Yes", " on "] {
-            assert!(is_truthy(value), "expected {value:?} to read as on");
+            assert!(
+                is_truthy("EXAMPLE", value),
+                "expected {value:?} to read as on"
+            );
         }
     }
 
     #[test]
     fn anything_else_is_off() {
         for value in ["", "  ", "0", "false", "no", "off", "enabled", "2"] {
-            assert!(!is_truthy(value), "expected {value:?} to read as off");
+            assert!(
+                !is_truthy("EXAMPLE", value),
+                "expected {value:?} to read as off"
+            );
         }
     }
 
@@ -45,5 +62,13 @@ mod tests {
         assert!(!env_truthy(
             "MEOWCAL_A_VARIABLE_THIS_PROCESS_WILL_NEVER_SET"
         ));
+    }
+
+    #[test]
+    fn all_winui_callers_follow_the_distribution() {
+        for name in ["MEOWCAL_USE_WINUI_SELECTOR", "MEOWCAL_USE_WINUI_OVERLAY"] {
+            assert_eq!(is_truthy(name, "1"), !cfg!(feature = "store"));
+            assert!(!is_truthy(name, "0"));
+        }
     }
 }

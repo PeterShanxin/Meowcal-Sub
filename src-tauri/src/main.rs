@@ -128,8 +128,7 @@ fn main() {
             info!("Setting up system tray...");
 
             // Register the shared Core before reading migration settings or starting it.
-            meowcal_sub::core_client::register(app.handle())
-                .map_err(std::io::Error::other)?;
+            meowcal_sub::core_client::register(app.handle()).map_err(std::io::Error::other)?;
 
             // Preserve old install locations so Core can verify and import them.
             let mut loaded_config = meowcal_sub::engine_recovery::load_with_engine(app.handle());
@@ -162,8 +161,8 @@ fn main() {
             //
             // Premium legacy selector/overlay is the default now. The WinUI OverlayHost can still be
             // enabled for experimentation via env vars.
-            let use_winui_selector = !cfg!(feature = "store") && env_truthy("MEOWCAL_USE_WINUI_SELECTOR");
-            let use_winui_overlay = !cfg!(feature = "store") && env_truthy("MEOWCAL_USE_WINUI_OVERLAY");
+            let use_winui_selector = env_truthy("MEOWCAL_USE_WINUI_SELECTOR");
+            let use_winui_overlay = env_truthy("MEOWCAL_USE_WINUI_OVERLAY");
             let should_spawn_overlay_host = use_winui_selector || use_winui_overlay;
 
             if should_spawn_overlay_host {
@@ -208,9 +207,7 @@ fn main() {
                 tauri::WindowEvent::CloseRequested { api, .. } => {
                     meowcal_sub::window_lifecycle::handle_close_requested(window, api);
                 }
-                tauri::WindowEvent::Destroyed => {
-                    meowcal_sub::overlay_host_process::stop(window)
-                }
+                tauri::WindowEvent::Destroyed => meowcal_sub::overlay_host_process::stop(window),
                 _ => {}
             }
         })
