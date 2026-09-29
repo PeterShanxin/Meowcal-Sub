@@ -159,5 +159,5 @@ Core 是底层运行环境，不是用户需要额外手动安装的应用。
 社区源码采用 **[AGPL-3.0-only](LICENSE)**，另见[应用声明](LICENSE-NOTICE.md)。
 遵守 AGPL 使用公开项目无需购买许可证；需要不同条款的组织可采用商业许可。
 
-可下载的腾讯 HY-MT 模型使用其独立的社区许可证，不属于应用的 AGPL 许可证。
+翻译模型适用独立的[许可与使用条款](LICENSE-NOTICE.md#separately-downloaded-translation-model)。
 [名称与图标的使用](TRADEMARKS.md)也单独约定。

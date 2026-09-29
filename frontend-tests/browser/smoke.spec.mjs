@@ -119,6 +119,11 @@ test("normal setup presents one private HY-MT engine without infrastructure choi
   await page.getByRole("button", { name: "Settings" }).click();
   await expect(page.getByText("Keep running in the tray")).toHaveCount(0);
   await expect(page.getByText("Start with Windows")).toHaveCount(0);
+  const modelTerms = page.locator(".model-license summary");
+  await expect(page.getByText(/The model license excludes use/)).toBeHidden();
+  await modelTerms.click();
+  await expect(page.getByLabel("Tencent HY Community License Agreement")).toBeVisible();
+  await modelTerms.click();
   const autoCheckInput = page.getByLabel(/Automatically check for updates/i);
   await expect(autoCheckInput).toBeVisible();
   await expect(autoCheckInput).toBeChecked();
@@ -158,6 +163,7 @@ test("normal setup presents one private HY-MT engine without infrastructure choi
 test("guided engine setup has one install action and no infrastructure choices", async ({
   page,
 }) => {
+  await page.setViewportSize({ width: 680, height: 500 });
   await page.goto("/wizard.html");
 
   await expect(page.getByRole("heading", { name: "Welcome to Meowcal Sub" })).toBeVisible();
@@ -174,11 +180,21 @@ test("guided engine setup has one install action and no infrastructure choices",
   await expect(page.getByLabel("Translate into")).toBeVisible();
   const consent = page.getByRole("checkbox", { name: /I agree to the model license/ });
   await expect(consent).not.toBeChecked();
-  await expect(page.getByText(/Meowcal Sub is provided by Shanxin Li/)).toBeVisible();
-  await page.getByText("Read model license and use restrictions", { exact: true }).click();
+  await expect(page.getByText(/Provided by Shanxin Li/)).toBeVisible();
+  const terms = page.locator(".model-license summary");
+  const restrictions = page.getByText(/The model license excludes use/);
+  await expect(terms).toHaveText("Model license and usage terms");
+  await expect(terms).toBeInViewport();
+  await expect(consent).toBeInViewport();
+  await expect(restrictions).toBeHidden();
+  await terms.focus();
+  await page.keyboard.press("Enter");
+  await expect(restrictions).toBeVisible();
   await expect(page.getByLabel("Tencent HY Community License Agreement")).toContainText(
     "ACCEPTABLE USE POLICY",
   );
+  await page.keyboard.press("Enter");
+  await expect(restrictions).toBeHidden();
   // Exercise the UI gate without downloading a model or accepting terms for a real user.
   await page.evaluate(() => {
     const setup = document.querySelector("meowcal-setup");

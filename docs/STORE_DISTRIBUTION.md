@@ -165,8 +165,9 @@ selects 204 of 240 markets. The EU's [outermost regions](https://eur-lex.europa.
 are part of the EU; not every overseas territory of an EU country is.
 
 The app includes the unmodified license and Notice in `licenses/tencent-hy/`.
-Setup displays the actual provider, non-affiliation and territory restrictions,
-with the full license and Acceptable Use Policy readable offline. Preparation
+Setup displays a brief provider and non-affiliation notice. An expandable
+"Model license and usage terms" section contains the territory restrictions,
+full license and Acceptable Use Policy, readable offline. Preparation
 requires an unchecked-by-default model-terms acknowledgement; Settings retains
 the same disclosure. These terms are separate from the application's AGPL license.
 Review their sufficiency for downstream use before submission; the setup UI is
