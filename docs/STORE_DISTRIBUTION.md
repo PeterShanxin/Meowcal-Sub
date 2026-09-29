@@ -127,6 +127,32 @@ Defender status. Hosted desktop checks do not replace real-device capture/OCR,
 full WACK, or Store certification; a disabled protection status does not count
 as protection-enabled acceptance.
 
+The x64 job also attempts WACK when the runner has `appcert.exe` and an active
+user session. Its artifact records tool availability, OS, exit status and the
+unmodified report. Missing tooling is reported as not run; an unsuccessful
+invocation fails the job. Inspect the report for failed and skipped tests even
+when the process exits successfully. Windows Server diagnostics do not close
+the Windows 11 client certification gate.
+
+## Model license release gate
+
+The pinned HY-MT1.5 GGUF model is governed by the
+[Tencent HY Community License](https://huggingface.co/tencent/HY-MT1.5-1.8B-GGUF/blob/265b2e615a7dc9b06c435dc878829ad99a512ba2/License.txt),
+separately from this application's AGPL license. Its territory excludes the
+European Union, United Kingdom and South Korea. Without separate authorization,
+worldwide Store availability is not an acceptable release configuration.
+Market filtering alone does not resolve every downstream-use restriction.
+
+Before submission, resolve the license's requirements for a license copy,
+Notice file, actual-provider identification, Tencent non-affiliation statement,
+and downstream use restrictions, including the Acceptable Use Policy. A model
+download outside the MSIX does not remove these obligations for a product
+using the model. The current Core manifest still marks distribution review as
+required and links to `LICENSE`, while the upstream file is `License.txt`.
+Correcting that embedded metadata must follow the reviewed Core release and
+application pin workflow. Do not treat successful package validation as license
+clearance or apply the model's restrictions to the application's AGPL source.
+
 ## Before submission
 
 - Reserve the name and supply actual Partner Center identity values.

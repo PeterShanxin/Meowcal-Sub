@@ -52,6 +52,9 @@ jobs:
             -OutputDirectory "$env:GITHUB_WORKSPACE/store-output"
       - name: Verify empty-cache Core download and CPU translation
         run: node scripts/tests/store-core-smoke.mjs
+      - name: Collect WACK diagnostics on the x64 runner
+        shell: powershell
+        run: ./scripts/tests/store-wack.ps1 -PackageDirectory "$env:GITHUB_WORKSPACE/store-output" -OutputDirectory "$env:RUNNER_TEMP/store-wack"
       - uses: actions/upload-artifact@v7
         if: always()
         with:
@@ -62,6 +65,7 @@ jobs:
             ${{ runner.temp }}/meowcal-store-core-smoke/result.json
             ${{ runner.temp }}/meowcal-store-core-smoke/progress.json
             ${{ runner.temp }}/meowcal-store-core-smoke/stderr.log
+            ${{ runner.temp }}/store-wack/**
           if-no-files-found: warn
 
   arm64-lifecycle:
