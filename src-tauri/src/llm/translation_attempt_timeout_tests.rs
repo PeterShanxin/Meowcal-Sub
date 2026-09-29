@@ -4,6 +4,33 @@ use crate::llm::BackendId;
 use std::sync::atomic::Ordering;
 use std::sync::{Arc, Mutex};
 
+#[tokio::test]
+async fn core_expiry_uses_timeout_policy_instead_of_transport_retry() {
+    let (runner, backend, diagnostics) =
+        harness(vec![ScriptedStep::Err(LlmError::DeadlineExceeded)]);
+    let mut warnings = Vec::new();
+    let outcome = runner
+        .run(
+            backend.as_ref(),
+            &zh_request("你好", Some("ctx"), true),
+            &budget(10_000),
+            ReadyState::Ready,
+            &mut warnings,
+        )
+        .await;
+    assert!(!expect_timed_out(outcome));
+    assert_eq!(backend.calls.load(Ordering::SeqCst), 1);
+    assert_eq!(warnings, vec!["local_engine: timeout"]);
+    assert!(!crate::llm::transport_errors::is_transient(
+        &LlmError::DeadlineExceeded
+    ));
+    let (errors, _) = lock_or_recover(&diagnostics).snapshot();
+    assert_eq!(
+        errors.get("local_engine").map(String::as_str),
+        Some("timeout")
+    );
+}
+
 #[tokio::test(start_paused = true)]
 async fn an_uncontexted_timeout_retries_without_sleep_and_warns_exactly_once() {
     let (runner, backend, diagnostics) = harness(vec![ScriptedStep::Hang]);
