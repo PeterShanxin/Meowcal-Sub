@@ -127,25 +127,29 @@ impl Service {
                         Error::new("INVALID_COMPLETION", "Invalid completion parameters")
                     })?;
                 completion::validate(&params, &session.manifest.model.id)?;
-                if !hy_mt_runtime::is_healthy(&session.paths.managed_config(&session.manifest))
-                    .await
-                {
-                    session.stop();
-                    return Err(Error::new(
-                        "NOT_READY",
-                        "Owned runtime is no longer healthy",
-                    ));
-                }
-                let endpoint = session
-                    .endpoint
-                    .as_deref()
-                    .ok_or_else(|| Error::new("NOT_READY", "Call ready before completion"))?;
-                let mut response = completion::execute(endpoint, &params).await?;
-                if !response.is_object() {
-                    return Err(Error::new("INVALID_RESPONSE", "Expected completion object"));
-                }
-                session.inference.record(&params.request, &mut response);
-                Ok(response)
+                tokio::time::timeout(Duration::from_millis(params.timeout_ms), async {
+                    if !hy_mt_runtime::is_healthy(&session.paths.managed_config(&session.manifest))
+                        .await
+                    {
+                        session.stop();
+                        return Err(Error::new(
+                            "NOT_READY",
+                            "Owned runtime is no longer healthy",
+                        ));
+                    }
+                    let endpoint = session
+                        .endpoint
+                        .as_deref()
+                        .ok_or_else(|| Error::new("NOT_READY", "Call ready before completion"))?;
+                    let mut response = completion::execute(endpoint, &params).await?;
+                    if !response.is_object() {
+                        return Err(Error::new("INVALID_RESPONSE", "Expected completion object"));
+                    }
+                    session.inference.record(&params.request, &mut response);
+                    Ok(response)
+                })
+                .await
+                .map_err(|_| Error::new("COMPLETION_TIMEOUT", "Completion budget expired"))?
             }
             "ocrLanguages" | "ocrInitialize" | "ocrRecognizeBgra" => {
                 self.ocr

@@ -68,7 +68,7 @@ pub fn status_blocking() -> Result<CoreStatus, String> {
         &TRANSLATION,
         "status",
         json!({}),
-        Duration::from_secs(5),
+        Instant::now() + Duration::from_secs(5),
         None,
         None,
         false,
@@ -88,7 +88,7 @@ pub async fn status() -> Result<CoreStatus, String> {
         &TRANSLATION,
         "status",
         json!({}),
-        Duration::from_secs(5),
+        Instant::now() + Duration::from_secs(5),
         None,
         false,
     )
@@ -112,7 +112,7 @@ pub async fn install(progress: Arc<dyn Fn(String) + Send + Sync>) -> Result<Core
         &TRANSLATION,
         "install",
         json!({}),
-        Duration::from_secs(30 * 60 + 15),
+        Instant::now() + Duration::from_secs(30 * 60 + 15),
         Some(progress),
         false,
     )
@@ -121,27 +121,43 @@ pub async fn install(progress: Arc<dyn Fn(String) + Send + Sync>) -> Result<Core
 
 pub fn ready_blocking(timeout: Duration) -> Result<CoreStatus, String> {
     recovery::clear_failure();
-    call(&TRANSLATION, "ready", json!({}), timeout, None, None, false)
+    call(
+        &TRANSLATION,
+        "ready",
+        json!({}),
+        Instant::now() + timeout,
+        None,
+        None,
+        false,
+    )
 }
 
 pub async fn ready(timeout: Duration) -> Result<CoreStatus, String> {
     recovery::clear_failure();
-    call_async(&TRANSLATION, "ready", json!({}), timeout, None, false).await
+    call_async(
+        &TRANSLATION,
+        "ready",
+        json!({}),
+        Instant::now() + timeout,
+        None,
+        false,
+    )
+    .await
 }
 
-pub async fn complete(request: Value, timeout_ms: u64) -> Result<Value, String> {
+pub async fn complete(request: Value, deadline: Instant) -> Result<Value, String> {
     if recovering() {
         return Err("CORE_INFERENCE_RECOVERING: Translation engine is recovering".into());
     }
     if recovery_failed() {
         return Err("CORE_INFERENCE_FAILED: Retry the engine explicitly".into());
     }
-    let timeout_ms = timeout_ms.clamp(1, 90_000);
+    let deadline = deadline.min(Instant::now() + Duration::from_secs(90));
     call_async(
         &TRANSLATION,
         "complete",
-        json!({"request":request,"timeoutMs":timeout_ms}),
-        Duration::from_millis(timeout_ms + 2_000),
+        json!({"request":request}),
+        deadline,
         None,
         true,
     )
@@ -153,7 +169,7 @@ pub fn ocr_languages_blocking() -> Result<Vec<String>, String> {
         &OCR,
         "ocrLanguages",
         json!({}),
-        Duration::from_secs(5),
+        Instant::now() + Duration::from_secs(5),
         None,
         None,
         false,
@@ -166,7 +182,7 @@ pub fn ocr_initialize_blocking(language: Option<String>) -> Result<String, Strin
         &OCR,
         "ocrInitialize",
         json!({"language":language}),
-        Duration::from_secs(5),
+        Instant::now() + Duration::from_secs(5),
         None,
         None,
         false,
@@ -183,7 +199,7 @@ pub async fn ocr_recognize(
         &OCR,
         "ocrRecognizeBgra",
         Request::ocr(params, payload)?,
-        timeout,
+        Instant::now() + timeout,
         None,
         false,
     )

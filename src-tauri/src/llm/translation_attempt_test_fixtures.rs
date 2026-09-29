@@ -28,6 +28,7 @@ pub(crate) struct ScriptedBackend {
     pub(crate) calls: Arc<AtomicUsize>,
     pub(crate) virtual_call_times: Arc<Mutex<Vec<VirtualInstant>>>,
     pub(crate) options_seen: Arc<Mutex<Vec<Option<PromptRouterOptions>>>>,
+    pub(crate) deadlines_seen: Arc<Mutex<Vec<Option<Instant>>>>,
 }
 
 impl ScriptedBackend {
@@ -38,6 +39,7 @@ impl ScriptedBackend {
             calls: Arc::new(AtomicUsize::new(0)),
             virtual_call_times: Arc::new(Mutex::new(Vec::new())),
             options_seen: Arc::new(Mutex::new(Vec::new())),
+            deadlines_seen: Arc::new(Mutex::new(Vec::new())),
         }
     }
 
@@ -80,8 +82,15 @@ impl TranslatorBackend for ScriptedBackend {
         source_language: &str,
         target_language: &str,
     ) -> Result<String, LlmError> {
-        self.translate_with_context_options(text, source_language, target_language, None, None)
-            .await
+        self.translate_with_context_options(
+            text,
+            source_language,
+            target_language,
+            None,
+            None,
+            None,
+        )
+        .await
     }
 
     async fn translate_with_context_options(
@@ -91,8 +100,10 @@ impl TranslatorBackend for ScriptedBackend {
         target_language: &str,
         context: Option<&str>,
         options: Option<PromptRouterOptions>,
+        deadline: Option<std::time::Instant>,
     ) -> Result<String, LlmError> {
         let call_index = self.calls.fetch_add(1, Ordering::SeqCst);
+        lock_or_recover(&self.deadlines_seen).push(deadline);
         {
             let mut times = lock_or_recover(&self.virtual_call_times);
             times.push(VirtualInstant::now());
@@ -101,7 +112,7 @@ impl TranslatorBackend for ScriptedBackend {
             let mut seen = lock_or_recover(&self.options_seen);
             seen.push(options);
         }
-        let _ = (text, source_language, target_language, context);
+        let _ = (text, source_language, target_language, context, deadline);
         match self.step_for(call_index) {
             ScriptedStep::Ok(translated) => Ok(translated),
             ScriptedStep::ManagedOk(translated) => {

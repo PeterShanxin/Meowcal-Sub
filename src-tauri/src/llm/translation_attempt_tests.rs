@@ -5,6 +5,27 @@ use std::sync::atomic::Ordering;
 use std::sync::{Arc, Mutex};
 
 #[tokio::test]
+async fn backend_receives_the_attempt_deadline_within_the_remaining_total_budget() {
+    let (runner, backend, _) = harness(vec![ScriptedStep::Ok("hello world".into())]);
+    let budget = AttemptBudget {
+        started: Instant::now() - Duration::from_millis(100),
+        total_timeout: Duration::from_millis(200),
+    };
+    let outcome = runner
+        .run(
+            backend.as_ref(),
+            &zh_request("你好", None, false),
+            &budget,
+            ReadyState::Ready,
+            &mut Vec::new(),
+        )
+        .await;
+    expect_succeeded(outcome);
+    let deadline = lock_or_recover(&backend.deadlines_seen)[0].expect("backend deadline");
+    assert!(deadline <= budget.started + budget.total_timeout);
+}
+
+#[tokio::test]
 async fn a_first_attempt_success_is_returned_with_success_diagnostics() {
     let (runner, backend, diagnostics) = harness(vec![ScriptedStep::Ok("hello world".to_string())]);
     let mut warnings = Vec::new();

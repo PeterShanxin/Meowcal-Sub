@@ -6,9 +6,6 @@ use std::path::Path;
 #[path = "../build_support/core_version.rs"]
 mod core_version;
 
-/// Readiness is process-global: a recovery flight marks it stale from its own
-/// thread and records a failure that the backend reports as its ready state. A
-/// test that asserts a ready snapshot must not overlap one that recovers.
 static READINESS: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
 fn hold_readiness() -> std::sync::MutexGuard<'static, ()> {
@@ -291,13 +288,19 @@ async fn real_core_active_completion_cancel_preserves_warm_process() {
     assert!(status.ready);
     let pid = owned_pid().expect("owned Core PID");
 
-    let first = tokio::spawn(complete(completion_request(&status.model), 90_000));
+    let request = || {
+        complete(
+            completion_request(&status.model),
+            Instant::now() + Duration::from_secs(90),
+        )
+    };
+    let first = tokio::spawn(request());
     tokio::time::sleep(Duration::from_millis(250)).await;
     assert!(!first.is_finished(), "first completion must be active");
     first.abort();
     assert!(first.await.expect_err("caller cancellation").is_cancelled());
 
-    let response = complete(completion_request(&status.model), 90_000)
+    let response = request()
         .await
         .expect("next completion should reuse the warm Core");
     assert_eq!(owned_pid(), Some(pid));
@@ -378,10 +381,7 @@ async fn a_configuration_restart_keeps_transport_recovery_available() {
 
     restart_owned();
     recover_transport();
-    // No Core is registered in unit tests, so the admitted flight fails fast.
-    // Wait for it to finish, not just to fail: it marks readiness stale after
-    // recording the failure. The flight runs on the blocking pool, so a
-    // blocking wait here does not starve it.
+    // Failure is recorded before the flight finishes invalidating readiness.
     for _ in 0..200 {
         if recovery_failed() && !recovering() {
             break;

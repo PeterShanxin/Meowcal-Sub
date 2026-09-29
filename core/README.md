@@ -89,9 +89,14 @@ concurrent binary requests close the session. An OCR timeout ends that process;
 the consumer must launch a replacement before sending another frame.
 
 Applications use a separate Core instance for OCR so model inference cannot
-occupy the recognition channel. Cancelling an active completion discards its
-result while the consumer drains the response within the original deadline,
-preserving the loaded model. Queued cancellations send no request. Closing stdin,
+occupy the recognition channel. Consumers subtract queue and handshake time from
+an absolute completion deadline before sending `timeoutMs`. Core bounds the
+health check and HTTP completion together; expiry returns `COMPLETION_TIMEOUT`
+without stopping the owned runtime. The consumer drains this response with a
+two-second transport grace, preserving framing and the loaded model. This grace
+does not extend the inference budget. Normal expiry must not trigger transport
+recovery. HTTP cancellation requires runtime-specific verification before
+claiming that GPU work stops. Queued cancellations and expirations send no request. Closing stdin,
 a transport timeout, or a broken protocol ends the owned session. Consumers must
 bound writes as well as reads and reap the exact process they launched.
 
