@@ -13,6 +13,54 @@ use std::sync::atomic::AtomicUsize;
 use std::sync::{Arc, Mutex};
 use tokio::time::Duration;
 
+#[tokio::test]
+async fn replay_recovery_uses_the_remaining_budget_and_never_returns_the_replay() {
+    let backend = RecordingBackend {
+        script: vec![
+            StepOutcome {
+                delay_ms: 0,
+                response: Ok("Not yet.".into()),
+            },
+            StepOutcome {
+                delay_ms: 500,
+                response: Ok("Hello.".into()),
+            },
+        ],
+        calls: AtomicUsize::new(0),
+        seen: Mutex::new(Vec::new()),
+    };
+    let history = Arc::new(Mutex::new(RecentTranslations::default()));
+    lock_or_recover(&history).record("还没有", "Not yet.", "zh-CN", "en-US", 0);
+    let store = tier_store(ContextTier::Full);
+    let planner = TranslationPlanner::new(default_policy(1), diagnostics(), Some(history));
+    let budget = AttemptBudget {
+        started: std::time::Instant::now() - Duration::from_millis(900),
+        total_timeout: Duration::from_millis(1_000),
+    };
+    let mut warnings = Vec::new();
+
+    let outcome = planner
+        .run_tiered_sequence(
+            &backend,
+            &plan(&store, ContextTier::Full, Some("还没有"), None),
+            ReadyState::Ready,
+            &budget,
+            &mut warnings,
+        )
+        .await;
+
+    assert!(
+        outcome.is_none(),
+        "neither replay nor late recovery may be returned"
+    );
+    assert_eq!(backend.calls.load(Ordering::SeqCst), 2);
+    assert!(lock_or_recover(&backend.seen)[1].0.is_none());
+    assert_eq!(
+        warnings,
+        vec!["local_engine: context_leakage", "local_engine: timeout"]
+    );
+}
+
 // Every tier times out: Full and MemoryOnly degrade once each, the None tier
 // exhausts its uncontexted retries, and the sequence ends for the next backend.
 #[tokio::test(start_paused = true)]
@@ -22,7 +70,7 @@ async fn all_tiers_timeout_then_the_sequence_exhausts() {
         vec![ScriptedStep::Hang],
     ));
     let store = tier_store(ContextTier::Full);
-    let planner = TranslationPlanner::new(default_policy(3), diagnostics());
+    let planner = TranslationPlanner::new(default_policy(3), diagnostics(), None);
     let mut warnings = Vec::new();
 
     let outcome = planner
@@ -69,7 +117,7 @@ async fn a_validation_rejection_exhausts_the_sequence_without_retry() {
     ));
     let store = tier_store(ContextTier::Full);
     let diagnostics = diagnostics();
-    let planner = TranslationPlanner::new(default_policy(3), diagnostics.clone());
+    let planner = TranslationPlanner::new(default_policy(3), diagnostics.clone(), None);
     let mut warnings = Vec::new();
 
     let outcome = planner
@@ -107,7 +155,7 @@ async fn an_exhausted_budget_at_entry_never_calls_the_backend() {
         vec![ScriptedStep::Hang],
     ));
     let store = tier_store(ContextTier::Full);
-    let planner = TranslationPlanner::new(default_policy(3), diagnostics());
+    let planner = TranslationPlanner::new(default_policy(3), diagnostics(), None);
     let mut warnings = Vec::new();
 
     let outcome = planner
@@ -134,7 +182,7 @@ async fn a_success_records_diagnostics_from_the_shared_clock() {
     ));
     let store = tier_store(ContextTier::Full);
     let diagnostics = diagnostics();
-    let planner = TranslationPlanner::new(default_policy(3), diagnostics.clone());
+    let planner = TranslationPlanner::new(default_policy(3), diagnostics.clone(), None);
     let mut warnings = Vec::new();
 
     let outcome = planner

@@ -1460,16 +1460,15 @@ impl TranslatorBackend for FoundryLocalBackend {
             prompt_options,
         );
 
-        let prompt = match built {
-            Some(built) => built.prompt,
-            None => return Ok(String::new()),
+        let Some(built) = built else {
+            return Ok(String::new());
         };
 
         let request = ChatCompletionRequest {
             model,
             messages: vec![ChatMessage {
                 role: "user".to_string(),
-                content: prompt,
+                content: built.prompt,
             }],
             temperature: 0.7,
             top_k: 20,
@@ -1503,6 +1502,7 @@ impl TranslatorBackend for FoundryLocalBackend {
                 source_language,
                 target_language,
                 prompt_options.max_source_chars,
+                built.used_context,
             )
             .await?
         } else {

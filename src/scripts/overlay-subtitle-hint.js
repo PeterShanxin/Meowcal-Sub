@@ -111,7 +111,11 @@
         clearSubtitleHint(hintEl, hintTextEl);
         return;
       }
-      const summary = primaryFoundry ? summarizeFoundryWarning(primaryFoundry) : null;
+      const summary = foundryWarnings.includes("local_engine: context_leakage")
+        ? { text: "Retranslated — context off for this session", severity: "ok" }
+        : primaryFoundry
+          ? summarizeFoundryWarning(primaryFoundry)
+          : null;
       if (!summary?.text) {
         clearSubtitleHint(hintEl, hintTextEl);
         return;

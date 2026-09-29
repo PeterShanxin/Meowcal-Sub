@@ -123,7 +123,7 @@ async fn first_tier_success_returns_translated_and_stores_the_tier() {
         vec![ScriptedStep::Ok("hello world".to_string())],
     ));
     let store = tier_store(ContextTier::Full);
-    let planner = TranslationPlanner::new(default_policy(3), diagnostics());
+    let planner = TranslationPlanner::new(default_policy(3), diagnostics(), None);
     let mut warnings = Vec::new();
 
     let outcome = planner
@@ -166,7 +166,7 @@ async fn a_timeout_degrades_one_tier_and_the_next_tier_succeeds() {
         ],
     ));
     let store = tier_store(ContextTier::Full);
-    let planner = TranslationPlanner::new(default_policy(3), diagnostics());
+    let planner = TranslationPlanner::new(default_policy(3), diagnostics(), None);
     let mut warnings = Vec::new();
 
     let outcome = planner
@@ -206,7 +206,7 @@ async fn an_unverified_tier_is_not_stored() {
         vec![ScriptedStep::Ok("hello world".to_string())],
     ));
     let store = tier_store(ContextTier::MemoryOnly);
-    let planner = TranslationPlanner::new(default_policy(3), diagnostics());
+    let planner = TranslationPlanner::new(default_policy(3), diagnostics(), None);
     let mut warnings = Vec::new();
 
     let outcome = planner
@@ -281,7 +281,7 @@ async fn the_retry_warning_precedes_the_slow_degredation_warning() {
 #[tokio::test(start_paused = true)]
 async fn each_tier_hands_its_own_prompt_to_the_backend() {
     let store = tier_store(ContextTier::Full);
-    let planner = TranslationPlanner::new(default_policy(3), diagnostics());
+    let planner = TranslationPlanner::new(default_policy(3), diagnostics(), None);
     let mut warnings = Vec::new();
 
     let backend = Arc::new(ScriptedBackend::new(

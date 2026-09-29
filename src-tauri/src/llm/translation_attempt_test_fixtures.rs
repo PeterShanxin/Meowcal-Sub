@@ -13,7 +13,10 @@ use tokio::time::Instant as VirtualInstant;
 #[derive(Clone)]
 pub(crate) enum ScriptedStep {
     Ok(String),
+    ManagedOk(String),
     Err(LlmError),
+    /// Controlled completion for requests that outlive a context reset.
+    Wait(Arc<tokio::sync::Notify>, String),
     /// Sleeps far beyond any attempt cap, so the runner's timeout fires.
     Hang,
 }
@@ -101,7 +104,30 @@ impl TranslatorBackend for ScriptedBackend {
         let _ = (text, source_language, target_language, context);
         match self.step_for(call_index) {
             ScriptedStep::Ok(translated) => Ok(translated),
+            ScriptedStep::ManagedOk(translated) => {
+                let response = serde_json::from_value(serde_json::json!({
+                    "choices": [{"message": {"role": "assistant", "content": translated}}]
+                }))
+                .unwrap();
+                let response = crate::llm::core_translation::validate_completion(
+                    response,
+                    120,
+                    text,
+                    source_language,
+                    target_language,
+                    options.is_some_and(|options| options.enable_context) && context.is_some(),
+                )?;
+                Ok(
+                    crate::llm::subtitle_output::sanitize_subtitle_translation_output(
+                        &response.choices[0].message.content,
+                    ),
+                )
+            }
             ScriptedStep::Err(err) => Err(err),
+            ScriptedStep::Wait(release, translated) => {
+                release.notified().await;
+                Ok(translated)
+            }
             ScriptedStep::Hang => {
                 tokio::time::sleep(Duration::from_secs(3_600)).await;
                 Ok(String::new())
