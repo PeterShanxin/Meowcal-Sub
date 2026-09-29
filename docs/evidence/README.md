@@ -138,3 +138,19 @@ Two suspected replays recovered successfully in 629 ms and 733 ms. The report
 records allowed negative warmup admissions and excluded interrupted attempts.
 Earlier native evidence remains available at commit `65065bb`. The final runs
 make no general latency improvement claim.
+
+The [recovery success](2026-09-29-context-recovery-success-arm64.png) and
+[recovery failure](2026-09-29-context-recovery-failure-arm64.png) screenshots
+validate the overlay presentation at `a3ce353` on Windows 11 ARM64 build 26200,
+125% scaling. The existing isolated development executable from `7ae2777`
+(SHA-256 `d0acb87c4062699b4136f724bdec779a04f0c5d9ac1f6eb1d4515d7f87400722`)
+loaded the updated frontend into its native Tauri WebView2 window. Controlled
+`translation-update` events exercised successful replay recovery, failed retry,
+and the next normal subtitle. Recovery showed a green, readable notice that
+context is off for the session; failure retained the unavailable error state;
+the next normal subtitle cleared the notice. The text fit a 520-logical-pixel
+subtitle area. These checks cover native presentation, not new capture, OCR,
+or model inference; the earlier end-to-end evidence covers the unchanged
+translation runtime. Full `scripts/verify.ps1` passed on the updated source:
+538 app unit tests, 456 frontend tests, and six browser/Rust bridge smoke tests,
+plus Core, IPC, command, lint, build, and audit checks.
