@@ -35,7 +35,34 @@ function Stop-TestApp {
     }
     if ($script:appPid) {
         $process = Get-Process -Id $script:appPid -ErrorAction SilentlyContinue
-        if ($process -and $process.Path -eq (Join-Path $script:package.InstallLocation 'meowcal-sub.exe')) { Stop-Process -Id $script:appPid }
+        if ($process -and $process.Path -eq (Join-Path $script:package.InstallLocation 'meowcal-sub.exe')) {
+            $tree = @(Get-CimInstance Win32_Process)
+            $ownedIds = [Collections.Generic.HashSet[uint32]]::new()
+            $null = $ownedIds.Add([uint32]$script:appPid)
+            do {
+                $changed = $false
+                foreach ($child in $tree) {
+                    if ($ownedIds.Contains([uint32]$child.ParentProcessId) -and $ownedIds.Add([uint32]$child.ProcessId)) { $changed = $true }
+                }
+            } while ($changed)
+            $owned = @(foreach ($ownedId in $ownedIds) {
+                $child = Get-Process -Id $ownedId -ErrorAction SilentlyContinue
+                if ($child) { $null = $child.Handle; $child }
+            })
+            $owned | Select-Object Id,ProcessName,Path,StartTime | ConvertTo-Json -Compress | Add-Content "$output/stopped-processes.jsonl"
+            Stop-Process -Id $script:appPid
+            $script:appPid = $null
+            $deadline = (Get-Date).AddSeconds(20)
+            do {
+                $remaining = @($owned | Where-Object { -not $_.HasExited })
+                if (-not $remaining.Count) { break }
+                Start-Sleep -Milliseconds 200
+            } while ((Get-Date) -lt $deadline)
+            if ($remaining.Count) {
+                $remaining | Select-Object Id,ProcessName,Path | ConvertTo-Json | Set-Content "$output/remaining-processes.json"
+                throw 'Test application children remained alive after shutdown; deployment was not retried.'
+            }
+        }
         $script:appPid = $null
     }
 }
