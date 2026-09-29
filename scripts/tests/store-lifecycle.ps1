@@ -28,14 +28,19 @@ using System.Runtime.InteropServices;
 interface IActivation { void ActivateApplication([MarshalAs(UnmanagedType.LPWStr)] string id,[MarshalAs(UnmanagedType.LPWStr)] string args,uint options,out uint pid); }
 public static class Activation { public static uint Launch(string id) { var a=(IActivation)Activator.CreateInstance(Type.GetTypeFromCLSID(new Guid("45BA127D-10A8-46EA-8AB7-56EA9078943C"))); uint pid; a.ActivateApplication(id,null,0,out pid); return pid; } }
 '@
-function Stop-TestApp {
+function Stop-TestApp([string]$ExecutablePath) {
     if ($script:socket -and $script:socket.State -eq [Net.WebSockets.WebSocketState]::Open) {
         try { $null = Invoke-AppScript "window.__TAURI__.core.invoke('prepare_for_update')" } catch { $_.Exception.Message | Add-Content "$output/stop-errors.txt" }
         $script:socket.Dispose()
     }
     if ($script:appPid) {
         $process = Get-Process -Id $script:appPid -ErrorAction SilentlyContinue
-        if ($process -and $process.Path -eq (Join-Path $script:package.InstallLocation 'meowcal-sub.exe')) {
+        if (-not $ExecutablePath) {
+            $ExecutablePath = if ($script:directExecutable -and $process.Path -eq $script:directExecutable) {
+                $script:directExecutable
+            } else { Join-Path $script:package.InstallLocation 'meowcal-sub.exe' }
+        }
+        if ($process -and $process.Path -eq $ExecutablePath) {
             $tree = @(Get-CimInstance Win32_Process)
             $ownedIds = [Collections.Generic.HashSet[uint32]]::new()
             $null = $ownedIds.Add([uint32]$script:appPid)
@@ -66,10 +71,22 @@ function Stop-TestApp {
         $script:appPid = $null
     }
 }
+. (Join-Path $PSScriptRoot 'store-direct-coexistence.ps1')
 try {
     try { $result.defender = Get-MpComputerStatus | Select-Object AntivirusEnabled,RealTimeProtectionEnabled,BehaviorMonitorEnabled }
     catch { $result.defender = @{unavailable=$_.Exception.Message} }
     $result.webviewBefore = @(Get-ItemProperty 'HKLM:\SOFTWARE\WOW6432Node\Microsoft\EdgeUpdate\Clients\*','HKLM:\SOFTWARE\Microsoft\EdgeUpdate\Clients\*','HKCU:\SOFTWARE\Microsoft\EdgeUpdate\Clients\*' -ErrorAction SilentlyContinue | Select-Object name,pv)
+    $policy = 'HKLM:\Software\Policies\Microsoft\Edge\WebView2\AdditionalBrowserArguments'
+    New-Item $policy -Force | Out-Null
+    New-ItemProperty $policy -Name '*' -Value '--remote-debugging-port=9241' -PropertyType String -Force | Out-Null
+    $directReady = $false
+    try {
+        $null = Step 'direct-install-baseline-startup' { Install-DirectBaseline }
+        $directReady = $true
+    } catch {
+        $_.Exception.Message | Set-Content "$output/direct-install-error.txt"
+        Stop-TestApp -ExecutablePath $script:directExecutable
+    }
     $null = Step 'trust-test-certificate-on-runner' {
         $certificate = Import-Certificate -FilePath (Join-Path $InputDirectory 'local-test.cer') -CertStoreLocation Cert:\LocalMachine\TrustedPeople
         $script:thumbprint = $certificate.Thumbprint
@@ -94,13 +111,10 @@ try {
     if ($result.coldCache.exists -or $result.coldCache.inputContainsModel) { throw 'Cold installation requires an empty engine cache.' }
     try {
         $null = Step 'release-activation-and-first-download' {
-            $policy = 'HKLM:\Software\Policies\Microsoft\Edge\WebView2\AdditionalBrowserArguments'
-            New-Item $policy -Force | Out-Null
-            New-ItemProperty $policy -Name '*' -Value '--remote-debugging-port=9241' -PropertyType String -Force | Out-Null
             $script:appPid = [Activation]::Launch($script:package.PackageFamilyName+'!App')
             $deadline = (Get-Date).AddSeconds(40)
             do { try { Connect-AppWebView; break } catch { if ((Get-Date) -gt $deadline) { throw }; Start-Sleep 2 } } while ($true)
-            $settings = Invoke-AppScript "(async()=>{const s=await window.__TAURI__.core.invoke('get_settings');s.translation.localEngine.cpuOnly=true;s.sourceLanguage='en-US';s.targetLanguage='zh-CN';await window.__TAURI__.core.invoke('save_settings',{settings:s});return s})()"
+            $settings = Invoke-AppScript "(async()=>{const s=await window.__TAURI__.core.invoke('get_settings');if(s.sourceLanguage==='ja-JP')throw Error('Store inherited direct-install settings');s.translation.localEngine.cpuOnly=true;s.sourceLanguage='en-US';s.targetLanguage='zh-CN';await window.__TAURI__.core.invoke('save_settings',{settings:s});return s})()"
             $settings | ConvertTo-Json -Depth 8 | Set-Content "$output/settings-before-install.json"
             $null = Invoke-AppScript "window.__install={done:false};window.__TAURI__.core.invoke('wizard_install_engine').then(()=>window.__install={done:true}).catch(e=>window.__install={done:true,error:String(e)});'started'"
             $deadline = (Get-Date).AddMinutes(20)
@@ -254,6 +268,7 @@ try {
         if ((Get-FileHash -LiteralPath $script:customModel).Hash -ne $script:customHash) { throw 'Uninstall changed the external model.' }
         @{registrationRemoved=$true;privateCacheRemoved=$true;externalModelRetained=$true}
     }
+    if ($directReady) { $null = Step 'direct-install-survives-store-lifecycle' { Test-DirectBaselineAfterStoreRemoval } }
     $result.complete = $true
 } catch { $result.fatalError = $_.Exception.Message }
 finally {

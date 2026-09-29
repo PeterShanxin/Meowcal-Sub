@@ -119,6 +119,12 @@ It also seeds a custom engine directory, checks translation after restart,
 resets the app through Windows, and verifies that reset and uninstall retain the
 external model while removing package-owned settings and cache. This tests a
 persisted custom configuration, not a directory-picker UI.
+The same runner installs the hash-pinned GitHub v0.8.6 ARM64 NSIS baseline,
+opens it with a distinct saved language preference, and checks that Store
+setup does not inherit that setting. After Store reset and removal, the direct
+installation and configuration must remain unchanged and launch successfully;
+the baseline is then uninstalled. This covers separate startup and data
+isolation, not simultaneous translation by both channels.
 Test signing and certificate trust are restricted to disposable hosted
 runners; the workflow does not use production signing secrets.
 
