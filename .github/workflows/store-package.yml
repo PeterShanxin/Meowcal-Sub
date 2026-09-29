@@ -56,9 +56,13 @@ jobs:
           cache: npm
       - name: Install native Rust toolchain
         shell: pwsh
+        env:
+          PACKAGE_ARCHITECTURE: ${{ inputs.architecture }}
         run: |
           rustup toolchain install stable --profile minimal
           rustup default stable
+          $target = if ($env:PACKAGE_ARCHITECTURE -eq 'arm64') { 'aarch64-pc-windows-msvc' } else { 'x86_64-pc-windows-msvc' }
+          rustup target add $target
       - name: Install locked frontend dependencies
         shell: pwsh
         run: npm ci --ignore-scripts

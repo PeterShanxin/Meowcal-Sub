@@ -1,8 +1,11 @@
 # ADR-0006: Separate Microsoft Store distribution channel
 
-**Date:** 2026-09-29  
-**Status:** Proposed  
-**Decision owners:** Meowcal Sub maintainers  
+**Date:** 2026-09-29
+
+**Status:** Proposed
+
+**Decision owners:** Meowcal Sub maintainers
+
 **Related:** #62, ADR-0004, ADR-0005
 
 ## Context
