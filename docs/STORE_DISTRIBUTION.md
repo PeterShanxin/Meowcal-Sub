@@ -69,6 +69,14 @@ package before publication; loose registration does not establish it.
 
 ## Local validation
 
+The MSIX declares `Microsoft.VCLibs.140.00.UWPDesktop` (minimum
+`14.0.33728.0`) because the pinned Core requires the desktop C++ runtime.
+Microsoft Store resolves this framework dependency. For sideloading or loose
+registration, install the Microsoft-signed framework package matching the app's
+architecture first, or supply it through `Add-AppxPackage -DependencyPath`.
+A developer machine's existing Visual C++ runtime can hide a missing dependency;
+verify activation on a clean Windows environment.
+
 Use `-Configuration Debug` and a clearly local package identity, for example
 `MeowcalSub.StoreLocalTest`, `CN=Meowcal Sub Local Validation`, and package
 version `1.0.0.0`. This is test identity/version data, not a Store reservation.
@@ -102,6 +110,7 @@ exclusions to make validation pass.
 ## References
 
 - [Microsoft package requirements and signing](https://learn.microsoft.com/en-us/windows/apps/publish/publish-your-app/msix/app-package-requirements)
+- [Desktop C++ runtime framework packages](https://learn.microsoft.com/en-us/troubleshoot/developer/visualstudio/cpp/libraries/c-runtime-packages-desktop-bridge)
 - [Desktop application packaging preparation](https://learn.microsoft.com/en-us/windows/msix/desktop/desktop-to-uwp-prepare)
 - [Loose-file registration](https://learn.microsoft.com/en-us/windows/apps/develop/testing/loose-file-registration)
 - [Store policies](https://learn.microsoft.com/en-us/windows/apps/publish/store-policies)
