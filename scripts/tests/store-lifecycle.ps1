@@ -49,7 +49,13 @@ try {
         $certificate.Thumbprint
     }
     $null = Step 'signed-install' {
-        Add-AppxPackage -Path (Join-Path $InputDirectory 'initial.msix') -DependencyPath (Join-Path $InputDirectory 'vclibs.appx')
+        $framework = Get-AppxPackage Microsoft.VCLibs.140.00.UWPDesktop |
+            Where-Object { $_.Architecture -eq $env:PROCESSOR_ARCHITECTURE -and [version]$_.Version -ge [version]'14.0.33728.0' }
+        $result.frameworkBefore = @($framework | Select-Object PackageFullName,Version,Architecture)
+        Save-Result
+        $install = @{Path = (Join-Path $InputDirectory 'initial.msix')}
+        if (-not $framework) { $install.DependencyPath = Join-Path $InputDirectory 'vclibs.appx' }
+        Add-AppxPackage @install
         $script:package = Get-AppxPackage -Name MeowcalSub.StoreCITest
         if ($script:package.Version -ne '1.0.0.0') { throw 'Initial package version mismatch.' }
         $script:package | Select-Object PackageFullName,InstallLocation,Status,SignatureKind
@@ -134,10 +140,5 @@ finally {
     if ($script:thumbprint) { Remove-Item -LiteralPath "Cert:\LocalMachine\TrustedPeople\$script:thumbprint" -ErrorAction Continue }
     Stop-Transcript
 }
-
-
-
-
-
 
 if ($result.verdict -ne 'pass') { exit 1 }
