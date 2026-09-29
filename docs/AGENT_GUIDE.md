@@ -39,6 +39,11 @@ Do not silently choose the more convenient interpretation.
 - Stage only scoped files.
 - Never use destructive reset or checkout commands to erase unknown changes.
 - Identify exact PIDs before stopping repository processes.
+- Prefer hosted Windows runners for package lifecycle tests. Batch local VM
+  checks in one stable session; do not overlap Sandbox clients or repeatedly
+  recreate guests. If a guest hangs, shutdown times out, or the host crashes,
+  stop lifecycle retries and preserve evidence before reassessing. Do not
+  change host power state, virtualization features, or drivers to unblock tests.
 
 ## Delivery
 
@@ -69,6 +74,12 @@ local branch and worktree survive; remove a finished worktree deliberately with
 `git worktree remove`.
 
 ## Release and update contract
+
+- Store builds use `scripts/build-store.ps1` and the `store` Cargo feature.
+  They exclude the Tauri updater and experimental WinUI helper, and isolate
+  default config/engine storage from direct installations. Follow
+  [Store distribution](STORE_DISTRIBUTION.md); never publish debug/local
+  identities or treat loose registration as signed install/upgrade evidence.
 
 - The Tauri CLI is pinned in `package.json`. It is versioned independently of
   the `tauri` crate - the two numbers are different series and are not expected

@@ -16,7 +16,13 @@ pub fn register<R: Runtime>(app: &tauri::AppHandle<R>) -> Result<(), String> {
         .path()
         .resource_dir()
         .map_err(|error| format!("CORE_RESOURCE_DIR: {error}"))?;
-    set_launch(resolve_executable(profile, &resource_dir)?, profile)
+    let store_root = crate::app_profile::store_core_storage_base()?;
+    set_launch(
+        resolve_executable(profile, &resource_dir)?,
+        profile,
+        store_root,
+        crate::app_profile::store_child_path()?,
+    )
 }
 
 pub fn register_headless(
@@ -26,11 +32,18 @@ pub fn register_headless(
     set_launch(
         resolve_executable("development", Path::new(env!("CARGO_MANIFEST_DIR")))?,
         "development",
+        None,
+        None,
     )?;
     configure_storage(storage_root, legacy_roots)
 }
 
-fn set_launch(executable: PathBuf, profile: &'static str) -> Result<(), String> {
+fn set_launch(
+    executable: PathBuf,
+    profile: &'static str,
+    default_storage_root: Option<PathBuf>,
+    child_path: Option<std::ffi::OsString>,
+) -> Result<(), String> {
     if !executable.is_file() {
         return Err(format!("CORE_EXECUTABLE_MISSING: {}", executable.display()));
     }
@@ -48,7 +61,9 @@ fn set_launch(executable: PathBuf, profile: &'static str) -> Result<(), String> 
     *config = Some(super::LaunchConfig {
         executable,
         profile,
-        storage_root: None,
+        storage_root: default_storage_root.clone(),
+        default_storage_root,
+        child_path,
         legacy_roots: Vec::new(),
         force_cpu: false,
     });
@@ -70,7 +85,7 @@ pub fn configure_storage(
     let config = guard
         .as_mut()
         .ok_or_else(|| "CORE_NOT_REGISTERED".to_string())?;
-    config.storage_root = storage_root;
+    config.storage_root = config.resolve_storage_root(storage_root);
     config.legacy_roots = dedupe_paths(legacy_roots);
     Ok(())
 }
@@ -89,9 +104,9 @@ pub fn select_storage_root(storage_root: Option<PathBuf>) -> Result<(), String> 
         .get()
         .and_then(|config| config.lock().ok())
         .and_then(|config| {
-            config
-                .as_ref()
-                .map(|config| config.storage_root == storage_root)
+            config.as_ref().map(|config| {
+                config.storage_root == config.resolve_storage_root(storage_root.clone())
+            })
         })
         .unwrap_or(false);
     if unchanged {
@@ -105,7 +120,7 @@ pub fn select_storage_root(storage_root: Option<PathBuf>) -> Result<(), String> 
     let config = guard
         .as_mut()
         .ok_or_else(|| "CORE_NOT_REGISTERED".to_string())?;
-    config.storage_root = storage_root;
+    config.storage_root = config.resolve_storage_root(storage_root);
     Ok(())
 }
 
@@ -259,4 +274,31 @@ fn is_sha256(value: &str) -> bool {
         && value.bytes().all(|byte| {
             byte.is_ascii_digit() || (byte.is_ascii_lowercase() && byte.is_ascii_hexdigit())
         })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn clearing_custom_storage_restores_the_channel_default() {
+        let mut config = super::super::LaunchConfig {
+            executable: PathBuf::from("core.exe"),
+            profile: "production",
+            storage_root: None,
+            default_storage_root: None,
+            child_path: None,
+            legacy_roots: Vec::new(),
+            force_cpu: false,
+        };
+        assert_eq!(config.resolve_storage_root(None), None);
+        let store_default = PathBuf::from(r"C:\cache\com.meowcal.sub.store\Core");
+        config.default_storage_root = Some(store_default.clone());
+        let custom = PathBuf::from(r"D:\MyModels");
+        assert_eq!(
+            config.resolve_storage_root(Some(custom.clone())),
+            Some(custom)
+        );
+        assert_eq!(config.resolve_storage_root(None), Some(store_default));
+    }
 }

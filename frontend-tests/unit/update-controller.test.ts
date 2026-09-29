@@ -30,6 +30,49 @@ afterEach(() => {
 });
 
 describe("initial state", () => {
+  it("keeps Store ownership when the version lookup fails", async () => {
+    const { controller } = harness();
+    window.TauriBridge.appIdentifier = async () => "com.meowcal.sub.store";
+    window.TauriBridge.appVersion = vi.fn().mockRejectedValue(new Error("version unavailable"));
+    expect(await controller.initialState()).toEqual({
+      update: { kind: "store" },
+      appVersion: null,
+    });
+  });
+
+  it("keeps the preview usable if its identity lookup fails", async () => {
+    const { controller } = harness();
+    window.TauriBridge.appIdentifier = vi.fn().mockRejectedValue(new Error("identity unavailable"));
+    expect(await controller.initialState()).toEqual({
+      update: { kind: "unsupported" },
+      appVersion: null,
+    });
+  });
+  it("leaves Store updates to Microsoft Store, even if an updater API is present", async () => {
+    const check = vi.fn();
+    const { controller, invoke } = harness({ currentVersion: vi.fn(), check, restart: vi.fn() });
+    window.TauriBridge.appIdentifier = async () => "com.meowcal.sub.store";
+    window.TauriBridge.appVersion = async () => "0.8.6";
+    expect(await controller.initialState()).toEqual({
+      update: { kind: "store" },
+      appVersion: "0.8.6",
+    });
+    await controller.check();
+    expect(await controller.checkAutomatic({ autoCheckUpdates: true })).toBeNull();
+    await controller.install();
+    expect(check).not.toHaveBeenCalled();
+    expect(invoke).not.toHaveBeenCalled();
+  });
+
+  it("recognizes the isolated Store development build without an updater", async () => {
+    const { controller } = harness();
+    window.TauriBridge.appIdentifier = async () => "com.meowcal.sub.store.dev";
+    expect(await controller.initialState()).toEqual({
+      update: { kind: "store" },
+      appVersion: null,
+    });
+  });
+
   it("reports the installed version so the screen can name it", async () => {
     const { controller } = harness({
       currentVersion: vi.fn().mockResolvedValue("0.6.6"),

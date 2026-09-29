@@ -25,6 +25,8 @@ license = "AGPL-3.0-only"
 test-windows = []
 # Explicitly bind development commands to the locally built Core candidate.
 core-source-candidate = []
+# Microsoft Store owns application updates and has an isolated data namespace.
+store = ["windows/Storage_Search", "windows/ApplicationModel"]
 
 # =============================================================================
 # DEPENDENCIES

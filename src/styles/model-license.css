@@ -1,0 +1,40 @@
+.model-license {
+  display: grid;
+  gap: 6px;
+  margin-block: 12px;
+  font-size: var(--type-caption);
+  text-align: left;
+}
+
+.model-license summary {
+  cursor: pointer;
+  color: var(--accent);
+}
+
+.model-license details p {
+  margin-block: 8px;
+}
+
+.model-license pre {
+  max-height: 220px;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font: inherit;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+}
+
+.model-consent {
+  display: flex;
+  align-items: start;
+  gap: 8px;
+  font-size: var(--type-caption);
+  cursor: pointer;
+}
+
+.model-consent input {
+  flex: none;
+  margin-top: 3px;
+}
