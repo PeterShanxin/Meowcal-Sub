@@ -1,9 +1,10 @@
 $script:cdpId = 0
-function Connect-AppWebView {
+function Connect-AppWebView([string]$PageUrl = 'http://tauri.localhost/') {
     $pages = Invoke-RestMethod 'http://127.0.0.1:9241/json/list' -TimeoutSec 5
     $page = $pages |
-        Where-Object { $_.url -eq 'http://tauri.localhost/' } | Select-Object -First 1
+        Where-Object { $_.url -eq $PageUrl } | Select-Object -First 1
     if (-not $page) { throw 'Application WebView is not available.' }
+    if ($script:socket) { $script:socket.Dispose() }
     $script:socket = [Net.WebSockets.ClientWebSocket]::new()
     $null = $script:socket.ConnectAsync([uri]$page.webSocketDebuggerUrl, [Threading.CancellationToken]::None).GetAwaiter().GetResult()
 }

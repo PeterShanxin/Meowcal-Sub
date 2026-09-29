@@ -25,6 +25,14 @@ It is separate from the product version in `tauri.conf.json`; do not bump the
 product version to build a Store package. Use the same package version and
 identity for both architectures of a submission.
 
+Keep the application version aligned across distribution channels when they
+ship the same release. The Store package number is an independently increasing
+delivery number, not a declaration that the product reached version 1.0. A
+pre-1.0 application cannot copy its version directly into the Store identity,
+because the Store requires a nonzero first component. Record product version,
+package version, source commit and artifact hashes together for each submission.
+Store certification may delay availability relative to the GitHub release.
+
 The script fetches and verifies the reviewed Core release, runs Store-feature
 library tests and the real Core handshake, builds through the pinned Tauri CLI,
 checks both PE architectures, and invokes SDK MakeAppx validation. It emits an
@@ -105,7 +113,13 @@ Windows 11 ARM job signs two test versions with a short-lived certificate,
 installs the initial package, downloads the engine into an empty cache,
 translates through the packaged application, upgrades with configuration
 retention, translates after restart, and uninstalls the package and private
-cache. Test signing and certificate trust are restricted to disposable hosted
+cache. After upgrading it captures an actual hosted desktop fixture through
+Windows OCR and checks that the native overlay displays the resulting translation.
+It also seeds a custom engine directory, checks translation after restart,
+resets the app through Windows, and verifies that reset and uninstall retain the
+external model while removing package-owned settings and cache. This tests a
+persisted custom configuration, not a directory-picker UI.
+Test signing and certificate trust are restricted to disposable hosted
 runners; the workflow does not use production signing secrets.
 
 Artifacts retain per-step results, package hashes, runtime module paths and

@@ -123,12 +123,109 @@ try {
         if (-not $sample.translatedText -or $sample.translatedText -eq 'Good morning.') { throw 'Upgraded application did not translate.' }
         $sample
     }
+    try { $null = Step 'hosted-screen-capture-ocr-and-overlay' {
+        $fixtureScript = Join-Path $PSScriptRoot 'store-capture-fixture.ps1'
+        $fixture = Start-Process powershell.exe -WindowStyle Hidden -PassThru -ArgumentList @('-NoProfile', '-File', "`"$fixtureScript`"", '-OutputDirectory', "`"$output`"")
+        try {
+            $deadline = (Get-Date).AddSeconds(20)
+            $regionPath = Join-Path $output 'capture-region.json'
+            while (-not (Test-Path $regionPath)) {
+                if ($fixture.HasExited -or (Get-Date) -gt $deadline) { throw 'Capture fixture did not become visible.' }
+                Start-Sleep 1
+            }
+            $regionJson = Get-Content $regionPath -Raw
+            $capture = Invoke-AppScript @"
+(async()=>{
+ const invoke=window.__TAURI__.core.invoke;
+ const updates=[];
+ const unlisten=await window.__TAURI__.event.listen('translation-update',e=>updates.push(e.payload));
+ try {
+   await invoke('set_capture_region',$regionJson);
+   await invoke('start_translation');
+   for(let i=0;i<30&&!updates.some(x=>x.displayState==='translated');i++) await new Promise(r=>setTimeout(r,1000));
+   return {running:await invoke('is_translation_running'),updates};
+ } finally {unlisten();}
+})()
+"@
+            $capture | ConvertTo-Json -Depth 10 | Set-Content "$output/capture-events.json" -Encoding UTF8
+            $translated = @($capture.updates | Where-Object { $_.displayState -eq 'translated' -and $_.original -match 'Good morning' -and $_.translated -match '[\u4e00-\u9fff]' })
+            if (-not $capture.running -or $translated.Count -eq 0) { throw 'No translated output from the real capture/OCR fixture.' }
+            Connect-AppWebView 'http://tauri.localhost/overlay.html'
+            $overlay = Invoke-AppScript "(async()=>({visible:await window.__TAURI__.window.getCurrentWindow().isVisible(),text:document.body.innerText}))()"
+            if (-not $overlay.visible -or -not $overlay.text.Contains($translated[-1].translated)) { throw 'Native overlay did not display the translated text.' }
+            Add-Type -AssemblyName System.Windows.Forms,System.Drawing
+            $bounds = [Windows.Forms.Screen]::PrimaryScreen.Bounds
+            $bitmap = New-Object Drawing.Bitmap($bounds.Width,$bounds.Height)
+            $graphics = [Drawing.Graphics]::FromImage($bitmap)
+            try {
+                $graphics.CopyFromScreen($bounds.Location,[Drawing.Point]::Empty,$bounds.Size)
+                $bitmap.Save("$output/capture-overlay.png",[Drawing.Imaging.ImageFormat]::Png)
+            } finally { $graphics.Dispose(); $bitmap.Dispose() }
+            @{capture=$capture;overlay=$overlay;environment='hosted Windows desktop, not physical hardware'}
+        } finally {
+            try {
+                Connect-AppWebView
+                $null = Invoke-AppScript "window.__TAURI__.core.invoke('stop_translation')"
+            } finally {
+                New-Item -ItemType File -Path "$output/stop-fixture" -Force | Out-Null
+                if (-not $fixture.WaitForExit(5000)) { Stop-Process -Id $fixture.Id }
+            }
+        }
+    } } catch { $_.Exception.Message | Set-Content "$output/capture-error.txt" }
+    Stop-TestApp
+    $null = Step 'custom-storage-restart-and-translation' {
+        $configs = @(Get-ChildItem $packageData -Filter config.json -File -Recurse)
+        if ($configs.Count -ne 1) { throw 'Expected one package-owned configuration.' }
+        $script:customCore = Join-Path $env:RUNNER_TEMP ('store-external-core-' + [guid]::NewGuid().ToString('N'))
+        Copy-Item -LiteralPath $physicalCore -Destination $script:customCore -Recurse
+        $config = Get-Content -LiteralPath $configs[0].FullName -Raw | ConvertFrom-Json
+        $engine = $config.translation.localEngine
+        foreach ($field in @('executablePath', 'modelPath')) {
+            $oldPath = $engine.managedRuntime.$field
+            if (-not $oldPath.StartsWith($physicalCore.TrimEnd('\') + '\', [StringComparison]::OrdinalIgnoreCase)) {
+                throw "Managed $field is outside the package cache."
+            }
+            $engine.managedRuntime.$field = $script:customCore + $oldPath.Substring($physicalCore.Length)
+        }
+        $engine.engineCacheRoot = $script:customCore
+        [IO.File]::WriteAllText($configs[0].FullName, ($config | ConvertTo-Json -Depth 15), [Text.UTF8Encoding]::new($false))
+        $script:customModel = $engine.managedRuntime.modelPath
+        $script:customHash = (Get-FileHash -LiteralPath $script:customModel).Hash
+        $script:appPid = [Activation]::Launch($script:package.PackageFamilyName+'!App')
+        $deadline = (Get-Date).AddSeconds(40)
+        do { try { Connect-AppWebView; break } catch { if ((Get-Date) -gt $deadline) { throw }; Start-Sleep 2 } } while ($true)
+        $settings = Invoke-AppScript "window.__TAURI__.core.invoke('get_settings')"
+        if ($settings.translation.localEngine.managedRuntime.modelPath -ne $script:customModel) {
+            throw 'Restart did not use custom model storage.'
+        }
+        $sample = Invoke-AppScript "(async()=>{await window.__TAURI__.core.invoke('wizard_start_service');return await window.__TAURI__.core.invoke('wizard_test_translation',{sourceText:'Thank you.',sourceLanguage:'en-US',targetLanguage:'zh-CN'})})()"
+        if (-not $sample.translatedText -or $sample.translatedText -eq 'Thank you.') { throw 'Custom storage did not translate.' }
+        @{sample=$sample;modelPath=$script:customModel;modelHash=$script:customHash;configurationSeededByHarness=$true}
+    }
+    Stop-TestApp
+    $null = Step 'windows-reset-clears-private-data-preserves-external-model' {
+        $script:package | Reset-AppxPackage
+        if (Test-Path $physicalCore) { throw 'Windows reset retained the private engine cache.' }
+        if (Get-ChildItem $packageData -Filter config.json -File -Recurse -ErrorAction SilentlyContinue) {
+            throw 'Windows reset retained application settings.'
+        }
+        if ((Get-FileHash -LiteralPath $script:customModel).Hash -ne $script:customHash) { throw 'Windows reset changed the external model.' }
+        $script:appPid = [Activation]::Launch($script:package.PackageFamilyName+'!App')
+        $deadline = (Get-Date).AddSeconds(40)
+        do { try { Connect-AppWebView; break } catch { if ((Get-Date) -gt $deadline) { throw }; Start-Sleep 2 } } while ($true)
+        $settings = Invoke-AppScript "window.__TAURI__.core.invoke('get_settings')"
+        if ($settings.translation.localEngine.managedRuntime -or $settings.translation.localEngine.engineCacheRoot) {
+            throw 'Reset application reused the external engine registration.'
+        }
+        @{privateCacheRemoved=$true;settingsReset=$true;externalModelRetained=$true;relaunchSucceeded=$true}
+    }
     Stop-TestApp
     $null = Step 'uninstall-removes-package-and-private-cache' {
         Remove-AppxPackage -Package $script:package.PackageFullName
         Start-Sleep 3
         if ((Get-AppxPackage -Name MeowcalSub.StoreCITest) -or (Test-Path $packageData)) { throw 'Package or private data remains after uninstall.' }
-        @{registrationRemoved=$true;privateCacheRemoved=$true}
+        if ((Get-FileHash -LiteralPath $script:customModel).Hash -ne $script:customHash) { throw 'Uninstall changed the external model.' }
+        @{registrationRemoved=$true;privateCacheRemoved=$true;externalModelRetained=$true}
     }
     $result.complete = $true
 } catch { $result.fatalError = $_.Exception.Message }
