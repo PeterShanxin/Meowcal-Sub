@@ -35,6 +35,13 @@ export class MeowcalApp extends LitElement {
     super.disconnectedCallback();
   }
 
+  protected updated(changed: Map<PropertyKey, unknown>): void {
+    const previous = changed.get("snapshot") as UiSnapshot | undefined;
+    if (previous && previous.screen !== this.snapshot.screen) {
+      this.querySelector<HTMLElement>("h1")?.focus();
+    }
+  }
+
   private async runPrimary(presentation: HomePresentation): Promise<void> {
     switch (presentation.action) {
       case "setup":
@@ -118,18 +125,40 @@ export class MeowcalApp extends LitElement {
   }
 
   private renderMessage() {
-    const { error, notice } = this.snapshot;
-    if (!error && !notice) return nothing;
+    const { error, notice, settingsSave } = this.snapshot;
+    const unsaved = !error && settingsSave.kind === "error";
+    const saving = !error && settingsSave.kind === "saving";
+    if (!error && !notice && !unsaved && !saving) return nothing;
     const message: MessagePresentation = error
       ? describeError(error)
-      : { text: notice ?? "", action: null };
+      : {
+          text: unsaved
+            ? "Changes aren’t saved. Retry to keep your settings."
+            : saving
+              ? "Saving settings…"
+              : (notice ?? ""),
+          action: null,
+        };
     // A notice published while work is still running describes that work.
-    const working = !error && this.snapshot.busy !== "idle";
-    const glyph = error ? icon("alert") : working ? icon("spinner", "spin") : icon("check-circle");
+    const working = saving || (!error && this.snapshot.busy !== "idle");
+    const failed = Boolean(error || unsaved);
+    const glyph = failed ? icon("alert") : working ? icon("spinner", "spin") : icon("check-circle");
     return html`
-      <div class=${error ? "toast error" : "toast notice"} role=${error ? "alert" : "status"}>
+      <div class=${failed ? "toast error" : "toast notice"} role=${failed ? "alert" : "status"}>
         ${glyph}
         <span class="toast-message">${message.text}</span>
+        ${
+          unsaved
+            ? html`<button
+                type="button"
+                class="secondary-button"
+                title=${settingsSave.kind === "error" ? settingsSave.message : nothing}
+                @click=${() => void this.controller.saveSettings()}
+              >
+                Retry save
+              </button>`
+            : nothing
+        }
         ${
           message.action
             ? html`<button
@@ -141,14 +170,18 @@ export class MeowcalApp extends LitElement {
               </button>`
             : nothing
         }
-        <button
-          type="button"
-          class="toast-dismiss"
-          aria-label="Dismiss"
-          @click=${() => this.controller.dismissMessage()}
-        >
-          ${icon("close")}
-        </button>
+        ${
+          !unsaved && !saving
+            ? html`<button
+                type="button"
+                class="toast-dismiss"
+                aria-label="Dismiss"
+                @click=${() => this.controller.dismissMessage()}
+              >
+                ${icon("close")}
+              </button>`
+            : nothing
+        }
       </div>
     `;
   }

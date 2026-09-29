@@ -295,3 +295,13 @@
   outline-offset: 4px;
   border-radius: 12px;
 }
+
+@media (max-width: 559px) {
+  .language-pair {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .language-arrow {
+    display: none;
+  }
+}

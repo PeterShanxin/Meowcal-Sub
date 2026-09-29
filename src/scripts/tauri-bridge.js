@@ -253,44 +253,23 @@
     function showBrowserModeIndicator() {
         if (!isBrowserMode()) return;
 
-        // Create the indicator element
+        if (document.getElementById('browser-mode-indicator')) return;
         const indicator = document.createElement('div');
         indicator.id = 'browser-mode-indicator';
-        indicator.innerHTML = `
-            <span class="browser-mode-badge">BROWSER MODE</span>
-            <span class="browser-mode-hint">Some features unavailable</span>
-        `;
+        indicator.textContent = 'Browser preview';
+        indicator.title = 'Capture, translation, and native windows require the Windows app.';
         indicator.style.cssText = `
             position: fixed;
-            bottom: 10px;
+            top: 4px;
             right: 10px;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            padding: 8px 12px;
-            border-radius: 8px;
-            font-size: 12px;
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            z-index: 9999;
+            color: var(--text-2, #bcc5d5);
+            background: var(--bg, #08090c);
+            padding: 0 8px;
+            border: 1px solid var(--line, #41454c);
+            border-radius: 4px;
+            font: 11px/22px system-ui, sans-serif;
+            z-index: 10;
             pointer-events: none;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-            display: flex;
-            flex-direction: column;
-            align-items: flex-end;
-            gap: 2px;
-        `;
-
-        // Style the badge
-        const badge = indicator.querySelector('.browser-mode-badge');
-        badge.style.cssText = `
-            font-weight: 600;
-            letter-spacing: 0.5px;
-        `;
-
-        // Style the hint
-        const hint = indicator.querySelector('.browser-mode-hint');
-        hint.style.cssText = `
-            font-size: 10px;
-            opacity: 0.8;
         `;
 
         // Add to page when DOM is ready

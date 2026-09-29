@@ -81,7 +81,10 @@ describe("AppController settings persistence", () => {
 
     await expect(update(controller)).resolves.toBeUndefined();
 
-    expect(snapshots.at(-1)?.error).toBe("settings unavailable");
+    expect(snapshots.at(-1)?.settingsSave).toEqual({
+      kind: "error",
+      message: "settings unavailable",
+    });
     expect(invoke).toHaveBeenCalledWith("save_settings", expect.anything());
   });
 
@@ -141,9 +144,37 @@ describe("AppController settings persistence", () => {
     invoke.mockRejectedValueOnce(new Error("appearance unavailable"));
 
     await expect(controller.updateOverlay({ fontSize: 40 })).resolves.toBeUndefined();
+    expect(controller.current().settingsSave).toEqual({ kind: "saving" });
     await vi.advanceTimersByTimeAsync(250);
 
-    expect(snapshots.at(-1)?.error).toBe("appearance unavailable");
+    expect(snapshots.at(-1)?.settingsSave).toEqual({
+      kind: "error",
+      message: "appearance unavailable",
+    });
+    controller.dispose();
+  });
+
+  it("keeps an appearance edit unsaved while its debounced write is pending", async () => {
+    vi.useFakeTimers();
+    let finishFirst!: () => void;
+    const firstWrite = new Promise<void>((resolve) => {
+      finishFirst = resolve;
+    });
+    const invoke = vi.fn().mockReturnValueOnce(firstWrite).mockResolvedValue(undefined);
+    const { controller } = createController(invoke);
+
+    const first = controller.setContinuity(true);
+    await Promise.resolve();
+    await controller.updateOverlay({ fontSize: 40 });
+    finishFirst();
+    await first;
+
+    expect(controller.current().settingsSave).toEqual({ kind: "saving" });
+    expect(invoke).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(250);
+    expect(invoke).toHaveBeenCalledTimes(2);
+    expect(invoke.mock.calls.at(-1)?.[1]?.settings.overlay.fontSize).toBe(40);
+    expect(controller.current().settingsSave).toEqual({ kind: "idle" });
     controller.dispose();
   });
 
@@ -872,6 +903,52 @@ describe("AppController progress messages", () => {
       notice: null,
       error: "ENGINE_SAMPLE_TRANSLATION_FAILED",
     });
+    controller.dispose();
+  });
+});
+
+describe("settings write recovery", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  it("keeps a failed edit explicitly unsaved and clears it after retry", async () => {
+    const invoke = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("disk full"))
+      .mockResolvedValue(undefined);
+    const { controller } = createController(invoke);
+    await controller.setContinuity(true);
+    expect(controller.current().settingsSave).toEqual({ kind: "error", message: "disk full" });
+    expect(controller.current().settings.translation.enableContextAware).toBe(true);
+    await controller.saveSettings();
+    expect(controller.current().settingsSave).toEqual({ kind: "idle" });
+    expect(controller.current().notice).toBe("Settings saved");
+    expect(invoke.mock.calls.at(-1)?.[1]?.settings.translation.enableContextAware).toBe(true);
+    controller.dispose();
+  });
+
+  it("writes rapid edits in order so an older request cannot overwrite the latest settings", async () => {
+    let release!: () => void;
+    const pending = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const invoke = vi.fn().mockReturnValueOnce(pending).mockResolvedValue(undefined);
+    const { controller } = createController(invoke);
+    const first = controller.setContinuity(true);
+    const second = controller.setCpuOnly(true);
+    await Promise.resolve();
+    expect(invoke).toHaveBeenCalledTimes(1);
+    expect(controller.current().settingsSave).toEqual({ kind: "saving" });
+    release();
+    await Promise.all([first, second]);
+    expect(invoke).toHaveBeenCalledTimes(2);
+    expect(invoke.mock.calls.at(-1)?.[1]?.settings.translation).toMatchObject({
+      enableContextAware: true,
+      localEngine: { cpuOnly: true },
+    });
+    expect(controller.current().settingsSave).toEqual({ kind: "idle" });
     controller.dispose();
   });
 });

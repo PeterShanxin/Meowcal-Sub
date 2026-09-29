@@ -30,7 +30,8 @@
     "frontend:check": "npm run version:check && npm run runners:check && npm run docs:check && npm run format:check && npm run lint && npm run typecheck && npm run build:web && npm run test:frontend && npm run test:browser",
     "tauri": "tauri",
     "tauri:dev": "tauri dev --features core-source-candidate --config src-tauri/tauri.dev.conf.json",
-    "tauri:build": "tauri build"
+    "tauri:build": "tauri build",
+    "dev:ui-audit": "vite --config frontend-tests/ui-audit/vite.config.mjs"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",
