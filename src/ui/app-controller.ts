@@ -319,7 +319,8 @@ export class AppController {
   async updateOverlay(patch: Partial<AppSettings["overlay"]>): Promise<void> {
     const settings = structuredClone(this.snapshot.settings);
     settings.overlay = { ...settings.overlay, ...patch };
-    this.publish({ settings, settingsSave: { kind: "saving" } });
+    this.publish({ settings });
+    this.settingsWriter.markPending();
     try {
       await window.TauriBridge.event.emit("overlay-settings-updated", settings.overlay);
     } catch (error) {

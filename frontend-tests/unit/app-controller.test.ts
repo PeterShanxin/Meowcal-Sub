@@ -154,6 +154,30 @@ describe("AppController settings persistence", () => {
     controller.dispose();
   });
 
+  it("keeps an appearance edit unsaved while its debounced write is pending", async () => {
+    vi.useFakeTimers();
+    let finishFirst!: () => void;
+    const firstWrite = new Promise<void>((resolve) => {
+      finishFirst = resolve;
+    });
+    const invoke = vi.fn().mockReturnValueOnce(firstWrite).mockResolvedValue(undefined);
+    const { controller } = createController(invoke);
+
+    const first = controller.setContinuity(true);
+    await Promise.resolve();
+    await controller.updateOverlay({ fontSize: 40 });
+    finishFirst();
+    await first;
+
+    expect(controller.current().settingsSave).toEqual({ kind: "saving" });
+    expect(invoke).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(250);
+    expect(invoke).toHaveBeenCalledTimes(2);
+    expect(invoke.mock.calls.at(-1)?.[1]?.settings.overlay.fontSize).toBe(40);
+    expect(controller.current().settingsSave).toEqual({ kind: "idle" });
+    controller.dispose();
+  });
+
   it("keeps a required start save failure visible and explicit", async () => {
     const invoke = vi.fn().mockRejectedValue(new Error("settings unavailable"));
     const { controller, snapshots } = createController(invoke);

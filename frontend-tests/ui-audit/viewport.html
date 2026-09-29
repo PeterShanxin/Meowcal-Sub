@@ -69,7 +69,9 @@
       app.width = w;
       app.height = h;
     };
-    document.querySelector("#page").onchange = (e) => (app.src = e.target.value);
+    document.querySelector("#page").onchange = (e) => {
+      app.src = e.target.selectedIndex === 1 ? "/wizard.html" : "/";
+    };
     document.querySelector("#reload").onclick = () => app.contentWindow.location.reload();
     document.querySelector("#mode").onchange = async (e) => {
       await fetch("/__ui-audit/mode", {

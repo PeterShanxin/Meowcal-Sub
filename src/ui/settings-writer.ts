@@ -9,6 +9,11 @@ export class SettingsWriter {
 
   constructor(private readonly publish: (state: SettingsSaveState) => void) {}
 
+  markPending(): void {
+    ++this.revision;
+    this.publish({ kind: "saving" });
+  }
+
   save(settings: AppSettings): Promise<void> {
     const revision = ++this.revision;
     const value = structuredClone(settings);
