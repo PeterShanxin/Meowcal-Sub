@@ -187,8 +187,8 @@ test("guided engine setup has one install action and no infrastructure choices",
   const terms = page.locator(".model-license summary");
   const restrictions = page.getByText(/The model license excludes use/);
   await expect(terms).toHaveText("Model license and usage terms");
-  await expect(terms).toBeInViewport();
-  await expect(consent).toBeInViewport();
+  await expect(terms).toBeInViewport({ ratio: 1 });
+  await expect(consent).toBeInViewport({ ratio: 1 });
   await expect(restrictions).toBeHidden();
   await terms.focus();
   await page.keyboard.press("Enter");
