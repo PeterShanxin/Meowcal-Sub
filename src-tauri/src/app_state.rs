@@ -18,6 +18,7 @@ pub struct AppState {
     pub config: Mutex<AppConfig>,
     /// Whether translation is currently active
     pub is_running: Mutex<bool>,
+    pub session_lifecycle: crate::session_lifecycle::SessionLifecycle,
     /// The current capture region (if set)
     pub capture_region: Mutex<Option<CaptureRegion>>,
     /// DPI scale factor for the capture region (logical -> physical)
@@ -49,6 +50,7 @@ impl Default for AppState {
             startup_gate: StartupGate::default(),
             config: Mutex::new(AppConfig::default()),
             is_running: Mutex::new(false),
+            session_lifecycle: crate::session_lifecycle::SessionLifecycle::default(),
             capture_region: Mutex::new(None),
             capture_scale_factor: Mutex::new(1.0),
             stop_signal: Mutex::new(None),

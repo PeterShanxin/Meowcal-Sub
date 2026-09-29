@@ -27,7 +27,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use tauri::{async_runtime, AppHandle, Emitter, Manager, State};
 use tokio::sync::watch;
-use tracing::{debug, error, info, warn};
+use tracing::{debug, info, warn};
 
 // =============================================================================
 // SYSTEM INFO
@@ -450,6 +450,7 @@ pub async fn get_translation_diagnostics(
 
 #[tauri::command]
 pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Result<(), String> {
+    let _transition = state.session_lifecycle.control.lock().await;
     info!(">>> START_TRANSLATION COMMAND CALLED <<<");
     info!("Starting translation...");
 
@@ -563,8 +564,8 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
         let app_for_guard = app.clone();
         defer! {
             let state = app_for_guard.state::<AppState>();
-            *lock_or_recover(&state.is_running) = false;
             capture::close_capture_session();
+            *lock_or_recover(&state.is_running) = false;
             info!("Translation loop cleanup complete");
         }
 
@@ -733,10 +734,15 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
             let ocr_started = Instant::now();
             let frame_data = &capture_result.data;
             let (frame_width, frame_height) = (capture_result.width, capture_result.height);
-            let ocr_result = match recognition_mode
-                .recognize(&ocr, frame_data, frame_width, frame_height)
-                .await
-            {
+            let Some(ocr_result) = crate::session_lifecycle::until_stopped(
+                recognition_mode.recognize(&ocr, frame_data, frame_width, frame_height),
+                &mut stop_rx,
+            )
+            .await
+            else {
+                break;
+            };
+            let ocr_result = match ocr_result {
                 Ok(result) => result,
                 Err((error, what)) => {
                     warn!("⚠️ {}: {}", what, error);
@@ -885,33 +891,7 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
         info!("Translation loop ended");
     });
 
-    // Monitor the translation task for panics - log but don't propagate
-    tokio::spawn(async move {
-        match translation_handle.await {
-            Ok(()) => {
-                // Task completed normally
-            }
-            Err(join_error) => {
-                if join_error.is_panic() {
-                    // Extract panic message if possible
-                    let panic_info = join_error.into_panic();
-                    let panic_msg = if let Some(s) = panic_info.downcast_ref::<&str>() {
-                        s.to_string()
-                    } else if let Some(s) = panic_info.downcast_ref::<String>() {
-                        s.clone()
-                    } else {
-                        "unknown panic".to_string()
-                    };
-                    error!(
-                        "❌ Translation loop panicked: {}. Cleanup was handled by scopeguard.",
-                        panic_msg
-                    );
-                } else if join_error.is_cancelled() {
-                    info!("Translation loop was cancelled");
-                }
-            }
-        }
-    });
+    state.session_lifecycle.monitor(translation_handle);
 
     Ok(())
 }
@@ -921,6 +901,7 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
 /// Called from JavaScript: `await invoke('stop_translation');`
 #[tauri::command]
 pub async fn stop_translation(state: State<'_, AppState>, app: AppHandle) -> Result<(), String> {
+    let _transition = state.session_lifecycle.control.lock().await;
     info!("Stopping translation...");
     let stopped_session_id = state.pipeline_clock.invalidate_session();
 
@@ -939,8 +920,7 @@ pub async fn stop_translation(state: State<'_, AppState>, app: AppHandle) -> Res
         *stop_signal = None;
     }
 
-    // Close the capture session
-    capture::close_capture_session();
+    state.session_lifecycle.wait_stopped().await?;
 
     // Send hide message to WinUI3 OverlayHost
     send_overlay_message(&app, IpcMessage::new("Overlay.Hide")).await;

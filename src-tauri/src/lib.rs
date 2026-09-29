@@ -65,6 +65,7 @@ pub mod pipeline_deadline;
 pub mod pipeline_pacing;
 pub mod pipeline_session;
 pub mod pipeline_translation;
+pub mod session_lifecycle;
 pub mod translation_eligibility;
 
 /// The capture-area selector window and its desktop-snapshot background
