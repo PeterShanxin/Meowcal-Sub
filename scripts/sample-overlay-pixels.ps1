@@ -34,4 +34,3 @@ try {
         ConvertTo-Json -Depth 5 | Set-Content (Join-Path $OutputDirectory 'pixels.json')
     $bitmap.Save((Join-Path $OutputDirectory 'last-overlay.png'))
 } finally { $graphics.Dispose(); $bitmap.Dispose() }
-
