@@ -56,5 +56,5 @@ runtime remains outside the MSIX signature's coverage.
 Test identity separation, resetting custom storage, Store update presentation,
 updater IPC rejection, package manifest validation and both PE architectures.
 Real capture/OCR/translation/overlay, signed installation/upgrade/uninstall,
-WebView2 prerequisites, full downloads, WACK and Store certification remain
-required before publishing a supported Store release.
+WebView2 prerequisites and full downloads remain release acceptance checks.
+WACK is an optional diagnostic; Partner Center performs official certification.

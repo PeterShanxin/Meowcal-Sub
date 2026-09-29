@@ -32,3 +32,9 @@ with, associated with, sponsoring, or endorsing Meowcal Sub.
 
 License source: the model's upstream
 [GGUF revision 265b2e615a7dc9b06c435dc878829ad99a512ba2](https://huggingface.co/tencent/HY-MT1.5-1.8B-GGUF/blob/265b2e615a7dc9b06c435dc878829ad99a512ba2/License.txt).
+
+## Separately downloaded inference runtime
+
+The pinned llama.cpp b10155 runtime is licensed under the
+[MIT License](licenses/llama.cpp/LICENSE). Its unmodified license text comes from
+the [upstream b10155 release](https://github.com/ggml-org/llama.cpp/blob/b10155/LICENSE).

@@ -118,7 +118,8 @@
       "resources/core/meowcal-core.json",
       "resources/core/LICENSE",
       "../licenses/tencent-hy/License.txt",
-      "../licenses/tencent-hy/Notice.txt"
+      "../licenses/tencent-hy/Notice.txt",
+      "../licenses/llama.cpp/LICENSE"
     ],
     "windows": {
       "certificateThumbprint": null,
