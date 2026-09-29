@@ -173,6 +173,9 @@ Shared contracts have one owner before parallel decomposition begins:
   recovery, skips stale requests, and retains CPU policy across internal Core
   restarts. CPU recovery failure requires explicit retry. HTTP health alone does
   not prove translation correctness. See [Core's API contract](../core/README.md#inference-recovery).
+- Readiness refresh never prepares a busy Core. It retains a previously confirmed
+  ready snapshot until invalidated; without one it reports `busy`. The UI shares
+  only an in-flight preparation promise, clearing it on success and failure.
 - Product version: `src-tauri/tauri.conf.json` is the product version record.
   `package.json` and `src-tauri/Cargo.toml` are synchronized mirrors.
 - Display state: the pipeline owns translated/source-only/failure semantics.

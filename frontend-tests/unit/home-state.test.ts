@@ -10,6 +10,16 @@ vi.stubGlobal("window", {
   },
 });
 
+it("shows busy work without offering repair or claiming another model load", () => {
+  const home = deriveHomePresentation(snapshot({ engine: { phase: "busy" } }));
+  expect(home).toMatchObject({
+    state: "checking",
+    title: "Waiting for the engine",
+    action: "none",
+    actionDisabled: true,
+  });
+});
+
 function snapshot(patch: Partial<UiSnapshot> = {}): UiSnapshot {
   return {
     settingsSave: { kind: "idle" },

@@ -83,20 +83,28 @@ async fn managed_status(
     start_if_needed: bool,
 ) -> Result<EngineStatusSnapshot, String> {
     if crate::core_client::recovering() {
-        return Ok(preparing_snapshot(config));
+        return Ok(busy_snapshot(config, None));
     }
     let status = if start_if_needed {
         crate::core_client::ready(crate::core_client::READY_TIMEOUT).await?
     } else {
         match crate::core_client::status_if_idle().await? {
             crate::core_client::StatusPoll::Status(status) => *status,
-            crate::core_client::StatusPoll::Busy => return Ok(preparing_snapshot(config)),
+            crate::core_client::StatusPoll::Busy => {
+                return Ok(busy_snapshot(config, crate::core_client::cached_status()));
+            }
         }
     };
     Ok(managed_snapshot(config, status))
 }
 
-fn preparing_snapshot(config: &FoundryLocalConfig) -> EngineStatusSnapshot {
+fn busy_snapshot(
+    config: &FoundryLocalConfig,
+    cached: Option<crate::core_client::CoreStatus>,
+) -> EngineStatusSnapshot {
+    if let Some(status) = cached.filter(|status| status.ready) {
+        return managed_snapshot(config, status);
+    }
     EngineStatusSnapshot {
         cli_available: config.managed_runtime.is_some(),
         service_running: false,
@@ -110,7 +118,7 @@ fn preparing_snapshot(config: &FoundryLocalConfig) -> EngineStatusSnapshot {
             "Local translation engine is busy. Please wait for the current operation."
         }
         .to_string(),
-        phase: FoundryLocalPhase::Preparing,
+        phase: FoundryLocalPhase::Busy,
         probe: None,
     }
 }

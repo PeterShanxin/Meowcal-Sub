@@ -276,6 +276,51 @@ describe("AppController settings persistence", () => {
     controller.dispose();
   });
 
+  it.each([false, true])(
+    "coalesces readiness and allows a fresh attempt after failure=%s",
+    async (fail) => {
+      let finish!: (value: unknown) => void;
+      let reject!: (reason: Error) => void;
+      let pending = new Promise((resolve, decline) => {
+        finish = resolve;
+        reject = decline;
+      });
+      const invoke = vi.fn(async (command: string) => {
+        if (command === "refresh_engine_status") return { phase: "preparing" };
+        if (command === "make_engine_ready") return pending;
+        return undefined;
+      });
+      const { controller } = createController(invoke as TauriBridgeApi["invoke"], undefined, false);
+      const refreshes = Promise.all([
+        controller.refresh(),
+        controller.refresh(),
+        controller.refresh(),
+      ]);
+      await vi.waitFor(() => expect(invoke).toHaveBeenCalledWith("make_engine_ready"));
+      const count = () => invoke.mock.calls.filter(([name]) => name === "make_engine_ready").length;
+      const initialCount = count();
+      if (fail) reject(new Error("readiness failed"));
+      else finish({ phase: "ready" });
+      await refreshes;
+      expect(initialCount).toBe(1);
+      expect(controller.current().engine?.phase).toBe(fail ? "error" : "ready");
+      pending = Promise.resolve({ phase: "ready" });
+      await controller.refresh();
+      expect(count()).toBe(2);
+      controller.dispose();
+    },
+  );
+
+  it("does not prepare an engine whose status is busy", async () => {
+    const invoke = vi.fn(async (command: string) =>
+      command === "refresh_engine_status" ? { phase: "busy" } : undefined,
+    );
+    const { controller } = createController(invoke as TauriBridgeApi["invoke"], undefined, false);
+    await controller.refresh();
+    expect(invoke).not.toHaveBeenCalledWith("make_engine_ready");
+    controller.dispose();
+  });
+
   it("updates a preparing engine when background startup finishes", async () => {
     let ready!: (value: unknown) => void;
     const pending = new Promise((resolve) => {
