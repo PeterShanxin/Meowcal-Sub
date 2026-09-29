@@ -180,9 +180,9 @@ test("guided engine setup has one install action and no infrastructure choices",
   await expect(page.getByLabel("Translate into")).toBeVisible();
   const consent = page.getByRole("checkbox", { name: /I agree to the model license/ });
   await expect(consent).not.toBeChecked();
-  await expect(page.getByText(/Provided by Shanxin Li/)).toBeVisible();
-  const contact = page.getByRole("link", { name: "shanxinpeter@gmail.com" });
-  await expect(contact).toHaveAttribute("href", "mailto:shanxinpeter@gmail.com");
+  await expect(page.getByText(/Meowcal Sub is provided by Shanxin Li/)).toBeHidden();
+  const contact = page.getByRole("link", { name: "@PeterShanxin" });
+  await expect(contact).toHaveAttribute("href", "https://github.com/PeterShanxin");
   await expect(contact).toHaveAttribute("target", "_blank");
   const terms = page.locator(".model-license summary");
   const restrictions = page.getByText(/The model license excludes use/);
@@ -193,6 +193,11 @@ test("guided engine setup has one install action and no infrastructure choices",
   await terms.focus();
   await page.keyboard.press("Enter");
   await expect(restrictions).toBeVisible();
+  await expect(page.getByText(/Meowcal Sub is provided by Shanxin Li/)).toBeVisible();
+  await expect(page.getByRole("link", { name: "shanxinpeter@gmail.com" })).toHaveAttribute(
+    "href",
+    "mailto:shanxinpeter@gmail.com",
+  );
   await expect(page.getByLabel("Tencent HY Community License Agreement")).toContainText(
     "ACCEPTABLE USE POLICY",
   );
