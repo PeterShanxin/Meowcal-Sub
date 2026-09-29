@@ -76,6 +76,10 @@ registration, install the Microsoft-signed framework package matching the app's
 architecture first, or supply it through `Add-AppxPackage -DependencyPath`.
 A developer machine's existing Visual C++ runtime can hide a missing dependency;
 verify activation on a clean Windows environment.
+The app resolves the framework from its package dependency graph and prepends
+that directory to Core's child-process `PATH`. Downloaded inference executables
+have no package graph of their own; they inherit this search path without
+changing the user's or system's environment.
 
 Use `-Configuration Debug` and a clearly local package identity, for example
 `MeowcalSub.StoreLocalTest`, `CN=Meowcal Sub Local Validation`, and package
@@ -93,6 +97,21 @@ the Store settings text, rejection of updater IPC, isolated data paths,
 Core processes, capture/OCR/inference/overlay, and process cleanup. A debug
 package must never be submitted. Do not bypass protection or add Defender
 exclusions to make validation pass.
+
+## Hosted lifecycle checks
+
+`store-validation.yml` builds native x64 and ARM64 Release packages. Its
+Windows 11 ARM job signs two test versions with a short-lived certificate,
+installs the initial package, downloads the engine into an empty cache,
+translates through the packaged application, upgrades with configuration
+retention, translates after restart, and uninstalls the package and private
+cache. Test signing and certificate trust are restricted to disposable hosted
+runners; the workflow does not use production signing secrets.
+
+Artifacts retain per-step results, package hashes, runtime module paths and
+Defender status. Hosted desktop checks do not replace real-device capture/OCR,
+full WACK, or Store certification; a disabled protection status does not count
+as protection-enabled acceptance.
 
 ## Before submission
 

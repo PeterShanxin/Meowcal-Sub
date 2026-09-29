@@ -67,6 +67,35 @@ pub fn store_core_storage_base() -> Result<Option<std::path::PathBuf>, String> {
     Ok(None)
 }
 
+/// A downloaded runtime has no package dependency graph. Pass the resolved
+/// Microsoft framework directory through Core's child environment instead.
+pub fn store_child_path() -> Result<Option<std::ffi::OsString>, String> {
+    #[cfg(all(target_os = "windows", feature = "store"))]
+    {
+        let resolve = || -> windows::core::Result<Option<std::path::PathBuf>> {
+            let dependencies = windows::ApplicationModel::Package::Current()?.Dependencies()?;
+            for dependency in dependencies {
+                if dependency.Id()?.Name()? == "Microsoft.VCLibs.140.00.UWPDesktop" {
+                    return Ok(Some(std::path::PathBuf::from(
+                        dependency.InstalledLocation()?.Path()?.to_string(),
+                    )));
+                }
+            }
+            Ok(None)
+        };
+        let directory = resolve()
+            .map_err(|error| format!("CORE_STORE_RUNTIME: {error}"))?
+            .ok_or_else(|| "CORE_STORE_RUNTIME: desktop C++ framework is missing".to_string())?;
+        let inherited = std::env::var_os("PATH").unwrap_or_default();
+        let paths = std::iter::once(directory).chain(std::env::split_paths(&inherited));
+        std::env::join_paths(paths)
+            .map(Some)
+            .map_err(|error| format!("CORE_STORE_RUNTIME_PATH: {error}"))
+    }
+    #[cfg(not(all(target_os = "windows", feature = "store")))]
+    Ok(None)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

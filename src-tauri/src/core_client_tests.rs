@@ -174,6 +174,7 @@ fn launch_config(force_cpu: bool) -> LaunchConfig {
         profile: "production",
         storage_root: None,
         default_storage_root: None,
+        child_path: None,
         legacy_roots: Vec::new(),
         force_cpu,
     }

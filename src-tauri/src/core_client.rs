@@ -41,6 +41,7 @@ struct LaunchConfig {
     profile: &'static str,
     storage_root: Option<PathBuf>,
     default_storage_root: Option<PathBuf>,
+    child_path: Option<std::ffi::OsString>,
     legacy_roots: Vec<PathBuf>,
     force_cpu: bool,
 }
@@ -222,7 +223,11 @@ fn spawn_initialized(
         .and_then(|value| value.lock().ok())
         .and_then(|value| value.clone())
         .ok_or_else(|| "CORE_NOT_REGISTERED".to_string())?;
-    let mut process = Transport::spawn(&config.executable)?;
+    let mut command = crate::windowless_command::std_command(&config.executable);
+    if let Some(path) = &config.child_path {
+        command.env("PATH", path);
+    }
+    let mut process = Transport::spawn_command(command)?;
     process.cpu_only = config.force_cpu;
     *kill_slot
         .get_or_init(|| Mutex::new(None))

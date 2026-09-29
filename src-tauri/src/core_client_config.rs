@@ -21,6 +21,7 @@ pub fn register<R: Runtime>(app: &tauri::AppHandle<R>) -> Result<(), String> {
         resolve_executable(profile, &resource_dir)?,
         profile,
         store_root,
+        crate::app_profile::store_child_path()?,
     )
 }
 
@@ -32,6 +33,7 @@ pub fn register_headless(
         resolve_executable("development", Path::new(env!("CARGO_MANIFEST_DIR")))?,
         "development",
         None,
+        None,
     )?;
     configure_storage(storage_root, legacy_roots)
 }
@@ -40,6 +42,7 @@ fn set_launch(
     executable: PathBuf,
     profile: &'static str,
     default_storage_root: Option<PathBuf>,
+    child_path: Option<std::ffi::OsString>,
 ) -> Result<(), String> {
     if !executable.is_file() {
         return Err(format!("CORE_EXECUTABLE_MISSING: {}", executable.display()));
@@ -60,6 +63,7 @@ fn set_launch(
         profile,
         storage_root: default_storage_root.clone(),
         default_storage_root,
+        child_path,
         legacy_roots: Vec::new(),
         force_cpu: false,
     });
@@ -283,6 +287,7 @@ mod tests {
             profile: "production",
             storage_root: None,
             default_storage_root: None,
+            child_path: None,
             legacy_roots: Vec::new(),
             force_cpu: false,
         };

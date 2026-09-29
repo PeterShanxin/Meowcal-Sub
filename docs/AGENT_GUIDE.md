@@ -39,6 +39,11 @@ Do not silently choose the more convenient interpretation.
 - Stage only scoped files.
 - Never use destructive reset or checkout commands to erase unknown changes.
 - Identify exact PIDs before stopping repository processes.
+- Prefer hosted Windows runners for package lifecycle tests. Batch local VM
+  checks in one stable session; do not overlap Sandbox clients or repeatedly
+  recreate guests. If a guest hangs, shutdown times out, or the host crashes,
+  stop lifecycle retries and preserve evidence before reassessing. Do not
+  change host power state, virtualization features, or drivers to unblock tests.
 
 ## Delivery
 

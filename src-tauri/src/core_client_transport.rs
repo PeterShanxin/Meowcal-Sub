@@ -3,7 +3,6 @@ mod diagnostics;
 
 use serde_json::{json, Value};
 use std::io::{BufRead, BufReader, Write};
-use std::path::Path;
 use std::process::{Child, ChildStdin, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{mpsc, Arc};
@@ -91,11 +90,7 @@ impl Drop for KillSwitch {
 }
 
 impl Transport {
-    pub(super) fn spawn(executable: &Path) -> Result<Self, String> {
-        Self::spawn_command(crate::windowless_command::std_command(executable))
-    }
-
-    fn spawn_command(mut command: std::process::Command) -> Result<Self, String> {
+    pub(super) fn spawn_command(mut command: std::process::Command) -> Result<Self, String> {
         command
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
