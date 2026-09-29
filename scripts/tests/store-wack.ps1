@@ -40,12 +40,15 @@ try {
     })) { Add-AppxPackage -Path "$fixtures/vclibs.appx" }
     $result.packageHash = (Get-FileHash "$fixtures/initial.msix").Hash
     $reset = Start-Process -FilePath $appcert -ArgumentList 'reset' -PassThru -WindowStyle Hidden
+    $null = $reset.Handle
     if (-not $reset.WaitForExit(60000)) {
         Stop-Process -Id $reset.Id
         throw 'WACK reset exceeded one minute.'
     }
     if ($reset.ExitCode -ne 0) { throw "WACK reset failed with exit code $($reset.ExitCode)." }
     $process = Start-Process -FilePath $appcert -ArgumentList @('test', '-appxpackagepath', "`"$fixtures/initial.msix`"", '-reportoutputpath', "`"$output/report.xml`"") -PassThru -WindowStyle Hidden -RedirectStandardOutput "$output/stdout.txt" -RedirectStandardError "$output/stderr.txt"
+    # Retain the process handle so Windows PowerShell can read ExitCode after exit.
+    $null = $process.Handle
     if (-not $process.WaitForExit(1200000)) {
         Stop-Process -Id $process.Id
         throw 'WACK validation exceeded 20 minutes.'
@@ -53,8 +56,20 @@ try {
     $result.exitCode = $process.ExitCode
     $result.reportCreated = Test-Path "$output/report.xml"
     if ($process.ExitCode -ne 0 -or -not $result.reportCreated) { throw 'WACK did not complete successfully; inspect the retained report and logs.' }
-    $result.status = 'report-ready-for-review'
-    $result.reason = 'Review XML test outcomes and skipped tests. A Windows Server run does not establish Windows 11 client acceptance.'
+    [xml]$report = Get-Content "$output/report.xml" -Raw
+    $result.overallResult = $report.REPORT.OVERALL_RESULT
+    $result.partialRun = $report.REPORT.PARTIAL_RUN
+    $result.tests = @($report.REPORT.REQUIREMENTS.REQUIREMENT.TEST | ForEach-Object {
+        @{name=$_.NAME;optional=$_.OPTIONAL;result=$_.RESULT.InnerText;messages=@($_.MESSAGES.MESSAGE | ForEach-Object { $_.TEXT })}
+    })
+    if ($result.overallResult -ne 'PASS' -or $result.partialRun -ne 'FALSE' -or -not $result.tests.Count -or
+        @($result.tests | Where-Object { $_.optional -ne 'TRUE' -and $_.result -ne 'PASS' }).Count) {
+        throw 'WACK required tests failed or validation was incomplete.'
+    }
+    $findings = @($result.tests | Where-Object { $_.result -ne 'PASS' })
+    $result.status = if ($findings.Count) { 'optional-findings-require-review' } else { 'diagnostic-pass' }
+    if ($findings.Count) { Write-Warning "WACK has $($findings.Count) optional finding(s); see result.json and the original report." }
+    $result.reason = 'Required tests passed. Review optional findings separately; a Windows Server run does not establish Windows 11 client acceptance.'
 } catch {
     $result.status = 'failed'
     $result.error = $_.Exception.Message

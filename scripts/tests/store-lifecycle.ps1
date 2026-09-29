@@ -169,17 +169,12 @@ try {
  try {
    await invoke('set_capture_region',$regionJson);
    await invoke('start_translation');
-   for(let i=0;i<30&&!updates.some(x=>x.displayState==='translated');i++) await new Promise(r=>setTimeout(r,1000));
+   for(let i=0;i<30&&!updates.some(x=>x.displayState==='translated'&&/Good morning/i.test(x.original));i++) await new Promise(r=>setTimeout(r,1000));
    return {running:await invoke('is_translation_running'),updates};
  } finally {unlisten();}
 })()
 "@
             $capture | ConvertTo-Json -Depth 10 | Set-Content "$output/capture-events.json" -Encoding UTF8
-            $translated = @($capture.updates | Where-Object { $_.displayState -eq 'translated' -and $_.original -match 'Good morning' -and $_.translated -match '[\u4e00-\u9fff]' })
-            if (-not $capture.running -or $translated.Count -eq 0) { throw 'No translated output from the real capture/OCR fixture.' }
-            Connect-AppWebView 'http://tauri.localhost/overlay.html'
-            $overlay = Invoke-AppScript "(async()=>({visible:await window.__TAURI__.window.getCurrentWindow().isVisible(),text:document.body.innerText}))()"
-            if (-not $overlay.visible -or -not $overlay.text.Contains($translated[-1].translated)) { throw 'Native overlay did not display the translated text.' }
             Add-Type -AssemblyName System.Windows.Forms,System.Drawing
             $bounds = [Windows.Forms.Screen]::PrimaryScreen.Bounds
             $bitmap = New-Object Drawing.Bitmap($bounds.Width,$bounds.Height)
@@ -188,6 +183,11 @@ try {
                 $graphics.CopyFromScreen($bounds.Location,[Drawing.Point]::Empty,$bounds.Size)
                 $bitmap.Save("$output/capture-overlay.png",[Drawing.Imaging.ImageFormat]::Png)
             } finally { $graphics.Dispose(); $bitmap.Dispose() }
+            $translated = @($capture.updates | Where-Object { $_.displayState -eq 'translated' -and $_.original -match 'Good morning' -and $_.translated -match '[\u4e00-\u9fff]' })
+            if (-not $capture.running -or $translated.Count -eq 0) { throw 'No translated output from the real capture/OCR fixture.' }
+            Connect-AppWebView 'http://tauri.localhost/overlay.html'
+            $overlay = Invoke-AppScript "(async()=>({visible:await window.__TAURI__.window.getCurrentWindow().isVisible(),text:document.body.innerText}))()"
+            if (-not $overlay.visible -or -not $overlay.text.Contains($translated[-1].translated)) { throw 'Native overlay did not display the translated text.' }
             @{capture=$capture;overlay=$overlay;environment='hosted Windows desktop, not physical hardware'}
         } finally {
             try {

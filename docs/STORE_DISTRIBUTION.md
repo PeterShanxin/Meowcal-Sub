@@ -131,8 +131,15 @@ The x64 job also attempts WACK when the runner has `appcert.exe` and an active
 user session. Its artifact records tool availability, OS, exit status and the
 unmodified report. Missing tooling is reported as not run; an unsuccessful
 invocation fails the job. Inspect the report for failed and skipped tests even
-when the process exits successfully. Windows Server diagnostics do not close
+when the process exits successfully. Required failures and partial reports fail
+the job; optional findings remain visible as warnings and in the result artifact.
+Windows Server diagnostics do not close
 the Windows 11 client certification gate.
+
+WACK's optional blocked-executables check also concerns Windows S mode. Core
+and inference use child processes, and the optional OCR language installer
+invokes elevated PowerShell. Do not claim S mode support from a passing overall
+WACK result; see Microsoft's [Desktop Bridge test definitions](https://learn.microsoft.com/en-us/windows/uwp/debug-test-perf/windows-desktop-bridge-app-tests).
 
 ## Model license release gate
 

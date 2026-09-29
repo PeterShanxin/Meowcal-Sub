@@ -31,6 +31,8 @@ $timer = New-Object Windows.Forms.Timer
 $timer.Interval = 250
 $timer.Add_Tick({ if (Test-Path (Join-Path $OutputDirectory 'stop-fixture')) { $form.Close() } })
 $form.Add_Shown({
+    $form.BringToFront()
+    $form.Activate()
     @{x=$form.Left;y=$form.Top;width=$form.Width;height=$form.Height;scaleFactor=1} |
         ConvertTo-Json | Set-Content (Join-Path $OutputDirectory 'capture-region.json')
     $timer.Start()

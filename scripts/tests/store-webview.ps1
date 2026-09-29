@@ -7,6 +7,9 @@ function Connect-AppWebView([string]$PageUrl = 'http://tauri.localhost/') {
     if ($script:socket) { $script:socket.Dispose() }
     $script:socket = [Net.WebSockets.ClientWebSocket]::new()
     $null = $script:socket.ConnectAsync([uri]$page.webSocketDebuggerUrl, [Threading.CancellationToken]::None).GetAwaiter().GetResult()
+    if (-not (Invoke-AppScript "typeof window.__TAURI__?.core?.invoke === 'function'")) {
+        throw 'Application WebView bridge is not ready.'
+    }
 }
 function Invoke-AppScript([string]$Expression) {
     $script:cdpId++
