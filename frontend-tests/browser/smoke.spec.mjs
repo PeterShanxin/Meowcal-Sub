@@ -181,6 +181,9 @@ test("guided engine setup has one install action and no infrastructure choices",
   const consent = page.getByRole("checkbox", { name: /I agree to the model license/ });
   await expect(consent).not.toBeChecked();
   await expect(page.getByText(/Provided by Shanxin Li/)).toBeVisible();
+  const contact = page.getByRole("link", { name: "shanxinpeter@gmail.com" });
+  await expect(contact).toHaveAttribute("href", "mailto:shanxinpeter@gmail.com");
+  await expect(contact).toHaveAttribute("target", "_blank");
   const terms = page.locator(".model-license summary");
   const restrictions = page.getByText(/The model license excludes use/);
   await expect(terms).toHaveText("Model license and usage terms");

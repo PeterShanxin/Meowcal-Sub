@@ -6,8 +6,12 @@ import "../styles/model-license.css";
 export function renderModelLicense() {
   return html`<section class="model-license" aria-label="Translation model terms">
     <p>
-      Provided by Shanxin Li (individual). Not affiliated with, associated with, sponsored or
-      endorsed by Tencent.
+      Provided by Shanxin Li (<a
+        href="mailto:shanxinpeter@gmail.com"
+        target="_blank"
+        rel="noopener noreferrer"
+        >shanxinpeter@gmail.com</a
+      >), an individual. Not affiliated with, associated with, sponsored or endorsed by Tencent.
     </p>
     <details>
       <summary>Model license and usage terms</summary>
