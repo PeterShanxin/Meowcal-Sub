@@ -4,6 +4,12 @@ Native baseline defects are reproduced. No native speedup is established: candid
 runtime measurements remain outstanding. The three fixes are independent draft
 changes; this report is the shared evidence record.
 
+| Change | PR | Native candidate gate |
+|---|---|---|
+| R1 — completion deadline | [#269](https://github.com/PeterShanxin/Meowcal-Sub/pull/269) | Pending, including Core release/pin |
+| R2 — capture teardown | [#270](https://github.com/PeterShanxin/Meowcal-Sub/pull/270) | Pending |
+| R3 — readiness refresh | [#271](https://github.com/PeterShanxin/Meowcal-Sub/pull/271) | Pending |
+
 ## Environment and method
 
 - Baseline: `171b1ec14484ca22c896412d03705d0db2880005`, app 0.8.6,
@@ -101,7 +107,15 @@ candidate queueing, model concurrency, quality validation or safety policy was
 changed without attributable measurement. No speculative speed change was
 retained. The failed cold-start harness is excluded from benchmark results.
 
-Automated validation results are recorded in the individual PRs. All three PRs
+R1 passed the full local Windows `scripts/verify.ps1 -CoreSourceCandidate` gate:
+95 Core unit tests (3 ignored), 1 executable and 15 protocol tests, 543 application
+unit tests (4 ignored), 16 IPC and 2 command contracts, 466 frontend unit tests,
+14 browser tests, formatting, lint, typecheck, web build and audit. A subsequently
+added timeout-policy regression passed with all 15 attempt tests. R2's three
+lifecycle tests and R3's six engine status tests pass; R3 also passes all 470
+frontend tests. Exact-head CI and build results are recorded in the individual PRs.
+Browser and controlled tests do not substitute for native candidate measurements.
+All three PRs
 remain draft until the changed native flows pass on their final heads. Remaining
 highest-ROI work is R1's paired native retest with llama task/cancellation logs,
 followed by R2 delayed-OCR restart and R3 real focus/return. Then repeat the
@@ -128,7 +142,8 @@ chosen native debug build with WebView2 CDP on a free localhost port 9241.
 4. Start capture and minimize the main window, leaving only the fixture in the
    selected region. Run `node scripts/benchmark-native-pipeline.mjs
    <results>/pipeline.json <fixture-dir>`; stop capture afterwards.
-5. The R2 branch contains `scripts/benchmark-delayed-ocr.ps1`. Supply the exact
+5. The R2 branch contains `scripts/benchmark-native-stop.ps1` for ten normal
+   immediate restart cycles and `scripts/benchmark-delayed-ocr.ps1`. Supply the exact
    owned app and OCR PIDs; it refuses a Core with inference children and always
    resumes the suspended OCR process. Never supply a user-owned process.
 6. Copy the same named result files into a separate baseline/candidate directory
