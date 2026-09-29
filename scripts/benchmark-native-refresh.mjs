@@ -28,6 +28,7 @@ socket.send(
       awaitPromise: true,
       returnByValue: true,
       expression: `(${async function () {
+        const { window, document } = globalThis;
         const bridge = window.TauriBridge;
         const controller = document.querySelector("meowcal-app").controller;
         const original = bridge.invoke;
