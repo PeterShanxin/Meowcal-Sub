@@ -77,7 +77,7 @@ exist for anyone who did not write it.
 | [0003](0003-incremental-lit-frontend.md)             | Accepted | Incremental Vite, TypeScript, and Lit frontend architecture    |
 | [0004](0004-versioned-meowcal-core.md)               | Accepted | Independent, versioned Core runtime shared by Sub 1 and Sub 2  |
 | [0005](0005-client-partitioned-core-storage.md)      | Accepted | Client-partitioned Core storage sharing one model by hard link |
-| [0006](0006-store-distribution-channel.md)          | Proposed | Independent Store updates, package identity and default data |
+| [0006](0006-store-distribution-channel.md)          | Accepted | Independent Store updates, package identity and default data |
 
 ## Superseded direction
 

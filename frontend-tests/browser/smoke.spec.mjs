@@ -1,5 +1,29 @@
 import { backendOrigin, expect, test } from "./fixtures.mjs";
 
+test("title bar distinguishes development builds in both distribution channels", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await page.waitForFunction(() => customElements.get("meowcal-titlebar"));
+  for (const [identifier, expected] of [
+    ["com.meowcal.sub", "Meowcal Sub"],
+    ["com.meowcal.sub.dev", "Meowcal Sub - Dev"],
+    ["com.meowcal.sub.store", "Meowcal Sub"],
+    ["com.meowcal.sub.store.dev", "Meowcal Sub - Dev"],
+  ]) {
+    await page.evaluate((profile) => {
+      window.TauriBridge.appIdentifier = async () => profile;
+      document.querySelector('[data-testid="profile-titlebar"]')?.remove();
+      const titlebar = document.createElement("meowcal-titlebar");
+      titlebar.dataset.testid = "profile-titlebar";
+      document.body.append(titlebar);
+    }, identifier);
+    await expect(page.getByTestId("profile-titlebar").locator(".titlebar-identity")).toHaveText(
+      expected,
+    );
+  }
+});
+
 test("status notices do not intercept the primary action in a compact window", async ({ page }) => {
   await page.setViewportSize({ width: 544, height: 400 });
   await page.goto("/");
