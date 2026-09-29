@@ -131,19 +131,14 @@ test("normal setup presents one private HY-MT engine without infrastructure choi
   await expect(page.locator(".nav-indicator")).toHaveCount(0);
   await page.evaluate(() => {
     const app = document.querySelector("meowcal-app");
-    if (app && app.snapshot) {
-      app.snapshot = {
-        ...app.snapshot,
-        update: { kind: "available", version: "0.6.10", notes: "New fixes" },
-      };
-    }
+    app.controller.publish({
+      update: { kind: "available", version: "0.6.10", notes: "New fixes" },
+    });
   });
   await expect(page.locator(".nav-indicator")).toBeVisible();
   await page.evaluate(() => {
     const app = document.querySelector("meowcal-app");
-    if (app && app.snapshot) {
-      app.snapshot = { ...app.snapshot, update: { kind: "upToDate" } };
-    }
+    app.controller.publish({ update: { kind: "upToDate" } });
   });
   await expect(page.locator(".nav-indicator")).toHaveCount(0);
 
