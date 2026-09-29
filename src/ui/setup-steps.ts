@@ -2,6 +2,7 @@ import { html, nothing, type TemplateResult } from "lit";
 import type { AppSettings, IconName } from "./contracts";
 import { icon } from "./icons";
 import { languageLabel, languages } from "./languages";
+import { renderModelLicense } from "./model-license";
 import { describeProgress, type SetupStage, type StageState } from "./setup-progress";
 
 export interface SampleResult {
@@ -23,6 +24,7 @@ export interface SetupView {
   sample: SampleResult | null;
   sampleSource: string;
   copyState: CopyState;
+  modelTermsAccepted: boolean;
 }
 
 export interface SetupActions {
@@ -34,6 +36,7 @@ export interface SetupActions {
   back(): void;
   close(): void;
   selectArea(): void;
+  acceptModelTerms(accepted: boolean): void;
 }
 
 const stageWords: Record<StageState, string> = {
@@ -136,6 +139,19 @@ function chooseLanguages(view: SetupView, actions: SetupActions): TemplateResult
           </span>
         </div>
       </div>
+      ${renderModelLicense()}
+      <label class="model-consent">
+        <input
+          type="checkbox"
+          .checked=${view.modelTermsAccepted}
+          @change=${(event: Event) =>
+            actions.acceptModelTerms((event.target as HTMLInputElement).checked)}
+        />
+        <span
+          >I agree to the model license and use restrictions, and will use the model and its outputs
+          only in permitted territories.</span
+        >
+      </label>
       ${errorNote(view)}
     </div>
   </section>`;
@@ -250,7 +266,7 @@ function primaryAction(view: SetupView, actions: SetupActions): TemplateResult {
       class="primary-button compact"
       type="button"
       @click=${actions.prepare}
-      ?disabled=${view.installingOcr}
+      ?disabled=${view.installingOcr || !view.modelTermsAccepted}
     >
       Prepare translation ${icon("arrow-right")}
     </button>`;

@@ -29,6 +29,7 @@ export class MeowcalSetup extends LitElement {
   @state() private sampleSource = "";
   @state() private copyState: CopyState = "idle";
   @state() private stages: SetupStage[] = initialStages();
+  @state() private modelTermsAccepted = false;
   private details: string[] = [];
   private unlisten: Array<() => void> = [];
 
@@ -123,6 +124,7 @@ export class MeowcalSetup extends LitElement {
   }
 
   private async beginEngineSetup(): Promise<void> {
+    if (!this.modelTermsAccepted) return;
     this.step = 3;
     this.working = true;
     this.error = null;
@@ -181,6 +183,7 @@ export class MeowcalSetup extends LitElement {
   }
 
   private reset(): void {
+    this.modelTermsAccepted = false;
     this.step = 1;
     this.working = false;
     this.error = null;
@@ -238,6 +241,7 @@ export class MeowcalSetup extends LitElement {
       sample: this.sample,
       sampleSource: this.sampleSource,
       copyState: this.copyState,
+      modelTermsAccepted: this.modelTermsAccepted,
     };
     const actions = {
       setLanguage: (kind: "source" | "target", value: string) => this.setLanguage(kind, value),
@@ -248,6 +252,7 @@ export class MeowcalSetup extends LitElement {
       back: () => (this.step = 1),
       close: () => void this.close(),
       selectArea: () => void this.selectArea(),
+      acceptModelTerms: (accepted: boolean) => (this.modelTermsAccepted = accepted),
     };
     return html`
       <div class="wizard-frame">

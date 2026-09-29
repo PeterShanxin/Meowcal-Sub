@@ -154,11 +154,21 @@ The pinned HY-MT1.5 GGUF model is governed by the
 separately from this application's AGPL license. Its territory excludes the
 European Union, United Kingdom and South Korea. Without separate authorization,
 worldwide Store availability is not an acceptable release configuration.
-Market filtering alone does not resolve every downstream-use restriction.
+Market filtering alone does not resolve every downstream-use restriction. Exclude
+the 27 EU countries, UK and Korea, plus separately listed EU territories: Åland
+Islands, French Guiana, Guadeloupe, Martinique, Mayotte, Réunion and Saint Martin.
+Disable automatic availability in future markets. The Store draft currently
+selects 204 of 240 markets. The EU's [outermost regions](https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=legissum%3Aoutermost_regions)
+are part of the EU; not every overseas territory of an EU country is.
 
-Before submission, resolve the license's requirements for a license copy,
-Notice file, actual-provider identification, Tencent non-affiliation statement,
-and downstream use restrictions, including the Acceptable Use Policy. A model
+The app includes the unmodified license and Notice in `licenses/tencent-hy/`.
+Setup displays the actual provider, non-affiliation and territory restrictions,
+with the full license and Acceptable Use Policy readable offline. Preparation
+requires an unchecked-by-default model-terms acknowledgement; Settings retains
+the same disclosure. These terms are separate from the application's AGPL license.
+Review their sufficiency for downstream use before submission; the setup UI is
+not geolocation enforcement or evidence of agreement by existing installations.
+A model
 download outside the MSIX does not remove these obligations for a product
 using the model. The current Core manifest still marks distribution review as
 required and links to `LICENSE`, while the upstream file is `License.txt`.

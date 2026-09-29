@@ -3,6 +3,7 @@ import type { Tone, UiSnapshot } from "./contracts";
 import { icon } from "./icons";
 import { backendUnavailablePhase } from "./home-state";
 import { deriveUpdatePresentation } from "./update-state";
+import { renderModelLicense } from "./model-license";
 
 type Recognition = "fast" | "balanced" | "accurate";
 
@@ -254,7 +255,8 @@ export function renderSettings(snapshot: UiSnapshot, actions: SettingsActions): 
           </label>
         </div>
 
-        ${renderEngineAndUpdates(snapshot, actions)} ${renderDeveloper(snapshot, actions)}
+        ${renderEngineAndUpdates(snapshot, actions)} ${renderModelLicense()}
+        ${renderDeveloper(snapshot, actions)}
       </div>
     </main>
   `;

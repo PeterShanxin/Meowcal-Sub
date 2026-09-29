@@ -67,6 +67,7 @@ try {
         Copy-Item -LiteralPath (Join-Path $coreDirectory $file) -Destination "$layout\resources\core\$file"
     }
     foreach ($file in @('LICENSE', 'LICENSE-NOTICE.md')) { Copy-Item -LiteralPath $file -Destination $layout }
+    Copy-Item -LiteralPath 'licenses' -Destination "$layout\licenses" -Recurse
     foreach ($file in @('Square150x150Logo.png', 'Square44x44Logo.png', 'StoreLogo.png')) {
         Copy-Item -LiteralPath "src-tauri\icons\$file" -Destination "$layout\Assets\$file"
     }
