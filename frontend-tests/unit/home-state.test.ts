@@ -12,6 +12,7 @@ vi.stubGlobal("window", {
 
 function snapshot(patch: Partial<UiSnapshot> = {}): UiSnapshot {
   return {
+    settingsSave: { kind: "idle" },
     screen: "home",
     busy: "idle",
     settings: {

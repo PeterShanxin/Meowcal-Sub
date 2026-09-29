@@ -41,7 +41,8 @@
     "scripts/doc-links.mjs",
     "scripts/maintainability-ratchet.mjs",
     "scripts/serve-frontend.mjs",
-    "scripts/workflow-runner-policy.mjs"
+    "scripts/workflow-runner-policy.mjs",
+    "src/ui/settings-writer.ts"
   ],
   "legacyFileMaxLines": {
     "src-tauri/src/capture/graphics_capture.rs": 522,

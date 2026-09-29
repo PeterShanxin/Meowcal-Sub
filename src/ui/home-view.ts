@@ -67,7 +67,7 @@ export function renderHome(
         ${presentation.state === "checking" ? icon("spinner", "spin") : html`<span class="dot"></span>`}
         ${presentation.statusLabel}
       </div>
-      <h1 id="home-title">${presentation.title}</h1>
+      <h1 id="home-title" tabindex="-1">${presentation.title}</h1>
       <p class="home-description">${presentation.description}</p>
 
       <section class="session-panel" aria-label="Subtitle session">

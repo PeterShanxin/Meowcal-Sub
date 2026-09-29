@@ -100,6 +100,7 @@ export interface EngineStatus {
 }
 
 export interface UiSnapshot {
+  settingsSave: import("./settings-writer").SettingsSaveState;
   screen: AppScreen;
   busy: BusyState;
   settings: AppSettings;

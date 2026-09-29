@@ -173,3 +173,37 @@
   color: var(--text-2);
   font-family: var(--font-mono);
 }
+
+@media (max-width: 559px) {
+  .page {
+    padding-inline: 16px;
+  }
+
+  .page-head {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+  }
+
+  .list-row:has(.row-end),
+  .list-row:has(.slider-control) {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 8px;
+    padding-block: 10px;
+  }
+
+  .row-end {
+    flex-wrap: wrap;
+  }
+
+  .slider-control .slider {
+    flex: 1;
+    min-width: 0;
+    width: auto;
+  }
+
+  .subtitle-plate {
+    overflow-wrap: anywhere;
+    padding-inline: 12px;
+  }
+}

@@ -212,7 +212,7 @@ export function renderSettings(snapshot: UiSnapshot, actions: SettingsActions): 
   return html`
     <main class="screen" aria-labelledby="settings-title">
       <div class="page">
-        <header class="page-head"><h1 id="settings-title">Settings</h1></header>
+        <header class="page-head"><h1 id="settings-title" tabindex="-1">Settings</h1></header>
 
         <h2 class="group-label">Translation</h2>
         <div class="list">

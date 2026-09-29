@@ -20,6 +20,7 @@ const SELECT_AREA_EVENT = "setup-select-area";
 export class MeowcalSetup extends LitElement {
   @state() private step = 1;
   @state() private settings: AppSettings | null = null;
+  @state() private loading = true;
   @state() private ocrLanguages = new Set<string>();
   @state() private installingOcr = false;
   @state() private working = false;
@@ -51,6 +52,14 @@ export class MeowcalSetup extends LitElement {
   }
 
   private async initialize(): Promise<void> {
+    await this.loadSettings();
+    await this.listenForSetup();
+  }
+
+  private async loadSettings(): Promise<void> {
+    if (!this.loading && this.settings) return;
+    this.loading = true;
+    this.error = null;
     try {
       const [settings, languagesAvailable] = await Promise.all([
         window.TauriBridge.invoke<AppSettings>("get_settings"),
@@ -59,8 +68,15 @@ export class MeowcalSetup extends LitElement {
       this.settings = ensureDistinctLanguagePair(settings);
       this.ocrLanguages = new Set(languagesAvailable);
     } catch (error) {
-      this.error = this.message(error);
+      console.warn("[Meowcal] setup settings unavailable", error);
+      this.error =
+        "Couldn’t load settings or recognition languages. Check the app connection and try again.";
+    } finally {
+      this.loading = false;
     }
+  }
+
+  private async listenForSetup(): Promise<void> {
     try {
       this.unlisten.push(await window.TauriBridge.event.listen("wizard-reset", () => this.reset()));
       this.unlisten.push(
@@ -229,6 +245,7 @@ export class MeowcalSetup extends LitElement {
     const view = {
       step: this.step,
       settings: this.settings,
+      loading: this.loading,
       ocrReady: this.sourceReady(),
       installingOcr: this.installingOcr,
       working: this.working,
@@ -240,6 +257,7 @@ export class MeowcalSetup extends LitElement {
       copyState: this.copyState,
     };
     const actions = {
+      retryLoad: () => void this.loadSettings(),
       setLanguage: (kind: "source" | "target", value: string) => this.setLanguage(kind, value),
       installOcr: () => void this.installSourceOcr(),
       prepare: () => void this.beginEngineSetup(),

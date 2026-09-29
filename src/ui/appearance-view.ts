@@ -19,7 +19,7 @@ export function renderAppearance(
     <main class="screen" aria-labelledby="appearance-title">
       <div class="page">
         <header class="page-head">
-          <h1 id="appearance-title">Subtitle style</h1>
+          <h1 id="appearance-title" tabindex="-1">Subtitle style</h1>
           <p>Changes apply to live subtitles right away.</p>
         </header>
 
