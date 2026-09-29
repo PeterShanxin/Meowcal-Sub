@@ -149,10 +149,7 @@ function chooseLanguages(view: SetupView, actions: SetupActions): TemplateResult
           @change=${(event: Event) =>
             actions.acceptModelTerms((event.target as HTMLInputElement).checked)}
         />
-        <span
-          >I agree to the model license and use restrictions, and will use the model and its outputs
-          only in permitted territories.</span
-        >
+        <span>I agree to the model license and usage terms.</span>
       </label>
       ${errorNote(view)}
     </div>

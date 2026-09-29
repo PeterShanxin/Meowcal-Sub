@@ -172,5 +172,5 @@ Community source: **[AGPL-3.0-only](LICENSE)**. See the
 not require a paid license; commercial licensing is available for organizations
 that require different terms.
 
-The downloadable Tencent HY-MT model has its own community license, separate
-from the app's AGPL license. [Name and logo use](TRADEMARKS.md) is separate too.
+The translation model has separate [license and usage terms](LICENSE-NOTICE.md#separately-downloaded-translation-model).
+[Name and logo use](TRADEMARKS.md) is separate too.

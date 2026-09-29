@@ -27,7 +27,8 @@ the European Union, United Kingdom, and South Korea, including use of outputs
 there, and restricts use of the model or its outputs to improve other AI models
 except Tencent HY or its derivatives (sections 5(a) and 5(b)).
 
-Meowcal Sub is provided by Shanxin Li, an individual. Tencent is not affiliated
+Meowcal Sub is provided by Shanxin Li ([shanxinpeter@gmail.com](mailto:shanxinpeter@gmail.com)),
+an individual. Tencent is not affiliated
 with, associated with, sponsoring, or endorsing Meowcal Sub.
 
 License source: the model's upstream
