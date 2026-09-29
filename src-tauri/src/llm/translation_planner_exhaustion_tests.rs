@@ -13,6 +13,54 @@ use std::sync::atomic::AtomicUsize;
 use std::sync::{Arc, Mutex};
 use tokio::time::Duration;
 
+#[tokio::test]
+async fn replay_recovery_uses_the_remaining_budget_and_never_returns_the_replay() {
+    let backend = RecordingBackend {
+        script: vec![
+            StepOutcome {
+                delay_ms: 0,
+                response: Ok("Not yet.".into()),
+            },
+            StepOutcome {
+                delay_ms: 500,
+                response: Ok("Hello.".into()),
+            },
+        ],
+        calls: AtomicUsize::new(0),
+        seen: Mutex::new(Vec::new()),
+    };
+    let history = Arc::new(Mutex::new(RecentTranslations::default()));
+    lock_or_recover(&history).record("还没有", "Not yet.", "zh-CN", "en-US", 0);
+    let store = tier_store(ContextTier::Full);
+    let planner = TranslationPlanner::new(default_policy(1), diagnostics(), Some(history));
+    let budget = AttemptBudget {
+        started: std::time::Instant::now() - Duration::from_millis(900),
+        total_timeout: Duration::from_millis(1_000),
+    };
+    let mut warnings = Vec::new();
+
+    let outcome = planner
+        .run_tiered_sequence(
+            &backend,
+            &plan(&store, ContextTier::Full, Some("还没有"), None),
+            ReadyState::Ready,
+            &budget,
+            &mut warnings,
+        )
+        .await;
+
+    assert!(
+        outcome.is_none(),
+        "neither replay nor late recovery may be returned"
+    );
+    assert_eq!(backend.calls.load(Ordering::SeqCst), 2);
+    assert!(lock_or_recover(&backend.seen)[1].0.is_none());
+    assert_eq!(
+        warnings,
+        vec!["local_engine: context_leakage", "local_engine: timeout"]
+    );
+}
+
 // Every tier times out: Full and MemoryOnly degrade once each, the None tier
 // exhausts its uncontexted retries, and the sequence ends for the next backend.
 #[tokio::test(start_paused = true)]
