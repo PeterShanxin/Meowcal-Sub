@@ -1,0 +1,150 @@
+{
+  "calls": [
+    {
+      "c": "translate_once",
+      "at": 1790703244933
+    },
+    {
+      "c": "translate_once",
+      "at": 1790703245493
+    },
+    {
+      "c": "refresh_engine_status",
+      "at": 1790703245619
+    },
+    {
+      "c": "get_capture_region",
+      "at": 1790703245620
+    },
+    {
+      "c": "get_settings",
+      "at": 1790703245620
+    },
+    {
+      "c": "translate_once",
+      "at": 1790703245999
+    },
+    {
+      "c": "refresh_engine_status",
+      "at": 1790703246110
+    },
+    {
+      "c": "get_capture_region",
+      "at": 1790703246110
+    },
+    {
+      "c": "get_settings",
+      "at": 1790703246111
+    }
+  ],
+  "rows": [
+    {
+      "appWindow": 12979524,
+      "sample": 1,
+      "translation": {
+        "elapsedMs": 437.30000000074506,
+        "result": {
+          "translated": "请在你离开时关上门。",
+          "backendUsed": "localEngine",
+          "warnings": [],
+          "displayState": "translated"
+        }
+      },
+      "foreground": 12979524
+    },
+    {
+      "appWindow": 12979524,
+      "sample": 2,
+      "translation": {
+        "elapsedMs": 391.69999999925494,
+        "result": {
+          "translated": "请在离开时关上门。",
+          "backendUsed": "localEngine",
+          "warnings": [],
+          "displayState": "translated"
+        }
+      },
+      "foreground": 12979524
+    },
+    {
+      "appWindow": 12979524,
+      "sample": 3,
+      "translation": {
+        "elapsedMs": 398.2000000011176,
+        "result": {
+          "translated": "请在离开时关上门。",
+          "backendUsed": "localEngine",
+          "warnings": [],
+          "displayState": "translated"
+        }
+      },
+      "foreground": 12979524
+    }
+  ],
+  "events": [
+    {
+      "type": "blur",
+      "at": 1790703245391
+    },
+    {
+      "type": "blur",
+      "at": 1790703245391
+    },
+    {
+      "type": "blur",
+      "at": 1790703245391
+    },
+    {
+      "type": "blur",
+      "at": 1790703245392
+    },
+    {
+      "type": "focus",
+      "at": 1790703245620
+    },
+    {
+      "type": "focus",
+      "at": 1790703245620
+    },
+    {
+      "type": "focus",
+      "at": 1790703245620
+    },
+    {
+      "type": "focus",
+      "at": 1790703245620
+    },
+    {
+      "type": "blur",
+      "at": 1790703245895
+    },
+    {
+      "type": "blur",
+      "at": 1790703245895
+    },
+    {
+      "type": "blur",
+      "at": 1790703245895
+    },
+    {
+      "type": "blur",
+      "at": 1790703245895
+    },
+    {
+      "type": "focus",
+      "at": 1790703246111
+    },
+    {
+      "type": "focus",
+      "at": 1790703246111
+    },
+    {
+      "type": "focus",
+      "at": 1790703246111
+    },
+    {
+      "type": "focus",
+      "at": 1790703246111
+    }
+  ]
+}

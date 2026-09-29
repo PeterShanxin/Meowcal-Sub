@@ -5,6 +5,7 @@ using System;
 using System.Runtime.InteropServices;
 public static class LatencyDpi {
     [DllImport("user32.dll")] public static extern IntPtr SetThreadDpiAwarenessContext(IntPtr value);
+    [DllImport("user32.dll")] public static extern bool SetWindowPos(IntPtr window, IntPtr after, int x, int y, int width, int height, uint flags);
 }
 '@
 [LatencyDpi]::SetThreadDpiAwarenessContext([IntPtr](-4)) | Out-Null
@@ -28,6 +29,8 @@ $timer.Interval = 20
 $script:lastCue = ''
 $timer.Add_Tick({
     if (Test-Path (Join-Path $OutputDirectory 'stop-fixture')) { $form.Close(); return }
+    # Keep the authored input above desktop notifications without taking keyboard focus.
+    [LatencyDpi]::SetWindowPos($form.Handle, [IntPtr](-1), 0, 0, 0, 0, 0x0013) | Out-Null
     $path = Join-Path $OutputDirectory 'cue.json'
     if (-not (Test-Path $path)) { return }
     try { $cue = Get-Content $path -Raw | ConvertFrom-Json } catch { return }

@@ -1,0 +1,644 @@
+{
+  "quantiles": "Linear interpolation; small samples describe these runs, not a reliable population tail estimate.",
+  "baselinePipeline": {
+    "rows": [
+      {
+        "text": "Please close the door behind you.",
+        "translated": "请在离开时关上门。",
+        "modelMs": 512,
+        "totalMs": 524,
+        "renderMs": 946
+      },
+      {
+        "text": "We should wait until tomorrow.",
+        "translated": "我们应该等到明天再行动。",
+        "modelMs": 450,
+        "totalMs": 463,
+        "renderMs": 775
+      },
+      {
+        "text": "I left my keys on the table.",
+        "translated": "我把钥匙落在了桌子上。",
+        "modelMs": 471,
+        "totalMs": 483,
+        "renderMs": 913
+      },
+      {
+        "text": "There is nobody in the room.",
+        "translated": "房间里一个人也没有。",
+        "modelMs": 378,
+        "totalMs": 390,
+        "renderMs": 644
+      },
+      {
+        "text": "The train leaves in ten minutes.",
+        "translated": "火车将在十分钟后出发。",
+        "modelMs": 454,
+        "totalMs": 465,
+        "renderMs": 811
+      },
+      {
+        "text": "Please close the door behind you.",
+        "translated": "请在离开时关上门。",
+        "modelMs": 529,
+        "totalMs": 542,
+        "renderMs": 998
+      },
+      {
+        "text": "We should wait until tomorrow.",
+        "translated": "我们应该等到明天再说。",
+        "modelMs": 470,
+        "totalMs": 484,
+        "renderMs": 766
+      },
+      {
+        "text": "I left my keys on the table.",
+        "translated": "我把钥匙落在了桌子上。",
+        "modelMs": 452,
+        "totalMs": 464,
+        "renderMs": 837
+      },
+      {
+        "text": "There is nobody in the room.",
+        "translated": "房间里没有人。",
+        "modelMs": 324,
+        "totalMs": 337,
+        "renderMs": 824
+      },
+      {
+        "text": "The train leaves in ten minutes.",
+        "translated": "火车将在十分钟后出发。",
+        "modelMs": 508,
+        "totalMs": 522,
+        "renderMs": 860
+      }
+    ],
+    "total": {
+      "n": 10,
+      "p50": 474,
+      "p95": 533.9,
+      "min": 337,
+      "max": 542,
+      "values": [
+        524,
+        463,
+        483,
+        390,
+        465,
+        542,
+        484,
+        464,
+        337,
+        522
+      ]
+    },
+    "model": {
+      "n": 10,
+      "p50": 462,
+      "p95": 521.35,
+      "min": 324,
+      "max": 529,
+      "values": [
+        512,
+        450,
+        471,
+        378,
+        454,
+        529,
+        470,
+        452,
+        324,
+        508
+      ]
+    },
+    "render": {
+      "n": 10,
+      "p50": 830.5,
+      "p95": 974.5999999999999,
+      "min": 644,
+      "max": 998,
+      "values": [
+        946,
+        775,
+        913,
+        644,
+        811,
+        998,
+        766,
+        837,
+        824,
+        860
+      ]
+    }
+  },
+  "r1Pipeline": {
+    "rows": [
+      {
+        "text": "Please close the door behind you.",
+        "translated": "请在离开时把门关好。",
+        "modelMs": 547,
+        "totalMs": 560,
+        "renderMs": 987
+      },
+      {
+        "text": "We should wait until tomorrow.",
+        "translated": "我们应该等到明天再行动。",
+        "modelMs": 493,
+        "totalMs": 505,
+        "renderMs": 804
+      },
+      {
+        "text": "I left my keys on the table.",
+        "translated": "我把钥匙落在了桌子上。",
+        "modelMs": 448,
+        "totalMs": 460,
+        "renderMs": 909
+      },
+      {
+        "text": "There is nobody in the room.",
+        "translated": "房间里没有人。",
+        "modelMs": 318,
+        "totalMs": 329,
+        "renderMs": 652
+      },
+      {
+        "text": "The train leaves in ten minutes.",
+        "translated": "火车将在十分钟后出发。",
+        "modelMs": 460,
+        "totalMs": 473,
+        "renderMs": 884
+      },
+      {
+        "text": "Please close the door behind you.",
+        "translated": "请在离开时关上门。",
+        "modelMs": 493,
+        "totalMs": 506,
+        "renderMs": 809
+      },
+      {
+        "text": "We should wait until tomorrow.",
+        "translated": "我们应该等到明天再说。",
+        "modelMs": 408,
+        "totalMs": 420,
+        "renderMs": 792
+      },
+      {
+        "text": "I left my keys on the table.",
+        "translated": "我把钥匙落在了桌子上。",
+        "modelMs": 475,
+        "totalMs": 487,
+        "renderMs": 742
+      },
+      {
+        "text": "There is nobody in the room.",
+        "translated": "房间里没有人。",
+        "modelMs": 331,
+        "totalMs": 345,
+        "renderMs": 724
+      },
+      {
+        "text": "The train leaves in ten minutes.",
+        "translated": "火车将在十分钟后出发。",
+        "modelMs": 470,
+        "totalMs": 483,
+        "renderMs": 967
+      }
+    ],
+    "total": {
+      "n": 10,
+      "p50": 478,
+      "p95": 535.6999999999999,
+      "min": 329,
+      "max": 560,
+      "values": [
+        560,
+        505,
+        460,
+        329,
+        473,
+        506,
+        420,
+        487,
+        345,
+        483
+      ]
+    },
+    "model": {
+      "n": 10,
+      "p50": 465,
+      "p95": 522.6999999999999,
+      "min": 318,
+      "max": 547,
+      "values": [
+        547,
+        493,
+        448,
+        318,
+        460,
+        493,
+        408,
+        475,
+        331,
+        470
+      ]
+    },
+    "render": {
+      "n": 10,
+      "p50": 806.5,
+      "p95": 978,
+      "min": 652,
+      "max": 987,
+      "values": [
+        987,
+        804,
+        909,
+        652,
+        884,
+        809,
+        792,
+        742,
+        724,
+        967
+      ]
+    }
+  },
+  "r2Pipeline": {
+    "rows": [
+      {
+        "text": "Please close the door behind you.",
+        "translated": "请在离开时关上门。",
+        "modelMs": 533,
+        "totalMs": 546,
+        "renderMs": 925
+      },
+      {
+        "text": "We should wait until tomorrow.",
+        "translated": "我们应该等到明天再行动。",
+        "modelMs": 462,
+        "totalMs": 474,
+        "renderMs": 708
+      },
+      {
+        "text": "I left my keys on the table.",
+        "translated": "我把钥匙落在了桌子上。",
+        "modelMs": 468,
+        "totalMs": 480,
+        "renderMs": 784
+      },
+      {
+        "text": "There is nobody in the room.",
+        "translated": "房间里一个人也没有。",
+        "modelMs": 399,
+        "totalMs": 412,
+        "renderMs": 836
+      },
+      {
+        "text": "The train leaves in ten minutes.",
+        "translated": "火车将在十分钟后出发。",
+        "modelMs": 505,
+        "totalMs": 518,
+        "renderMs": 828
+      },
+      {
+        "text": "Please close the door behind you.",
+        "translated": "请在离开时关上门。",
+        "modelMs": 511,
+        "totalMs": 526,
+        "renderMs": 926
+      },
+      {
+        "text": "We should wait until tomorrow.",
+        "translated": "我们应该等到明天再行动。",
+        "modelMs": 458,
+        "totalMs": 470,
+        "renderMs": 750
+      },
+      {
+        "text": "I left my keys on the table.",
+        "translated": "我把钥匙落在了桌子上。",
+        "modelMs": 517,
+        "totalMs": 533,
+        "renderMs": 940
+      },
+      {
+        "text": "There is nobody in the room.",
+        "translated": "房间里没有人。",
+        "modelMs": 340,
+        "totalMs": 353,
+        "renderMs": 616
+      },
+      {
+        "text": "The train leaves in ten minutes.",
+        "translated": "火车将在十分钟后出发。",
+        "modelMs": 477,
+        "totalMs": 489,
+        "renderMs": 823
+      }
+    ],
+    "total": {
+      "n": 10,
+      "p50": 484.5,
+      "p95": 540.15,
+      "min": 353,
+      "max": 546,
+      "values": [
+        546,
+        474,
+        480,
+        412,
+        518,
+        526,
+        470,
+        533,
+        353,
+        489
+      ]
+    },
+    "model": {
+      "n": 10,
+      "p50": 472.5,
+      "p95": 525.8,
+      "min": 340,
+      "max": 533,
+      "values": [
+        533,
+        462,
+        468,
+        399,
+        505,
+        511,
+        458,
+        517,
+        340,
+        477
+      ]
+    },
+    "render": {
+      "n": 10,
+      "p50": 825.5,
+      "p95": 933.6999999999999,
+      "min": 616,
+      "max": 940,
+      "values": [
+        925,
+        708,
+        784,
+        836,
+        828,
+        926,
+        750,
+        940,
+        616,
+        823
+      ]
+    }
+  },
+  "r3Pipeline": {
+    "rows": [
+      {
+        "text": "Please close the door behind you.",
+        "translated": "请在你身后关上门。",
+        "modelMs": 455,
+        "totalMs": 473,
+        "renderMs": 980
+      },
+      {
+        "text": "We should wait until tomorrow.",
+        "translated": "我们应该等到明天再行动。",
+        "modelMs": 456,
+        "totalMs": 470,
+        "renderMs": 784
+      },
+      {
+        "text": "I left my keys on the table.",
+        "translated": "我把钥匙落在了桌子上。",
+        "modelMs": 457,
+        "totalMs": 469,
+        "renderMs": 899
+      },
+      {
+        "text": "There is nobody in the room.",
+        "translated": "房间里没有人。",
+        "modelMs": 334,
+        "totalMs": 347,
+        "renderMs": 635
+      },
+      {
+        "text": "The train leaves in ten minutes.",
+        "translated": "火车将在十分钟后出发。",
+        "modelMs": 484,
+        "totalMs": 497,
+        "renderMs": 911
+      },
+      {
+        "text": "Please close the door behind you.",
+        "translated": "请在离开时关上门。",
+        "modelMs": 542,
+        "totalMs": 554,
+        "renderMs": 835
+      },
+      {
+        "text": "We should wait until tomorrow.",
+        "translated": "我们应该等到明天再行动。",
+        "modelMs": 518,
+        "totalMs": 531,
+        "renderMs": 908
+      },
+      {
+        "text": "I left my keys on the table.",
+        "translated": "我把钥匙落在了桌子上。",
+        "modelMs": 515,
+        "totalMs": 528,
+        "renderMs": 783
+      },
+      {
+        "text": "There is nobody in the room.",
+        "translated": "房间里没有人。",
+        "modelMs": 373,
+        "totalMs": 386,
+        "renderMs": 766
+      },
+      {
+        "text": "The train leaves in ten minutes.",
+        "translated": "火车将在十分钟后出发。",
+        "modelMs": 531,
+        "totalMs": 544,
+        "renderMs": 790
+      }
+    ],
+    "total": {
+      "n": 10,
+      "p50": 485,
+      "p95": 549.5,
+      "min": 347,
+      "max": 554,
+      "values": [
+        473,
+        470,
+        469,
+        347,
+        497,
+        554,
+        531,
+        528,
+        386,
+        544
+      ]
+    },
+    "model": {
+      "n": 10,
+      "p50": 470.5,
+      "p95": 537.05,
+      "min": 334,
+      "max": 542,
+      "values": [
+        455,
+        456,
+        457,
+        334,
+        484,
+        542,
+        518,
+        515,
+        373,
+        531
+      ]
+    },
+    "render": {
+      "n": 10,
+      "p50": 812.5,
+      "p95": 948.9499999999999,
+      "min": 635,
+      "max": 980,
+      "values": [
+        980,
+        784,
+        899,
+        635,
+        911,
+        835,
+        908,
+        783,
+        766,
+        790
+      ]
+    }
+  },
+  "baselineDeadline": {
+    "long": {
+      "n": 5,
+      "p50": 2415,
+      "p95": 4618.859999997914,
+      "min": 2347.800000000745,
+      "max": 4621.099999997765,
+      "values": [
+        2415,
+        4609.89999999851,
+        4621.099999997765,
+        2379,
+        2347.800000000745
+      ]
+    },
+    "following": {
+      "n": 5,
+      "p50": 509.29999999701977,
+      "p95": 841.6000000022352,
+      "min": 488.5,
+      "max": 843.7000000029802,
+      "values": [
+        499.70000000298023,
+        833.1999999992549,
+        843.7000000029802,
+        509.29999999701977,
+        488.5
+      ]
+    },
+    "unavailableLong": 2,
+    "unavailableFollowing": 0
+  },
+  "r1Deadline": {
+    "long": {
+      "n": 5,
+      "p50": 2412.5,
+      "p95": 4609.839999999851,
+      "min": 2324.60000000149,
+      "max": 4610,
+      "values": [
+        4610,
+        2412.5,
+        4609.199999999255,
+        2406.199999999255,
+        2324.60000000149
+      ]
+    },
+    "following": {
+      "n": 5,
+      "p50": 498.79999999701977,
+      "p95": 982.6999999992549,
+      "min": 493.5,
+      "max": 1010.6999999992549,
+      "values": [
+        1010.6999999992549,
+        493.5,
+        870.6999999992549,
+        493.69999999925494,
+        498.79999999701977
+      ]
+    },
+    "unavailableLong": 2,
+    "unavailableFollowing": 0
+  },
+  "r2Stop": {
+    "n": 10,
+    "p50": 269.34999999962747,
+    "p95": 286.44000000003723,
+    "min": 254.2999999988824,
+    "max": 294.90000000037253,
+    "values": [
+      259.69999999925494,
+      294.90000000037253,
+      271.80000000074506,
+      268.7999999988824,
+      254.2999999988824,
+      269.90000000037253,
+      271.69999999925494,
+      254.7000000011176,
+      264.40000000037253,
+      276.09999999962747
+    ]
+  },
+  "r2Delayed": {
+    "stopMs": 252.5,
+    "running": false,
+    "error": null
+  },
+  "r3Quiet": {
+    "n": 5,
+    "p50": 547.9000000003725,
+    "p95": 582.5199999999255,
+    "min": 392.40000000037253,
+    "max": 585.5,
+    "values": [
+      547.9000000003725,
+      570.5999999996275,
+      392.40000000037253,
+      585.5,
+      480.2000000011176
+    ]
+  },
+  "r3Busy": {
+    "n": 5,
+    "p50": 482.7999999988824,
+    "p95": 539.2800000000746,
+    "min": 343.09999999962747,
+    "max": 550.5,
+    "values": [
+      550.5,
+      494.40000000037253,
+      480.2999999988824,
+      482.7999999988824,
+      343.09999999962747
+    ]
+  },
+  "r3ReadinessCalls": 0
+}

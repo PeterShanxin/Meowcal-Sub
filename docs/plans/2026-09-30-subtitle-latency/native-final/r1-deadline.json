@@ -1,0 +1,145 @@
+[
+  {
+    "sample": 0,
+    "requests": [
+      {
+        "text": "When we arrived at the station, the last train had already left. We decided to walk back through the empty streets, carrying our heavy bags and wondering whether anyone would still be awake to open the door. The rain was getting stronger, and neither of us had brought an umbrella for the journey.",
+        "startedAt": 1790703517585,
+        "elapsedMs": 4610,
+        "outcome": {
+          "translated": "When we arrived at the station, the last train had already left. We decided to walk back through the empty streets, carrying our heavy bags and wondering whether anyone would still be awake to open the door. The rain was getting stronger, and neither of us had brought an umbrella for the journey.",
+          "backendUsed": "mock",
+          "warnings": [
+            "local_engine: timeout",
+            "mock: disabled",
+            "no translation backend available"
+          ],
+          "displayState": "temporarilyUnavailable"
+        }
+      },
+      {
+        "text": "Please close the door behind you.",
+        "startedAt": 1790703522195,
+        "elapsedMs": 1010.6999999992549,
+        "outcome": {
+          "translated": "请在离开时把门关好。",
+          "backendUsed": "localEngine",
+          "warnings": [],
+          "displayState": "translated"
+        }
+      }
+    ]
+  },
+  {
+    "sample": 1,
+    "requests": [
+      {
+        "text": "When we arrived at the station, the last train had already left. We decided to walk back through the empty streets, carrying our heavy bags and wondering whether anyone would still be awake to open the door. The rain was getting stronger, and neither of us had brought an umbrella for the journey.",
+        "startedAt": 1790703523206,
+        "elapsedMs": 2412.5,
+        "outcome": {
+          "translated": "当我们到达车站时，最后一班火车已经离开了。我们决定步行穿过空荡荡的街道，背着沉重的行李，心里想着是否还有人醒着来开门。雨越下越大，我们俩都没有带雨伞。",
+          "backendUsed": "localEngine",
+          "warnings": [],
+          "displayState": "translated"
+        }
+      },
+      {
+        "text": "Please close the door behind you.",
+        "startedAt": 1790703525619,
+        "elapsedMs": 493.5,
+        "outcome": {
+          "translated": "请在离开时关上门。",
+          "backendUsed": "localEngine",
+          "warnings": [],
+          "displayState": "translated"
+        }
+      }
+    ]
+  },
+  {
+    "sample": 2,
+    "requests": [
+      {
+        "text": "When we arrived at the station, the last train had already left. We decided to walk back through the empty streets, carrying our heavy bags and wondering whether anyone would still be awake to open the door. The rain was getting stronger, and neither of us had brought an umbrella for the journey.",
+        "startedAt": 1790703526112,
+        "elapsedMs": 4609.199999999255,
+        "outcome": {
+          "translated": "When we arrived at the station, the last train had already left. We decided to walk back through the empty streets, carrying our heavy bags and wondering whether anyone would still be awake to open the door. The rain was getting stronger, and neither of us had brought an umbrella for the journey.",
+          "backendUsed": "mock",
+          "warnings": [
+            "local_engine: timeout",
+            "mock: disabled",
+            "no translation backend available"
+          ],
+          "displayState": "temporarilyUnavailable"
+        }
+      },
+      {
+        "text": "Please close the door behind you.",
+        "startedAt": 1790703530721,
+        "elapsedMs": 870.6999999992549,
+        "outcome": {
+          "translated": "请在离开时关上门。",
+          "backendUsed": "localEngine",
+          "warnings": [],
+          "displayState": "translated"
+        }
+      }
+    ]
+  },
+  {
+    "sample": 3,
+    "requests": [
+      {
+        "text": "When we arrived at the station, the last train had already left. We decided to walk back through the empty streets, carrying our heavy bags and wondering whether anyone would still be awake to open the door. The rain was getting stronger, and neither of us had brought an umbrella for the journey.",
+        "startedAt": 1790703531592,
+        "elapsedMs": 2406.199999999255,
+        "outcome": {
+          "translated": "当我们到达车站时，最后一班火车已经离开了。我们决定步行返回，穿过空荡荡的街道，背着沉重的行李，心里想着是否还有人醒着来开门。雨越下越大，我们俩都没有带伞一起出发。",
+          "backendUsed": "localEngine",
+          "warnings": [],
+          "displayState": "translated"
+        }
+      },
+      {
+        "text": "Please close the door behind you.",
+        "startedAt": 1790703533998,
+        "elapsedMs": 493.69999999925494,
+        "outcome": {
+          "translated": "请在离开时关上门。",
+          "backendUsed": "localEngine",
+          "warnings": [],
+          "displayState": "translated"
+        }
+      }
+    ]
+  },
+  {
+    "sample": 4,
+    "requests": [
+      {
+        "text": "When we arrived at the station, the last train had already left. We decided to walk back through the empty streets, carrying our heavy bags and wondering whether anyone would still be awake to open the door. The rain was getting stronger, and neither of us had brought an umbrella for the journey.",
+        "startedAt": 1790703534492,
+        "elapsedMs": 2324.60000000149,
+        "outcome": {
+          "translated": "当我们到达车站时，最后一班火车已经离开了。我们决定步行返回，穿过空荡荡的街道，背着沉重的行李，心里想着是否还有人醒着来开门。雨越下越大，我们俩都没有带雨伞。",
+          "backendUsed": "localEngine",
+          "warnings": [],
+          "displayState": "translated"
+        }
+      },
+      {
+        "text": "Please close the door behind you.",
+        "startedAt": 1790703536817,
+        "elapsedMs": 498.79999999701977,
+        "outcome": {
+          "translated": "请在离开时关上门。",
+          "backendUsed": "localEngine",
+          "warnings": [],
+          "displayState": "translated"
+        }
+      }
+    ]
+  }
+]

@@ -1,0 +1,301 @@
+{
+  "cues": [
+    {
+      "id": "1790703423893-0-0",
+      "text": "Please close the door behind you.",
+      "submittedAt": 1790703423893
+    },
+    {
+      "id": "1790703427901-0-1",
+      "text": "We should wait until tomorrow.",
+      "submittedAt": 1790703427901
+    },
+    {
+      "id": "1790703431908-0-2",
+      "text": "I left my keys on the table.",
+      "submittedAt": 1790703431908
+    },
+    {
+      "id": "1790703435916-0-3",
+      "text": "There is nobody in the room.",
+      "submittedAt": 1790703435916
+    },
+    {
+      "id": "1790703439922-0-4",
+      "text": "The train leaves in ten minutes.",
+      "submittedAt": 1790703439922
+    },
+    {
+      "id": "1790703443925-1-0",
+      "text": "Please close the door behind you.",
+      "submittedAt": 1790703443925
+    },
+    {
+      "id": "1790703447926-1-1",
+      "text": "We should wait until tomorrow.",
+      "submittedAt": 1790703447926
+    },
+    {
+      "id": "1790703451928-1-2",
+      "text": "I left my keys on the table.",
+      "submittedAt": 1790703451928
+    },
+    {
+      "id": "1790703455941-1-3",
+      "text": "There is nobody in the room.",
+      "submittedAt": 1790703455941
+    },
+    {
+      "id": "1790703459956-1-4",
+      "text": "The train leaves in ten minutes.",
+      "submittedAt": 1790703459956
+    }
+  ],
+  "fixturePaints": [
+    {
+      "id": "1790703423893-0-0",
+      "paintedAt": 1790703423917,
+      "text": "Please close the door behind you."
+    },
+    {
+      "id": "1790703427901-0-1",
+      "paintedAt": 1790703427909,
+      "text": "We should wait until tomorrow."
+    },
+    {
+      "id": "1790703431908-0-2",
+      "paintedAt": 1790703431950,
+      "text": "I left my keys on the table."
+    },
+    {
+      "id": "1790703435916-0-3",
+      "paintedAt": 1790703435948,
+      "text": "There is nobody in the room."
+    },
+    {
+      "id": "1790703439922-0-4",
+      "paintedAt": 1790703439931,
+      "text": "The train leaves in ten minutes."
+    },
+    {
+      "id": "1790703443925-1-0",
+      "paintedAt": 1790703443949,
+      "text": "Please close the door behind you."
+    },
+    {
+      "id": "1790703447926-1-1",
+      "paintedAt": 1790703447934,
+      "text": "We should wait until tomorrow."
+    },
+    {
+      "id": "1790703451928-1-2",
+      "paintedAt": 1790703451936,
+      "text": "I left my keys on the table."
+    },
+    {
+      "id": "1790703455941-1-3",
+      "paintedAt": 1790703455951,
+      "text": "There is nobody in the room."
+    },
+    {
+      "id": "1790703459956-1-4",
+      "paintedAt": 1790703459977,
+      "text": "The train leaves in ten minutes."
+    }
+  ],
+  "events": [
+    {
+      "at": 1790703424836,
+      "payload": {
+        "sessionId": 25,
+        "captureId": 83,
+        "original": "Please close the door behind you.",
+        "translated": "请在离开时关上门。",
+        "backendUsed": "local_engine",
+        "warnings": [],
+        "displayState": "translated",
+        "timestamp": 1790703424836,
+        "modelMs": 533,
+        "totalMs": 546
+      }
+    },
+    {
+      "at": 1790703428615,
+      "payload": {
+        "sessionId": 25,
+        "captureId": 98,
+        "original": "We should wait until tomorrow.",
+        "translated": "我们应该等到明天再行动。",
+        "backendUsed": "local_engine",
+        "warnings": [],
+        "displayState": "translated",
+        "timestamp": 1790703428614,
+        "modelMs": 462,
+        "totalMs": 474
+      }
+    },
+    {
+      "at": 1790703432724,
+      "payload": {
+        "sessionId": 25,
+        "captureId": 114,
+        "original": "I left my keys on the table.",
+        "translated": "我把钥匙落在了桌子上。",
+        "backendUsed": "local_engine",
+        "warnings": [],
+        "displayState": "translated",
+        "timestamp": 1790703432723,
+        "modelMs": 468,
+        "totalMs": 480
+      }
+    },
+    {
+      "at": 1790703436781,
+      "payload": {
+        "sessionId": 25,
+        "captureId": 130,
+        "original": "There is nobody in the room.",
+        "translated": "房间里一个人也没有。",
+        "backendUsed": "local_engine",
+        "warnings": [],
+        "displayState": "translated",
+        "timestamp": 1790703436781,
+        "modelMs": 399,
+        "totalMs": 412
+      }
+    },
+    {
+      "at": 1790703440752,
+      "payload": {
+        "sessionId": 25,
+        "captureId": 145,
+        "original": "The train leaves in ten minutes.",
+        "translated": "火车将在十分钟后出发。",
+        "backendUsed": "local_engine",
+        "warnings": [],
+        "displayState": "translated",
+        "timestamp": 1790703440751,
+        "modelMs": 505,
+        "totalMs": 518
+      }
+    },
+    {
+      "at": 1790703444869,
+      "payload": {
+        "sessionId": 25,
+        "captureId": 161,
+        "original": "Please close the door behind you.",
+        "translated": "请在离开时关上门。",
+        "backendUsed": "local_engine",
+        "warnings": [],
+        "displayState": "translated",
+        "timestamp": 1790703444869,
+        "modelMs": 511,
+        "totalMs": 526
+      }
+    },
+    {
+      "at": 1790703448680,
+      "payload": {
+        "sessionId": 25,
+        "captureId": 176,
+        "original": "We should wait until tomorrow.",
+        "translated": "我们应该等到明天再行动。",
+        "backendUsed": "local_engine",
+        "warnings": [],
+        "displayState": "translated",
+        "timestamp": 1790703448680,
+        "modelMs": 458,
+        "totalMs": 470
+      }
+    },
+    {
+      "at": 1790703452874,
+      "payload": {
+        "sessionId": 25,
+        "captureId": 192,
+        "original": "I left my keys on the table.",
+        "translated": "我把钥匙落在了桌子上。",
+        "backendUsed": "local_engine",
+        "warnings": [],
+        "displayState": "translated",
+        "timestamp": 1790703452873,
+        "modelMs": 517,
+        "totalMs": 533
+      }
+    },
+    {
+      "at": 1790703456563,
+      "payload": {
+        "sessionId": 25,
+        "captureId": 207,
+        "original": "There is nobody in the room.",
+        "translated": "房间里没有人。",
+        "backendUsed": "local_engine",
+        "warnings": [],
+        "displayState": "translated",
+        "timestamp": 1790703456562,
+        "modelMs": 340,
+        "totalMs": 353
+      }
+    },
+    {
+      "at": 1790703460791,
+      "payload": {
+        "sessionId": 25,
+        "captureId": 223,
+        "original": "The train leaves in ten minutes.",
+        "translated": "火车将在十分钟后出发。",
+        "backendUsed": "local_engine",
+        "warnings": [],
+        "displayState": "translated",
+        "timestamp": 1790703460791,
+        "modelMs": 477,
+        "totalMs": 489
+      }
+    }
+  ],
+  "paints": [
+    {
+      "at": 1790703424842,
+      "text": "请在离开时关上门。"
+    },
+    {
+      "at": 1790703428617,
+      "text": "我们应该等到明天再行动。"
+    },
+    {
+      "at": 1790703432734,
+      "text": "我把钥匙落在了桌子上。"
+    },
+    {
+      "at": 1790703436784,
+      "text": "房间里一个人也没有。"
+    },
+    {
+      "at": 1790703440759,
+      "text": "火车将在十分钟后出发。"
+    },
+    {
+      "at": 1790703444875,
+      "text": "请在离开时关上门。"
+    },
+    {
+      "at": 1790703448684,
+      "text": "我们应该等到明天再行动。"
+    },
+    {
+      "at": 1790703452876,
+      "text": "我把钥匙落在了桌子上。"
+    },
+    {
+      "at": 1790703456567,
+      "text": "房间里没有人。"
+    },
+    {
+      "at": 1790703460800,
+      "text": "火车将在十分钟后出发。"
+    }
+  ],
+  "limitation": "Fixture WM_PAINT completion to overlay double requestAnimationFrame. This is a render proxy, not proof of desktop presentation."
+}
