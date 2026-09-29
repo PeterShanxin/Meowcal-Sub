@@ -16,16 +16,7 @@ pub fn register<R: Runtime>(app: &tauri::AppHandle<R>) -> Result<(), String> {
         .path()
         .resource_dir()
         .map_err(|error| format!("CORE_RESOURCE_DIR: {error}"))?;
-    let store_root = if cfg!(feature = "store") {
-        Some(
-            app.path()
-                .app_cache_dir()
-                .map_err(|error| format!("CORE_STORAGE_PATH: {error}"))?
-                .join("Core"),
-        )
-    } else {
-        None
-    };
+    let store_root = crate::app_profile::store_core_storage_base()?;
     set_launch(
         resolve_executable(profile, &resource_dir)?,
         profile,

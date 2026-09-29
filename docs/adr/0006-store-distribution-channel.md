@@ -26,6 +26,11 @@ Core's client/profile/version/architecture layout within that base, and retain
 explicit custom storage selection. Do not migrate settings between channels
 automatically. Development Store builds get a separate `.dev` identity.
 
+Resolve the default Core base through Windows `ApplicationData.LocalCacheFolder`.
+The downloaded inference child lacks package identity, so it must receive a
+physical path rather than its parent's virtualized AppData path. Keep this
+data under the package-owned cache without disabling Windows virtualization.
+
 Require Partner Center identity and an explicit Store package version at build
 time. Store versions obey Microsoft's four-component rules independently of
 the existing application version. Build and validate through one local script

@@ -45,6 +45,28 @@ impl AppProfile {
     }
 }
 
+/// Downloaded inference processes do not inherit package identity. Give Core
+/// the physical package cache path, not an AppData path redirected only for
+/// the packaged parent, so the child can load its libraries and model.
+pub fn store_core_storage_base() -> Result<Option<std::path::PathBuf>, String> {
+    #[cfg(all(target_os = "windows", feature = "store"))]
+    {
+        let cache = windows::Storage::ApplicationData::Current()
+            .and_then(|data| data.LocalCacheFolder())
+            .and_then(|folder| folder.Path())
+            .map_err(|error| {
+                format!("CORE_STORE_CACHE: launch through the registered MSIX package: {error}")
+            })?;
+        Ok(Some(
+            std::path::PathBuf::from(cache.to_string())
+                .join(AppProfile::current().identifier())
+                .join("Core"),
+        ))
+    }
+    #[cfg(not(all(target_os = "windows", feature = "store")))]
+    Ok(None)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

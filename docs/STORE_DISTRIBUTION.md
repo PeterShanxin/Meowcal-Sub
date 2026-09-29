@@ -54,10 +54,13 @@ Store builds use `com.meowcal.sub.store`; debug Store builds use
 from `com.meowcal.sub` and `com.meowcal.sub.dev`. They start with their own setup;
 there is no automatic import of another channel's settings.
 
-The Store's default Core base is `<Store app cache>/Core`, retaining Core's
+The Store's default Core base is `<package LocalCache>/<Store profile>/Core`, retaining Core's
 `sub1/<profile>/<version>/<architecture>` partition structure. This keeps a
 direct-install uninstaller from removing the Store's default engine files.
-Resetting a custom engine location restores that channel-specific default.
+Windows `ApplicationData.LocalCacheFolder` supplies the physical path. A logical
+AppData path can be redirected for the packaged parent while remaining invisible
+to the downloaded inference process, which has no package identity. Resetting a
+custom engine location restores that channel-specific default.
 Users can still choose a custom storage directory; such files live outside
 package-managed data and may remain after uninstall. Do not select another
 installation's active engine directory when testing coexistence. Default data
