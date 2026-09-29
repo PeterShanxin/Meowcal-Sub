@@ -129,8 +129,8 @@ Test signing and certificate trust are restricted to disposable hosted
 runners; the workflow does not use production signing secrets.
 
 Artifacts retain per-step results, package hashes, runtime module paths and
-Defender status. Hosted desktop checks do not replace real-device capture/OCR,
-full WACK, or Store certification; a disabled protection status does not count
+Defender status. Hosted desktop checks do not replace real-device capture/OCR
+or Store certification; a disabled protection status does not count
 as protection-enabled acceptance.
 
 The x64 job also attempts WACK when the runner has `appcert.exe` and an active
@@ -139,8 +139,11 @@ unmodified report. Missing tooling is reported as not run; an unsuccessful
 invocation fails the job. Inspect the report for failed and skipped tests even
 when the process exits successfully. Required failures and partial reports fail
 the job; optional findings remain visible as warnings and in the result artifact.
-Windows Server diagnostics do not close
-the Windows 11 client certification gate.
+Windows Server diagnostics do not establish Windows 11 client functionality.
+Microsoft now documents WACK as deprecated and optional for local
+pre-submission checks. Official certification occurs through Partner Center;
+a separate local x64 WACK report is not a submission prerequisite. See
+[MSIX package validation](https://learn.microsoft.com/en-us/windows/msix/package/packaging-uwp-apps#validate-your-app-package-locally).
 
 WACK's optional blocked-executables check also concerns Windows S mode. Core
 and inference use child processes, and the optional OCR language installer
@@ -179,7 +182,8 @@ clearance or apply the model's restrictions to the application's AGPL source.
 ## Before submission
 
 - Reserve the name and supply actual Partner Center identity values.
-- Build release MSIX packages for both architectures and run WACK.
+- Build release MSIX packages for both architectures. Review available WACK
+  diagnostics as an optional preflight, separate from Store certification.
 - Test signed package installation and upgrades with normal protection,
   including GitHub/Store coexistence, uninstall/reset, and custom storage.
 - Check cold-machine WebView2 availability and a complete first-time model and
