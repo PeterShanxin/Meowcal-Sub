@@ -99,6 +99,14 @@ describe("Store release write boundary", () => {
     expect(contents).toContain("steps.activation.outputs.active == 'true'");
     expect(contents).toContain("--auto true");
     expect(contents).toContain("--status true");
+    expect(contents).toContain(
+      "store_assets_missing|release_assets_unexpected|release_digest_missing",
+    );
+    const releaseJobs = splitWorkflowJobs(contents);
+    expect(releaseJobs.map((job) => job.name)).toEqual(["submit", "status"]);
+    for (const job of releaseJobs) {
+      expectTrustedActorIf(job, `store-release-sync.yml:${job.name}`);
+    }
     expect(contents).not.toContain("secrets: inherit");
     expect(contents).toMatch(/^permissions:\n {2}contents: read$/m);
   });

@@ -215,15 +215,17 @@ The desktop icon and MSIX logos share the canonical
 `Square150x150Logo.png` (150×150) into the package. Regeneration instructions
 live in [`src-tauri/icons/README.md`](../src-tauri/icons/README.md).
 
-Partner Center listing images are managed separately from the package.
-For product `9NNK2X23VLWT`, open the next submission's **Store listings**, then
-each published language's **Store logos** section. Replace its square 300×300
-logo with [`assets/store-listing-logo-300.png`](assets/store-listing-logo-300.png).
-Remove or replace any optional listing logos that still contain the orange cat;
-render replacements from the same SVG at the dimensions that field requires.
-Preview each language's listing and save the draft. Submit only after the
-release and listing changes are approved; building or uploading an MSIX does
-not edit these listing images. No workflow submits to Partner Center.
+The opt-in Store release workflow stages
+[`assets/store-listing-logo-300.png`](assets/store-listing-logo-300.png) as the
+square 300×300 listing logo for product `9NNK2X23VLWT` in each existing
+language, alongside both MSIX packages. When explicitly activated, it commits
+that submission for certification and requests publication after approval.
+Other listing images remain as they are. Before activation, inspect each
+language's optional logos in Partner Center and replace any that still contain
+the orange cat with images rendered from the canonical SVG at the required
+sizes. The workflow does not generate those optional sizes. See
+[Store release submission setup](STORE_SUBMISSION_SETUP.md) for activation and
+pending-draft safeguards.
 
 ## Before submission
 

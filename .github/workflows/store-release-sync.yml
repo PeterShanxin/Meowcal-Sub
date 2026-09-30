@@ -58,7 +58,7 @@ jobs:
               exit 0
             }
             case "$result" in
-              release_assets_missing|release_assets_unexpected|release_digest_missing)
+              store_assets_missing|release_assets_unexpected|release_digest_missing)
                 echo "Release assets are not complete (attempt $attempt/15)."
                 sleep 60
                 ;;
@@ -81,7 +81,11 @@ jobs:
 
   status:
     name: Report Store certification status
-    if: github.event_name == 'schedule' && github.repository == 'PeterShanxin/Meowcal-Sub'
+    if: >-
+      github.event_name == 'schedule' &&
+      github.repository == 'PeterShanxin/Meowcal-Sub' &&
+      (github.actor == 'PeterShanxin' || github.actor == 'ianmeowmeow') &&
+      github.actor != 'dependabot[bot]'
     runs-on: ubuntu-latest
     environment: store-submission-draft
     steps:
