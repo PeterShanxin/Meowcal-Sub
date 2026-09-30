@@ -74,6 +74,12 @@ export function updateSubmission(submission, release) {
   }
   const listings = Object.values(result.listings ?? {});
   requireCondition(listings.length > 0, "published_listings_missing");
+  requireCondition(
+    typeof release.notes === "string" &&
+      release.notes.trim().length > 0 &&
+      release.notes.length <= 1500,
+    "store_release_notes_invalid",
+  );
   for (const listing of listings) {
     const base = listing.baseListing;
     requireCondition(base && typeof base === "object", "invalid_listing");

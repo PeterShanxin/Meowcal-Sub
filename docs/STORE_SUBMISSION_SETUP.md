@@ -51,7 +51,11 @@ the enabled environment and its reviewer approval and four configured secrets.
 Neither mode accepts package URLs or package identity from inputs.
 
 Verification binds the tag, commit, eight published release assets and their
-SHA256 digests, combined checksums, application version and release notes. It
+SHA256 digests, combined checksums, application version and release notes. The
+Store listing receives complete fix/improvement bullets that fit its 1,500
+character release-notes field, followed by a link to the full GitHub notes.
+The exact tagged release document is the source; a malformed or overlong
+summary fails before draft creation. Verification also
 examines both MSIX manifests and PE architectures, checks the independent Store
 version and compares all three package icons with the tag's source. It copies
 the exact 300 × 300 listing icon from that commit. After checking the target

@@ -5,6 +5,7 @@ import { requireCondition, SubmissionError } from "./store-submission.mjs";
 
 const REPO = "PeterShanxin/Meowcal-Sub";
 const API = `https://api.github.com/repos/${REPO}`;
+export const STORE_RELEASE_NOTES_LIMIT = 1500;
 const REQUIRED = (version) => [
   "latest.json",
   "SHA256SUMS.txt",
@@ -92,6 +93,23 @@ export function assertSource(source, release, tag) {
       png.readUInt32BE(20) === 300,
     "listing_icon_invalid",
   );
+}
+
+export function storeReleaseNotes(notes, tag) {
+  const section = notes.split(/^## Fixes and improvements\s*$/m)[1]?.split(/^## /m)[0];
+  const bullets = section
+    ?.split(/(?=^- )/m)
+    .slice(1)
+    .map((item) => item.replace(/\s+/g, " ").trim());
+  requireCondition(bullets?.length > 0, "store_release_notes_missing");
+  const footer = `Full release notes: https://github.com/${REPO}/releases/tag/${tag}`;
+  let summary = `Meowcal Sub ${tag} highlights:\n`;
+  for (const bullet of bullets) {
+    if (`${summary}${bullet}\n\n${footer}`.length > STORE_RELEASE_NOTES_LIMIT) break;
+    summary += `${bullet}\n`;
+  }
+  requireCondition(summary.includes("\n- "), "store_release_notes_too_long");
+  return `${summary}\n${footer}`;
 }
 
 export function assertPackageChecksums(release, files) {
@@ -204,5 +222,5 @@ export async function prepareRelease(client, tag, commit, directory, inspector) 
     await writeFile(path.join(directory, name), source.icons[index], { flag: "wx" });
   }
   await inspector(directory, release.storeVersion);
-  return { ...release, notes: source.notes, commit };
+  return { ...release, notes: storeReleaseNotes(source.notes, tag), commit };
 }

@@ -11,6 +11,7 @@ import {
   assertPackageChecksums,
   parseChecksums,
   prepareRelease,
+  storeReleaseNotes,
   validateRelease,
 } from "../../scripts/store-release-assets.mjs";
 
@@ -71,6 +72,19 @@ describe("draft protection and metadata", () => {
         { ...release, storeVersion: "1.0.0.0" },
       ),
     ).toThrow("store_version_not_increasing");
+  });
+  it("rejects overlong Store notes before a draft is created", async () => {
+    const calls = [];
+    const client = {
+      authenticate: async () => {},
+      getApp: async () => app(),
+      getSubmission: async () => published(),
+      create: async () => calls.push("create"),
+    };
+    await expect(
+      stageDraft(client, { ...release, notes: "x".repeat(1501) }, {}, { stage: true }),
+    ).rejects.toThrow("store_release_notes_invalid");
+    expect(calls).toEqual([]);
   });
   it("replaces only intended packages, icon and release notes", () => {
     const result = updateSubmission({ ...published(), status: "PendingCommit" }, release);
@@ -233,6 +247,14 @@ describe("release and transport boundaries", () => {
     html_url: `https://github.com/PeterShanxin/Meowcal-Sub/releases/tag/${tag}`,
     assets,
   };
+  it("derives bounded Store highlights from the exact release notes", () => {
+    const notes = `# Meowcal Sub ${tag}\n## Fixes and improvements\n- First fix.\n- ${"Long but accurate detail. ".repeat(100)}\n## Validation\n- Test evidence.`;
+    const summary = storeReleaseNotes(notes, tag);
+    expect(summary).toContain("- First fix.");
+    expect(summary).not.toContain("Test evidence");
+    expect(summary.length).toBeLessThanOrEqual(1500);
+    expect(summary).toContain(`/releases/tag/${tag}`);
+  });
   it("requires exactly the canonical published assets, names and digests", () => {
     expect(validateRelease(fixture, tag, sha).storeVersion).toBe("1.0.1.0");
     expect(() => validateRelease({ ...fixture, assets: assets.slice(1) }, tag, sha)).toThrow(
@@ -352,7 +374,10 @@ describe("release and transport boundaries", () => {
     logo.writeUInt32BE(300, 20);
     const sources = new Map([
       ["src-tauri/tauri.conf.json", Buffer.from(JSON.stringify({ version: "0.8.7" }))],
-      ["docs/releases/v0.8.7.md", Buffer.from("# Meowcal Sub v0.8.7\nFixes")],
+      [
+        "docs/releases/v0.8.7.md",
+        Buffer.from("# Meowcal Sub v0.8.7\n## Fixes and improvements\n- Fixes"),
+      ],
       ["docs/assets/store-listing-logo-300.png", logo],
       ...["Square150x150Logo.png", "Square44x44Logo.png", "StoreLogo.png"].map((name) => [
         `src-tauri/icons/${name}`,
@@ -364,7 +389,11 @@ describe("release and transport boundaries", () => {
       json: async (url) => {
         requested.push(url);
         if (url.startsWith("/git/ref/")) return { object: { type: "commit", sha } };
-        return { ...fixture, body: "# Meowcal Sub v0.8.7\nFixes", assets: releaseAssets };
+        return {
+          ...fixture,
+          body: "# Meowcal Sub v0.8.7\n## Fixes and improvements\n- Fixes",
+          assets: releaseAssets,
+        };
       },
       source: async (_commit, name) => sources.get(name),
       asset: async (asset) => fileBytes.get(asset.name),
