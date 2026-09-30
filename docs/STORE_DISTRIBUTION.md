@@ -33,6 +33,14 @@ because the Store requires a nonzero first component. Record product version,
 package version, source commit and artifact hashes together for each submission.
 Store certification may delay availability relative to the GitHub release.
 
+Draft release and release preflight automatically prepare both native
+architectures using the same `store_package_*`/`store_publisher*` dispatch
+inputs. Enter the real Partner Center identity and an explicit Store version;
+do not derive the version from the pre-1.0 application version. The draft
+attaches both unsigned MSIX files and their hashes in `SHA256SUMS.txt`.
+The standalone `store-package.yml` workflow remains available for independent
+Store deliveries; its artifact checksum files are architecture-specific.
+
 The script fetches and verifies the reviewed Core release, runs Store-feature
 library tests and the real Core handshake, builds through the pinned Tauri CLI,
 checks both PE architectures, and invokes SDK MakeAppx validation. It emits an
@@ -119,6 +127,18 @@ It also seeds a custom engine directory, checks translation after restart,
 resets the app through Windows, and verifies that reset and uninstall retain the
 external model while removing package-owned settings and cache. This tests a
 persisted custom configuration, not a directory-picker UI.
+Before native GUI checks, `prepare-store-desktop.ps1` applies Microsoft's
+[DisablePrivacyExperience policy](https://learn.microsoft.com/en-us/windows/client-management/mdm/policy-csp-privacy#disableprivacyexperience)
+and dismisses an already-open privacy screen using the
+[hosted ARM workaround](https://github.com/actions/runner-images/issues/14069).
+Keyboard input requires a verified foreground CloudExperienceHost package;
+Escape may also close its verified Start/Search panel. Preparation runs only on disposable
+hosted runners, before build and immediately before lifecycle tests. The
+capture fixture checks its rendered text and background pixels on the actual screen before
+reporting readiness; the application must still capture, OCR, translate and
+display the expected fixture text. Desktop preparation results and fixture
+screenshots accompany lifecycle evidence.
+
 The same runner installs the hash-pinned GitHub v0.8.6 ARM64 NSIS baseline,
 opens it with a distinct saved language preference, and checks that Store
 setup does not inherit that setting. After Store reset and removal, the direct
@@ -183,6 +203,24 @@ required and links to `LICENSE`, while the upstream file is `License.txt`.
 Correcting that embedded metadata must follow the reviewed Core release and
 application pin workflow. Do not treat successful package validation as license
 clearance or apply the model's restrictions to the application's AGPL source.
+
+## Store branding
+
+The desktop icon and MSIX logos share the canonical
+[`assets/logo.svg`](assets/logo.svg) artwork. `build-store.ps1` copies
+`src-tauri/icons/StoreLogo.png` (50×50), `Square44x44Logo.png` (44×44) and
+`Square150x150Logo.png` (150×150) into the package. Regeneration instructions
+live in [`src-tauri/icons/README.md`](../src-tauri/icons/README.md).
+
+Partner Center listing images are managed separately from the package.
+For product `9NNK2X23VLWT`, open the next submission's **Store listings**, then
+each published language's **Store logos** section. Replace its square 300×300
+logo with [`assets/store-listing-logo-300.png`](assets/store-listing-logo-300.png).
+Remove or replace any optional listing logos that still contain the orange cat;
+render replacements from the same SVG at the dimensions that field requires.
+Preview each language's listing and save the draft. Submit only after the
+release and listing changes are approved; building or uploading an MSIX does
+not edit these listing images. No workflow submits to Partner Center.
 
 ## Before submission
 

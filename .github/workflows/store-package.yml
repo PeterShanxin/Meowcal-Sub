@@ -1,6 +1,23 @@
 name: Microsoft Store Packages
 
 on:
+  workflow_call:
+    inputs:
+      architecture:
+        required: true
+        type: string
+      package_name:
+        required: true
+        type: string
+      publisher:
+        required: true
+        type: string
+      publisher_display_name:
+        required: true
+        type: string
+      package_version:
+        required: true
+        type: string
   workflow_dispatch:
     inputs:
       architecture:
@@ -85,10 +102,15 @@ jobs:
             -PackageName $env:STORE_PACKAGE_NAME -Publisher $env:STORE_PUBLISHER `
             -PublisherDisplayName $env:STORE_PUBLISHER_DISPLAY_NAME -PackageVersion $env:STORE_PACKAGE_VERSION `
             -CargoTargetDir "$env:GITHUB_WORKSPACE/store-target" -OutputDirectory "$env:GITHUB_WORKSPACE/store-output"
+      - name: Keep architecture checksums distinct
+        shell: pwsh
+        env:
+          PACKAGE_ARCHITECTURE: ${{ inputs.architecture }}
+        run: Move-Item -LiteralPath store-output/SHA256.json -Destination "store-output/SHA256-$env:PACKAGE_ARCHITECTURE.json"
       - uses: actions/upload-artifact@v7
         with:
           name: meowcal-sub-store-${{ inputs.architecture }}
           path: |
             store-output/*.msix
-            store-output/SHA256.json
+            store-output/SHA256-*.json
           if-no-files-found: error

@@ -47,3 +47,37 @@ try {
 }
 Write-Host 'Store identity, manifest and PE architecture contracts passed.'
 & (Join-Path $PSScriptRoot 'store-direct-diagnostics.Tests.ps1')
+
+$assetRoot = Join-Path ([IO.Path]::GetTempPath()) ('meowcal-release-assets-' + [guid]::NewGuid().ToString('N'))
+New-Item -ItemType Directory -Path $assetRoot | Out-Null
+try {
+    foreach ($architecture in @('x64', 'arm64')) {
+        foreach ($name in @("App-$architecture.msi", "App-$architecture-setup.exe", "App-$architecture-setup.exe.sig", "MeowcalSub-1.2.3.0-$architecture-Release.msix")) {
+            [IO.File]::WriteAllText((Join-Path $assetRoot $name), "fixture $name")
+        }
+    }
+    $checksum = Join-Path $assetRoot 'SHA256SUMS.txt'
+    $verify = Join-Path $PSScriptRoot '..\verify-release-assets.ps1'
+    & $verify -Directory $assetRoot -ChecksumPath $checksum -StorePackageVersion '1.2.3.0'
+    $lines = @(Get-Content -LiteralPath $checksum)
+    if ($lines.Count -ne 6) { throw 'Release checksums must cover four direct installers and two MSIX packages.' }
+    foreach ($architecture in @('x64', 'arm64')) {
+        $name = "MeowcalSub-1.2.3.0-$architecture-Release.msix"
+        $hash = (Get-FileHash -LiteralPath (Join-Path $assetRoot $name) -Algorithm SHA256).Hash.ToLowerInvariant()
+        if ($lines -notcontains "$hash  $name") { throw "Missing or incorrect Store checksum: $name" }
+    }
+    Assert-Throws { & $verify -Directory $assetRoot -ChecksumPath $checksum -StorePackageVersion '1.2.4.0' } 'Expected exactly one Store package'
+    $armPackage = Join-Path $assetRoot 'MeowcalSub-1.2.3.0-arm64-Release.msix'
+    Remove-Item -LiteralPath $armPackage
+    Assert-Throws { & $verify -Directory $assetRoot -ChecksumPath $checksum -StorePackageVersion '1.2.3.0' } 'exactly two Store'
+    [IO.File]::WriteAllText($armPackage, 'restored fixture')
+    [IO.File]::WriteAllText((Join-Path $assetRoot 'stale.msix'), 'stale fixture')
+    Assert-Throws { & $verify -Directory $assetRoot -ChecksumPath $checksum -StorePackageVersion '1.2.3.0' } 'exactly two Store'
+    Remove-Item -LiteralPath (Join-Path $assetRoot 'stale.msix')
+    & $verify -Directory $assetRoot -ChecksumPath $checksum
+    if (@(Get-Content -LiteralPath $checksum).Count -ne 4) { throw 'Direct-only checksum compatibility changed.' }
+} finally {
+    Get-ChildItem -LiteralPath $assetRoot -File | Remove-Item -Force
+    Remove-Item -LiteralPath $assetRoot -Force
+}
+Write-Host 'Store release asset and checksum contracts passed.'

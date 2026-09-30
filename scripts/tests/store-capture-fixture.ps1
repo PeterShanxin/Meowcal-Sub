@@ -12,6 +12,7 @@ public static class FixtureDpi {
 '@
 [FixtureDpi]::SetProcessDpiAwarenessContext([IntPtr](-4)) | Out-Null
 Add-Type -AssemblyName System.Windows.Forms,System.Drawing
+. (Join-Path $PSScriptRoot 'store-fixture-image.ps1')
 $form = New-Object Windows.Forms.Form
 $form.Text = 'Meowcal Store capture test'
 $form.FormBorderStyle = 'None'
@@ -31,11 +32,36 @@ $timer = New-Object Windows.Forms.Timer
 $timer.Interval = 250
 $timer.Add_Tick({ if (Test-Path (Join-Path $OutputDirectory 'stop-fixture')) { $form.Close() } })
 $form.Add_Shown({
-    $form.BringToFront()
-    $form.Activate()
+    $deadline = (Get-Date).AddSeconds(15)
+    do {
+        $form.BringToFront()
+        $form.Activate()
+        $form.Refresh()
+        [Windows.Forms.Application]::DoEvents()
+        $bitmap = New-Object Drawing.Bitmap($form.Width,$form.Height)
+        $expected = New-Object Drawing.Bitmap($form.Width,$form.Height)
+        $graphics = [Drawing.Graphics]::FromImage($bitmap)
+        try {
+            $graphics.CopyFromScreen($form.Location,[Drawing.Point]::Empty,$form.Size)
+            $form.DrawToBitmap($expected,[Drawing.Rectangle]::new(0,0,$form.Width,$form.Height))
+            $visible = [StoreFixtureImage]::IsVisible($expected,$bitmap)
+            $expected.Save((Join-Path $OutputDirectory 'capture-fixture-expected.png'),[Drawing.Imaging.ImageFormat]::Png)
+            $bitmap.Save((Join-Path $OutputDirectory 'capture-fixture.png'),[Drawing.Imaging.ImageFormat]::Png)
+        } finally { $graphics.Dispose(); $bitmap.Dispose(); $expected.Dispose() }
+        if (-not $visible) { Start-Sleep -Milliseconds 100 }
+    } while (-not $visible -and (Get-Date) -lt $deadline)
+    if (-not $visible) {
+        $script:fixtureFailed = $true
+        'Capture fixture is obscured on the physical desktop.' | Set-Content (Join-Path $OutputDirectory 'capture-fixture-error.txt')
+        $form.Close()
+        return
+    }
     @{x=$form.Left;y=$form.Top;width=$form.Width;height=$form.Height;scaleFactor=1} |
         ConvertTo-Json | Set-Content (Join-Path $OutputDirectory 'capture-region.json')
     $timer.Start()
 })
+$script:fixtureFailed = $false
 try { [Windows.Forms.Application]::Run($form) }
 finally { $timer.Dispose(); $form.Dispose() }
+
+if ($script:fixtureFailed) { throw 'Capture fixture is obscured on the physical desktop.' }

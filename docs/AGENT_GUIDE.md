@@ -76,6 +76,10 @@ local branch and worktree survive; remove a finished worktree deliberately with
 ## Release and update contract
 
 - Store builds use `scripts/build-store.ps1` and the `store` Cargo feature.
+  Draft release and preflight prepare both Store architectures through
+  `store-package.yml`, with explicit Partner Center identity and an independent
+  Store version supplied at dispatch. MSIX assets and checksums accompany the
+  draft; submission remains manual and MSIX never enters `latest.json`.
   They exclude the Tauri updater and experimental WinUI helper, and isolate
   default config/engine storage from direct installations. Follow
   [Store distribution](STORE_DISTRIBUTION.md); never publish debug/local
@@ -188,6 +192,11 @@ The browser smoke allocates a free frontend and backend port for each run, so it
 coexists with whatever else is on a shared machine. Never free a port by stopping
 another project's process; set `MEOWCAL_FRONTEND_PORT` and `MEOWCAL_HTTP_PORT` if
 you need fixed addresses.
+
+Hosted Store lifecycle preparation is restricted to disposable runners. Require
+physical fixture visibility and real capture/OCR/translation/overlay results;
+creating a fixture window is not evidence that another Windows screen has not
+obscured it.
 
 Browser mode does not prove Tauri-only capture, OCR, selector, overlay, tray,
 window, installer, or runtime-process behavior.
