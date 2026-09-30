@@ -33,13 +33,17 @@ export function compareStoreVersions(left, right) {
   return 0;
 }
 
-export function assertApp(app) {
+export function assertAppIdentity(app) {
   requireCondition(
     app.id === PRODUCT_ID &&
       app.packageIdentityName === STORE_IDENTITY.name &&
       app.publisherName === STORE_IDENTITY.publisher,
     "store_app_identity_mismatch",
   );
+}
+
+export function assertApp(app) {
+  assertAppIdentity(app);
   requireCondition(!app.pendingApplicationSubmission, "existing_submission_protected");
   requireCondition(
     /^\d+$/.test(app.lastPublishedApplicationSubmission?.id),
@@ -47,7 +51,8 @@ export function assertApp(app) {
   );
 }
 
-export function updateSubmission(submission, release) {
+export function updateSubmission(submission, release, publishMode = "Manual") {
+  requireCondition(["Manual", "Immediate"].includes(publishMode), "publish_mode_invalid");
   requireCondition(submission.status === "PendingCommit", "submission_not_draft");
   requireCondition(
     Array.isArray(submission.applicationPackages) && submission.applicationPackages.length > 0,
@@ -55,7 +60,7 @@ export function updateSubmission(submission, release) {
   );
   requireCondition(submission.pricing?.priceId === "Free", "free_product_required");
   const result = structuredClone(submission);
-  result.targetPublishMode = "Manual";
+  result.targetPublishMode = publishMode;
   for (const pkg of result.applicationPackages) {
     requireCondition(pkg.fileStatus === "Uploaded", "unexpected_package_state");
     requireCondition(
@@ -128,8 +133,9 @@ export function createStoreClient(credentials, fetchImpl = fetch) {
     const allowed =
       method === "GET" ||
       (method === "POST" && suffix === "/submissions") ||
+      (method === "POST" && /^\/submissions\/\d+\/commit$/.test(suffix)) ||
       (method === "PUT" && /^\/submissions\/\d+$/.test(suffix));
-    requireCondition(allowed && !suffix.includes("commit"), "operation_forbidden");
+    requireCondition(allowed, "operation_forbidden");
     const response = await request(
       `${API}/applications/${PRODUCT_ID}${suffix}`,
       {
@@ -172,10 +178,18 @@ export function createStoreClient(credentials, fetchImpl = fetch) {
       requireCondition(/^\d+$/.test(id), "invalid_submission_id");
       return api("GET", `/submissions/${id}`);
     },
+    getStatus: (id) => {
+      requireCondition(/^\d+$/.test(id), "invalid_submission_id");
+      return api("GET", `/submissions/${id}/status`);
+    },
     create: () => api("POST", "/submissions"),
     update: (id, body) => {
       requireCondition(/^\d+$/.test(id), "invalid_submission_id");
       return api("PUT", `/submissions/${id}`, body);
+    },
+    commit: (id) => {
+      requireCondition(/^\d+$/.test(id), "invalid_submission_id");
+      return api("POST", `/submissions/${id}/commit`);
     },
     async upload(url, bytes, md5) {
       let parsed;
@@ -220,21 +234,13 @@ export function createStoreClient(credentials, fetchImpl = fetch) {
   };
 }
 
-export async function stageDraft(
-  client,
-  release,
-  bundle,
-  { stage = false, commit = false, onCreated = () => {} } = {},
-) {
-  requireCondition(!commit, "commit_forbidden");
-  requireCondition(stage === true, "explicit_stage_required");
-  await client.authenticate();
+async function stageSubmission(client, release, bundle, publishMode, onCreated) {
   const app = await client.getApp();
   assertApp(app);
   const published = await client.getSubmission(app.lastPublishedApplicationSubmission.id);
   requireCondition(published.status === "Published", "published_submission_not_ready");
   // Validate all metadata/version changes before creating any draft.
-  updateSubmission({ ...published, status: "PendingCommit" }, release);
+  updateSubmission({ ...published, status: "PendingCommit" }, release, publishMode);
   const current = await client.getApp();
   assertApp(current);
   requireCondition(
@@ -244,7 +250,7 @@ export async function stageDraft(
   const created = await client.create();
   requireCondition(/^\d+$/.test(created.id), "invalid_created_submission");
   onCreated(created.id);
-  const payload = updateSubmission(created, release);
+  const payload = updateSubmission(created, release, publishMode);
   const ownership = await client.getApp();
   requireCondition(
     ownership.pendingApplicationSubmission?.id === created.id,
@@ -254,7 +260,7 @@ export async function stageDraft(
   await client.upload(created.fileUploadUrl, bundle.bytes, bundle.md5);
   const after = await client.getSubmission(created.id);
   requireCondition(
-    after.status === "PendingCommit" && after.targetPublishMode === "Manual",
+    after.status === "PendingCommit" && after.targetPublishMode === publishMode,
     "staged_state_unconfirmed",
   );
   for (const pkg of payload.applicationPackages.filter(
@@ -288,4 +294,111 @@ export async function stageDraft(
     status: "PendingCommit",
     committed: false,
   };
+}
+
+export async function stageDraft(
+  client,
+  release,
+  bundle,
+  { stage = false, commit = false, onCreated = () => {} } = {},
+) {
+  requireCondition(!commit, "commit_forbidden");
+  requireCondition(stage === true, "explicit_stage_required");
+  await client.authenticate();
+  return stageSubmission(client, release, bundle, "Manual", onCreated);
+}
+
+const SUBMITTED = new Set([
+  "CommitStarted",
+  "PreProcessing",
+  "Certification",
+  "Release",
+  "PendingPublication",
+  "Publishing",
+  "Published",
+]);
+const FAILED = new Set([
+  "CommitFailed",
+  "PreProcessingFailed",
+  "CertificationFailed",
+  "ReleaseFailed",
+  "PublishFailed",
+  "Canceled",
+]);
+
+export function submissionStatus(status) {
+  requireCondition(typeof status === "string", "store_status_invalid");
+  requireCondition(!FAILED.has(status), `store_${status.toLowerCase()}`);
+  requireCondition(SUBMITTED.has(status), "store_status_unexpected");
+  return status;
+}
+
+export async function submitRelease(client, release, bundle, onCreated = () => {}) {
+  await client.authenticate();
+  const app = await client.getApp();
+  assertAppIdentity(app);
+  if (app.pendingApplicationSubmission) {
+    const pending = await client.getSubmission(app.pendingApplicationSubmission.id);
+    const files = ["x64", "arm64"].map(
+      (arch) => `MeowcalSub-${release.storeVersion}-${arch}-Release.msix`,
+    );
+    requireCondition(
+      pending.targetPublishMode === "Immediate" &&
+        Object.values(pending.listings ?? {}).length > 0 &&
+        Object.values(pending.listings).every(
+          (listing) => listing.baseListing?.releaseNotes === release.notes,
+        ) &&
+        files.every((name) => pending.applicationPackages?.some((pkg) => pkg.fileName === name)),
+      "existing_submission_protected",
+    );
+    const current = await client.getStatus(pending.id);
+    return { submissionId: pending.id, status: submissionStatus(current.status), reused: true };
+  }
+  const published = await client.getSubmission(app.lastPublishedApplicationSubmission?.id);
+  requireCondition(published.status === "Published", "published_submission_not_ready");
+  const versions = published.applicationPackages?.map((pkg) => pkg.version) ?? [];
+  requireCondition(versions.length > 0, "published_packages_missing");
+  if (versions.every((version) => compareStoreVersions(release.storeVersion, version) === 0)) {
+    requireCondition(
+      ["x64", "arm64"].every((arch) =>
+        published.applicationPackages.some(
+          (pkg) => pkg.fileName === `MeowcalSub-${release.storeVersion}-${arch}-Release.msix`,
+        ),
+      ) &&
+        Object.values(published.listings ?? {}).length > 0 &&
+        Object.values(published.listings).every(
+          (listing) => listing.baseListing?.releaseNotes === release.notes,
+        ),
+      "store_version_not_increasing",
+    );
+    return { submissionId: published.id, status: "Published", reused: true };
+  }
+  const staged = await stageSubmission(client, release, bundle, "Immediate", onCreated);
+  const current = await client.getApp();
+  requireCondition(
+    current.pendingApplicationSubmission?.id === staged.submissionId,
+    "submission_ownership_changed",
+  );
+  let committed;
+  try {
+    committed = await client.commit(staged.submissionId);
+  } catch {
+    // A transport failure can follow a successful POST. Read status; never send a second commit.
+    committed = await client.getStatus(staged.submissionId);
+  }
+  return {
+    submissionId: staged.submissionId,
+    status: submissionStatus(committed.status),
+    reused: false,
+  };
+}
+
+export async function reportSubmissionStatus(client) {
+  await client.authenticate();
+  const app = await client.getApp();
+  assertAppIdentity(app);
+  const id = app.pendingApplicationSubmission?.id ?? app.lastPublishedApplicationSubmission?.id;
+  requireCondition(/^\d+$/.test(id), "submission_missing");
+  const status = await client.getStatus(id);
+  return { submissionId: id, status: submissionStatus(status.status) };
 }

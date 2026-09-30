@@ -1,0 +1,114 @@
+name: Sync GitHub Release to Store
+
+on:
+  release:
+    types: [published]
+  schedule:
+    - cron: "17 * * * *"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: store-release-sync-${{ github.repository }}
+  cancel-in-progress: false
+
+jobs:
+  submit:
+    name: Verify and submit Store release
+    if: >-
+      github.event_name == 'release' &&
+      github.repository == 'PeterShanxin/Meowcal-Sub' &&
+      !github.event.release.draft &&
+      !github.event.release.prerelease &&
+      (github.actor == 'PeterShanxin' || github.actor == 'ianmeowmeow') &&
+      github.actor != 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    environment: store-submission-draft
+    steps:
+      - name: Require explicit automation activation
+        id: activation
+        env:
+          STORE_RELEASE_AUTOMATION_ENABLED: ${{ vars.STORE_RELEASE_AUTOMATION_ENABLED }}
+        run: |
+          if [ "$STORE_RELEASE_AUTOMATION_ENABLED" = true ]; then
+            echo 'active=true' >> "$GITHUB_OUTPUT"
+          else
+            echo 'Store release automation is inactive.'
+          fi
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        if: steps.activation.outputs.active == 'true'
+        with:
+          ref: main
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        if: steps.activation.outputs.active == 'true'
+        with:
+          node-version: 24
+      - name: Wait for complete published assets and verify package provenance
+        if: steps.activation.outputs.active == 'true'
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          RELEASE_COMMIT: ${{ github.sha }}
+        run: |
+          for attempt in $(seq 1 15); do
+            result=$(node scripts/store-submission-cli.mjs --tag "$RELEASE_TAG" --commit "$RELEASE_COMMIT" 2>&1) && {
+              echo "$result"
+              exit 0
+            }
+            case "$result" in
+              release_assets_missing|release_assets_unexpected|release_digest_missing)
+                echo "Release assets are not complete (attempt $attempt/15)."
+                sleep 60
+                ;;
+              *) echo "$result"; exit 1 ;;
+            esac
+          done
+          echo 'release_assets_not_ready'
+          exit 1
+      - name: Submit verified packages for certification and immediate publication
+        if: steps.activation.outputs.active == 'true'
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          RELEASE_COMMIT: ${{ github.sha }}
+          AZURE_AD_TENANT_ID: ${{ secrets.AZURE_AD_TENANT_ID }}
+          AZURE_AD_APPLICATION_CLIENT_ID: ${{ secrets.AZURE_AD_APPLICATION_CLIENT_ID }}
+          AZURE_AD_APPLICATION_SECRET: ${{ secrets.AZURE_AD_APPLICATION_SECRET }}
+          SELLER_ID: ${{ secrets.SELLER_ID }}
+        run: node scripts/store-submission-cli.mjs --tag "$RELEASE_TAG" --commit "$RELEASE_COMMIT" --auto true
+
+  status:
+    name: Report Store certification status
+    if: github.event_name == 'schedule' && github.repository == 'PeterShanxin/Meowcal-Sub'
+    runs-on: ubuntu-latest
+    environment: store-submission-draft
+    steps:
+      - name: Require explicit automation activation
+        id: activation
+        env:
+          STORE_RELEASE_AUTOMATION_ENABLED: ${{ vars.STORE_RELEASE_AUTOMATION_ENABLED }}
+        run: |
+          if [ "$STORE_RELEASE_AUTOMATION_ENABLED" = true ]; then
+            echo 'active=true' >> "$GITHUB_OUTPUT"
+          else
+            echo 'Store release automation is inactive.'
+          fi
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        if: steps.activation.outputs.active == 'true'
+        with:
+          ref: main
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        if: steps.activation.outputs.active == 'true'
+        with:
+          node-version: 24
+      - name: Read current submission status
+        if: steps.activation.outputs.active == 'true'
+        env:
+          AZURE_AD_TENANT_ID: ${{ secrets.AZURE_AD_TENANT_ID }}
+          AZURE_AD_APPLICATION_CLIENT_ID: ${{ secrets.AZURE_AD_APPLICATION_CLIENT_ID }}
+          AZURE_AD_APPLICATION_SECRET: ${{ secrets.AZURE_AD_APPLICATION_SECRET }}
+          SELLER_ID: ${{ secrets.SELLER_ID }}
+        run: node scripts/store-submission-cli.mjs --status true

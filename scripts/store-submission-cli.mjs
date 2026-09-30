@@ -10,6 +10,8 @@ import {
   requireCondition,
   safeFailure,
   stageDraft,
+  submitRelease,
+  reportSubmissionStatus,
 } from "./store-submission.mjs";
 
 const root = path.dirname(fileURLToPath(import.meta.url));
@@ -25,13 +27,27 @@ async function main() {
     argumentsMap.set(process.argv[i], process.argv[i + 1]);
   }
   const stage = argumentsMap.get("--stage") === "true";
+  const automatic = argumentsMap.get("--auto") === "true";
+  const statusOnly = argumentsMap.get("--status") === "true";
   requireCondition(
-    [...argumentsMap.keys()].every((key) => ["--tag", "--commit", "--stage"].includes(key)) &&
-      argumentsMap.has("--tag") &&
-      argumentsMap.has("--commit") &&
-      (!argumentsMap.has("--stage") || ["true", "false"].includes(argumentsMap.get("--stage"))),
+    [...argumentsMap.keys()].every((key) =>
+      ["--tag", "--commit", "--stage", "--auto", "--status"].includes(key),
+    ) &&
+      (!argumentsMap.has("--stage") || ["true", "false"].includes(argumentsMap.get("--stage"))) &&
+      (!argumentsMap.has("--auto") || ["true", "false"].includes(argumentsMap.get("--auto"))) &&
+      (!argumentsMap.has("--status") || ["true", "false"].includes(argumentsMap.get("--status"))) &&
+      Number(stage) + Number(automatic) + Number(statusOnly) <= 1 &&
+      (statusOnly || (argumentsMap.has("--tag") && argumentsMap.has("--commit"))),
     "arguments_invalid",
   );
+  if (statusOnly) {
+    requireCondition(
+      !argumentsMap.has("--tag") && !argumentsMap.has("--commit"),
+      "arguments_invalid",
+    );
+    console.log(JSON.stringify(await reportSubmissionStatus(createStoreClient(process.env))));
+    return;
+  }
   requireCondition(process.env.GITHUB_TOKEN?.length > 0, "github_token_missing");
   const directory = await mkdtemp(path.join(tmpdir(), "meowcal-store-draft-"));
   const release = await prepareRelease(
@@ -65,7 +81,7 @@ async function main() {
       staged: false,
     }),
   );
-  if (!stage) return;
+  if (!stage && !automatic) return;
   const bundlePath = path.join(directory, "submission.zip");
   const result = spawnSync(
     "pwsh",
@@ -85,17 +101,15 @@ async function main() {
   requireCondition(bytes.length > 1000 && bytes.length < 300_000_000, "submission_bundle_invalid");
   const md5 = createHash("md5").update(bytes).digest("base64");
   const client = createStoreClient(process.env);
-  const staged = await stageDraft(
-    client,
-    release,
-    { bytes, md5 },
-    {
-      stage: true,
-      onCreated: (submissionId) =>
-        console.log(JSON.stringify({ submissionId, status: "created_uncommitted" })),
-    },
+  const onCreated = (submissionId) =>
+    console.log(JSON.stringify({ submissionId, status: "created_uncommitted" }));
+  console.log(
+    JSON.stringify(
+      automatic
+        ? await submitRelease(client, release, { bytes, md5 }, onCreated)
+        : await stageDraft(client, release, { bytes, md5 }, { stage: true, onCreated }),
+    ),
   );
-  console.log(JSON.stringify(staged));
 }
 
 try {
