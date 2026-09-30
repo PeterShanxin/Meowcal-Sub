@@ -1,7 +1,7 @@
 # Microsoft Store distribution
 
-For the credential-free draft preparation and later account setup, see
-[Store submission draft setup](STORE_SUBMISSION_SETUP.md).
+For the opt-in release sync, manual draft preparation, and account setup, see
+[Store release submission setup](STORE_SUBMISSION_SETUP.md).
 
 The Store channel uses MSIX. It is separate from the GitHub MSI/NSIS channel;
 Store packages do not contribute to `latest.json` or use the Tauri updater key.
