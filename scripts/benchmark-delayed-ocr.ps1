@@ -16,6 +16,7 @@ try {
     if ($appProcess.HasExited -or $process.HasExited -or
         ($app.CreationDate.ToUniversalTime() - $appProcess.StartTime.ToUniversalTime()).Duration().Ticks -ge 10 -or
         ($ocr.CreationDate.ToUniversalTime() - $process.StartTime.ToUniversalTime()).Duration().Ticks -ge 10 -or
+        $ocr.CreationDate -lt $app.CreationDate -or
         $app.ExecutablePath -ne (Resolve-Path $AppExecutable).Path -or
         $ocr.ParentProcessId -ne $AppPid -or $ocr.Name -ne 'meowcal-core.exe') {
         throw 'The supplied OCR process is not a child of the owned test application.'

@@ -9,7 +9,7 @@ function Assert-Failure([scriptblock]$Action, [string]$Message) {
     }
     throw "Expected failure: $Message"
 }
-function Get-NetTCPConnection { $script:listeners | ForEach-Object { @{ OwningProcess = $_ } } }
+function Get-NetTCPConnection { $script:listeners | ForEach-Object { [pscustomobject]@{ OwningProcess = $_ } } }
 function Get-CimInstance($Class, $Filter) { $script:processes[[int]($Filter.Split('=')[1])] }
 function Invoke-RestMethod { $script:pages }
 
@@ -63,6 +63,24 @@ if ($child.Killed) { throw 'Exited original child triggered cleanup of a reused 
 $child.HasExited = $false
 $child.ExitCompletes = $false
 Assert-Failure { Resume-BenchmarkOcr $child } 'cleanup timed out'
+
+# Exercise the actual preflight without loading native suspension or opening a socket.
+$benchmarkPath = Join-Path (Split-Path -Parent $PSScriptRoot) 'benchmark-delayed-ocr.ps1'
+$tokens = $null
+$parseErrors = $null
+$ast = [Management.Automation.Language.Parser]::ParseFile($benchmarkPath, [ref]$tokens, [ref]$parseErrors)
+$validation = $ast.Find({param($node) $node -is [Management.Automation.Language.IfStatementAst] -and $node.Extent.Text.Contains('$ocr.ParentProcessId')}, $false)
+$validateChild = [scriptblock]::Create($validation.Extent.Text)
+$AppExecutable = $benchmarkPath
+$AppPid = 100
+$appProcess = [pscustomobject]@{HasExited=$false;StartTime=$created}
+$process = [pscustomobject]@{HasExited=$false;StartTime=$created.AddSeconds(-1)}
+$app = [pscustomobject]@{CreationDate=$created;ExecutablePath=$benchmarkPath}
+$ocr = [pscustomobject]@{CreationDate=$process.StartTime;ParentProcessId=100;Name='meowcal-core.exe'}
+Assert-Failure { & $validateChild } 'not a child'
+$process.StartTime = $created.AddSeconds(1)
+$ocr.CreationDate = $process.StartTime
+& $validateChild
 node --test (Join-Path $PSScriptRoot 'benchmark-stop.test.mjs')
 if ($LASTEXITCODE -ne 0) { throw 'Benchmark session regression tests failed.' }
 Write-Host 'Benchmark endpoint and OCR cleanup regressions passed.'
