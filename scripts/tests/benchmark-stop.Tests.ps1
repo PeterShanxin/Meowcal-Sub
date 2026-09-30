@@ -84,3 +84,4 @@ $ocr.CreationDate = $process.StartTime
 node --test (Join-Path $PSScriptRoot 'benchmark-stop.test.mjs')
 if ($LASTEXITCODE -ne 0) { throw 'Benchmark session regression tests failed.' }
 Write-Host 'Benchmark endpoint and OCR cleanup regressions passed.'
+& (Join-Path $PSScriptRoot 'benchmark-delayed-failure.Tests.ps1')

@@ -46,7 +46,9 @@ function Invoke-BenchmarkScript([string]$Expression) {
 
 function Resume-BenchmarkOcr($Process) {
     $status = [OcrDelay]::NtResumeProcess($Process.Handle)
-    if ($Process.HasExited) { throw 'The original OCR process exited during the benchmark.' }
+    if ($Process.HasExited) {
+        throw "The original OCR process exited during the benchmark (resume status=$status, exit code=$($Process.ExitCode)). Benchmark invalid."
+    }
     if ($status -ne 0) {
         # The retained handle identifies the original child even if its PID is reused.
         try { $Process.Kill() } catch { throw "OCR resume failed ($status); original child cleanup failed: $_" }

@@ -7,6 +7,7 @@ param(
 $ErrorActionPreference = 'Stop'
 $appProcess = Get-Process -Id $AppPid
 $process = $null
+$result = $null
 try {
     $process = Get-Process -Id $OcrPid
     $null = $appProcess.Handle
@@ -43,6 +44,20 @@ public static class OcrDelay {
         $result = Invoke-BenchmarkScript '(async()=>{const b=window.TauriBridge;if(!await b.invoke("is_translation_running"))throw new Error("Capture session exited before delayed OCR measurement");const t=performance.now();await b.invoke("stop_translation");const stopMs=performance.now()-t;const running=await b.invoke("is_translation_running");let error=null;try{await b.invoke("start_translation")}catch(e){error=String(e)}return {stopMs,running,error};})()'
     } finally { Resume-BenchmarkOcr $process }
     $result | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $OutputFile
+} catch {
+    $failure = $_
+    $evidence = [ordered]@{valid=$false;error=$failure.Exception.Message;appPid=$AppPid;ocrPid=$OcrPid}
+    if ($result) {
+        $evidence.attemptedMeasurement = @{stopMs=$result.stopMs;running=$result.running;restartError=$result.error}
+    }
+    if ($process) {
+        $evidence.ocrExited = $process.HasExited
+        if ($process.HasExited) { $evidence.ocrExitCode = $process.ExitCode }
+    }
+    try {
+        $evidence | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath "$OutputFile.failure.json"
+    } catch { Write-Warning 'Could not persist the invalid delayed-OCR diagnostic.' }
+    throw $failure
 } finally {
     if ($script:socket) { $script:socket.Dispose() }
     if ($process) { $process.Dispose() }
