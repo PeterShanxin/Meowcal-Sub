@@ -1,4 +1,28 @@
-# Store submission draft setup
+# Store release submission setup
+
+The [release sync workflow](../.github/workflows/store-release-sync.yml) is
+inactive until `STORE_RELEASE_AUTOMATION_ENABLED=true` is deliberately set in
+the `store-submission-draft` GitHub environment. Once enabled, publishing a
+stable GitHub release by a trusted maintainer verifies its complete assets,
+stages both MSIX packages and the canonical 300 × 300 logo, commits the Store
+submission for certification, and requests `Immediate` publication after Store
+approval. A scheduled read-only Store status check reports certification and
+publication progress each hour. Microsoft still decides whether certification
+succeeds and when the package becomes available.
+
+Do not enable the workflow while an existing Store submission is pending. It
+never deletes or changes an existing draft. A matching submission already in
+certification is reported without another commit; a pending uncommitted draft
+stops the run for deliberate recovery. A failed upload leaves the created draft
+in place. GitHub release assets are retried for up to 15 minutes while upload
+metadata is incomplete, then the run fails without contacting Partner Center.
+
+The GitHub release must already be published for the event to fire. This
+repository creates a draft release first and a maintainer publishes it after
+checking assets. A release published by another workflow with the repository
+`GITHUB_TOKEN` does not trigger `release.published`; use an independently
+authorized GitHub App token if release publication itself later becomes fully
+automated. The sync workflow does not create tags or releases.
 
 The [Prepare Store Submission Draft](../.github/workflows/store-submission-draft.yml)
 workflow is limited to Meowcal Sub product `9NNK2X23VLWT`. Its default run checks
@@ -7,40 +31,39 @@ a published GitHub release without contacting Partner Center. An explicit
 contains both production MSIX packages, the 300 × 300 listing icon, and release
 notes. The workflow contains no commit, certification or publication operation.
 
-## Before enabling staging
+## Before enabling automatic submission
 
-1. In Partner Center, check this account's **Account settings → User
-   management / Microsoft Entra applications** and whether an Entra directory
-   and application can be associated with the account. This has not been
-   verified for the existing individual account. It is an eligibility check,
-   not a request to change the account type or register a company. Confirm the
+1. In Partner Center, confirm that the associated MeowcalStudio Entra application
+   has the **Manager** role and the existing account can use the submission API.
+   The account connection and actual API eligibility have not yet been tested.
+   Confirm the
    product has a completed first submission with age ratings, is a free product,
    and uses neither mandatory app updates nor Store-managed consumables. The
    Store CLI GitHub recipe supports free products; this workflow uses the
    [MSIX submission API](https://learn.microsoft.com/en-us/windows/uwp/monetize/create-and-manage-submissions-using-windows-store-services).
-2. If eligible and separately approved, associate a dedicated Microsoft Entra
-   application with Partner Center. Microsoft's API guide requires the
-   **Manager** role for that application. The tenant administrator may need to
-   create or link the directory/application first. Record the tenant ID,
-   application client ID and Seller ID from the account. Do not create a tenant,
-   grant Manager, or generate a client secret as part of this code PR.
-3. If separately approved, create the GitHub environment
-   `store-submission-draft` with required reviewers, then enter its secrets
+2. The `store-submission-draft` GitHub environment currently has these four
+   secret names:
    `AZURE_AD_TENANT_ID`, `AZURE_AD_APPLICATION_CLIENT_ID`,
-   `AZURE_AD_APPLICATION_SECRET`, and `SELLER_ID`. Set the environment variable
-   `STORE_DRAFT_STAGING_ENABLED` to `true` only after access is tested and
-   approved. `SELLER_ID` is recorded as part of the account setup; this
+   `AZURE_AD_APPLICATION_SECRET`, and `SELLER_ID`. Their values have not been
+   read or verified. The environment currently has no required reviewers and
+   no branch restriction; activation therefore grants unattended release-time
+   access to these credentials. Review that access policy before enabling it.
+   `SELLER_ID` is recorded as part of the account setup; this
    particular REST endpoint authenticates via the tenant/client application
    and fixes the target product ID in source. Enter secrets only in GitHub's
    protected environment, never in workflow inputs, a PR, a local config or
    logs. Store the secret expiration date in an approved credential inventory;
    arrange rotation before expiration and revoke the old key afterward.
-4. Check Partner Center for a pending submission, including a manually edited
+3. Check Partner Center for a pending submission, including a manually edited
    draft. If one exists, finish or cancel it through its existing owner before
-   staging. The workflow also checks `pendingApplicationSubmission` twice and
-   refuses to mutate it. It never deletes/recreates someone else's draft.
+   activation. The workflow refuses to mutate an existing draft.
+4. After the code PR is reviewed and merged, and after deciding to permit
+   unattended submission, set the environment variable
+   `STORE_RELEASE_AUTOMATION_ENABLED` to `true`. Do not set it while testing
+   this PR. The existing manual draft workflow has a separate
+   `STORE_DRAFT_STAGING_ENABLED` switch; neither switch enables the other.
 
-## Running the workflow
+## Manual verification and draft workflow
 
 Open **Actions → Prepare Store Submission Draft → Run workflow** on `main`.
 Provide the tag of an already published canonical release and its **exact**
@@ -72,8 +95,8 @@ will refuse it. Review the staged package versions, architectures, listing icon,
 release notes and retained metadata before any later certification action.
 Microsoft warns that editing an API-created submission in the Partner Center
 UI can leave it impossible to change or commit through the API. Keep edits and
-future commit through the API, or stop and plan an explicit recovery. No later
-commit or publication workflow is included here.
+future commit through the API, or stop and plan an explicit recovery. The
+automatic release workflow will not adopt or commit this manual draft.
 
 Microsoft's [`msstore publish --noCommit`](https://learn.microsoft.com/en-us/windows/apps/publish/msstore-dev-cli/commands)
 can stage a CLI-managed draft, but `msstore publish` recreates a draft from the
@@ -82,4 +105,6 @@ This workflow calls the
 [`manage.devcenter.microsoft.com` MSIX app submission API](https://learn.microsoft.com/en-us/windows/uwp/monetize/manage-app-submissions),
 not the separate EXE/MSI Store API. Its single ZIP uses the upload URL returned
 by the newly created submission. The Store may not validate package content
-until a later explicit commit; an uncommitted draft is not a certified update.
+until commit; an uncommitted draft is not a certified update. `Immediate`
+requests publication after successful certification; `CommitStarted` is not
+proof of certification or availability.

@@ -79,7 +79,11 @@ local branch and worktree survive; remove a finished worktree deliberately with
   Draft release and preflight prepare both Store architectures through
   `store-package.yml`, with explicit Partner Center identity and an independent
   Store version supplied at dispatch. MSIX assets and checksums accompany the
-  draft; submission remains manual and MSIX never enters `latest.json`.
+  draft; MSIX never enters `latest.json`. `store-release-sync.yml` remains
+  inactive until its environment switch is enabled; after a trusted stable
+  GitHub release is published it verifies assets, commits the Store submission
+  with `Immediate` publication, and reports certification status hourly.
+  Existing drafts are protected and never deleted automatically.
   They exclude the Tauri updater and experimental WinUI helper, and isolate
   default config/engine storage from direct installations. Follow
   [Store distribution](STORE_DISTRIBUTION.md); never publish debug/local

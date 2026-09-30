@@ -5,6 +5,8 @@ import {
   createStoreClient,
   safeFailure,
   stageDraft,
+  submitRelease,
+  reportSubmissionStatus,
   updateSubmission,
 } from "../../scripts/store-submission.mjs";
 import {
@@ -217,6 +219,160 @@ describe("draft protection and metadata", () => {
       "existing_submission_protected",
     );
     expect(calls).toEqual(["app", "app"]);
+  });
+});
+
+describe("automatic release submission", () => {
+  it("commits the verified new draft with immediate publication mode", async () => {
+    const calls = [];
+    let created = false;
+    let updated;
+    const client = {
+      authenticate: async () => calls.push("auth"),
+      getApp: async () => app(created ? { id: "2" } : null),
+      getSubmission: async (id) => (id === "1" ? published() : updated),
+      create: async () => {
+        created = true;
+        calls.push("create");
+        return { ...published(), id: "2", status: "PendingCommit", fileUploadUrl: "sas" };
+      },
+      update: async (_id, body) => {
+        updated = body;
+        calls.push("update");
+      },
+      upload: async () => calls.push("upload"),
+      commit: async () => {
+        calls.push("commit");
+        return { status: "CommitStarted" };
+      },
+    };
+    const result = await submitRelease(client, release, { bytes: Buffer.from("zip") });
+    expect(result).toEqual({ submissionId: "2", status: "CommitStarted", reused: false });
+    expect(updated.targetPublishMode).toBe("Immediate");
+    expect(calls).toEqual(["auth", "create", "update", "upload", "commit"]);
+  });
+  it("never modifies a pre-existing manual draft", async () => {
+    const calls = [];
+    const client = {
+      authenticate: async () => {},
+      getApp: async () => app({ id: "2" }),
+      getSubmission: async () => published(),
+      create: async () => calls.push("create"),
+      commit: async () => calls.push("commit"),
+    };
+    await expect(submitRelease(client, release, {})).rejects.toThrow(
+      "existing_submission_protected",
+    );
+    expect(calls).toEqual([]);
+  });
+  it("reports a matching in-flight submission without committing again", async () => {
+    const calls = [];
+    const pending = updateSubmission(
+      { ...published(), id: "2", status: "PendingCommit" },
+      release,
+      "Immediate",
+    );
+    const client = {
+      authenticate: async () => {},
+      getApp: async () => app({ id: "2" }),
+      getSubmission: async () => pending,
+      getStatus: async () => ({ status: "Certification" }),
+      create: async () => calls.push("create"),
+      commit: async () => calls.push("commit"),
+    };
+    expect(await submitRelease(client, release, {})).toEqual({
+      submissionId: "2",
+      status: "Certification",
+      reused: true,
+    });
+    expect(calls).toEqual([]);
+  });
+  it("does not treat a different published release with the same Store version as its own", async () => {
+    const prior = {
+      ...published(),
+      applicationPackages: [
+        { fileName: "other.msix", version: release.storeVersion, fileStatus: "Uploaded" },
+      ],
+    };
+    const client = {
+      authenticate: async () => {},
+      getApp: async () => app(),
+      getSubmission: async () => prior,
+    };
+    await expect(submitRelease(client, release, {})).rejects.toThrow(
+      "store_version_not_increasing",
+    );
+  });
+  it("checks status after an ambiguous commit response without posting a second commit", async () => {
+    let created = false;
+    let updated;
+    let commits = 0;
+    const client = {
+      authenticate: async () => {},
+      getApp: async () => app(created ? { id: "2" } : null),
+      getSubmission: async (id) => (id === "1" ? published() : updated),
+      create: async () => {
+        created = true;
+        return { ...published(), id: "2", status: "PendingCommit" };
+      },
+      update: async (_id, body) => {
+        updated = body;
+      },
+      upload: async () => {},
+      commit: async () => {
+        commits++;
+        throw Error("network timeout");
+      },
+      getStatus: async () => ({ status: "PreProcessing" }),
+    };
+    expect((await submitRelease(client, release, {})).status).toBe("PreProcessing");
+    expect(commits).toBe(1);
+  });
+  it("reports certification failure by stable code without exposing status details", async () => {
+    const client = {
+      authenticate: async () => {},
+      getApp: async () => app({ id: "2" }),
+      getStatus: async () => ({
+        status: "CertificationFailed",
+        statusDetails: { errors: ["private"] },
+      }),
+    };
+    const error = await reportSubmissionStatus(client).catch((caught) => caught);
+    expect(safeFailure(error)).toBe("store_certificationfailed");
+    expect(safeFailure(error)).not.toContain("private");
+  });
+  it("uses only the product-scoped status and commit endpoints", async () => {
+    const requests = [];
+    const credentials = {
+      AZURE_AD_TENANT_ID: "a".repeat(36),
+      AZURE_AD_APPLICATION_CLIENT_ID: "b".repeat(36),
+      AZURE_AD_APPLICATION_SECRET: "mock-secret",
+      SELLER_ID: "mock-seller",
+    };
+    const client = createStoreClient(credentials, async (url, options) => {
+      requests.push([url, options.method]);
+      return {
+        ok: true,
+        json: async () =>
+          new URL(url).hostname === "login.microsoftonline.com"
+            ? { access_token: "mock-token" }
+            : { status: "CommitStarted" },
+      };
+    });
+    await client.authenticate();
+    expect((await client.commit("2")).status).toBe("CommitStarted");
+    expect((await client.getStatus("2")).status).toBe("CommitStarted");
+    expect(requests.slice(1)).toEqual([
+      [
+        "https://manage.devcenter.microsoft.com/v1.0/my/applications/9NNK2X23VLWT/submissions/2/commit",
+        "POST",
+      ],
+      [
+        "https://manage.devcenter.microsoft.com/v1.0/my/applications/9NNK2X23VLWT/submissions/2/status",
+        "GET",
+      ],
+    ]);
+    expect(() => client.commit("other")).toThrow("invalid_submission_id");
   });
 });
 
