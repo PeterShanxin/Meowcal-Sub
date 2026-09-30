@@ -281,6 +281,42 @@ describe("release and preflight share one asset contract", () => {
   });
 });
 
+describe("release prepares both Store architectures", () => {
+  it("uses the same explicit Store identity and version for both native builds", () => {
+    for (const name of ["release.yml", "release-preflight.yml"]) {
+      const contents = readWorkflow(name);
+      const job = splitWorkflowJobs(contents).find((entry) => entry.name === "store-packages");
+      expect(job, name).toBeDefined();
+      const text = jobText(job);
+      expect(text).toContain("architecture: [x64, arm64]");
+      expect(text).toContain("uses: ./.github/workflows/store-package.yml");
+      expect(text).not.toContain("secrets: inherit");
+      for (const input of [
+        "package_name",
+        "publisher",
+        "publisher_display_name",
+        "package_version",
+      ]) {
+        expect(text).toContain(`inputs.store_${input}`);
+      }
+      const assets = splitWorkflowJobs(contents).find((entry) =>
+        ["draft-release", "assets"].includes(entry.name),
+      );
+      expect(jobText(assets)).toContain("- store-packages");
+      expect(jobText(assets)).toContain("-StorePackageVersion $env:STORE_PACKAGE_VERSION");
+    }
+  });
+
+  it("publishes MSIX alongside direct installers without putting it in the updater", () => {
+    expect(readWorkflow("release.yml")).toContain('$_.Extension -eq ".msix"');
+    const workflow = readWorkflow("store-package.yml");
+    expect(workflow).toMatch(/^ {2}workflow_call:$/m);
+    expect(workflow).toContain("store-output/SHA256-*.json");
+    expect(workflow).not.toContain("secrets:");
+    expect(workflow).not.toContain("gh release");
+  });
+});
+
 describe("Core release and preflight share one asset contract", () => {
   it("builds both architectures through the native Core packager", () => {
     const contents = readWorkflow("core-package.yml");
@@ -324,8 +360,14 @@ describe("host trust is PeterShanxin and ianmeowmeow only", () => {
       "core-release.yml": ["validate", "package-x64", "package-arm64", "release"],
       "core-release-preflight.yml": ["package-x64", "package-arm64", "assets"],
       "package.yml": ["package"],
-      "release.yml": ["validate", "package-x64", "package-arm64", "draft-release"],
-      "release-preflight.yml": ["package-x64", "package-arm64", "assets"],
+      "release.yml": [
+        "validate",
+        "package-x64",
+        "package-arm64",
+        "store-packages",
+        "draft-release",
+      ],
+      "release-preflight.yml": ["package-x64", "package-arm64", "store-packages", "assets"],
       "publish-legacy-update-bridge.yml": ["publish"],
     };
     for (const [name, jobNames] of Object.entries(expected)) {

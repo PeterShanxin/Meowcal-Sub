@@ -56,18 +56,25 @@ cache: a release build starts cold.
 
 ## What a release run produces
 
-Microsoft Store MSIX builds use a separate artifact-only workflow and explicit
-Partner Center identity. See [Store distribution](STORE_DISTRIBUTION.md) for
-builds, channel isolation and certification gates. They do not enter the GitHub
-release/updater asset set described below.
+Release and preflight also call `store-package.yml` for native x64 and ARM64
+unsigned MSIX packages. Supply `store_package_name`, `store_publisher`,
+`store_publisher_display_name` and `store_package_version` at dispatch. The
+identity comes from Partner Center; the Store version remains an explicit,
+independently increasing delivery number. Release validates it before reserving
+the application tag. No application version is inferred or changed.
 
 `.github/workflows/release.yml` reserves the tag, calls `package.yml` once per
 architecture, then merges the artifacts and validates them. Each architecture
 must contribute exactly one MSI, one NSIS setup executable, and one updater
-signature. `scripts/verify-release-assets.ps1` enforces that and writes
+signature, plus one Release MSIX with the requested Store version.
+`scripts/verify-release-assets.ps1` enforces that and writes
 `SHA256SUMS.txt`; `scripts/build-updater-manifest.mjs` writes `latest.json`,
 which is where the updater reads the per-architecture installer URL and its
-minisign signature.
+minisign signature. The draft release attaches both unsigned MSIX packages and
+`SHA256SUMS.txt` covers the four direct installers and both MSIX packages.
+Store packages never enter `latest.json`; they remain subject to manual
+Partner Center submission and certification. The artifact-only Store workflow
+can still be dispatched independently. See [Store distribution](STORE_DISTRIBUTION.md).
 
 The `.sig` files are not published. The updater reads the signature text out of
 `latest.json` and never fetches a separate file.

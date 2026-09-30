@@ -16,6 +16,23 @@ name: Release Preflight
 
 on:
   workflow_dispatch:
+    inputs:
+      store_package_name:
+        description: Partner Center Package/Identity/Name
+        required: true
+        type: string
+      store_publisher:
+        description: Partner Center Package/Identity/Publisher
+        required: true
+        type: string
+      store_publisher_display_name:
+        description: Partner Center PublisherDisplayName
+        required: true
+        type: string
+      store_package_version:
+        description: Independent Store version (nonzero major, fourth component 0)
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -51,6 +68,25 @@ jobs:
     permissions:
       contents: read
 
+  store-packages:
+    name: Store MSIX (${{ matrix.architecture }})
+    if: >-
+      (github.actor == 'PeterShanxin' || github.actor == 'ianmeowmeow') &&
+      github.actor != 'dependabot[bot]'
+    strategy:
+      fail-fast: false
+      matrix:
+        architecture: [x64, arm64]
+    uses: ./.github/workflows/store-package.yml
+    with:
+      architecture: ${{ matrix.architecture }}
+      package_name: ${{ inputs.store_package_name }}
+      publisher: ${{ inputs.store_publisher }}
+      publisher_display_name: ${{ inputs.store_publisher_display_name }}
+      package_version: ${{ inputs.store_package_version }}
+    permissions:
+      contents: read
+
   assets:
     name: Validate release assets
     if: >-
@@ -59,6 +95,7 @@ jobs:
     needs:
       - package-x64
       - package-arm64
+      - store-packages
     runs-on: ubuntu-latest
     # Deliberately read-only. This workflow must not be able to reserve a tag or
     # create a release even if someone later adds a step that tries.
@@ -100,10 +137,13 @@ jobs:
 
       - name: Verify assets and write checksums
         shell: pwsh
+        env:
+          STORE_PACKAGE_VERSION: ${{ inputs.store_package_version }}
         run: >-
           ./scripts/verify-release-assets.ps1
           -Directory release-assets
           -ChecksumPath release-assets/SHA256SUMS.txt
+          -StorePackageVersion $env:STORE_PACKAGE_VERSION
 
       - name: Build the updater manifest
         shell: pwsh
