@@ -16,7 +16,13 @@ pub(super) fn call_async<T: DeserializeOwned + Send + 'static>(
     let params = params.into();
     let cancelled = Arc::new(AtomicBool::new(false));
     let worker_cancelled = cancelled.clone();
+    let install = if std::ptr::eq(slot, &super::TRANSLATION) && method == "install" {
+        super::readiness::Install::begin().map(Some)
+    } else {
+        Ok(None)
+    };
     let task = tokio::task::spawn_blocking(move || {
+        let _install = install?;
         super::call(
             slot,
             method,

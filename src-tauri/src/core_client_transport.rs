@@ -367,4 +367,4 @@ fn terminate_child(child: &mut Child) {
 
 #[cfg(test)]
 #[path = "core_client_transport_tests.rs"]
-mod tests;
+pub(super) mod tests;

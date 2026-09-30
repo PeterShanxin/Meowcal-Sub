@@ -88,3 +88,22 @@ for (const width of [320, 390, 560, 1000]) {
     expect(footer.scroll).toBeLessThanOrEqual(footer.width);
   });
 }
+
+for (const phase of ["busy", "preparing"]) {
+  test(`Settings presents ${phase} neutrally and disables engine actions`, async ({ page }) => {
+    await mockSettings(page);
+    await page.route("**/api/engine/status", (route) => route.fulfill({ json: { phase } }));
+    await page.goto("/");
+    await page.getByRole("button", { name: "Settings", exact: true }).click();
+    const engine = page.locator(".list-row", { hasText: "Translation engine" });
+    await expect(engine.locator(".status-chip")).toHaveClass(/tone-neutral/);
+    await expect(engine).toContainText(phase === "busy" ? "Busy" : "Preparing");
+    await expect(engine).not.toContainText("Needs repair");
+    await expect(engine.getByRole("button", { name: "Repair" })).toBeDisabled();
+    await expect(engine.getByRole("button", { name: "Test", exact: true })).toBeDisabled();
+    if (phase === "busy") {
+      await page.getByRole("button", { name: "Home", exact: true }).click();
+      await expect(page.getByRole("button", { name: "Start", exact: true })).toHaveCount(0);
+    }
+  });
+}
