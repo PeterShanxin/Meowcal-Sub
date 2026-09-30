@@ -108,14 +108,24 @@ describe("selector geometry", () => {
     });
   });
 
-  it("pads and clamps the persisted capture region while preserving fractional DPI", () => {
+  it("persists the selected bounds without expansion while preserving fractional DPI", () => {
     expect(
       buildCaptureRegionPayload(
         { x: 105, y: 55, width: 100, height: 40 },
         { left: 100, top: 50, right: 500, bottom: 300 },
         1.25,
       ),
-    ).toEqual({ x: 100, y: 50, width: 113, height: 55, scaleFactor: 1.25 });
+    ).toEqual({ x: 105, y: 55, width: 100, height: 40, scaleFactor: 1.25 });
+  });
+
+  it("clamps a selection crossing the screen edge without adding padding", () => {
+    expect(
+      buildCaptureRegionPayload(
+        { x: 480, y: 280, width: 100, height: 40 },
+        { left: 100, top: 50, right: 500, bottom: 300 },
+        1.5,
+      ),
+    ).toEqual({ x: 480, y: 280, width: 20, height: 20, scaleFactor: 1.5 });
   });
 
   it("applies the existing non-negative clamp for a negative screen origin", () => {
