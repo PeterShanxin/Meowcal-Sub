@@ -80,11 +80,28 @@ function Install-DirectBaseline {
     $script:directExecutableHash = (Get-FileHash $script:directExecutable).Hash
     Start-DirectApp
     Write-DirectDiagnostic 'before-save' (Invoke-AppScript "window.__TAURI__.core.invoke('get_settings')")
-    $settings = Invoke-AppScript "(async()=>{const s=await window.__TAURI__.core.invoke('get_settings');s.sourceLanguage='ja-JP';await window.__TAURI__.core.invoke('save_settings',{settings:s});return s})()"
+    # The pinned app also saves its UI snapshot after automatic update checks.
+    # Seed through the same controller as a user edit so a later save retains it.
+    $settings = Invoke-AppScript @"
+(async()=>{
+  const deadline=Date.now()+30000;
+  let controller;
+  while (!(controller=document.querySelector('meowcal-app')?.controller) || controller.current().busy==='loading') {
+    if (Date.now()>deadline) throw new Error('Direct application settings UI did not initialize.');
+    await new Promise(resolve=>setTimeout(resolve,100));
+  }
+  await controller.updatePreference('autoCheckUpdates',false);
+  await controller.setLanguage('source','ja-JP');
+  return window.__TAURI__.core.invoke('get_settings');
+})()
+"@
     if ($settings.sourceLanguage -ne 'ja-JP') { throw 'Direct baseline did not retain its language setting.' }
     Write-DirectDiagnostic 'after-save-readback' (Invoke-AppScript "window.__TAURI__.core.invoke('get_settings')")
     Stop-TestApp -ExecutablePath $script:directExecutable
     Write-DirectDiagnostic 'after-direct-close'
+    if ((Get-Content -LiteralPath $script:directConfig -Raw | ConvertFrom-Json).sourceLanguage -ne 'ja-JP') {
+        throw 'Direct baseline language did not survive its initial close; Store lifecycle has not started.'
+    }
     $script:directProcess.Dispose()
     $script:directProcess = $null
     $script:directConfigHash = (Get-FileHash $script:directConfig).Hash

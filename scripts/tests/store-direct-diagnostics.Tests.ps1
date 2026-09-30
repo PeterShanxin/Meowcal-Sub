@@ -42,3 +42,5 @@ try {
     Remove-Item -LiteralPath $resolvedRoot -Recurse -Force
 }
 Write-Host 'Direct coexistence diagnostic privacy and persistence contracts passed.'
+node --test (Join-Path $PSScriptRoot 'store-direct-baseline.test.mjs')
+if ($LASTEXITCODE) { throw 'Direct baseline UI snapshot regression failed.' }
