@@ -76,6 +76,10 @@ local branch and worktree survive; remove a finished worktree deliberately with
 ## Release and update contract
 
 - Store builds use `scripts/build-store.ps1` and the `store` Cargo feature.
+  Draft release and preflight prepare both Store architectures through
+  `store-package.yml`, with explicit Partner Center identity and an independent
+  Store version supplied at dispatch. MSIX assets and checksums accompany the
+  draft; submission remains manual and MSIX never enters `latest.json`.
   They exclude the Tauri updater and experimental WinUI helper, and isolate
   default config/engine storage from direct installations. Follow
   [Store distribution](STORE_DISTRIBUTION.md); never publish debug/local
