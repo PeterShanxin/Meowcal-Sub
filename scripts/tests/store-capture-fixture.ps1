@@ -12,6 +12,7 @@ public static class FixtureDpi {
 '@
 [FixtureDpi]::SetProcessDpiAwarenessContext([IntPtr](-4)) | Out-Null
 Add-Type -AssemblyName System.Windows.Forms,System.Drawing
+. (Join-Path $PSScriptRoot 'store-fixture-image.ps1')
 $form = New-Object Windows.Forms.Form
 $form.Text = 'Meowcal Store capture test'
 $form.FormBorderStyle = 'None'
@@ -38,17 +39,15 @@ $form.Add_Shown({
         $form.Refresh()
         [Windows.Forms.Application]::DoEvents()
         $bitmap = New-Object Drawing.Bitmap($form.Width,$form.Height)
+        $expected = New-Object Drawing.Bitmap($form.Width,$form.Height)
         $graphics = [Drawing.Graphics]::FromImage($bitmap)
         try {
             $graphics.CopyFromScreen($form.Location,[Drawing.Point]::Empty,$form.Size)
-            $visible = $true
-            foreach ($point in @([Drawing.Point]::new(5,5), [Drawing.Point]::new($form.Width-6,5),
-                [Drawing.Point]::new(5,$form.Height-6), [Drawing.Point]::new($form.Width-6,$form.Height-6))) {
-                $pixel = $bitmap.GetPixel($point.X,$point.Y)
-                if ($pixel.R -gt 8 -or $pixel.G -gt 8 -or $pixel.B -gt 8) { $visible = $false; break }
-            }
+            $form.DrawToBitmap($expected,[Drawing.Rectangle]::new(0,0,$form.Width,$form.Height))
+            $visible = [StoreFixtureImage]::IsVisible($expected,$bitmap)
+            $expected.Save((Join-Path $OutputDirectory 'capture-fixture-expected.png'),[Drawing.Imaging.ImageFormat]::Png)
             $bitmap.Save((Join-Path $OutputDirectory 'capture-fixture.png'),[Drawing.Imaging.ImageFormat]::Png)
-        } finally { $graphics.Dispose(); $bitmap.Dispose() }
+        } finally { $graphics.Dispose(); $bitmap.Dispose(); $expected.Dispose() }
         if (-not $visible) { Start-Sleep -Milliseconds 100 }
     } while (-not $visible -and (Get-Date) -lt $deadline)
     if (-not $visible) {

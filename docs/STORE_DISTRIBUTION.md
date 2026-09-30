@@ -131,7 +131,7 @@ Before native GUI checks, `prepare-store-desktop.ps1` applies Microsoft's
 [DisablePrivacyExperience policy](https://learn.microsoft.com/en-us/windows/client-management/mdm/policy-csp-privacy#disableprivacyexperience)
 and completes an already-open Windows privacy screen through UI Automation,
 with optional choices off. It runs only on disposable hosted runners. The
-capture fixture checks its black border pixels on the actual screen before
+capture fixture checks its rendered text and background pixels on the actual screen before
 reporting readiness; the application must still capture, OCR, translate and
 display the expected fixture text. Desktop preparation results and fixture
 screenshots accompany lifecycle evidence.

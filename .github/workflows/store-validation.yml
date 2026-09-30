@@ -104,7 +104,10 @@ jobs:
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
           ./scripts/tests/store-package.Tests.ps1
       - name: Check hosted desktop preparation guards
-        run: ./scripts/tests/store-desktop.Tests.ps1
+        run: |
+          ./scripts/tests/store-desktop.Tests.ps1
+          powershell -NoProfile -File ./scripts/tests/store-fixture-image.Tests.ps1
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
       - name: Prepare hosted desktop
         shell: powershell
         run: ./scripts/tests/prepare-store-desktop.ps1 -OutputDirectory "$env:RUNNER_TEMP/store-desktop"
