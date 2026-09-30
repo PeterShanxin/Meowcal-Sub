@@ -88,13 +88,6 @@
     let x2 = rawX + Math.max(1, rawWidth);
     let y2 = rawY + Math.max(1, rawHeight);
 
-    // Automatic padding is disabled so capture matches the selected bounds.
-    // Review removal after the observation period in issue #274.
-    // x1 -= 8;
-    // y1 -= 10;
-    // x2 += 8;
-    // y2 += 10;
-
     // Keep the existing selector-window clamp and the non-negative capture
     // clamp in this order. The backend expects this logical screen payload.
     x1 = Math.max(windowBounds.left, x1);
