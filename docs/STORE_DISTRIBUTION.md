@@ -127,6 +127,15 @@ It also seeds a custom engine directory, checks translation after restart,
 resets the app through Windows, and verifies that reset and uninstall retain the
 external model while removing package-owned settings and cache. This tests a
 persisted custom configuration, not a directory-picker UI.
+Before native GUI checks, `prepare-store-desktop.ps1` applies Microsoft's
+[DisablePrivacyExperience policy](https://learn.microsoft.com/en-us/windows/client-management/mdm/policy-csp-privacy#disableprivacyexperience)
+and completes an already-open Windows privacy screen through UI Automation,
+with optional choices off. It runs only on disposable hosted runners. The
+capture fixture checks its black border pixels on the actual screen before
+reporting readiness; the application must still capture, OCR, translate and
+display the expected fixture text. Desktop preparation results and fixture
+screenshots accompany lifecycle evidence.
+
 The same runner installs the hash-pinned GitHub v0.8.6 ARM64 NSIS baseline,
 opens it with a distinct saved language preference, and checks that Store
 setup does not inherit that setting. After Store reset and removal, the direct

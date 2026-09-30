@@ -193,6 +193,11 @@ coexists with whatever else is on a shared machine. Never free a port by stoppin
 another project's process; set `MEOWCAL_FRONTEND_PORT` and `MEOWCAL_HTTP_PORT` if
 you need fixed addresses.
 
+Hosted Store lifecycle preparation is restricted to disposable runners. Require
+physical fixture visibility and real capture/OCR/translation/overlay results;
+creating a fixture window is not evidence that another Windows screen has not
+obscured it.
+
 Browser mode does not prove Tauri-only capture, OCR, selector, overlay, tray,
 window, installer, or runtime-process behavior.
 
