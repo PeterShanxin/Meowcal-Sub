@@ -25,6 +25,12 @@ pub(super) fn call<T: DeserializeOwned>(
     cancelled: Option<&Arc<AtomicBool>>,
     drain_active_on_drop: bool,
 ) -> Result<T, String> {
+    if std::ptr::eq(slot, &super::TRANSLATION)
+        && method == "ready"
+        && super::readiness::installing()
+    {
+        return Err("CORE_INSTALL_BUSY: Translation engine is being installed".into());
+    }
     let deadline = Instant::now() + timeout;
     let mut guard = acquire_slot(
         slot.get_or_init(|| Mutex::new(None)),
@@ -51,6 +57,10 @@ pub(super) fn poll_status(
     kill_slot: &OnceLock<Mutex<Option<Arc<KillSwitch>>>>,
     timeout: Duration,
 ) -> Result<StatusPoll, String> {
+    if std::ptr::eq(kill_slot, &super::TRANSLATION_KILL) && super::readiness::installing() {
+        return Ok(StatusPoll::Busy);
+    }
+    let generation = super::readiness::generation()?;
     let mut guard = match slot.try_lock() {
         Ok(guard) => guard,
         Err(std::sync::TryLockError::WouldBlock) => return Ok(StatusPoll::Busy),
@@ -70,7 +80,16 @@ pub(super) fn poll_status(
             drain_active_on_drop: false,
         },
     )
-    .map(|status| StatusPoll::Status(Box::new(status)))
+    .map(|status| {
+        if std::ptr::eq(kill_slot, &super::TRANSLATION_KILL)
+            && (super::readiness::installing()
+                || super::readiness::generation().ok() != Some(generation))
+        {
+            StatusPoll::Busy
+        } else {
+            StatusPoll::Status(Box::new(status))
+        }
+    })
 }
 
 fn call_locked<T: DeserializeOwned>(
@@ -86,6 +105,12 @@ fn call_locked<T: DeserializeOwned>(
         cancelled,
         drain_active_on_drop,
     } = options;
+    if std::ptr::eq(kill_slot, &super::TRANSLATION_KILL)
+        && method == "ready"
+        && super::readiness::installing()
+    {
+        return Err("CORE_INSTALL_BUSY: Translation engine is being installed".into());
+    }
     if cancelled.is_some_and(|flag| flag.load(Ordering::SeqCst)) {
         return Err("CORE_REQUEST_CANCELLED".to_string());
     }
@@ -108,6 +133,11 @@ fn call_locked<T: DeserializeOwned>(
     if guard.is_none() {
         *guard = Some(spawn_initialized(kill_slot, deadline, method, cancelled)?);
     }
+    let generation = if std::ptr::eq(kill_slot, &super::TRANSLATION_KILL) {
+        super::readiness::generation()?
+    } else {
+        0
+    };
     let request_timeout = remaining(deadline, method)?;
     let process = guard
         .as_mut()
@@ -139,7 +169,7 @@ fn call_locked<T: DeserializeOwned>(
         Some(&on_progress),
         request_cancelled,
     );
-    let value = match response {
+    let mut value = match response {
         Ok(value) => value,
         Err(Failure::Remote { code, message }) if !fatal_remote(&code) => {
             if std::ptr::eq(kill_slot, &super::TRANSLATION_KILL)
@@ -165,8 +195,8 @@ fn call_locked<T: DeserializeOwned>(
             if super::cpu_lock_is_gpu_failure(status.cpu_locked, started_cpu_only) {
                 super::recovery::lock_cpu();
             }
-            if let Ok(mut cached) = super::STATUS.lock() {
-                *cached = Some(status);
+            if !super::readiness::record(status, generation) {
+                value["ready"] = json!(false);
             }
         }
     }

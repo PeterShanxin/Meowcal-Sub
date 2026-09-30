@@ -39,12 +39,15 @@ function recognition(snapshot: UiSnapshot): Recognition {
 
 function engineRow(snapshot: UiSnapshot): EngineRow {
   const phase = snapshot.engine?.phase ?? "unknown";
-  if (snapshot.busy === "loading" || phase === "preparing") {
-    const chip = snapshot.busy === "loading" ? "Checking" : "Preparing";
+  if (snapshot.busy === "loading" || phase === "preparing" || phase === "busy") {
+    const chip = snapshot.busy === "loading" ? "Checking" : phase === "busy" ? "Busy" : "Preparing";
     return {
       tone: "neutral",
       chip,
-      detail: "Checking the engine on this PC",
+      detail:
+        phase === "busy"
+          ? "Waiting for the current engine operation"
+          : "Checking the engine on this PC",
       actionLabel: "Repair",
       actionIsPrimary: false,
       canTest: false,
@@ -138,6 +141,7 @@ function renderEngineAndUpdates(snapshot: UiSnapshot, actions: SettingsActions):
                   class=${engine.actionIsPrimary ? "primary-button compact" : "secondary-button"}
                   type="button"
                   @click=${actions.onRepair}
+                  ?disabled=${snapshot.busy !== "idle" || ["preparing", "busy"].includes(snapshot.engine?.phase ?? "")}
                 >
                   ${icon("wrench")}${engine.actionLabel}
                 </button>`

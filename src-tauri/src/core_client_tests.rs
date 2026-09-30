@@ -11,7 +11,7 @@ mod core_version;
 /// test that asserts a ready snapshot must not overlap one that recovers.
 static READINESS: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
-fn hold_readiness() -> std::sync::MutexGuard<'static, ()> {
+pub(super) fn hold_readiness() -> std::sync::MutexGuard<'static, ()> {
     READINESS
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner())
@@ -36,7 +36,7 @@ fn managed_backend_snapshots_do_not_wait_for_an_active_core_request() {
         managed_config: None,
         install_paths: None,
     };
-    *STATUS.lock().unwrap() = Some(status);
+    readiness::CACHE.lock().unwrap().status = Some(status);
     let config = crate::config::FoundryLocalConfig {
         managed_runtime: Some(crate::config::ManagedLocalRuntimeConfig {
             kind: "hy-mt".into(),
@@ -58,7 +58,7 @@ fn managed_backend_snapshots_do_not_wait_for_an_active_core_request() {
     assert_eq!(result.unwrap(), (true, ReadyState::Ready));
     invalidate_readiness();
     assert!(!cached_status().unwrap().ready);
-    *STATUS.lock().unwrap() = None;
+    readiness::CACHE.lock().unwrap().status = None;
 }
 
 #[test]

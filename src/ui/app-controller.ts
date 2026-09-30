@@ -1,10 +1,11 @@
-import type { AppScreen, AppSettings, CaptureRegion, EngineStatus, UiSnapshot } from "./contracts";
+import type { AppScreen, AppSettings, CaptureRegion, UiSnapshot } from "./contracts";
 import { pickSampleTranslation } from "./sample-translations";
 import { applyLanguageSelection } from "./languages";
 import { backendUnavailablePhase } from "./home-state";
 import { defaultSettings, mergeSettings, recognitionPresets } from "./settings-defaults";
 import { UpdateController } from "./update-controller";
 import { SettingsWriter } from "./settings-writer";
+import { EngineStatusController } from "./engine-status-controller";
 
 type Subscriber = (snapshot: UiSnapshot) => void;
 
@@ -26,7 +27,6 @@ export class AppController {
   private noticeTimer: number | null = null;
   private settingsLoaded = false;
   private disposed = false;
-  private preparation: Promise<EngineStatus> | null = null;
   private snapshot: UiSnapshot = {
     settingsSave: { kind: "idle" },
     screen: "home",
@@ -43,6 +43,7 @@ export class AppController {
     update: { kind: "idle" },
     appVersion: null,
   };
+  private engines = new EngineStatusController((patch) => this.publish(patch));
   private updates = new UpdateController((patch) => this.publish(patch));
   private settingsWriter = new SettingsWriter((settingsSave) => this.publish({ settingsSave }));
 
@@ -80,7 +81,7 @@ export class AppController {
     const [settings, languages, engine, region, running] = await Promise.all([
       this.safeInvoke<Partial<AppSettings> | null>("get_settings", null),
       this.safeInvoke<string[]>("get_ocr_languages", []),
-      this.safeInvoke<EngineStatus>("get_engine_status", {
+      this.engines.read("get_engine_status", {
         phase: browserMode ? backendUnavailablePhase : "unknown",
       }),
       this.safeInvoke<CaptureRegion | null>("get_capture_region", null),
@@ -91,7 +92,6 @@ export class AppController {
     this.publish({
       settings: merged,
       ocrLanguages: new Set(languages),
-      engine,
       region: region ?? merged.lastCaptureRegion ?? null,
       running,
       busy: "idle",
@@ -103,26 +103,7 @@ export class AppController {
       await this.openSetup();
     }
     this.scheduleAutomaticUpdateCheck();
-    if (!browserMode) await this.finishEnginePreparation(engine);
-  }
-
-  private async finishEnginePreparation(engine: EngineStatus | undefined): Promise<void> {
-    if (this.disposed || engine?.phase !== "preparing") return;
-    try {
-      const ready = await this.prepareEngine();
-      this.publish({ engine: ready });
-    } catch (error) {
-      this.publish({ engine: { ...engine, phase: "error" }, error: errorMessage(error) });
-    }
-  }
-
-  private prepareEngine(): Promise<EngineStatus> {
-    this.preparation ??= window.TauriBridge.invoke<EngineStatus>("make_engine_ready").finally(
-      () => {
-        this.preparation = null;
-      },
-    );
-    return this.preparation;
+    if (!browserMode) await this.engines.finishPreparation(engine);
   }
 
   private async safeInvoke<T>(command: string, fallback: T): Promise<T> {
@@ -157,6 +138,7 @@ export class AppController {
 
   dispose(): void {
     this.disposed = true;
+    this.engines.dispose();
     this.stopRegionPolling();
     if (this.overlaySaveId !== null) window.clearTimeout(this.overlaySaveId);
     if (this.autoCheckTimer !== null) window.clearTimeout(this.autoCheckTimer);
@@ -231,40 +213,31 @@ export class AppController {
       ? { phase: backendUnavailablePhase }
       : (this.snapshot.engine ?? {});
     const [engine, region, stored] = await Promise.all([
-      this.safeInvoke<EngineStatus>("refresh_engine_status", engineFallback),
+      this.engines.read("refresh_engine_status", engineFallback),
       this.safeInvoke<CaptureRegion | null>("get_capture_region", this.snapshot.region),
       this.safeInvoke<Partial<AppSettings> | null>("get_settings", null),
     ]);
     // Refresh cannot establish whether a capture error has cleared.
-    const patch: Partial<UiSnapshot> = { engine, region };
+    const patch: Partial<UiSnapshot> = { region };
     // Import the overlay menu's saved appearance without overwriting pending edits.
     if (stored && this.overlaySaveId === null && this.snapshot.settingsSave.kind === "idle") {
       patch.settings = { ...this.snapshot.settings, overlay: mergeSettings(stored).overlay };
     }
     this.publish(patch);
-    await this.finishEnginePreparation(engine);
+    await this.engines.finishPreparation(engine);
   }
 
   async start(): Promise<void> {
     this.publish({ busy: "warming", error: null, notice: null, captureWarning: null });
     try {
       await this.saveSettings(true);
-      const engine = await this.readyEngine();
-      this.publish({ engine, busy: "starting" });
+      await this.engines.ready();
+      this.publish({ busy: "starting" });
       await window.TauriBridge.invoke("start_translation");
       this.publish({ running: true, busy: "idle", notice: "Translation started" });
     } catch (error) {
       this.publish({ running: false, busy: "idle", error: errorMessage(error) });
     }
-  }
-
-  private async readyEngine(): Promise<EngineStatus> {
-    let engine = await window.TauriBridge.invoke<EngineStatus>("refresh_engine_status");
-    if (["notRunning", "notrunning", "preparing"].includes(engine.phase ?? "")) {
-      engine = await this.prepareEngine();
-    }
-    if (engine.phase !== "ready") throw new Error("The local translation engine is not ready yet.");
-    return engine;
   }
 
   async stop(): Promise<void> {
@@ -345,7 +318,7 @@ export class AppController {
   async testTranslation(): Promise<void> {
     this.publish({ busy: "saving", notice: "Running a private sample translation…", error: null });
     try {
-      this.publish({ engine: await this.readyEngine() });
+      await this.engines.ready();
       const result = await window.TauriBridge.invoke<WizardTestResult>("wizard_test_translation", {
         sourceText: pickSampleTranslation(this.snapshot.settings.sourceLanguage),
         sourceLanguage: this.snapshot.settings.sourceLanguage,

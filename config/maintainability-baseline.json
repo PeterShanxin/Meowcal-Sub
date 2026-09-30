@@ -26,6 +26,7 @@
     "src/scripts/selector-geometry.js",
     "src/scripts/translation-display.js",
     "src/ui/app-controller.ts",
+    "src/ui/engine-status-controller.ts",
     "src/ui/error-copy.ts",
     "src/ui/home-state.ts",
     "src/ui/languages.ts",

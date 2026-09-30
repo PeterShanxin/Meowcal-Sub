@@ -311,6 +311,160 @@ describe("AppController settings persistence", () => {
     },
   );
 
+  it.each(["ready", "error", "notRunning"])(
+    "rechecks busy until %s without preparation",
+    async (phase) => {
+      vi.useFakeTimers();
+      let result = { phase: "busy" };
+      const invoke = vi.fn(async (command: string) =>
+        command === "refresh_engine_status" ? result : undefined,
+      );
+      const { controller } = createController(invoke as TauriBridgeApi["invoke"], undefined, false);
+      await Promise.all([controller.refresh(), controller.refresh(), controller.refresh()]);
+      expect(controller.current().engine?.phase).toBe("busy");
+      result = { phase };
+      await vi.advanceTimersByTimeAsync(1000);
+      expect(controller.current().engine?.phase).toBe(phase);
+      expect(invoke.mock.calls.filter(([name]) => name === "refresh_engine_status")).toHaveLength(
+        4,
+      );
+      expect(invoke).not.toHaveBeenCalledWith("make_engine_ready");
+      await vi.advanceTimersByTimeAsync(5000);
+      expect(invoke.mock.calls.filter(([name]) => name === "refresh_engine_status")).toHaveLength(
+        4,
+      );
+      controller.dispose();
+    },
+  );
+
+  it("bounds busy rechecks and cancels the pending timer on dispose", async () => {
+    vi.useFakeTimers();
+    const invoke = vi.fn(async (command: string) =>
+      command === "refresh_engine_status" ? { phase: "busy" } : undefined,
+    );
+    const { controller } = createController(invoke as TauriBridgeApi["invoke"], undefined, false);
+    await controller.refresh();
+    await vi.advanceTimersByTimeAsync(130000);
+    expect(invoke.mock.calls.filter(([name]) => name === "refresh_engine_status")).toHaveLength(
+      121,
+    );
+    controller.dispose();
+    const second = createController(
+      invoke as TauriBridgeApi["invoke"],
+      undefined,
+      false,
+    ).controller;
+    await second.refresh();
+    second.dispose();
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(invoke.mock.calls.filter(([name]) => name === "refresh_engine_status")).toHaveLength(
+      122,
+    );
+  });
+
+  it.each([false, true])("ignores a stale busy recheck after dispose=%s", async (disposed) => {
+    vi.useFakeTimers();
+    let finish!: (engine: unknown) => void;
+    const pending = new Promise((resolve) => {
+      finish = resolve;
+    });
+    let calls = 0;
+    const invoke = vi.fn(async (command: string) => {
+      if (command !== "refresh_engine_status") return undefined;
+      if (++calls === 1) return { phase: "busy" };
+      if (calls === 2) return pending;
+      return { phase: "error" };
+    });
+    const { controller, snapshots } = createController(
+      invoke as TauriBridgeApi["invoke"],
+      undefined,
+      false,
+    );
+    await controller.refresh();
+    await vi.advanceTimersByTimeAsync(1000);
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(calls).toBe(2);
+    if (disposed) controller.dispose();
+    else await controller.refresh();
+    const published = snapshots.length;
+    finish({ phase: "ready" });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(snapshots).toHaveLength(published);
+    expect(controller.current().engine?.phase).toBe(disposed ? "busy" : "error");
+    controller.dispose();
+  });
+
+  it("reports a failed busy recheck and blocks Start while installation is busy", async () => {
+    vi.useFakeTimers();
+    let fail = false;
+    const invoke = vi.fn(async (command: string) => {
+      if (command !== "refresh_engine_status") return undefined;
+      if (fail) throw new Error("status unavailable");
+      return { phase: "busy" };
+    });
+    const { controller } = createController(invoke as TauriBridgeApi["invoke"], undefined, false);
+    await controller.refresh();
+    await controller.start();
+    expect(controller.current().running).toBe(false);
+    expect(invoke).not.toHaveBeenCalledWith("start_translation");
+    expect(invoke).not.toHaveBeenCalledWith("make_engine_ready");
+    fail = true;
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(controller.current()).toMatchObject({
+      engine: { phase: "error" },
+      error: "status unavailable",
+    });
+    controller.dispose();
+  });
+
+  it("ignores an older refresh that finishes after a newer status", async () => {
+    let finish!: (engine: unknown) => void;
+    const pending = new Promise((resolve) => {
+      finish = resolve;
+    });
+    let calls = 0;
+    const invoke = vi.fn(async (command: string) =>
+      command === "refresh_engine_status"
+        ? ++calls === 1
+          ? pending
+          : { phase: "error" }
+        : undefined,
+    );
+    const { controller } = createController(invoke as TauriBridgeApi["invoke"], undefined, false);
+    const first = controller.refresh();
+    await controller.refresh();
+    finish({ phase: "preparing" });
+    await first;
+    expect(controller.current().engine?.phase).toBe("error");
+    expect(invoke).not.toHaveBeenCalledWith("make_engine_ready");
+    controller.dispose();
+  });
+
+  it.each([false, true])("ignores stale preparation success/failure=%s", async (fail) => {
+    let finish!: (engine: unknown) => void;
+    let reject!: (error: Error) => void;
+    const pending = new Promise((resolve, decline) => {
+      finish = resolve;
+      reject = decline;
+    });
+    let phase = "preparing";
+    const invoke = vi.fn(async (command: string) => {
+      if (command === "refresh_engine_status") return { phase };
+      if (command === "make_engine_ready") return pending;
+      return undefined;
+    });
+    const { controller } = createController(invoke as TauriBridgeApi["invoke"], undefined, false);
+    const first = controller.refresh();
+    await vi.waitFor(() => expect(invoke).toHaveBeenCalledWith("make_engine_ready"));
+    phase = "error";
+    await controller.refresh();
+    if (fail) reject(new Error("old failure"));
+    else finish({ phase: "ready" });
+    await first;
+    expect(controller.current()).toMatchObject({ engine: { phase: "error" }, error: null });
+    controller.dispose();
+  });
+
   it("does not prepare an engine whose status is busy", async () => {
     const invoke = vi.fn(async (command: string) =>
       command === "refresh_engine_status" ? { phase: "busy" } : undefined,
