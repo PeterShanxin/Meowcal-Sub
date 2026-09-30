@@ -37,3 +37,12 @@ $startMenu = @{name='StartMenuExperienceHost';path='C:\Windows\SystemApps\Micros
 if (Test-StoreDesktopInputTarget $startMenu '{ENTER}' $windowsDirectory) { throw 'Enter accepted for Start menu.' }
 if (-not (Test-StoreDesktopInputTarget $startMenu '{ESC}' $windowsDirectory)) { throw 'Escape rejected for verified Start menu.' }
 Write-Host 'Hosted desktop input targeting tests passed.'
+$search = @{name='SearchHost';path='C:\Windows\SystemApps\MicrosoftWindows.Client.CBS_test\SearchHost.exe';family='MicrosoftWindows.Client.CBS_test'}
+if (Test-StoreDesktopInputTarget $search '{ENTER}' $windowsDirectory) { throw 'Enter accepted for Search panel.' }
+if (-not (Test-StoreDesktopInputTarget $search '{ESC}' $windowsDirectory)) { throw 'Escape rejected for verified Search panel.' }
+$search.family='Other.App_test'
+if (Test-StoreDesktopInputTarget $search '{ESC}' $windowsDirectory) { throw 'Escape accepted for unverified Search package.' }
+$search.family='MicrosoftWindows.Client.CBS_test'
+$search.path='C:\Other\SearchHost.exe'
+if (Test-StoreDesktopInputTarget $search '{ESC}' $windowsDirectory) { throw 'Escape accepted outside Windows SystemApps.' }
+Write-Host 'Hosted Search panel target tests passed.'

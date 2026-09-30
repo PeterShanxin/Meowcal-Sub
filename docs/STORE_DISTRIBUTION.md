@@ -132,7 +132,7 @@ Before native GUI checks, `prepare-store-desktop.ps1` applies Microsoft's
 and dismisses an already-open privacy screen using the
 [hosted ARM workaround](https://github.com/actions/runner-images/issues/14069).
 Keyboard input requires a verified foreground CloudExperienceHost package;
-Escape may also close its Start menu. Preparation runs only on disposable
+Escape may also close its verified Start/Search panel. Preparation runs only on disposable
 hosted runners, before build and immediately before lifecycle tests. The
 capture fixture checks its rendered text and background pixels on the actual screen before
 reporting readiness; the application must still capture, OCR, translate and
