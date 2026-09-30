@@ -354,7 +354,7 @@ describe("automatic release submission", () => {
       return {
         ok: true,
         json: async () =>
-          url.includes("login.microsoftonline.com")
+          new URL(url).hostname === "login.microsoftonline.com"
             ? { access_token: "mock-token" }
             : { status: "CommitStarted" },
       };
