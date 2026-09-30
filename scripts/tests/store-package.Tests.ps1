@@ -46,3 +46,4 @@ try {
     Remove-Item -LiteralPath $testRoot -Force
 }
 Write-Host 'Store identity, manifest and PE architecture contracts passed.'
+& (Join-Path $PSScriptRoot 'store-direct-diagnostics.Tests.ps1')
