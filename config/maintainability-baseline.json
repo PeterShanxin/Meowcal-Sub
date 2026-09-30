@@ -41,6 +41,8 @@
     "scripts/doc-links.mjs",
     "scripts/maintainability-ratchet.mjs",
     "scripts/serve-frontend.mjs",
+    "scripts/store-release-assets.mjs",
+    "scripts/store-submission.mjs",
     "scripts/workflow-runner-policy.mjs",
     "src/ui/settings-writer.ts"
   ],

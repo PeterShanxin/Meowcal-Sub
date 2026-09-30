@@ -1,0 +1,103 @@
+name: Prepare Store Submission Draft
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Published canonical GitHub release tag, for example v0.8.7
+        required: true
+        type: string
+      release_commit:
+        description: Exact 40-character commit SHA of that release tag
+        required: true
+        type: string
+      stage_draft:
+        description: Stage a new API-managed Store draft after verification
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: store-submission-draft-${{ github.repository }}
+  cancel-in-progress: false
+
+jobs:
+  verify-release:
+    name: Verify Store release inputs
+    if: >-
+      github.repository == 'PeterShanxin/Meowcal-Sub' &&
+      github.ref == 'refs/heads/main' &&
+      (github.actor == 'PeterShanxin' || github.actor == 'ianmeowmeow') &&
+      github.actor != 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require a trusted actor
+        shell: pwsh
+        run: |
+          if (@('PeterShanxin', 'ianmeowmeow') -notcontains $env:GITHUB_ACTOR) {
+            throw "Privileged job refused actor '$env:GITHUB_ACTOR'."
+          }
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 24
+      - name: Verify published release and both production MSIX packages
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+          RELEASE_COMMIT: ${{ inputs.release_commit }}
+        run: node scripts/store-submission-cli.mjs --tag "$RELEASE_TAG" --commit "$RELEASE_COMMIT"
+
+  stage-draft:
+    name: Stage Store draft
+    needs: verify-release
+    if: >-
+      inputs.stage_draft &&
+      github.repository == 'PeterShanxin/Meowcal-Sub' &&
+      github.ref == 'refs/heads/main' &&
+      (github.actor == 'PeterShanxin' || github.actor == 'ianmeowmeow') &&
+      github.actor != 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    environment: store-submission-draft
+    steps:
+      - name: Require trusted actor and staging enablement
+        shell: pwsh
+        env:
+          STORE_DRAFT_STAGING_ENABLED: ${{ vars.STORE_DRAFT_STAGING_ENABLED }}
+        run: |
+          if (@('PeterShanxin', 'ianmeowmeow') -notcontains $env:GITHUB_ACTOR) {
+            throw "Privileged job refused actor '$env:GITHUB_ACTOR'."
+          }
+          if ($env:STORE_DRAFT_STAGING_ENABLED -ne 'true') {
+            throw 'Store draft staging is not enabled for this environment.'
+          }
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 24
+      - name: Validate credentials without logging values
+        shell: pwsh
+        env:
+          AZURE_AD_TENANT_ID: ${{ secrets.AZURE_AD_TENANT_ID }}
+          AZURE_AD_APPLICATION_CLIENT_ID: ${{ secrets.AZURE_AD_APPLICATION_CLIENT_ID }}
+          AZURE_AD_APPLICATION_SECRET: ${{ secrets.AZURE_AD_APPLICATION_SECRET }}
+          SELLER_ID: ${{ secrets.SELLER_ID }}
+        run: |
+          foreach ($name in @('AZURE_AD_TENANT_ID', 'AZURE_AD_APPLICATION_CLIENT_ID', 'AZURE_AD_APPLICATION_SECRET', 'SELLER_ID')) {
+            if ([string]::IsNullOrWhiteSpace([Environment]::GetEnvironmentVariable($name))) {
+              throw 'Store draft credentials are incomplete.'
+            }
+          }
+      - name: Stage new API-managed draft only
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+          RELEASE_COMMIT: ${{ inputs.release_commit }}
+          AZURE_AD_TENANT_ID: ${{ secrets.AZURE_AD_TENANT_ID }}
+          AZURE_AD_APPLICATION_CLIENT_ID: ${{ secrets.AZURE_AD_APPLICATION_CLIENT_ID }}
+          AZURE_AD_APPLICATION_SECRET: ${{ secrets.AZURE_AD_APPLICATION_SECRET }}
+          SELLER_ID: ${{ secrets.SELLER_ID }}
+        run: node scripts/store-submission-cli.mjs --tag "$RELEASE_TAG" --commit "$RELEASE_COMMIT" --stage true
