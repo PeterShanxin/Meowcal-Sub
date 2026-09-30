@@ -21,7 +21,7 @@ allow immediate Start. A later session must produce the new authored translation
 in the visible native overlay; old-session or old-cue output fails acceptance.
 Interrupted trials still check resume/cleanup for the retained original handle.
 
-## Fresh native result
+## Recorded native result and strengthened gate
 
 Windows ARM64 isolated CPU validation completed at
 2026-09-30T17:41:50.4549069Z using the application built from
@@ -32,7 +32,8 @@ Windows ARM64 isolated CPU validation completed at
 - Harness commit: `554170949433be55a577bc5a820daa801fabb571`.
 - Stop: 261.1 ms; immediate Start: 13 ms.
 - Stopped session 2; session 3 translated authored “Good morning.” to “早上好。”.
-  Native overlay visibility and rendered text passed; capture remained running.
+  Native window visibility and DOM text matched; capture remained running.
+  This trial did not independently check subtitle-container visibility/bounds.
 - Original suspended OCR exited with code 1. No stale result appeared during
   the additional observation interval.
 - Retained inference and model process handles/creation times remained identical.
@@ -49,6 +50,26 @@ This is functional cancellation/restart/output acceptance. It does not measure
 pixel presentation latency, prove a speedup, or establish general movie
 reliability. The prior Windows All, normal restart 10/10 and authored pipeline
 10/10 results also bind `5d7b28d`; they were not repeated unnecessarily.
+
+The second review identified four harness defects. Failed reruns now replace the
+nominal output with an invalid verdict as well as preserving the failure
+companion. Interrupted trials stop only their token-owned session and unregister
+their listener; cleanup errors invalidate output. Stale checks inspect events
+after the recorded Stop boundary, including old-session non-text events. Native
+overlay acceptance now requires a visible subtitle container and text with
+positive rendered bounds inside the container and viewport, in addition to
+native window visibility and correct text. Regressions cover each failure mode
+in PowerShell 7 and 5.1 and execute the actual embedded JavaScript.
+
+Fresh native verification of this strengthened surface assertion remains open.
+Two subsequent preflights stopped before inference loading or OCR suspension:
+`reconciled-native-20260930-181318` and `reconciled-native-20260930-181435`.
+The latter recorded only the owned overlay WebView, with no main WebView for
+20 seconds; a concurrent read-only inventory found `LogonUI.exe` active. The
+desktop appears locked. Exact startup causality is unproven. Both attempts
+cleaned all owned processes, restored config hashes and released port 9241.
+Do not substitute the earlier DOM-only result for the strengthened native gate.
+No desktop unlock or power-state change was attempted.
 
 ## Integration boundary
 
