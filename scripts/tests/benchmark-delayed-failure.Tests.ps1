@@ -24,17 +24,20 @@ $AppPid = 100
 $OcrPid = 200
 $result = [pscustomobject]@{stopMs=200;running=$false;error=$null;privateToken='DO_NOT_PUBLISH'}
 try {
+    '{"valid":true,"stopMs":123}' | Set-Content -LiteralPath $OutputFile
     try { throw 'original resume failure' } catch {
         try { & $handler; throw 'Failure handler accepted the sample.' } catch {
             if ($_.Exception.Message -ne 'original resume failure') { throw }
         }
     }
-    if (Test-Path $OutputFile) { throw 'Failed sample created accepted measurement output.' }
+    if ((Get-Content -LiteralPath $OutputFile -Raw | ConvertFrom-Json).valid -ne $false) {
+        throw 'Failed rerun left prior accepted output at the nominal path.'
+    }
     $raw = Get-Content -LiteralPath "$OutputFile.failure.json" -Raw
     $saved = $raw | ConvertFrom-Json
     if ($saved.valid -ne $false -or $saved.ocrExitCode -ne 1 -or
         $saved.attemptedMeasurement.stopMs -ne 200 -or $raw.Contains('DO_NOT_PUBLISH')) {
         throw 'Invalid sample diagnostics were incomplete or leaked unselected fields.'
     }
-} finally { Remove-Item -LiteralPath "$OutputFile.failure.json" -ErrorAction SilentlyContinue }
+} finally { Remove-Item -LiteralPath $OutputFile,"$OutputFile.failure.json" -ErrorAction SilentlyContinue }
 Write-Host 'Delayed OCR exit diagnostics passed.'

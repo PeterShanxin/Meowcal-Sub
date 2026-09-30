@@ -5,10 +5,11 @@ param(
     [Parameter(Mandatory)][string]$OutputFile
 )
 $ErrorActionPreference = 'Stop'
-$appProcess = Get-Process -Id $AppPid
+$appProcess = $null
 $process = $null
 $result = $null
 try {
+    $appProcess = Get-Process -Id $AppPid
     $process = Get-Process -Id $OcrPid
     $null = $appProcess.Handle
     $null = $process.Handle
@@ -55,11 +56,12 @@ public static class OcrDelay {
         if ($process.HasExited) { $evidence.ocrExitCode = $process.ExitCode }
     }
     try {
+        $evidence | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $OutputFile
         $evidence | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath "$OutputFile.failure.json"
     } catch { Write-Warning 'Could not persist the invalid delayed-OCR diagnostic.' }
     throw $failure
 } finally {
     if ($script:socket) { $script:socket.Dispose() }
     if ($process) { $process.Dispose() }
-    $appProcess.Dispose()
+    if ($appProcess) { $appProcess.Dispose() }
 }

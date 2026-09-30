@@ -13,7 +13,17 @@ $null = $app.Handle
 $null = $ocr.Handle
 $suspended = $false
 $overlaySocket = $null
+$mainSocket = $null
+$trialToken = [guid]::NewGuid().ToString('N')
 $result = [ordered]@{valid=$false;appPid=$AppPid;originalOcrPid=$OcrPid}
+function Get-RestartEvents($Events, $Marker) {
+    $boundary = -1
+    for ($i=0; $i -lt $Events.Count; $i++) {
+        if ($Events[$i].displayState -eq 'stopped' -and $Events[$i].sessionId -eq $Marker) { $boundary=$i; break }
+    }
+    if ($boundary -lt 0) { throw 'Stop event boundary missing.' }
+    $Events | Select-Object -Skip ($boundary+1) | Where-Object { $_.displayState -ne 'stopped' }
+}
 try {
     $identity = Get-CimInstance Win32_Process -Filter "ProcessId=$OcrPid"
     if ($app.Path -ne (Resolve-Path $AppExecutable).Path -or $app.HasExited -or $ocr.HasExited -or
@@ -27,7 +37,10 @@ try {
     }
     Connect-BenchmarkWebView $app
     $mainSocket = $script:socket
-    Invoke-BenchmarkScript '(async()=>{const b=window.TauriBridge;if(await b.invoke("is_translation_running"))throw new Error("Existing capture session");window.delayedEvents=[];window.delayedUnlisten=await b.event.listen("translation-update",e=>window.delayedEvents.push(e.payload));await b.invoke("start_translation");})()' | Out-Null
+    $startExpression = @'
+(async()=>{const b=window.TauriBridge;if(await b.invoke("is_translation_running"))throw new Error("Existing capture session");window.delayedTrial={token:"TRIAL_TOKEN",owned:false};window.delayedEvents=[];window.delayedTrial.unlisten=await b.event.listen("translation-update",e=>window.delayedEvents.push(e.payload));window.delayedTrial.owned=true;await b.invoke("start_translation");})()
+'@
+    Invoke-BenchmarkScript $startExpression.Replace('TRIAL_TOKEN',$trialToken) | Out-Null
     $overlayDeadline = (Get-Date).AddSeconds(5)
     do {
         Assert-BenchmarkEndpoint $app
@@ -72,13 +85,14 @@ public static class OcrDelay {
 })()
 '@
     $result.transition = Invoke-BenchmarkScript $stopExpression
+    $marker = $result.transition.stoppedSessionId
     if (-not $ocr.WaitForExit(5000)) { throw 'Cancelled original OCR transport was not reaped.' }
     $suspended = $false
     $result.originalOcrExitCode = $ocr.ExitCode
     $deadline = (Get-Date).AddSeconds(20)
     do {
         $events = @(Invoke-BenchmarkScript 'window.delayedEvents')
-        $translated = @($events | Where-Object { $_.displayState -eq 'translated' -and $_.original -eq 'Good morning.' })
+        $translated = @(Get-RestartEvents $events $marker | Where-Object { $_.displayState -eq 'translated' -and $_.original -eq 'Good morning.' })
         if ($translated.Count) { break }
         if ((Get-Date) -gt $deadline) { throw 'Restart did not produce the new authored translation.' }
         Start-Sleep -Milliseconds 250
@@ -86,17 +100,24 @@ public static class OcrDelay {
     # Observe an additional interval for late results, rather than accepting the first event alone.
     Start-Sleep -Milliseconds 1000
     $result.events = @(Invoke-BenchmarkScript 'window.delayedEvents')
-    $marker = $result.transition.stoppedSessionId
-    $after = @($result.events | Where-Object { $_.displayState -ne 'stopped' -and $_.original })
-    if (-not $after.Count -or @($after | Where-Object { $_.sessionId -le $marker -or $_.original -ne 'Good morning.' }).Count) {
+    $after = @(Get-RestartEvents $result.events $marker)
+    if (-not $after.Count -or @($after | Where-Object { $_.sessionId -le $marker -or ($_.original -and $_.original -ne 'Good morning.') }).Count) {
         throw 'Old-session output reached the restarted session.'
     }
     if ($translated[0].translated -notmatch '早上好|早安') { throw 'Unexpected new translation.' }
     $script:socket = $overlaySocket
     try {
-        $result.overlay = Invoke-BenchmarkScript '(async()=>({visible:await window.__TAURI__.window.getCurrentWindow().isVisible(),text:document.getElementById("subtitle-text").textContent}))()'
+        $overlayExpression = @'
+(async()=>{
+ const container=document.getElementById("subtitle-container"),text=document.getElementById("subtitle-text");
+ const c=container.getBoundingClientRect(),r=text.getBoundingClientRect();
+ const surfaceVisible=container.classList.contains("visible")&&!container.classList.contains("hidden")&&container.checkVisibility({checkOpacity:true,checkVisibilityCSS:true})&&text.checkVisibility({checkOpacity:true,checkVisibilityCSS:true})&&c.width>0&&c.height>0&&r.width>0&&r.height>0&&r.left>=Math.max(0,c.left)&&r.top>=Math.max(0,c.top)&&r.right<=Math.min(innerWidth,c.right)&&r.bottom<=Math.min(innerHeight,c.bottom);
+ return {visible:await window.__TAURI__.window.getCurrentWindow().isVisible(),surfaceVisible,text:text.textContent,containerBounds:{left:c.left,top:c.top,width:c.width,height:c.height},textBounds:{left:r.left,top:r.top,width:r.width,height:r.height}};
+})()
+'@
+        $result.overlay = Invoke-BenchmarkScript $overlayExpression
     } finally { $script:socket = $mainSocket }
-    if (-not $result.overlay.visible -or $result.overlay.text -notmatch '早上好|早安') { throw 'New translation was not displayed in the visible native overlay.' }
+    if (-not $result.overlay.visible -or -not $result.overlay.surfaceVisible -or $result.overlay.text -notmatch '早上好|早安') { throw 'New translation was not displayed in the visible native overlay.' }
     $result.running = Invoke-BenchmarkScript 'window.TauriBridge.invoke("is_translation_running")'
     if (-not $result.running) { throw 'Restarted capture exited.' }
     $result.valid = $true
@@ -104,16 +125,26 @@ public static class OcrDelay {
     $result.error = $_.Exception.Message
     throw
 } finally {
+    $cleanupFailure = $null
     try {
         if ($suspended -and -not $ocr.HasExited) { Resume-BenchmarkOcr $ocr }
-    } catch { $result.valid=$false; $result.error=$_.Exception.Message; throw }
-    finally {
-        try { $result | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $OutputFile }
-        finally {
-            if ($overlaySocket) { $overlaySocket.Dispose() }
-            if ($script:socket) { $script:socket.Dispose() }
-            $ocr.Dispose()
-            $app.Dispose()
+    } catch { $result.valid=$false; $result.resumeError=$_.Exception.Message; $cleanupFailure=$_ }
+    try {
+        if ($mainSocket) {
+            $script:socket = $mainSocket
+            $cleanupExpression = @'
+(async()=>{const trial=window.delayedTrial;if(trial?.token!=="TRIAL_TOKEN")return;try{if(STOP_OWNED&&trial.owned){await window.TauriBridge.invoke("stop_translation");if(await window.TauriBridge.invoke("is_translation_running"))throw new Error("Owned capture cleanup failed");trial.owned=false;}}finally{if(trial.unlisten){trial.unlisten();trial.unlisten=null;}}})()
+'@
+            $stopOwned = if ($result.valid) { 'false' } else { 'true' }
+            Invoke-BenchmarkScript $cleanupExpression.Replace('TRIAL_TOKEN',$trialToken).Replace('STOP_OWNED',$stopOwned) | Out-Null
         }
+    } catch { $result.valid=$false; $result.sessionCleanupError=$_.Exception.Message; $cleanupFailure=$_ }
+    try { $result | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $OutputFile }
+    finally {
+        if ($overlaySocket) { $overlaySocket.Dispose() }
+        if ($script:socket) { $script:socket.Dispose() }
+        $ocr.Dispose()
+        $app.Dispose()
     }
+    if ($cleanupFailure) { throw $cleanupFailure }
 }
