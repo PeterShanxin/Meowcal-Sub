@@ -85,3 +85,6 @@ node --test (Join-Path $PSScriptRoot 'benchmark-stop.test.mjs')
 if ($LASTEXITCODE -ne 0) { throw 'Benchmark session regression tests failed.' }
 Write-Host 'Benchmark endpoint and OCR cleanup regressions passed.'
 & (Join-Path $PSScriptRoot 'benchmark-delayed-failure.Tests.ps1')
+node --test (Join-Path $PSScriptRoot 'acceptance-delayed-ocr.test.mjs')
+if ($LASTEXITCODE) { throw 'Delayed OCR cancellation acceptance regressions failed.' }
+& (Join-Path $PSScriptRoot 'acceptance-delayed-ocr.Tests.ps1')
