@@ -17,6 +17,23 @@ on:
         required: true
         type: string
 
+      store_package_name:
+        description: Partner Center Package/Identity/Name
+        required: true
+        type: string
+      store_publisher:
+        description: Partner Center Package/Identity/Publisher
+        required: true
+        type: string
+      store_publisher_display_name:
+        description: Partner Center PublisherDisplayName
+        required: true
+        type: string
+      store_package_version:
+        description: Independent Store version (nonzero major, fourth component 0)
+        required: true
+        type: string
+
 permissions:
   contents: read
 
@@ -64,6 +81,10 @@ jobs:
         env:
           RELEASE_VERSION: ${{ inputs.version }}
           RELEASE_REF: ${{ github.ref }}
+          STORE_PACKAGE_NAME: ${{ inputs.store_package_name }}
+          STORE_PUBLISHER: ${{ inputs.store_publisher }}
+          STORE_PUBLISHER_DISPLAY_NAME: ${{ inputs.store_publisher_display_name }}
+          STORE_PACKAGE_VERSION: ${{ inputs.store_package_version }}
         run: |
           if ($env:RELEASE_REF -ne "refs/heads/main") {
             throw "Draft releases must be prepared from main, not $env:RELEASE_REF."
@@ -76,6 +97,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) {
             throw "Product version does not match the requested release."
           }
+          Import-Module ./scripts/store-package.psm1 -Force
+          Assert-StoreIdentity $env:STORE_PACKAGE_NAME $env:STORE_PUBLISHER $env:STORE_PUBLISHER_DISPLAY_NAME $env:STORE_PACKAGE_VERSION
           "version=$env:RELEASE_VERSION" >> $env:GITHUB_OUTPUT
 
       - name: Reserve immutable release tag
@@ -147,6 +170,26 @@ jobs:
     permissions:
       contents: read
 
+  store-packages:
+    name: Store MSIX (${{ matrix.architecture }})
+    if: >-
+      (github.actor == 'PeterShanxin' || github.actor == 'ianmeowmeow') &&
+      github.actor != 'dependabot[bot]'
+    needs: validate
+    strategy:
+      fail-fast: false
+      matrix:
+        architecture: [x64, arm64]
+    uses: ./.github/workflows/store-package.yml
+    with:
+      architecture: ${{ matrix.architecture }}
+      package_name: ${{ inputs.store_package_name }}
+      publisher: ${{ inputs.store_publisher }}
+      publisher_display_name: ${{ inputs.store_publisher_display_name }}
+      package_version: ${{ inputs.store_package_version }}
+    permissions:
+      contents: read
+
   draft-release:
     name: Create draft release
     if: >-
@@ -156,6 +199,7 @@ jobs:
       - validate
       - package-x64
       - package-arm64
+      - store-packages
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -185,10 +229,13 @@ jobs:
 
       - name: Verify assets and write checksums
         shell: pwsh
+        env:
+          STORE_PACKAGE_VERSION: ${{ inputs.store_package_version }}
         run: >-
           ./scripts/verify-release-assets.ps1
           -Directory release-assets
           -ChecksumPath release-assets/SHA256SUMS.txt
+          -StorePackageVersion $env:STORE_PACKAGE_VERSION
 
       - name: Build the updater manifest
         shell: pwsh
@@ -227,6 +274,7 @@ jobs:
           # of users.
           $assets = @(Get-ChildItem release-assets -Recurse -File |
             Where-Object {
+              $_.Extension -eq ".msix" -or
               $_.Extension -eq ".msi" -or
               $_.Name -like "*-setup.exe" -or
               $_.Name -eq "SHA256SUMS.txt" -or

@@ -4,12 +4,26 @@ param(
     [Parameter(Mandatory)][string]$Directory,
 
     # Where to write the SHA256 manifest.
-    [Parameter(Mandatory)][string]$ChecksumPath
+    [Parameter(Mandatory)][string]$ChecksumPath,
+
+    [string]$StorePackageVersion
 )
 
 $ErrorActionPreference = "Stop"
 
 $files = @(Get-ChildItem -LiteralPath $Directory -Recurse -File)
+if ($StorePackageVersion) {
+    Import-Module (Join-Path $PSScriptRoot 'store-package.psm1') -Force
+    Assert-StoreIdentity 'MeowcalSub.VersionCheck' 'CN=Version Check' 'Version Check' $StorePackageVersion
+    $storePackages = @($files | Where-Object { $_.Extension -eq '.msix' })
+    if ($storePackages.Count -ne 2) { throw 'Expected exactly two Store MSIX packages.' }
+    foreach ($architecture in @('x64', 'arm64')) {
+        $expectedName = "MeowcalSub-$StorePackageVersion-$architecture-Release.msix"
+        if (@($storePackages | Where-Object { $_.Name -eq $expectedName }).Count -ne 1) {
+            throw "Expected exactly one Store package named $expectedName."
+        }
+    }
+}
 
 # Named per architecture rather than counted, so a run that produced four x64
 # files cannot pass as one that produced both architectures. The signature is
@@ -32,7 +46,8 @@ foreach ($architecture in @("x64", "arm64")) {
 }
 
 $installers = @($files |
-    Where-Object { $_.Extension -eq ".msi" -or $_.Name -like "*-setup.exe" })
+    Where-Object { $_.Extension -eq ".msi" -or $_.Name -like "*-setup.exe" -or
+        ($StorePackageVersion -and $_.Extension -eq '.msix') })
 $checksumLines = $installers |
     Sort-Object Name |
     ForEach-Object {
