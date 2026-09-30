@@ -129,8 +129,11 @@ external model while removing package-owned settings and cache. This tests a
 persisted custom configuration, not a directory-picker UI.
 Before native GUI checks, `prepare-store-desktop.ps1` applies Microsoft's
 [DisablePrivacyExperience policy](https://learn.microsoft.com/en-us/windows/client-management/mdm/policy-csp-privacy#disableprivacyexperience)
-and completes an already-open Windows privacy screen through UI Automation,
-with optional choices off. It runs only on disposable hosted runners. The
+and dismisses an already-open privacy screen using the
+[hosted ARM workaround](https://github.com/actions/runner-images/issues/14069).
+Keyboard input requires a verified foreground CloudExperienceHost package;
+Escape may also close its Start menu. Preparation runs only on disposable
+hosted runners, before build and immediately before lifecycle tests. The
 capture fixture checks its rendered text and background pixels on the actual screen before
 reporting readiness; the application must still capture, OCR, translate and
 display the expected fixture text. Desktop preparation results and fixture

@@ -21,3 +21,19 @@ try {
     $env:RUNNER_ENVIRONMENT = $originalEnvironment
 }
 Write-Host 'Hosted desktop preparation guards passed.'
+. (Join-Path $PSScriptRoot 'store-desktop-target.ps1')
+$windowsDirectory = 'C:\Windows'
+$privacy = @{name='WWAHost';path='C:\Windows\System32\WWAHost.exe';family='Microsoft.Windows.CloudExperienceHost_test'}
+if (-not (Test-StoreDesktopInputTarget $privacy '{ENTER}' $windowsDirectory)) { throw 'Verified privacy host rejected.' }
+foreach ($invalid in @(
+    @{name='WWAHost';path='C:\Windows\System32\WWAHost.exe';family='Other.App_test'},
+    @{name='WWAHost';path='C:\Other\WWAHost.exe';family='Microsoft.Windows.CloudExperienceHost_test'},
+    @{name='Other';path='C:\Windows\System32\WWAHost.exe';family='Microsoft.Windows.CloudExperienceHost_test'},
+    @{name='explorer';path='C:\Windows\explorer.exe';family=''}
+)) {
+    if (Test-StoreDesktopInputTarget $invalid '{ENTER}' $windowsDirectory) { throw 'Unverified input target accepted.' }
+}
+$startMenu = @{name='StartMenuExperienceHost';path='C:\Windows\SystemApps\MicrosoftWindows.Client.CBS_test\StartMenuExperienceHost.exe';family='MicrosoftWindows.Client.CBS_test'}
+if (Test-StoreDesktopInputTarget $startMenu '{ENTER}' $windowsDirectory) { throw 'Enter accepted for Start menu.' }
+if (-not (Test-StoreDesktopInputTarget $startMenu '{ESC}' $windowsDirectory)) { throw 'Escape rejected for verified Start menu.' }
+Write-Host 'Hosted desktop input targeting tests passed.'

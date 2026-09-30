@@ -122,6 +122,9 @@ jobs:
             -OutputDirectory "$env:GITHUB_WORKSPACE/store-output"
       - name: Prepare signed lifecycle fixtures
         run: ./scripts/tests/prepare-store-lifecycle.ps1 -PackageDirectory "$env:GITHUB_WORKSPACE/store-output" -OutputDirectory "$env:RUNNER_TEMP/store-fixtures"
+      - name: Prepare lifecycle desktop
+        shell: powershell
+        run: ./scripts/tests/prepare-store-desktop.ps1 -OutputDirectory "$env:RUNNER_TEMP/store-desktop-lifecycle"
       - name: Install, download, translate, upgrade and uninstall
         shell: powershell
         run: ./scripts/tests/store-lifecycle.ps1 -InputDirectory "$env:RUNNER_TEMP/store-fixtures" -OutputDirectory "$env:RUNNER_TEMP/store-lifecycle"
@@ -133,6 +136,7 @@ jobs:
             store-output/*.msix
             store-output/SHA256.json
             ${{ runner.temp }}/store-desktop/**
+            ${{ runner.temp }}/store-desktop-lifecycle/**
             ${{ runner.temp }}/store-lifecycle/**
             ${{ runner.temp }}/store-fixtures/packages.json
             ${{ runner.temp }}/store-fixtures/*.msix
