@@ -474,7 +474,7 @@ async function confirmSelection() {
     // The selector tracks the region in screen coordinates (MouseEvent.screenX/Y), which matches
     // what the backend capture expects (logical/CSS pixels + a DPI scale factor).
     //
-    // Add a small padding so OCR isn't overly sensitive to "tight" selections.
+    // Clamp the selected bounds without expanding the OCR region.
     const winLeft = Math.round(window.screenX || 0);
     const winTop = Math.round(window.screenY || 0);
     const winRight = winLeft + Math.round(window.innerWidth || 0);
