@@ -126,7 +126,7 @@ pub async fn execute(endpoint: &str, params: &CompletionParams) -> Result<Value,
         .json(&params.request)
         .send()
         .await
-        .map_err(|_| Error::new("TRANSPORT_ERROR", "Local completion request failed"))?;
+        .map_err(completion_error)?;
     if !response.status().is_success() {
         return Err(Error::new(
             "RUNTIME_ERROR",
@@ -134,11 +134,7 @@ pub async fn execute(endpoint: &str, params: &CompletionParams) -> Result<Value,
         ));
     }
     let mut body = Vec::new();
-    while let Some(chunk) = response
-        .chunk()
-        .await
-        .map_err(|_| Error::new("TRANSPORT_ERROR", "Incomplete local response"))?
-    {
+    while let Some(chunk) = response.chunk().await.map_err(completion_error)? {
         if body.len() + chunk.len() > MAX_FRAME_BYTES - 1024 {
             return Err(Error::new(
                 "RESPONSE_TOO_LARGE",
@@ -149,6 +145,17 @@ pub async fn execute(endpoint: &str, params: &CompletionParams) -> Result<Value,
     }
     serde_json::from_slice(&body)
         .map_err(|_| Error::new("INVALID_RESPONSE", "Runtime returned invalid JSON"))
+}
+
+fn completion_error(error: reqwest::Error) -> Error {
+    if error.is_timeout() {
+        Error::new(
+            "COMPLETION_TIMEOUT",
+            "Completion exceeded its request budget",
+        )
+    } else {
+        Error::new("TRANSPORT_ERROR", "Local completion transport failed")
+    }
 }
 
 pub async fn sample(endpoint: &str, model: &str) -> Result<(), String> {
@@ -204,6 +211,61 @@ fn is_sample_translation(content: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn request_expiry_closes_http_without_becoming_a_transport_failure() {
+        use tokio::io::AsyncReadExt;
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move {
+            let (mut stream, _) = listener.accept().await.unwrap();
+            let mut bytes = [0; 4096];
+            let first = stream.read(&mut bytes).await.unwrap();
+            assert!(first > 0);
+            loop {
+                if stream.read(&mut bytes).await.unwrap() == 0 {
+                    break;
+                }
+            }
+        });
+        let error = execute(
+            &format!("http://{address}"),
+            &CompletionParams {
+                request: json!({"messages":[]}),
+                timeout_ms: 100,
+            },
+        )
+        .await
+        .unwrap_err();
+        assert_eq!(error.code, "COMPLETION_TIMEOUT");
+        tokio::time::timeout(Duration::from_secs(2), server)
+            .await
+            .unwrap()
+            .unwrap();
+    }
+
+    #[tokio::test]
+    async fn disconnected_peer_remains_a_transport_failure() {
+        use tokio::io::AsyncReadExt;
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move {
+            let (mut stream, _) = listener.accept().await.unwrap();
+            let mut bytes = [0; 4096];
+            assert!(stream.read(&mut bytes).await.unwrap() > 0);
+        });
+        let error = execute(
+            &format!("http://{address}"),
+            &CompletionParams {
+                request: json!({"messages":[]}),
+                timeout_ms: 5000,
+            },
+        )
+        .await
+        .unwrap_err();
+        assert_eq!(error.code, "TRANSPORT_ERROR");
+        server.await.unwrap();
+    }
 
     // Corrupt GPU output from the validated Adreno host (#105) mixes unrelated
     // CJK and Latin tokens; it must fail the Chinese-to-English sample.

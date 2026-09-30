@@ -128,6 +128,25 @@ fn pipe_fixture() {
     let mut input = BufReader::new(std::io::stdin().lock());
     let mut header = String::new();
     input.read_line(&mut header).unwrap();
+    if mode == "completion-budget" {
+        loop {
+            let request: Value = serde_json::from_str(&header).unwrap();
+            let budget = request["params"]["timeoutMs"].as_u64().unwrap();
+            let delay = request["params"]["delayMs"].as_u64().unwrap();
+            std::thread::sleep(Duration::from_millis(delay.min(budget)));
+            let reply = if delay >= budget {
+                json!({"id":request["id"],"error":{"code":"COMPLETION_TIMEOUT","message":"expired"}})
+            } else {
+                json!({"id":request["id"],"result":{"budget":budget}})
+            };
+            writeln!(output, "{reply}").unwrap();
+            output.flush().unwrap();
+            header.clear();
+            if input.read_line(&mut header).unwrap() == 0 {
+                std::process::exit(0);
+            }
+        }
+    }
     if mode == "malformed" {
         writeln!(output, "not-json").unwrap();
         output.flush().unwrap();
@@ -189,6 +208,54 @@ fn pipe_fixture() {
     std::process::exit(0);
 }
 
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn an_expired_completion_releases_the_channel_without_killing_the_warm_core() {
+    use super::super::async_call::call_async;
+    use std::sync::{Mutex, OnceLock};
+    let process = fixture("completion-budget").unwrap();
+    let pid = process.pid();
+    let slot: &'static OnceLock<Mutex<Option<Transport>>> = Box::leak(Box::new(OnceLock::new()));
+    slot.get_or_init(|| Mutex::new(Some(process)));
+    let first = call_async::<Value>(
+        slot,
+        "complete",
+        json!({"timeoutMs":800,"delayMs":700}),
+        Instant::now() + Duration::from_millis(100),
+        None,
+        true,
+    );
+    let started = Instant::now();
+    let _ = tokio::time::timeout(Duration::from_millis(90), first).await;
+    let second = call_async::<Value>(
+        slot,
+        "complete",
+        json!({"timeoutMs":800,"delayMs":10}),
+        Instant::now() + Duration::from_millis(300),
+        None,
+        true,
+    )
+    .await;
+    let mut guard = slot.get().unwrap().lock().unwrap();
+    let same_process = guard.as_ref().map(Transport::pid) == Some(pid);
+    if let Some(process) = guard.as_mut() {
+        process.kill_and_wait();
+    }
+    *guard = None;
+    assert!(
+        second.is_ok(),
+        "the next request must reach the same Core: {second:?}"
+    );
+    assert!(
+        second.unwrap()["budget"].as_u64().unwrap() < 300,
+        "queue time must reduce the Core budget"
+    );
+    assert!(
+        same_process,
+        "normal completion expiry must preserve the warm process"
+    );
+    assert!(started.elapsed() < Duration::from_millis(500));
+}
+
 #[test]
 fn binary_payload_preserves_bytes_and_next_request_alignment() -> Result<(), String> {
     let mut process = fixture("binary")?;
@@ -214,6 +281,26 @@ fn binary_payload_preserves_bytes_and_next_request_alignment() -> Result<(), Str
         .map_err(|error| format!("following control failed: {error:?}"))?;
     assert_eq!(result, json!({"aligned":true}));
     Ok(())
+}
+
+#[tokio::test]
+async fn a_completion_expiring_in_the_queue_never_starts_a_core() {
+    use std::sync::{Mutex, OnceLock};
+    let slot = Box::leak(Box::new(OnceLock::new()));
+    let guard = slot.get_or_init(|| Mutex::new(None)).lock().unwrap();
+    let request = super::super::async_call::call_async::<Value>(
+        slot,
+        "complete",
+        json!({}),
+        Instant::now() + Duration::from_millis(50),
+        None,
+        true,
+    );
+    tokio::time::sleep(Duration::from_millis(100)).await;
+    drop(guard);
+    let error = request.await.unwrap_err();
+    assert!(error.starts_with("CORE_COMPLETION_TIMEOUT:"), "{error}");
+    assert!(slot.get().unwrap().lock().unwrap().is_none());
 }
 
 #[test]

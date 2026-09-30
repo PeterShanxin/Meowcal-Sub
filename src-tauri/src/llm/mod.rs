@@ -54,6 +54,9 @@ pub enum LlmError {
 
     #[error("API error: {0}")]
     ApiError(String),
+
+    #[error("Translation deadline expired")]
+    DeadlineExceeded,
 }
 
 impl LlmError {
@@ -65,6 +68,7 @@ impl LlmError {
             }
             LlmError::ModelNotAvailable(_) => "model_not_available",
             LlmError::ApiError(_) => "api_error",
+            LlmError::DeadlineExceeded => "timeout",
         }
     }
 }
@@ -348,8 +352,9 @@ pub trait TranslatorBackend: Send + Sync {
         target_language: &str,
         context: Option<&str>,
         options: Option<PromptRouterOptions>,
+        deadline: Option<std::time::Instant>,
     ) -> Result<String, LlmError> {
-        let _ = options;
+        let _ = (options, deadline);
         self.translate_with_context(text, source_language, target_language, context)
             .await
     }

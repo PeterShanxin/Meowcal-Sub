@@ -1147,32 +1147,25 @@ impl FoundryLocalBackend {
         }
     }
 
-    /// Determine the current phase based on system state and optional probe result.
-    ///
-    /// If `probe_result` is None, no probe was performed (fast status check).
-    /// If `probe_result` is Some, it contains the result of a probe attempt.
+    /// Determine readiness from system state and an optional fresh probe.
     pub fn determine_phase(
         &self,
         probe_result: Option<Result<bool, LlmError>>,
     ) -> FoundryLocalPhase {
-        // Check if CLI is available
         if !Self::is_cli_available() {
             return FoundryLocalPhase::NotInstalled;
         }
 
-        // Check if service is running
         if !self.service_available.load(Ordering::SeqCst) {
             return FoundryLocalPhase::NotRunning;
         }
 
-        // Check if models are cached
         let models = read_or_recover(&self.cached_models);
         if models.is_empty() {
             return FoundryLocalPhase::NoModels;
         }
         drop(models);
 
-        // If we have a probe result, use it
         if let Some(result) = probe_result {
             match result {
                 Ok(true) => {
@@ -1189,7 +1182,6 @@ impl FoundryLocalBackend {
             }
         }
 
-        // No probe performed - check cache
         if self.is_probe_cache_valid() {
             return FoundryLocalPhase::Ready;
         }
@@ -1203,8 +1195,7 @@ impl FoundryLocalBackend {
             }
         }
 
-        // Service running with models but no recent probe - not checked yet.
-        // (caller should perform a probe if they want accurate status)
+        // A fresh probe is required to establish readiness.
         FoundryLocalPhase::Unchecked
     }
 
@@ -1238,7 +1229,6 @@ impl FoundryLocalBackend {
             .get_model()
             .ok_or_else(|| LlmError::ModelNotAvailable("No model available".to_string()))?;
 
-        // Build history text
         let history_text: String = history
             .iter()
             .map(|line| format!("\"{}\"", line))
@@ -1275,7 +1265,11 @@ impl FoundryLocalBackend {
         };
 
         let completion = if managed {
-            core_translation::complete(&request, self.config.timeout_ms as u64).await?
+            core_translation::complete(
+                &request,
+                std::time::Instant::now() + Duration::from_millis(self.config.timeout_ms as u64),
+            )
+            .await?
         } else {
             let response = self
                 .post_with_namespace_fallback(
@@ -1315,7 +1309,6 @@ impl TranslatorBackend for FoundryLocalBackend {
         if self.config.managed_runtime.is_some() {
             return core_translation::is_available();
         }
-        // Refresh status if currently unavailable
         if !self.service_available.load(Ordering::SeqCst) {
             self.refresh_service_status();
         }
@@ -1343,10 +1336,7 @@ impl TranslatorBackend for FoundryLocalBackend {
             return ReadyState::NotReady;
         }
 
-        // If service is running and model is available, consider it ready for translation.
-        // The probe cache is for UI status display (the "Model ready (probe)" ladder step),
-        // not for blocking translation attempts. Translation will timeout/fallback if
-        // the model is still warming up.
+        // The probe cache drives UI status, not admission of translation attempts.
         ReadyState::Ready
     }
 
@@ -1409,8 +1399,15 @@ impl TranslatorBackend for FoundryLocalBackend {
         target_language: &str,
         context: Option<&str>,
     ) -> Result<String, LlmError> {
-        self.translate_with_context_options(text, source_language, target_language, context, None)
-            .await
+        self.translate_with_context_options(
+            text,
+            source_language,
+            target_language,
+            context,
+            None,
+            None,
+        )
+        .await
     }
 
     async fn translate_with_context_options(
@@ -1420,6 +1417,7 @@ impl TranslatorBackend for FoundryLocalBackend {
         target_language: &str,
         context: Option<&str>,
         options: Option<PromptRouterOptions>,
+        deadline: Option<std::time::Instant>,
     ) -> Result<String, LlmError> {
         if text.trim().is_empty() {
             return Ok(String::new());
@@ -1497,7 +1495,9 @@ impl TranslatorBackend for FoundryLocalBackend {
         let completion = if managed {
             core_translation::complete_translation(
                 &request,
-                self.config.timeout_ms as u64,
+                deadline.unwrap_or_else(|| {
+                    std::time::Instant::now() + Duration::from_millis(self.config.timeout_ms as u64)
+                }),
                 text,
                 source_language,
                 target_language,

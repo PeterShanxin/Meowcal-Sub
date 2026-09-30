@@ -127,18 +127,14 @@ impl TranslationAttemptRunner {
                 };
             }
 
-            // Every attempt is bounded. With context the cap is tight, since a
-            // slow answer has somewhere to go: drop a tier and ask again.
-            // Without context there was no cap at all historically, so an
-            // attempt ran to the full 30s total - and because the capture loop
-            // awaits translation inline, one 27.6s stall left the pipeline
-            // blind for its duration. The caps themselves are policy knobs.
+            // The same deadline bounds backend queueing and inference.
             let attempt_cap = if context_used {
                 self.policy.contexted_attempt_cap_ms
             } else {
                 self.policy.uncontexted_attempt_cap_ms
             };
             let attempt_timeout = remaining_total.min(Duration::from_millis(attempt_cap));
+            let deadline = (started + total_timeout).min(Instant::now() + attempt_timeout);
 
             let result = timeout(
                 attempt_timeout,
@@ -152,9 +148,14 @@ impl TranslationAttemptRunner {
                         max_context_chars: self.policy.prompt_max_context_chars,
                         max_source_chars: self.policy.prompt_max_source_chars,
                     }),
+                    Some(deadline),
                 ),
             )
             .await;
+            let result = match result {
+                Ok(Err(LlmError::DeadlineExceeded)) => Err(()),
+                result => result.map_err(|_| ()),
+            };
             let latency_ms = started.elapsed().as_millis();
 
             match result {

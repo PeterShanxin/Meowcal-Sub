@@ -103,7 +103,7 @@ fn start(method: &'static str, params: Value) {
             &TRANSLATION,
             method,
             params,
-            Duration::from_secs(120),
+            std::time::Instant::now() + Duration::from_secs(120),
             None,
             Some(&cancelled),
             false,

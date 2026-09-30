@@ -57,13 +57,16 @@ pub(super) async fn is_ready() -> Result<bool, LlmError> {
 
 pub(super) async fn complete(
     request: &ChatCompletionRequest,
-    timeout_ms: u64,
+    deadline: std::time::Instant,
 ) -> Result<ChatCompletionResponse, LlmError> {
     let request = serde_json::to_value(request)
         .map_err(|error| LlmError::ApiError(format!("Invalid Core request: {error}")))?;
-    let response = match crate::core_client::complete(request, timeout_ms).await {
+    let response = match crate::core_client::complete(request, deadline).await {
         Ok(response) => response,
         Err(error) => {
+            if error.starts_with("CORE_COMPLETION_TIMEOUT:") {
+                return Err(LlmError::DeadlineExceeded);
+            }
             if super::transport_errors::is_transient(&LlmError::ApiError(error.clone())) {
                 crate::core_client::recover_transport();
             }
@@ -76,7 +79,7 @@ pub(super) async fn complete(
 
 pub(super) async fn complete_translation(
     request: &ChatCompletionRequest,
-    timeout_ms: u64,
+    deadline: std::time::Instant,
     text: &str,
     source_language: &str,
     target_language: &str,
@@ -87,7 +90,7 @@ pub(super) async fn complete_translation(
         &super::prompt_router::clean_source_text(text),
         max_source_chars,
     );
-    let response = complete(request, timeout_ms).await?;
+    let response = complete(request, deadline).await?;
     validate_completion(
         response,
         request.max_tokens,

@@ -64,8 +64,15 @@ impl TranslatorBackend for RecordingBackend {
         source_language: &str,
         target_language: &str,
     ) -> Result<String, LlmError> {
-        self.translate_with_context_options(text, source_language, target_language, None, None)
-            .await
+        self.translate_with_context_options(
+            text,
+            source_language,
+            target_language,
+            None,
+            None,
+            None,
+        )
+        .await
     }
 
     async fn translate_with_context_options(
@@ -75,7 +82,9 @@ impl TranslatorBackend for RecordingBackend {
         _target_language: &str,
         context: Option<&str>,
         options: Option<PromptRouterOptions>,
+        deadline: Option<std::time::Instant>,
     ) -> Result<String, LlmError> {
+        let _ = deadline;
         let index = self.calls.fetch_add(1, Ordering::SeqCst);
         {
             let mut seen = lock_or_recover(&self.seen);
@@ -356,8 +365,15 @@ impl TranslatorBackend for PromptRecorderBackend {
         source_language: &str,
         target_language: &str,
     ) -> Result<String, LlmError> {
-        self.translate_with_context_options(text, source_language, target_language, None, None)
-            .await
+        self.translate_with_context_options(
+            text,
+            source_language,
+            target_language,
+            None,
+            None,
+            None,
+        )
+        .await
     }
 
     async fn translate_with_context_options(
@@ -367,6 +383,7 @@ impl TranslatorBackend for PromptRecorderBackend {
         target_language: &str,
         context: Option<&str>,
         options: Option<PromptRouterOptions>,
+        deadline: Option<std::time::Instant>,
     ) -> Result<String, LlmError> {
         lock_or_recover(&self.seen).push(context.map(str::to_string));
         self.inner
@@ -376,6 +393,7 @@ impl TranslatorBackend for PromptRecorderBackend {
                 target_language,
                 context,
                 options,
+                deadline,
             )
             .await
     }

@@ -1,0 +1,410 @@
+{
+  "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36 Edg/154.0.0.0",
+  "rows": [
+    {
+      "text": "The train leaves in ten minutes.",
+      "refresh": false,
+      "outcome": {
+        "translated": "火车将在十分钟后出发。",
+        "backendUsed": "localEngine",
+        "warnings": [],
+        "displayState": "translated"
+      },
+      "elapsedMs": 547.9000000003725,
+      "calls": [
+        {
+          "command": "translate_once",
+          "startMs": 34961.90000000037,
+          "endMs": 35509.70000000112
+        }
+      ]
+    },
+    {
+      "text": "Please close the door behind you.",
+      "refresh": true,
+      "outcome": {
+        "translated": "请在离开时关上门。",
+        "backendUsed": "localEngine",
+        "warnings": [],
+        "displayState": "translated"
+      },
+      "elapsedMs": 550.5,
+      "calls": [
+        {
+          "command": "translate_once",
+          "startMs": 35509.70000000112,
+          "endMs": 36060.20000000112
+        },
+        {
+          "command": "refresh_engine_status",
+          "startMs": 35615,
+          "endMs": 35622.5
+        },
+        {
+          "command": "get_capture_region",
+          "startMs": 35615.70000000112,
+          "endMs": 35621.10000000149
+        },
+        {
+          "command": "get_settings",
+          "startMs": 35616,
+          "endMs": 35622.800000000745
+        },
+        {
+          "command": "refresh_engine_status",
+          "startMs": 35616.300000000745,
+          "endMs": 35623.10000000149
+        },
+        {
+          "command": "get_capture_region",
+          "startMs": 35616.60000000149,
+          "endMs": 35622.800000000745
+        },
+        {
+          "command": "get_settings",
+          "startMs": 35616.90000000037,
+          "endMs": 35623.20000000112
+        },
+        {
+          "command": "refresh_engine_status",
+          "startMs": 35617.10000000149,
+          "endMs": 35622.70000000112
+        },
+        {
+          "command": "get_capture_region",
+          "startMs": 35617.300000000745,
+          "endMs": 35622.800000000745
+        },
+        {
+          "command": "get_settings",
+          "startMs": 35617.40000000037,
+          "endMs": 35623.10000000149
+        }
+      ]
+    },
+    {
+      "text": "We should wait until tomorrow.",
+      "refresh": false,
+      "outcome": {
+        "translated": "我们应该等到明天再行动。",
+        "backendUsed": "localEngine",
+        "warnings": [],
+        "displayState": "translated"
+      },
+      "elapsedMs": 570.5999999996275,
+      "calls": [
+        {
+          "command": "translate_once",
+          "startMs": 36060.300000000745,
+          "endMs": 36630.90000000037
+        }
+      ]
+    },
+    {
+      "text": "I left my keys on the table.",
+      "refresh": true,
+      "outcome": {
+        "translated": "我把钥匙落在了桌子上。",
+        "backendUsed": "localEngine",
+        "warnings": [],
+        "displayState": "translated"
+      },
+      "elapsedMs": 494.40000000037253,
+      "calls": [
+        {
+          "command": "translate_once",
+          "startMs": 36630.90000000037,
+          "endMs": 37125.10000000149
+        },
+        {
+          "command": "refresh_engine_status",
+          "startMs": 36738.5,
+          "endMs": 36744.300000000745
+        },
+        {
+          "command": "get_capture_region",
+          "startMs": 36739.20000000112,
+          "endMs": 36744
+        },
+        {
+          "command": "get_settings",
+          "startMs": 36739.300000000745,
+          "endMs": 36744.60000000149
+        },
+        {
+          "command": "refresh_engine_status",
+          "startMs": 36739.5,
+          "endMs": 36744.40000000037
+        },
+        {
+          "command": "get_capture_region",
+          "startMs": 36739.60000000149,
+          "endMs": 36744.300000000745
+        },
+        {
+          "command": "get_settings",
+          "startMs": 36739.60000000149,
+          "endMs": 36744.90000000037
+        },
+        {
+          "command": "refresh_engine_status",
+          "startMs": 36739.800000000745,
+          "endMs": 36745
+        },
+        {
+          "command": "get_capture_region",
+          "startMs": 36739.90000000037,
+          "endMs": 36744.90000000037
+        },
+        {
+          "command": "get_settings",
+          "startMs": 36740,
+          "endMs": 36745
+        }
+      ]
+    },
+    {
+      "text": "There is nobody in the room.",
+      "refresh": false,
+      "outcome": {
+        "translated": "房间里一个人也没有。",
+        "backendUsed": "localEngine",
+        "warnings": [],
+        "displayState": "translated"
+      },
+      "elapsedMs": 392.40000000037253,
+      "calls": [
+        {
+          "command": "translate_once",
+          "startMs": 37125.300000000745,
+          "endMs": 37517.60000000149
+        }
+      ]
+    },
+    {
+      "text": "The train leaves in ten minutes.",
+      "refresh": true,
+      "outcome": {
+        "translated": "火车将在十分钟后出发。",
+        "backendUsed": "localEngine",
+        "warnings": [],
+        "displayState": "translated"
+      },
+      "elapsedMs": 480.2999999988824,
+      "calls": [
+        {
+          "command": "translate_once",
+          "startMs": 37517.70000000112,
+          "endMs": 37998
+        },
+        {
+          "command": "refresh_engine_status",
+          "startMs": 37624,
+          "endMs": 37627.60000000149
+        },
+        {
+          "command": "get_capture_region",
+          "startMs": 37624.60000000149,
+          "endMs": 37627.5
+        },
+        {
+          "command": "get_settings",
+          "startMs": 37624.800000000745,
+          "endMs": 37628.10000000149
+        },
+        {
+          "command": "refresh_engine_status",
+          "startMs": 37625.10000000149,
+          "endMs": 37629
+        },
+        {
+          "command": "get_capture_region",
+          "startMs": 37625.60000000149,
+          "endMs": 37628
+        },
+        {
+          "command": "get_settings",
+          "startMs": 37625.70000000112,
+          "endMs": 37629.5
+        },
+        {
+          "command": "refresh_engine_status",
+          "startMs": 37625.90000000037,
+          "endMs": 37629.70000000112
+        },
+        {
+          "command": "get_capture_region",
+          "startMs": 37626,
+          "endMs": 37629.5
+        },
+        {
+          "command": "get_settings",
+          "startMs": 37626.10000000149,
+          "endMs": 37629.800000000745
+        }
+      ]
+    },
+    {
+      "text": "Please close the door behind you.",
+      "refresh": false,
+      "outcome": {
+        "translated": "请在离开时把门关好。",
+        "backendUsed": "localEngine",
+        "warnings": [],
+        "displayState": "translated"
+      },
+      "elapsedMs": 585.5,
+      "calls": [
+        {
+          "command": "translate_once",
+          "startMs": 37998.10000000149,
+          "endMs": 38583.60000000149
+        }
+      ]
+    },
+    {
+      "text": "We should wait until tomorrow.",
+      "refresh": true,
+      "outcome": {
+        "translated": "我们应该等到明天再说。",
+        "backendUsed": "localEngine",
+        "warnings": [],
+        "displayState": "translated"
+      },
+      "elapsedMs": 482.7999999988824,
+      "calls": [
+        {
+          "command": "translate_once",
+          "startMs": 38583.60000000149,
+          "endMs": 39066.40000000037
+        },
+        {
+          "command": "refresh_engine_status",
+          "startMs": 38698.90000000037,
+          "endMs": 38705.20000000112
+        },
+        {
+          "command": "get_capture_region",
+          "startMs": 38699.300000000745,
+          "endMs": 38705
+        },
+        {
+          "command": "get_settings",
+          "startMs": 38699.60000000149,
+          "endMs": 38705.40000000037
+        },
+        {
+          "command": "refresh_engine_status",
+          "startMs": 38699.60000000149,
+          "endMs": 38705.5
+        },
+        {
+          "command": "get_capture_region",
+          "startMs": 38699.800000000745,
+          "endMs": 38705.20000000112
+        },
+        {
+          "command": "get_settings",
+          "startMs": 38699.90000000037,
+          "endMs": 38705.5
+        },
+        {
+          "command": "refresh_engine_status",
+          "startMs": 38700,
+          "endMs": 38705.5
+        },
+        {
+          "command": "get_capture_region",
+          "startMs": 38700.10000000149,
+          "endMs": 38705.5
+        },
+        {
+          "command": "get_settings",
+          "startMs": 38700.300000000745,
+          "endMs": 38705.5
+        }
+      ]
+    },
+    {
+      "text": "I left my keys on the table.",
+      "refresh": false,
+      "outcome": {
+        "translated": "我把钥匙落在了桌子上。",
+        "backendUsed": "localEngine",
+        "warnings": [],
+        "displayState": "translated"
+      },
+      "elapsedMs": 480.2000000011176,
+      "calls": [
+        {
+          "command": "translate_once",
+          "startMs": 39066.40000000037,
+          "endMs": 39546.60000000149
+        }
+      ]
+    },
+    {
+      "text": "There is nobody in the room.",
+      "refresh": true,
+      "outcome": {
+        "translated": "房间里没有人。",
+        "backendUsed": "localEngine",
+        "warnings": [],
+        "displayState": "translated"
+      },
+      "elapsedMs": 343.09999999962747,
+      "calls": [
+        {
+          "command": "translate_once",
+          "startMs": 39546.60000000149,
+          "endMs": 39889.60000000149
+        },
+        {
+          "command": "refresh_engine_status",
+          "startMs": 39649.10000000149,
+          "endMs": 39652.70000000112
+        },
+        {
+          "command": "get_capture_region",
+          "startMs": 39649.70000000112,
+          "endMs": 39652.20000000112
+        },
+        {
+          "command": "get_settings",
+          "startMs": 39649.90000000037,
+          "endMs": 39654.300000000745
+        },
+        {
+          "command": "refresh_engine_status",
+          "startMs": 39650.40000000037,
+          "endMs": 39655
+        },
+        {
+          "command": "get_capture_region",
+          "startMs": 39650.5,
+          "endMs": 39653.90000000037
+        },
+        {
+          "command": "get_settings",
+          "startMs": 39650.70000000112,
+          "endMs": 39655.20000000112
+        },
+        {
+          "command": "refresh_engine_status",
+          "startMs": 39650.800000000745,
+          "endMs": 39655.20000000112
+        },
+        {
+          "command": "get_capture_region",
+          "startMs": 39650.90000000037,
+          "endMs": 39655.20000000112
+        },
+        {
+          "command": "get_settings",
+          "startMs": 39651.20000000112,
+          "endMs": 39655.20000000112
+        }
+      ]
+    }
+  ]
+}

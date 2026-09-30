@@ -1,0 +1,15 @@
+{
+  "elapsedMs": 9282.699999999255,
+  "status": {
+    "cliAvailable": true,
+    "serviceRunning": true,
+    "serviceUrl": null,
+    "models": [
+      "HY-MT1.5-1.8B-Q4_K_M"
+    ],
+    "configuredModel": "HY-MT1.5-1.8B-Q4_K_M",
+    "selectedModel": "HY-MT1.5-1.8B-Q4_K_M",
+    "notes": "Local Translation Engine is ready.",
+    "phase": "ready"
+  }
+}

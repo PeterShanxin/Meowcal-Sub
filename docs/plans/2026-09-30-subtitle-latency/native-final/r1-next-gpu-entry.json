@@ -1,0 +1,42 @@
+[
+  {
+    "sample": 0,
+    "submittedAt": 1790703522195,
+    "gpuTask": 113,
+    "gpuStartedAt": 1790703522625,
+    "submissionToGpuMs": 430,
+    "rpcMs": 1010.6999999992549
+  },
+  {
+    "sample": 1,
+    "submittedAt": 1790703525619,
+    "gpuTask": 179,
+    "gpuStartedAt": 1790703525627,
+    "submissionToGpuMs": 8,
+    "rpcMs": 493.5
+  },
+  {
+    "sample": 2,
+    "submittedAt": 1790703530721,
+    "gpuTask": 286,
+    "gpuStartedAt": 1790703531090,
+    "submissionToGpuMs": 369,
+    "rpcMs": 870.6999999992549
+  },
+  {
+    "sample": 3,
+    "submittedAt": 1790703533998,
+    "gpuTask": 353,
+    "gpuStartedAt": 1790703534008,
+    "submissionToGpuMs": 10,
+    "rpcMs": 493.69999999925494
+  },
+  {
+    "sample": 4,
+    "submittedAt": 1790703536817,
+    "gpuTask": 412,
+    "gpuStartedAt": 1790703536827,
+    "submissionToGpuMs": 10,
+    "rpcMs": 498.79999999701977
+  }
+]

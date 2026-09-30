@@ -1,7 +1,7 @@
 use serde::de::DeserializeOwned;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
-use std::time::Duration;
+use std::time::Instant;
 
 use super::{Request, Transport};
 
@@ -9,7 +9,7 @@ pub(super) fn call_async<T: DeserializeOwned + Send + 'static>(
     slot: &'static OnceLock<Mutex<Option<Transport>>>,
     method: &'static str,
     params: impl Into<Request>,
-    timeout: Duration,
+    deadline: Instant,
     progress: Option<Arc<dyn Fn(String) + Send + Sync>>,
     drain_active_on_drop: bool,
 ) -> impl std::future::Future<Output = Result<T, String>> {
@@ -21,17 +21,18 @@ pub(super) fn call_async<T: DeserializeOwned + Send + 'static>(
             slot,
             method,
             params,
-            timeout,
+            deadline,
             progress.as_deref(),
             Some(&worker_cancelled),
             drain_active_on_drop,
         )
     });
+    let guard = CancelOnDrop {
+        flag: cancelled,
+        armed: true,
+    };
     async move {
-        let mut guard = CancelOnDrop {
-            flag: cancelled,
-            armed: true,
-        };
+        let mut guard = guard;
         let result = task
             .await
             .map_err(|error| format!("CORE_TASK_FAILED: {error}"))?;

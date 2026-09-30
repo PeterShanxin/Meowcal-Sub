@@ -1,6 +1,6 @@
 use super::{
-    clear_process, fatal_remote, kill_slot_for, remaining, spawn_initialized, Failure, KillSwitch,
-    Request, StatusPoll, Transport,
+    clear_process, fatal_remote, kill_slot_for, spawn_initialized, Failure, KillSwitch, Request,
+    StatusPoll, Transport,
 };
 use serde::de::DeserializeOwned;
 use serde_json::json;
@@ -20,12 +20,11 @@ pub(super) fn call<T: DeserializeOwned>(
     slot: &'static OnceLock<Mutex<Option<Transport>>>,
     method: &str,
     params: impl Into<Request>,
-    timeout: Duration,
+    deadline: Instant,
     progress: Option<&(dyn Fn(String) + Send + Sync)>,
     cancelled: Option<&Arc<AtomicBool>>,
     drain_active_on_drop: bool,
 ) -> Result<T, String> {
-    let deadline = Instant::now() + timeout;
     let mut guard = acquire_slot(
         slot.get_or_init(|| Mutex::new(None)),
         deadline,
@@ -76,7 +75,7 @@ pub(super) fn poll_status(
 fn call_locked<T: DeserializeOwned>(
     guard: &mut Option<Transport>,
     kill_slot: &OnceLock<Mutex<Option<Arc<KillSwitch>>>>,
-    params: Request,
+    mut params: Request,
     options: CallOptions<'_>,
 ) -> Result<T, String> {
     let CallOptions {
@@ -89,6 +88,7 @@ fn call_locked<T: DeserializeOwned>(
     if cancelled.is_some_and(|flag| flag.load(Ordering::SeqCst)) {
         return Err("CORE_REQUEST_CANCELLED".to_string());
     }
+    request_budget(deadline, method)?;
     if std::ptr::eq(kill_slot, &super::TRANSLATION_KILL)
         && method == "complete"
         && super::recovering()
@@ -108,7 +108,13 @@ fn call_locked<T: DeserializeOwned>(
     if guard.is_none() {
         *guard = Some(spawn_initialized(kill_slot, deadline, method, cancelled)?);
     }
-    let request_timeout = remaining(deadline, method)?;
+    let mut request_timeout = request_budget(deadline, method)?;
+    if method == "complete" {
+        params.params["timeoutMs"] = json!(request_timeout.as_millis().clamp(1, 90_000) as u64);
+        // Drain the bounded Core response after caller expiry, preserving both
+        // the warm process and response framing for the next request.
+        request_timeout += Duration::from_secs(2);
+    }
     let process = guard
         .as_mut()
         .ok_or_else(|| "CORE_NOT_RUNNING".to_string())?;
@@ -196,10 +202,27 @@ pub(super) fn acquire_slot<'a>(
                     return Err("CORE_REQUEST_CANCELLED".to_string());
                 }
                 if Instant::now() >= deadline {
-                    return Err(format!("CORE_REQUEST_TIMEOUT: {method}"));
+                    return Err(expired(method));
                 }
                 std::thread::sleep(Duration::from_millis(10));
             }
         }
+    }
+}
+
+fn expired(method: &str) -> String {
+    if method == "complete" {
+        "CORE_COMPLETION_TIMEOUT: request deadline expired".into()
+    } else {
+        format!("CORE_REQUEST_TIMEOUT: {method}")
+    }
+}
+
+fn request_budget(deadline: Instant, method: &str) -> Result<Duration, String> {
+    let left = deadline.saturating_duration_since(Instant::now());
+    if left.is_zero() {
+        Err(expired(method))
+    } else {
+        Ok(left)
     }
 }
