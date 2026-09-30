@@ -1,15 +1,15 @@
-import type { AppScreen, AppSettings, CaptureRegion, EngineStatus, UiSnapshot } from "./contracts";
+import type { AppScreen, AppSettings, CaptureRegion, UiSnapshot } from "./contracts";
 import { pickSampleTranslation } from "./sample-translations";
 import { applyLanguageSelection } from "./languages";
 import { backendUnavailablePhase } from "./home-state";
 import { defaultSettings, mergeSettings, recognitionPresets } from "./settings-defaults";
 import { UpdateController } from "./update-controller";
 import { SettingsWriter } from "./settings-writer";
+import { EngineStatusController } from "./engine-status-controller";
 
 type Subscriber = (snapshot: UiSnapshot) => void;
 
-// Named for an earlier rule; renaming it would reopen setup for everyone who
-// already finished it.
+// Keep the stored key so completed setup does not reopen.
 const ONBOARDING_SEEN_KEY = "meowcal.onboardingComplete";
 const NOTICE_DURATION_MS = 4000;
 
@@ -43,6 +43,7 @@ export class AppController {
     update: { kind: "idle" },
     appVersion: null,
   };
+  private engines = new EngineStatusController((patch) => this.publish(patch));
   private updates = new UpdateController((patch) => this.publish(patch));
   private settingsWriter = new SettingsWriter((settingsSave) => this.publish({ settingsSave }));
 
@@ -62,7 +63,6 @@ export class AppController {
     this.subscriber(this.snapshot);
   }
 
-  /** Notices expire once the work they describe is done; errors stay until dismissed. */
   private expireNotice(notice: string): void {
     if (this.noticeTimer !== null) window.clearTimeout(this.noticeTimer);
     this.noticeTimer = window.setTimeout(() => {
@@ -81,7 +81,7 @@ export class AppController {
     const [settings, languages, engine, region, running] = await Promise.all([
       this.safeInvoke<Partial<AppSettings> | null>("get_settings", null),
       this.safeInvoke<string[]>("get_ocr_languages", []),
-      this.safeInvoke<EngineStatus>("get_engine_status", {
+      this.engines.read("get_engine_status", {
         phase: browserMode ? backendUnavailablePhase : "unknown",
       }),
       this.safeInvoke<CaptureRegion | null>("get_capture_region", null),
@@ -92,7 +92,6 @@ export class AppController {
     this.publish({
       settings: merged,
       ocrLanguages: new Set(languages),
-      engine,
       region: region ?? merged.lastCaptureRegion ?? null,
       running,
       busy: "idle",
@@ -104,17 +103,7 @@ export class AppController {
       await this.openSetup();
     }
     this.scheduleAutomaticUpdateCheck();
-    if (!browserMode) await this.finishEnginePreparation(engine);
-  }
-
-  private async finishEnginePreparation(engine: EngineStatus | undefined): Promise<void> {
-    if (this.disposed || engine?.phase !== "preparing") return;
-    try {
-      const ready = await window.TauriBridge.invoke<EngineStatus>("make_engine_ready");
-      this.publish({ engine: ready });
-    } catch (error) {
-      this.publish({ engine: { ...engine, phase: "error" }, error: errorMessage(error) });
-    }
+    if (!browserMode) await this.engines.finishPreparation(engine);
   }
 
   private async safeInvoke<T>(command: string, fallback: T): Promise<T> {
@@ -136,9 +125,7 @@ export class AppController {
       if (payload.isError) this.publish({ error: payload.message ?? "Screen capture failed" });
       else if (payload.message) this.publish({ captureWarning: payload.message });
     });
-    // Setup opens by itself only until the user has closed it once, finished or
-    // not. After that Home's setup action is the way back, so a cancelled setup
-    // cannot trap anyone in a window that reopens on every launch (#74).
+    // A dismissed wizard must not reopen automatically (#74).
     const wizardUnlisten = await window.TauriBridge.event.listen("engine-wizard-closed", () => {
       localStorage.setItem(ONBOARDING_SEEN_KEY, "true");
     });
@@ -151,6 +138,7 @@ export class AppController {
 
   dispose(): void {
     this.disposed = true;
+    this.engines.dispose();
     this.stopRegionPolling();
     if (this.overlaySaveId !== null) window.clearTimeout(this.overlaySaveId);
     if (this.autoCheckTimer !== null) window.clearTimeout(this.autoCheckTimer);
@@ -177,7 +165,6 @@ export class AppController {
     }
   }
 
-  // Backs up `region-selected`. The selector keeps the saved area, so only a new area counts.
   private startRegionPolling(saved: CaptureRegion | null): void {
     this.stopRegionPolling();
     let attempts = 0;
@@ -226,43 +213,31 @@ export class AppController {
       ? { phase: backendUnavailablePhase }
       : (this.snapshot.engine ?? {});
     const [engine, region, stored] = await Promise.all([
-      this.safeInvoke<EngineStatus>("refresh_engine_status", engineFallback),
+      this.engines.read("refresh_engine_status", engineFallback),
       this.safeInvoke<CaptureRegion | null>("get_capture_region", this.snapshot.region),
       this.safeInvoke<Partial<AppSettings> | null>("get_settings", null),
     ]);
-    // Errors stay: this re-reads engine and area, not capture, so it cannot tell
-    // whether a failure reported while another window had focus is over.
-    const patch: Partial<UiSnapshot> = { engine, region };
-    // The overlay's quick menu saves appearance itself. Take its values back,
-    // unless an edit made in this window is still waiting to be saved.
+    // Refresh cannot establish whether a capture error has cleared.
+    const patch: Partial<UiSnapshot> = { region };
+    // Import the overlay menu's saved appearance without overwriting pending edits.
     if (stored && this.overlaySaveId === null && this.snapshot.settingsSave.kind === "idle") {
       patch.settings = { ...this.snapshot.settings, overlay: mergeSettings(stored).overlay };
     }
     this.publish(patch);
-    await this.finishEnginePreparation(engine);
+    await this.engines.finishPreparation(engine);
   }
 
   async start(): Promise<void> {
     this.publish({ busy: "warming", error: null, notice: null, captureWarning: null });
     try {
       await this.saveSettings(true);
-      const engine = await this.readyEngine();
-      this.publish({ engine, busy: "starting" });
+      await this.engines.ready();
+      this.publish({ busy: "starting" });
       await window.TauriBridge.invoke("start_translation");
       this.publish({ running: true, busy: "idle", notice: "Translation started" });
     } catch (error) {
       this.publish({ running: false, busy: "idle", error: errorMessage(error) });
     }
-  }
-
-  /** Launch does not load the engine, so everything that translates readies it first. */
-  private async readyEngine(): Promise<EngineStatus> {
-    let engine = await window.TauriBridge.invoke<EngineStatus>("refresh_engine_status");
-    if (["notRunning", "notrunning", "preparing"].includes(engine.phase ?? "")) {
-      engine = await window.TauriBridge.invoke<EngineStatus>("make_engine_ready");
-    }
-    if (engine.phase !== "ready") throw new Error("The local translation engine is not ready yet.");
-    return engine;
   }
 
   async stop(): Promise<void> {
@@ -343,7 +318,7 @@ export class AppController {
   async testTranslation(): Promise<void> {
     this.publish({ busy: "saving", notice: "Running a private sample translation…", error: null });
     try {
-      this.publish({ engine: await this.readyEngine() });
+      await this.engines.ready();
       const result = await window.TauriBridge.invoke<WizardTestResult>("wizard_test_translation", {
         sourceText: pickSampleTranslation(this.snapshot.settings.sourceLanguage),
         sourceLanguage: this.snapshot.settings.sourceLanguage,
@@ -389,8 +364,7 @@ export class AppController {
     this.hideDiagnosticsOutsideDeveloperMode();
   }
 
-  // Diagnostics show raw recognition text, which normal mode never shows. The
-  // setting can predate Developer options, so startup applies this rule too.
+  // Hide persisted raw-text diagnostics outside Developer options, including on startup.
   private hideDiagnosticsOutsideDeveloperMode(): void {
     if (!this.snapshot.developerMode && this.snapshot.settings.overlay.showDiagnostics) {
       void this.updateOverlay({ showDiagnostics: false });

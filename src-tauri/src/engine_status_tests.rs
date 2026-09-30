@@ -85,12 +85,23 @@ fn steady_probe_timeout_clamps_like_both_adapters() {
 }
 
 #[test]
-fn busy_core_is_preparing_without_claiming_model_readiness() {
-    let snapshot = preparing_snapshot(&managed_config());
-    assert_eq!(snapshot.phase, FoundryLocalPhase::Preparing);
+fn busy_core_without_ready_evidence_does_not_request_preparation() {
+    let snapshot = busy_snapshot(&managed_config(), Some(core_status(true, false)));
+    assert_eq!(snapshot.phase, FoundryLocalPhase::Busy);
     assert!(!snapshot.service_running);
     assert!(snapshot.models.is_empty());
     assert!(snapshot.selected_model.is_none());
     assert!(snapshot.service_url.is_none());
     assert_eq!(snapshot.configured_model.as_deref(), Some("legacy-model"));
+}
+
+#[test]
+fn a_busy_ready_engine_keeps_its_last_confirmed_readiness() {
+    let snapshot = busy_snapshot(&managed_config(), Some(core_status(true, true)));
+    assert_eq!(snapshot.phase, FoundryLocalPhase::Ready);
+    assert!(snapshot.service_running);
+    assert_eq!(
+        busy_snapshot(&managed_config(), None).phase,
+        FoundryLocalPhase::Busy
+    );
 }

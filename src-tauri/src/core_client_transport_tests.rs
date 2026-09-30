@@ -84,7 +84,7 @@ fn malformed_handshake_frame_is_a_fatal_protocol_error() -> Result<(), String> {
     Ok(())
 }
 
-fn fixture(mode: &str) -> Result<Transport, String> {
+pub(in crate::core_client) fn fixture(mode: &str) -> Result<Transport, String> {
     let executable = std::env::current_exe().map_err(|error| error.to_string())?;
     let mut command = crate::windowless_command::std_command(executable);
     command.args([
@@ -147,11 +147,37 @@ fn pipe_fixture() {
         output.flush().unwrap();
         std::process::exit(0);
     }
-    if mode == "status" || mode == "status-timeout" {
+    if mode.starts_with("install-") {
+        let request: Value = serde_json::from_str(&header).unwrap();
+        assert_eq!(request["method"], "install");
+        writeln!(
+            output,
+            "{}",
+            json!({"id":1,"event":"progress","message":"install-dispatched"})
+        )
+        .unwrap();
+        output.flush().unwrap();
+        std::thread::sleep(Duration::from_millis(100));
+        let response = if mode == "install-failure" {
+            json!({"id":1,"error":{"code":"INSTALL_FAILED","message":"fixture failure"}})
+        } else {
+            json!({"id":1,"result":{
+                "installed":true,"ready":false,"model":"owned-model","version":"0.1.0",
+                "storageRoot":"C:/core","managedConfig":null,"installPaths":null}})
+        };
+        writeln!(output, "{response}").unwrap();
+        output.flush().unwrap();
+        std::thread::sleep(Duration::from_secs(30));
+        std::process::exit(0);
+    }
+    if mode == "status" || mode == "status-timeout" || mode == "status-delayed" {
         let request: Value = serde_json::from_str(&header).unwrap();
         assert_eq!(request["id"], 1);
         assert_eq!(request["method"], "status");
         assert_eq!(request["payloadBytes"], 0);
+        if mode == "status-delayed" {
+            std::thread::sleep(Duration::from_millis(200));
+        }
         if mode == "status-timeout" {
             std::thread::sleep(Duration::from_secs(30));
         } else {

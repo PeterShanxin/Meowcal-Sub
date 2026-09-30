@@ -2,6 +2,8 @@
 mod async_call;
 #[path = "core_client_config.rs"]
 mod config;
+#[path = "core_client_readiness.rs"]
+mod readiness;
 #[path = "core_client_recovery.rs"]
 mod recovery;
 #[path = "core_client_request.rs"]
@@ -57,10 +59,9 @@ static TRANSLATION: OnceLock<Mutex<Option<Transport>>> = OnceLock::new();
 static OCR: OnceLock<Mutex<Option<Transport>>> = OnceLock::new();
 static TRANSLATION_KILL: OnceLock<Mutex<Option<Arc<KillSwitch>>>> = OnceLock::new();
 static OCR_KILL: OnceLock<Mutex<Option<Arc<KillSwitch>>>> = OnceLock::new();
-static STATUS: Mutex<Option<CoreStatus>> = Mutex::new(None);
 
 pub fn cached_status() -> Option<CoreStatus> {
-    STATUS.lock().ok().and_then(|status| status.clone())
+    readiness::cached_status()
 }
 
 pub fn status_blocking() -> Result<CoreStatus, String> {
@@ -76,11 +77,7 @@ pub fn status_blocking() -> Result<CoreStatus, String> {
 }
 
 fn invalidate_readiness() {
-    if let Ok(mut status) = STATUS.lock() {
-        if let Some(status) = status.as_mut() {
-            status.ready = false;
-        }
-    }
+    readiness::invalidate();
 }
 
 pub async fn status() -> Result<CoreStatus, String> {
@@ -376,6 +373,10 @@ fn clear_kill(slot: &OnceLock<Mutex<Option<Arc<KillSwitch>>>>) {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "core_client_readiness_tests.rs"]
+mod readiness_tests;
 
 #[cfg(test)]
 #[path = "core_client_tests.rs"]

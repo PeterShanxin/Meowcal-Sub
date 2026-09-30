@@ -158,6 +158,8 @@ pub enum FoundryLocalPhase {
     Unchecked,
     /// Service up and model known, but chat probe times out (warmup in progress)
     Preparing,
+    /// The Core channel has an operation in flight; do not enqueue preparation.
+    Busy,
     /// Chat probe succeeds - ready for translation
     Ready,
     /// An error occurred during status check
@@ -173,7 +175,8 @@ impl FoundryLocalPhase {
             FoundryLocalPhase::NotRunning
             | FoundryLocalPhase::NoModels
             | FoundryLocalPhase::Unchecked
-            | FoundryLocalPhase::Preparing => ReadyState::NotReady,
+            | FoundryLocalPhase::Preparing
+            | FoundryLocalPhase::Busy => ReadyState::NotReady,
             FoundryLocalPhase::Error => ReadyState::Error,
         }
     }
@@ -186,6 +189,7 @@ impl FoundryLocalPhase {
             FoundryLocalPhase::NoModels => "No Models",
             FoundryLocalPhase::Unchecked => "Not Checked",
             FoundryLocalPhase::Preparing => "Preparing",
+            FoundryLocalPhase::Busy => "Busy",
             FoundryLocalPhase::Ready => "Ready",
             FoundryLocalPhase::Error => "Error",
         }

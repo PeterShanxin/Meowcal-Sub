@@ -3,7 +3,7 @@ import { describeCaptureWarning } from "./error-copy";
 
 const repairPhases = new Set(["error", "noModels", "nomodels", "damaged", "invalid"]);
 const missingPhases = new Set(["notInstalled", "notinstalled"]);
-const preparingPhases = new Set(["preparing"]);
+const preparingPhases = new Set(["preparing", "busy"]);
 const readyPhases = new Set(["ready", "notRunning", "notrunning"]);
 /** Browser mode only: its HTTP backend did not answer. Core never reports it. */
 export const backendUnavailablePhase = "backendUnavailable";
@@ -109,14 +109,18 @@ export function deriveHomePresentation(snapshot: UiSnapshot): HomePresentation {
   if (preparingPhases.has(phase)) {
     return {
       state: "checking",
-      statusLabel: "Preparing",
-      title: "Warming up translation",
-      description: "The engine is checking its model. You can start when it is ready.",
+      statusLabel: phase === "busy" ? "Busy" : "Preparing",
+      title: phase === "busy" ? "Waiting for the engine" : "Warming up translation",
+      description:
+        phase === "busy"
+          ? "The engine is finishing another operation. Check again when it is ready."
+          : "The engine is checking its model. You can start when it is ready.",
       action: "none",
-      actionLabel: "Preparing engine…",
+      actionLabel: phase === "busy" ? "Waiting for engine…" : "Preparing engine…",
       actionIcon: "spinner",
       actionDisabled: true,
-      supportLine: "Preparing the engine on this PC",
+      supportLine:
+        phase === "busy" ? "Engine operation in progress" : "Preparing the engine on this PC",
       supportTone: "neutral",
     };
   }

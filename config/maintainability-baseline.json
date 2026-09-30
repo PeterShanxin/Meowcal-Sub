@@ -26,6 +26,7 @@
     "src/scripts/selector-geometry.js",
     "src/scripts/translation-display.js",
     "src/ui/app-controller.ts",
+    "src/ui/engine-status-controller.ts",
     "src/ui/error-copy.ts",
     "src/ui/home-state.ts",
     "src/ui/languages.ts",
@@ -41,6 +42,8 @@
     "scripts/doc-links.mjs",
     "scripts/maintainability-ratchet.mjs",
     "scripts/serve-frontend.mjs",
+    "scripts/store-release-assets.mjs",
+    "scripts/store-submission.mjs",
     "scripts/workflow-runner-policy.mjs",
     "src/ui/settings-writer.ts"
   ],
