@@ -6,8 +6,8 @@ enabled by `STORE_RELEASE_AUTOMATION_ENABLED=true` in the
 stable GitHub release by a trusted maintainer verifies its complete assets,
 stages both MSIX packages and the canonical 300 × 300 logo, commits the Store
 submission for certification, and requests `Immediate` publication after Store
-approval. A scheduled read-only Store status check reports certification and
-publication progress each hour. Microsoft still decides whether certification
+approval. A read-only Store status check is scheduled daily at 02:17 UTC;
+GitHub may delay scheduled runs. Microsoft still decides whether certification
 succeeds and when the package becomes available.
 
 Do not enable the workflow while an existing Store submission is pending. It
