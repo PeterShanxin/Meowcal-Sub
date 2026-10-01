@@ -1,6 +1,7 @@
 name: Sync GitHub Release to Store
 
 on:
+  workflow_dispatch:
   release:
     types: [published]
   schedule:
@@ -82,7 +83,8 @@ jobs:
   status:
     name: Report Store certification status
     if: >-
-      github.event_name == 'schedule' &&
+      (github.event_name == 'schedule' ||
+       (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')) &&
       github.repository == 'PeterShanxin/Meowcal-Sub' &&
       (github.actor == 'PeterShanxin' || github.actor == 'ianmeowmeow') &&
       github.actor != 'dependabot[bot]'
@@ -109,10 +111,18 @@ jobs:
         with:
           node-version: 24
       - name: Read current submission status
-        if: steps.activation.outputs.active == 'true'
+        if: steps.activation.outputs.active == 'true' && github.event_name == 'schedule'
         env:
           AZURE_AD_TENANT_ID: ${{ secrets.AZURE_AD_TENANT_ID }}
           AZURE_AD_APPLICATION_CLIENT_ID: ${{ secrets.AZURE_AD_APPLICATION_CLIENT_ID }}
           AZURE_AD_APPLICATION_SECRET: ${{ secrets.AZURE_AD_APPLICATION_SECRET }}
           SELLER_ID: ${{ secrets.SELLER_ID }}
         run: node scripts/store-submission-cli.mjs --status true
+      - name: Read published packages and pending submission
+        if: steps.activation.outputs.active == 'true' && github.event_name == 'workflow_dispatch'
+        env:
+          AZURE_AD_TENANT_ID: ${{ secrets.AZURE_AD_TENANT_ID }}
+          AZURE_AD_APPLICATION_CLIENT_ID: ${{ secrets.AZURE_AD_APPLICATION_CLIENT_ID }}
+          AZURE_AD_APPLICATION_SECRET: ${{ secrets.AZURE_AD_APPLICATION_SECRET }}
+          SELLER_ID: ${{ secrets.SELLER_ID }}
+        run: node scripts/store-submission-cli.mjs --inventory true

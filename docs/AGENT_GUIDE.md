@@ -83,7 +83,9 @@ local branch and worktree survive; remove a finished worktree deliberately with
   inactive until its environment switch is enabled; after a trusted stable
   GitHub release is published it verifies assets, commits the Store submission
   with `Immediate` publication, and reports certification status hourly.
-  Existing drafts are protected and never deleted automatically.
+  Existing drafts are protected and never deleted automatically. A trusted
+  manual dispatch on `main` reads published Store package versions and any
+  pending submission before release preparation.
   They exclude the Tauri updater and experimental WinUI helper, and isolate
   default config/engine storage from direct installations. Follow
   [Store distribution](STORE_DISTRIBUTION.md); never publish debug/local

@@ -7,6 +7,7 @@ import {
   stageDraft,
   submitRelease,
   reportSubmissionStatus,
+  reportSubmissionInventory,
   updateSubmission,
 } from "../../scripts/store-submission.mjs";
 import {
@@ -340,6 +341,45 @@ describe("automatic release submission", () => {
     const error = await reportSubmissionStatus(client).catch((caught) => caught);
     expect(safeFailure(error)).toBe("store_certificationfailed");
     expect(safeFailure(error)).not.toContain("private");
+  });
+  it("reads published package versions and absence of a pending draft without writing", async () => {
+    const calls = [];
+    const client = {
+      authenticate: async () => calls.push("authenticate"),
+      getApp: async () => {
+        calls.push("getApp");
+        return app();
+      },
+      getSubmission: async (id) => {
+        calls.push(`getSubmission:${id}`);
+        return {
+          ...published(),
+          applicationPackages: [{ version: "1.0.0.0" }, { version: "1.0.0.0" }],
+        };
+      },
+      create: async () => calls.push("create"),
+      commit: async () => calls.push("commit"),
+    };
+    expect(await reportSubmissionInventory(client)).toEqual({
+      productId: "9NNK2X23VLWT",
+      publishedSubmissionId: "1",
+      publishedPackageVersions: ["1.0.0.0"],
+      pendingSubmissionId: null,
+      pendingStatus: null,
+    });
+    expect(calls).toEqual(["authenticate", "getApp", "getSubmission:1"]);
+  });
+  it("reports a pending submission without echoing its metadata", async () => {
+    const client = {
+      authenticate: async () => {},
+      getApp: async () => app({ id: "2" }),
+      getSubmission: async (id) =>
+        id === "1" ? published() : { status: "PendingCommit", privateNotes: "do-not-log" },
+    };
+    const result = await reportSubmissionInventory(client);
+    expect(result.pendingSubmissionId).toBe("2");
+    expect(result.pendingStatus).toBe("PendingCommit");
+    expect(JSON.stringify(result)).not.toContain("do-not-log");
   });
   it("uses only the product-scoped status and commit endpoints", async () => {
     const requests = [];
