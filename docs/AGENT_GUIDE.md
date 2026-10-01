@@ -82,7 +82,7 @@ local branch and worktree survive; remove a finished worktree deliberately with
   draft; MSIX never enters `latest.json`. `store-release-sync.yml` remains
   inactive until its environment switch is enabled; after a trusted stable
   GitHub release is published it verifies assets, commits the Store submission
-  with `Immediate` publication, and reports certification status hourly.
+  with `Immediate` publication, and reports certification status daily.
   Existing drafts are protected and never deleted automatically. A trusted
   manual dispatch on `main` reads published Store package versions and any
   pending submission before release preparation.

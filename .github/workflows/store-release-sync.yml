@@ -5,7 +5,7 @@ on:
   release:
     types: [published]
   schedule:
-    - cron: "17 * * * *"
+    - cron: "17 2 * * *"
 
 permissions:
   contents: read
