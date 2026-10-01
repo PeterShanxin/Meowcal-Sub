@@ -1,8 +1,8 @@
 # Store release submission setup
 
 The [release sync workflow](../.github/workflows/store-release-sync.yml) is
-inactive until `STORE_RELEASE_AUTOMATION_ENABLED=true` is deliberately set in
-the `store-submission-draft` GitHub environment. Once enabled, publishing a
+enabled by `STORE_RELEASE_AUTOMATION_ENABLED=true` in the
+`store-submission-draft` GitHub environment. It is currently enabled. Publishing a
 stable GitHub release by a trusted maintainer verifies its complete assets,
 stages both MSIX packages and the canonical 300 × 300 logo, commits the Store
 submission for certification, and requests `Immediate` publication after Store
@@ -35,8 +35,8 @@ notes. The workflow contains no commit, certification or publication operation.
 
 1. In Partner Center, confirm that the associated MeowcalStudio Entra application
    has the **Manager** role and the existing account can use the submission API.
-   The account connection and actual API eligibility have not yet been tested.
-   Confirm the
+   A protected scheduled job has authenticated and read the published submission;
+   creation and certification submission have not yet been tested. Confirm the
    product has a completed first submission with age ratings, is a free product,
    and uses neither mandatory app updates nor Store-managed consumables. The
    Store CLI GitHub recipe supports free products; this workflow uses the
@@ -56,12 +56,19 @@ notes. The workflow contains no commit, certification or publication operation.
    arrange rotation before expiration and revoke the old key afterward.
 3. Check Partner Center for a pending submission, including a manually edited
    draft. If one exists, finish or cancel it through its existing owner before
-   activation. The workflow refuses to mutate an existing draft.
-4. After the code PR is reviewed and merged, and after deciding to permit
-   unattended submission, set the environment variable
-   `STORE_RELEASE_AUTOMATION_ENABLED` to `true`. Do not set it while testing
-   this PR. The existing manual draft workflow has a separate
+   publishing another release. The workflow refuses to mutate an existing draft.
+4. Confirm `STORE_RELEASE_AUTOMATION_ENABLED=true` before relying on unattended
+   submission. Set it to `false` to pause future release syncs. The existing
+   manual draft workflow has a separate
    `STORE_DRAFT_STAGING_ENABLED` switch; neither switch enables the other.
+
+For a read-only Store inventory, open **Actions → Sync GitHub Release to Store →
+Run workflow** on `main`. This manually dispatched path authenticates through
+the configured environment and reads the product identity, last published
+package versions, and any pending submission ID/status. It does not create or
+commit a submission; the release submission job runs only for a stable published
+GitHub release. Treat a pending submission as a blocker and resolve it through
+its existing owner before publishing another release.
 
 ## Manual verification and draft workflow
 

@@ -12,6 +12,7 @@ import {
   stageDraft,
   submitRelease,
   reportSubmissionStatus,
+  reportSubmissionInventory,
 } from "./store-submission.mjs";
 
 const root = path.dirname(fileURLToPath(import.meta.url));
@@ -29,15 +30,18 @@ async function main() {
   const stage = argumentsMap.get("--stage") === "true";
   const automatic = argumentsMap.get("--auto") === "true";
   const statusOnly = argumentsMap.get("--status") === "true";
+  const inventoryOnly = argumentsMap.get("--inventory") === "true";
   requireCondition(
     [...argumentsMap.keys()].every((key) =>
-      ["--tag", "--commit", "--stage", "--auto", "--status"].includes(key),
+      ["--tag", "--commit", "--stage", "--auto", "--status", "--inventory"].includes(key),
     ) &&
       (!argumentsMap.has("--stage") || ["true", "false"].includes(argumentsMap.get("--stage"))) &&
       (!argumentsMap.has("--auto") || ["true", "false"].includes(argumentsMap.get("--auto"))) &&
       (!argumentsMap.has("--status") || ["true", "false"].includes(argumentsMap.get("--status"))) &&
-      Number(stage) + Number(automatic) + Number(statusOnly) <= 1 &&
-      (statusOnly || (argumentsMap.has("--tag") && argumentsMap.has("--commit"))),
+      (!argumentsMap.has("--inventory") ||
+        ["true", "false"].includes(argumentsMap.get("--inventory"))) &&
+      Number(stage) + Number(automatic) + Number(statusOnly) + Number(inventoryOnly) <= 1 &&
+      (statusOnly || inventoryOnly || (argumentsMap.has("--tag") && argumentsMap.has("--commit"))),
     "arguments_invalid",
   );
   if (statusOnly) {
@@ -46,6 +50,14 @@ async function main() {
       "arguments_invalid",
     );
     console.log(JSON.stringify(await reportSubmissionStatus(createStoreClient(process.env))));
+    return;
+  }
+  if (inventoryOnly) {
+    requireCondition(
+      !argumentsMap.has("--tag") && !argumentsMap.has("--commit"),
+      "arguments_invalid",
+    );
+    console.log(JSON.stringify(await reportSubmissionInventory(createStoreClient(process.env))));
     return;
   }
   requireCondition(process.env.GITHUB_TOKEN?.length > 0, "github_token_missing");

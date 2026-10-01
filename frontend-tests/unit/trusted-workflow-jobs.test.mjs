@@ -92,18 +92,22 @@ describe("Store release write boundary", () => {
   it("requires a stable published release and explicit activation before credentials are used", () => {
     const contents = readWorkflow("store-release-sync.yml");
     expect(contents).toMatch(/release:\s*\n\s*types: \[published\]/);
-    expect(contents).not.toContain("workflow_dispatch:");
+    expect(contents).toContain("workflow_dispatch:");
     expect(contents).toContain("!github.event.release.prerelease");
     expect(contents).toContain(TRUSTED_ACTOR_IF);
     expect(contents).toContain("STORE_RELEASE_AUTOMATION_ENABLED");
     expect(contents).toContain("steps.activation.outputs.active == 'true'");
     expect(contents).toContain("--auto true");
     expect(contents).toContain("--status true");
+    expect(contents).toContain("--inventory true");
     expect(contents).toContain(
       "store_assets_missing|release_assets_unexpected|release_digest_missing",
     );
     const releaseJobs = splitWorkflowJobs(contents);
     expect(releaseJobs.map((job) => job.name)).toEqual(["submit", "status"]);
+    expect(jobText(releaseJobs[0])).toContain("github.event_name == 'release'");
+    expect(jobText(releaseJobs[0])).not.toContain("workflow_dispatch");
+    expect(jobText(releaseJobs[1])).toContain("github.ref == 'refs/heads/main'");
     for (const job of releaseJobs) {
       expectTrustedActorIf(job, `store-release-sync.yml:${job.name}`);
     }

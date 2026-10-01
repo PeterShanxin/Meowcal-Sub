@@ -402,3 +402,29 @@ export async function reportSubmissionStatus(client) {
   const status = await client.getStatus(id);
   return { submissionId: id, status: submissionStatus(status.status) };
 }
+
+export async function reportSubmissionInventory(client) {
+  await client.authenticate();
+  const app = await client.getApp();
+  assertAppIdentity(app);
+  const publishedId = app.lastPublishedApplicationSubmission?.id;
+  requireCondition(/^\d+$/.test(publishedId), "published_submission_missing");
+  const published = await client.getSubmission(publishedId);
+  requireCondition(published.status === "Published", "published_submission_not_ready");
+  const versions = published.applicationPackages?.map((pkg) => pkg.version);
+  requireCondition(
+    versions?.length > 0 && versions.every((version) => /^\d+\.\d+\.\d+\.\d+$/.test(version)),
+    "published_packages_missing",
+  );
+  const pendingId = app.pendingApplicationSubmission?.id;
+  requireCondition(!pendingId || /^\d+$/.test(pendingId), "invalid_submission_id");
+  const pending = pendingId ? await client.getSubmission(pendingId) : null;
+  requireCondition(!pending || /^[A-Za-z]{1,40}$/.test(pending.status), "store_status_invalid");
+  return {
+    productId: PRODUCT_ID,
+    publishedSubmissionId: publishedId,
+    publishedPackageVersions: [...new Set(versions)].sort(),
+    pendingSubmissionId: pendingId ?? null,
+    pendingStatus: pending?.status ?? null,
+  };
+}
