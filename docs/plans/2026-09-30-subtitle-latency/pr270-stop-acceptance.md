@@ -61,12 +61,34 @@ positive rendered bounds inside the container and viewport, in addition to
 native window visibility and correct text. Regressions cover each failure mode
 in PowerShell 7 and 5.1 and execute the actual embedded JavaScript.
 
-Fresh native verification of this strengthened surface assertion remains open.
-Two subsequent preflights stopped before inference loading or OCR suspension:
+Fresh native verification of this strengthened surface assertion passed on
+2026-10-01T04:22:17.6646966Z with harness commit
+`b2b21ae70af0d89789d6d69f80631d3b9bc13348` (SHA256
+`CCB6C14945D2C8A523DA84CB2FC231BFA7A4D27790B32CA581A60EC7E698D98F`)
+and the same accepted application binary:
+
+- Stop: 239.2 ms; immediate Start: 14.1 ms; stopped session 2 and new session 3.
+- Original verified OCR process was reaped with exit code 1. The new session
+  produced “Good morning.” → “早上好。” through the local engine, with no stale
+  text or quiet event after the recorded Stop boundary.
+- Native overlay and subtitle surface were visible. Container bounds were
+  `(100, 630, 1200, 53.2)` and text bounds `(120.8, 638.8, 1158.4, 33.6)`,
+  contained within the visible container and viewport.
+- Original inference/model handles and creation times stayed unchanged; loaded
+  free RAM was 9.55 GiB. All owned processes exited, config hashes were restored
+  unchanged, and port 9241 was released.
+
+Selected authored evidence is
+`reconciled-native-20261001-042157/{verdict,acceptance}.json` in the task workspace.
+This closes the strengthened functional native gate; it adds no pixel latency
+or performance claim. Previous failed and limited samples remain preserved.
+
+Two earlier preflights stopped before inference loading or OCR suspension:
 `reconciled-native-20260930-181318` and `reconciled-native-20260930-181435`.
 The latter recorded only the owned overlay WebView, with no main WebView for
 20 seconds; a concurrent read-only inventory found `LogonUI.exe` active. The
-desktop appears locked. Exact startup causality is unproven. Both attempts
+desktop was later confirmed locked by WTS inspection. Exact startup causality
+is unproven. Both attempts
 cleaned all owned processes, restored config hashes and released port 9241.
 Do not substitute the earlier DOM-only result for the strengthened native gate.
 No desktop unlock or power-state change was attempted.
