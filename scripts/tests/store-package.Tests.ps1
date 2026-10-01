@@ -46,6 +46,7 @@ try {
     Remove-Item -LiteralPath $testRoot -Force
 }
 Write-Host 'Store identity, manifest and PE architecture contracts passed.'
+& (Join-Path $PSScriptRoot 'store-direct-diagnostics.Tests.ps1')
 
 $assetRoot = Join-Path ([IO.Path]::GetTempPath()) ('meowcal-release-assets-' + [guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Path $assetRoot | Out-Null

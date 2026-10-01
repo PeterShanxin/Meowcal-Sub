@@ -34,12 +34,7 @@ use tracing::info;
 ///
 /// Called from the front end immediately before `downloadAndInstall`.
 ///
-/// Stopping a session is best effort, and deliberately so: `stop_translation`
-/// signals the pipeline loop and returns without waiting for it, and every step
-/// inside it that can fail is already tolerated rather than reported. The loop
-/// holds nothing inside the install directory, so what it is still doing when
-/// the installer starts does not decide whether the upgrade succeeds. Do not
-/// read the `Result` here as a promise that capture has stopped.
+/// Stop waits for capture cleanup; a bounded teardown failure prevents handoff.
 ///
 /// The two child processes are different: they hold files open, so this waits
 /// for them.

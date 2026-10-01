@@ -262,6 +262,7 @@ try {
     }
     Stop-TestApp
     $null = Step 'uninstall-removes-package-and-private-cache' {
+        if ($directReady) { Write-DirectDiagnostic 'before-store-uninstall' }
         Remove-AppxPackage -Package $script:package.PackageFullName
         Start-Sleep 3
         if ((Get-AppxPackage -Name MeowcalSub.StoreCITest) -or (Test-Path $packageData)) { throw 'Package or private data remains after uninstall.' }
@@ -273,6 +274,7 @@ try {
 } catch { $result.fatalError = $_.Exception.Message }
 finally {
     Stop-TestApp
+    if ($script:directProcess) { $script:directProcess.Dispose(); $script:directProcess = $null }
     $result.finished = (Get-Date).ToString('o')
     $result.verdict = if ($result.fatalError -or @($result.steps | Where-Object {$_.status -eq 'fail'}).Count) { 'partial-or-failed' } else { 'pass' }
     Save-Result

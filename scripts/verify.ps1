@@ -48,6 +48,7 @@ $coreUpgradeTest = Join-Path $PSScriptRoot "tests\core-upgrade.Tests.ps1"
 $browserBackendTest = Join-Path $PSScriptRoot "tests\browser-backend.Tests.ps1"
 $engineSupportTest = Join-Path $PSScriptRoot "tests\engine-support.Tests.ps1"
 $devEnvironmentTest = Join-Path $PSScriptRoot "tests\dev-environment.Tests.ps1"
+$benchmarkStopTest = Join-Path $PSScriptRoot "tests\benchmark-stop.Tests.ps1"
 $rustDirectory = Join-Path $repositoryRoot "src-tauri"
 $coreDirectory = Join-Path $repositoryRoot "core"
 $coreTargetDirectory = Join-Path $coreDirectory "target"
@@ -162,6 +163,11 @@ if ($env:MEOWCAL_VERIFY_CONTRACT_ACTIVE -ne "1") {
     }
     Write-Host "==> Developer environment contract tests" -ForegroundColor Cyan
     & pwsh -NoProfile -File $devEnvironmentTest
+    if ($LASTEXITCODE -ne 0) {
+        exit $LASTEXITCODE
+    }
+    Write-Host "==> Stop benchmark safety tests" -ForegroundColor Cyan
+    & pwsh -NoProfile -File $benchmarkStopTest
     if ($LASTEXITCODE -ne 0) {
         exit $LASTEXITCODE
     }

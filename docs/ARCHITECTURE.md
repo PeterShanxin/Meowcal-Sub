@@ -195,6 +195,10 @@ Shared contracts have one owner before parallel decomposition begins:
   Region changes and stop requests invalidate in-flight work; Rust and frontend
   consumers reject stale results. Completed frames log privacy-safe
   capture/OCR/model/overlay/total timings without subtitle text.
+- Session teardown: `session_lifecycle.rs` serializes Start and Stop through
+  capture-task cleanup and overlay hiding. OCR waits observe Stop. A successful
+  Stop means the old capture task has exited; bounded teardown failure keeps
+  Stop retryable and cannot authorize a second running capture session.
 - Subtitle evaluation: `subtitle_eval.rs` and
   `evals/subtitle-eval-v1.json` own the deterministic validator contract and
   opt-in live engine gate. Reports exclude source and translated text while
