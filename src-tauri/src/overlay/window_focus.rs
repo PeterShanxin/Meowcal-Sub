@@ -8,6 +8,18 @@
 
 #[cfg(windows)]
 pub fn allow_interaction(window: &tauri::WebviewWindow) -> Result<(), String> {
+    let target = window.clone();
+    window
+        .run_on_main_thread(move || {
+            if let Err(error) = apply(&target) {
+                tracing::warn!("Failed to enable overlay keyboard interaction: {error}");
+            }
+        })
+        .map_err(|e| e.to_string())
+}
+
+#[cfg(windows)]
+fn apply(window: &tauri::WebviewWindow) -> Result<(), String> {
     use raw_window_handle::HasWindowHandle;
     use windows::Win32::Foundation::HWND;
 
