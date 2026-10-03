@@ -204,6 +204,10 @@ Shared contracts have one owner before parallel decomposition begins:
   consumes `translation-exited` to return to Home with a stopped session;
   browser mode returns `501`. `overlay-toolbar.js` owns control visibility,
   pending/error presentation, and DOM wiring over the shared geometry rules.
+- Overlay keyboard input: `overlay/window_focus.rs` enables native activation
+  after show and cursor-style changes. Tao remains non-focusable during those
+  operations so they cannot activate the window; explicit click or Alt+Tab
+  reveals the toolbar and gives its controls keyboard focus.
 - Subtitle evaluation: `subtitle_eval.rs` and
   `evals/subtitle-eval-v1.json` own the deterministic validator contract and
   opt-in live engine gate. Reports exclude source and translated text while

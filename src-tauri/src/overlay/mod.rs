@@ -18,6 +18,7 @@ pub mod commands;
 pub mod liveness;
 pub mod window_alpha;
 pub mod window_clip;
+pub mod window_focus;
 
 // =============================================================================
 // OVERLAY PAYLOADS (sent to frontend)
@@ -201,6 +202,8 @@ pub async fn show_overlay(app: &AppHandle) -> Result<(), String> {
     if let Err(e) = window_alpha::apply(&window) {
         tracing::warn!("Failed to apply overlay translucency: {}", e);
     }
+
+    window_focus::allow_interaction(&window)?;
 
     // Emit visibility event
     app.emit("overlay-visibility", true)
