@@ -360,6 +360,7 @@ pub fn create_router(state: HttpAppState) -> Router {
         .route("/api/area-selector", post(open_area_selector))
         .route("/api/translation/start", post(start_translation))
         .route("/api/translation/stop", post(stop_translation))
+        .route("/api/translation/exit", post(stop_translation))
         // Wizard endpoints (Tauri-only, return 501 in browser mode)
         .route("/api/wizard/open", post(wizard_not_available))
         .route("/api/wizard/close", post(wizard_not_available))

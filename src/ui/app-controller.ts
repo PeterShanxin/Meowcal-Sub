@@ -133,7 +133,23 @@ export class AppController {
       "setup-select-area",
       () => void this.selectRegion(),
     );
-    this.unlisten.push(regionUnlisten, captureUnlisten, wizardUnlisten, selectAreaUnlisten);
+    const exitUnlisten = await window.TauriBridge.event.listen("translation-exited", () => {
+      this.publish({
+        screen: "home",
+        running: false,
+        busy: "idle",
+        error: null,
+        captureWarning: null,
+        notice: "Translation stopped",
+      });
+    });
+    this.unlisten.push(
+      regionUnlisten,
+      captureUnlisten,
+      wizardUnlisten,
+      selectAreaUnlisten,
+      exitUnlisten,
+    );
   }
 
   dispose(): void {

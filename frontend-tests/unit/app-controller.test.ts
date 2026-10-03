@@ -60,6 +60,30 @@ describe("AppController settings persistence", () => {
     vi.unstubAllGlobals();
   });
 
+  it("returns to Home with a stopped session when translation is exited from the overlay", async () => {
+    const invoke = vi.fn(async (command: string) =>
+      ["get_engine_status", "refresh_engine_status", "make_engine_ready"].includes(command)
+        ? { phase: "ready" }
+        : undefined,
+    );
+    const { controller, listeners } = createController(invoke as TauriBridgeApi["invoke"]);
+    await controller.initialize();
+    await controller.start();
+    expect(controller.current().running).toBe(true);
+    controller.setScreen("settings");
+
+    listeners.get("translation-exited")?.({ payload: null });
+
+    expect(controller.current()).toMatchObject({
+      screen: "home",
+      running: false,
+      busy: "idle",
+      captureWarning: null,
+      notice: "Translation stopped",
+    });
+    controller.dispose();
+  });
+
   it.each([
     ["language", (controller: AppController) => controller.setLanguage("source", "ja-JP")],
     [

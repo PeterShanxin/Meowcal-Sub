@@ -112,18 +112,23 @@ pub fn handle_page_load(webview: &Webview, payload: &PageLoadPayload<'_>) {
     }
 }
 
-/// Windows parks a minimised window far outside any desktop rather than
-/// hiding it, so its reported position is the giveaway.
+pub fn return_to_home(app: &AppHandle) -> Result<(), String> {
+    let window = app
+        .get_webview_window("main")
+        .ok_or("Main window not found")?;
+    window
+        .emit("translation-exited", ())
+        .map_err(|e| e.to_string())?;
+    window.unminimize().map_err(|e| e.to_string())?;
+    window.show().map_err(|e| e.to_string())?;
+    window.set_focus().map_err(|e| e.to_string())
+}
+
+/// Windows parks minimised windows outside the desktop.
 const OFFSCREEN_LIMIT: i32 = -30_000;
 
-/// Whether a captured size and position could have come from a window the user
-/// was actually looking at.
-///
-/// Minimising fires the same `Resized` and `Moved` events as dragging, and the
-/// geometry that arrives with them describes the minimised window: a tiny box
-/// at roughly (-32000, -32000). Persisting it restored the app as a 320x300
-/// cube in the corner of the primary monitor on the next launch, because that
-/// is what the restore clamps such a geometry to.
+/// Minimise events report a tiny box near (-32000, -32000). Keep the previous
+/// visible geometry rather than persisting that box for the next launch.
 fn is_onscreen_geometry(width: u32, height: u32, x: i32, y: i32) -> bool {
     width >= MIN_WINDOW_WIDTH
         && height >= MIN_WINDOW_HEIGHT
@@ -141,8 +146,7 @@ fn capture_preferences(window: &Window, preferences: &mut WindowPreferences) {
     let (Ok(size), Ok(position)) = (window.inner_size(), window.outer_position()) else {
         return;
     };
-    // Checked together: a minimised window has to keep the geometry it had
-    // while visible, not half of it.
+    // Preserve size and position together when minimised.
     if !is_onscreen_geometry(size.width, size.height, position.x, position.y) {
         return;
     }
@@ -319,9 +323,7 @@ mod tests {
         assert_eq!(close_behavior("selector"), CloseBehavior::AllowClose);
     }
 
-    // Minimising to tray fired a resize and a move carrying the minimised
-    // window's geometry. Remembering it reopened the app as a small cube in the
-    // corner of the screen, which is what the restore clamps that geometry to.
+    // Minimise events must not replace the previous visible geometry.
     #[test]
     fn a_minimised_windows_geometry_is_not_worth_remembering() {
         assert!(!is_onscreen_geometry(160, 28, -32000, -32000));

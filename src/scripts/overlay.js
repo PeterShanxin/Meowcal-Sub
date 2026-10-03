@@ -9,6 +9,7 @@ const { clearSubtitleHint, setSubtitleHint, updateSubtitleHint } = window.Overla
 const { appendClipSurface } = window.OverlayWindowClip;
 const { resolveSubtitleSurface } = window.OverlaySubtitleSurface;
 const { setupSettingsMenu } = window.OverlaySettingsMenu;
+const { setupOverlayToolbar } = window.OverlayToolbar;
 const { clipPayloadEquals } = window.OverlayClipPayload;
 const { pointInBounds, rectToPhysicalBounds, regionToPhysicalBounds } = window.OverlayHitBounds;
 const { buildDiagnosticsText } = window.OverlayDiagnostics;
@@ -17,8 +18,7 @@ const { moveRegion, resizeRegion } = window.RegionGeometry;
 const { DEFAULT_APPEARANCE, FONT_SIZE_MAX, FONT_SIZE_MIN, hydrateAppearance, patchAppearance } = window.OverlayAppearance;
 const { createTimerOwner } = window.OverlayTimers;
 
-// Smallest capture region a resize drag may leave behind. Larger than the
-// selector's minimum because the overlay frame also has to hold its handles.
+// Smallest capture region that leaves room for the resize handles.
 const MIN_REGION_SIZE = 50;
 
 // Gap between the capture region and the subtitle plate.
@@ -78,9 +78,6 @@ function syncFrameScaleTokens(scaleFactor) {
 // =============================================================================
 // INTERACTION MANAGEMENT (Smart click-through)
 // =============================================================================
-
-// The overlay toggles click-through so users can interact with other apps.
-// It becomes interactive when the cursor is over the capture frame or subtitles.
 
 function setOverlayActive(active) {
     overlayState.isOverlayActive = active;
@@ -165,9 +162,12 @@ function getInteractiveBoundsPhysical(scaleFactor) {
     const origin = getWindowOrigin();
 
     if (overlayState.region) {
-        // Padding covers the resize handles and the settings gear outside the frame.
+        // Padding lets the cursor reveal the frame before reaching its handles.
         bounds.push(regionToPhysicalBounds(overlayState.region, 40, origin, scaleFactor));
     }
+
+    const toolbar = document.getElementById('overlay-toolbar');
+    if (toolbar && !toolbar.hidden) bounds.push(rectToPhysicalBounds(toolbar.getBoundingClientRect(), origin, scaleFactor));
 
     const subtitleContainer = document.getElementById('subtitle-container');
     if (subtitleContainer && !subtitleContainer.classList.contains('hidden')) {
@@ -198,7 +198,7 @@ async function updateClickThroughState() {
             return;
         }
 
-        if (overlayState.isDragging || overlayState.isResizing || overlayState.settingsOpen) {
+        if (overlayState.isDragging || overlayState.isResizing || overlayState.settingsOpen || document.getElementById('overlay-toolbar')?.querySelector(':focus-visible')) {
             setHoveringState(true);
             await setOverlayClickThrough(false);
             return;
@@ -240,9 +240,9 @@ function scheduleFadeOut() {
 
     // Fade out after a few seconds of no interaction
     overlayTimers.timeout(FRAME_FADE_TIMER, () => {
-        // The settings popup is anchored to the gear inside the frame, so fading
-        // the frame while it is open would strand the popup with no way to close it.
-        if (overlayState.settingsOpen) return;
+        // Keep controls available while the popup is open or the keyboard is
+        // focused on the toolbar.
+        if (overlayState.settingsOpen || document.getElementById('overlay-toolbar')?.querySelector(':focus-visible')) return;
         if (!overlayState.isOverlayActive && !overlayState.isDragging && !overlayState.isResizing) {
             captureFrame.classList.add('faded');
             scheduleWindowClipUpdate();
@@ -302,7 +302,6 @@ async function initOverlay() {
     // Load initial font size
     await loadOverlaySettings();
 
-    // Set up resize handles
     setupResizeHandles(captureFrame);
 
     // Set up drag to reposition
@@ -311,8 +310,8 @@ async function initOverlay() {
     // Set up hover detection for the entire interactive area
     setupHoverDetection(captureFrame, subtitleContainer);
 
-    // Set up settings button
     setupSettingsButton(settingsButton, settingsMenu, subtitleText, subtitleContainer);
+    setupOverlayToolbar({ frame: captureFrame, onInteraction: cancelClickThrough, onGeometryChange: scheduleWindowClipUpdate });
 
     // Set up event listeners
     await setupEventListeners({
@@ -379,7 +378,7 @@ function setupHoverDetection(captureFrame, subtitleContainer) {
 
     // Note: We don't use document-level mousemove tracking because:
     // 1. The overlay body has pointer-events: none, so document won't receive mouse events
-    // 2. Only the capture-frame and subtitle-container receive mouse events
+    // 2. Only the frame, subtitles and toolbar receive mouse events
     // 3. This ensures clean enter/leave detection without false triggers
 }
 
@@ -671,6 +670,7 @@ async function setupEventListeners(elements) {
                 await setOverlayClickThrough(true);
             } else {
                 // Fade everything out (Rust will hide the window after a short delay).
+                settingsMenuControls?.close();
                 // Keep `visible` during the fade so the Win32 window region stays clipped.
                 captureFrame.classList.remove('entering');
                 captureFrame.classList.remove('faded');
@@ -848,7 +848,7 @@ async function updateOverlayWindowClip() {
     const captureFrame = document.getElementById('capture-frame');
     const subtitleContainer = document.getElementById('subtitle-container');
     const debugInfo = document.getElementById('debug-info');
-    const settingsButton = document.getElementById('settings-button');
+    const toolbar = document.getElementById('overlay-toolbar');
     const settingsMenu = document.getElementById('settings-menu');
 
     const frameVisible = captureFrame &&
@@ -878,8 +878,8 @@ async function updateOverlayWindowClip() {
                 .forEach((handle) => appendClipSurface(bounds, radii, handle));
         }
 
-        if (settingsButton && frameVisible) {
-            appendClipSurface(bounds, radii, settingsButton);
+        if (toolbar && frameVisible && !toolbar.hidden) {
+            appendClipSurface(bounds, radii, toolbar);
         }
 
         // Keep the bottom-right diagnostics panel visible when window clipping is enabled.

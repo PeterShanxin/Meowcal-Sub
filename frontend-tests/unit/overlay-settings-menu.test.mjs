@@ -11,6 +11,8 @@ function fakeElement(children = []) {
     listeners,
     classes,
     style: {},
+    setAttribute() {},
+    focus() {},
     classList: {
       toggle: (name, force) => (force ? classes.add(name) : classes.delete(name)),
       add: (name) => classes.add(name),
