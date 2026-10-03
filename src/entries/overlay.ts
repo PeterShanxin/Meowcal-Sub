@@ -11,5 +11,7 @@ import "../scripts/overlay-geometry.js";
 import "../scripts/overlay-appearance.js";
 import "../scripts/overlay-timers.js";
 import "../scripts/overlay-settings-menu.js";
+import "../scripts/overlay-toolbar.js";
 import "../scripts/overlay-diagnostics.js";
 import "../scripts/overlay.js";
+import "../scripts/tauri-bridge.js";

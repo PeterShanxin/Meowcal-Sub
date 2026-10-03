@@ -199,6 +199,11 @@ Shared contracts have one owner before parallel decomposition begins:
   capture-task cleanup and overlay hiding. OCR waits observe Stop. A successful
   Stop means the old capture task has exited; bounded teardown failure keeps
   Stop retryable and cannot authorize a second running capture session.
+- Overlay exit: `overlay/commands.rs::exit_translation` awaits that Stop before
+  `window_lifecycle.rs` restores and focuses the main window. The main controller
+  consumes `translation-exited` to return to Home with a stopped session;
+  browser mode returns `501`. `overlay-toolbar.js` owns control visibility,
+  pending/error presentation, and DOM wiring over the shared geometry rules.
 - Subtitle evaluation: `subtitle_eval.rs` and
   `evals/subtitle-eval-v1.json` own the deterministic validator contract and
   opt-in live engine gate. Reports exclude source and translated text while

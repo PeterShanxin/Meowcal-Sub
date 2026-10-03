@@ -53,21 +53,24 @@
     if (!button || !menu) return null;
 
     let open = false;
+    button.setAttribute("aria-expanded", "false");
 
     syncFontSize(fontSizeSlider, fontSizeDisplay, initialFontSize);
     syncPlate(plateInputs, initialLight === true);
 
-    const applyOpen = (next) => {
+    const applyOpen = (next, restoreFocus = true) => {
       if (open === next) return;
       open = next;
       setMenuOpen(menu, open);
+      button.setAttribute("aria-expanded", String(open));
       onOpenChange(open);
+      if (open) (closeButton || fontSizeSlider)?.focus();
+      else if (restoreFocus) button.focus();
     };
 
     // Keep the capture frame from starting a drag when the gear is pressed.
     button.addEventListener("mousedown", (event) => {
       event.stopPropagation();
-      event.preventDefault();
     });
 
     button.addEventListener("click", (event) => {
@@ -89,7 +92,7 @@
     document.addEventListener("click", (event) => {
       if (!open) return;
       if (menu.contains(event.target) || event.target === button) return;
-      applyOpen(false);
+      applyOpen(false, false);
     });
 
     document.addEventListener("keydown", (event) => {
@@ -117,13 +120,12 @@
       });
     }
 
-    // Never write pointer-events inline. `.settings-menu` and `.settings-button`
-    // already opt in through CSS, and an inline value outranks the `.hidden` and
-    // `.faded` rules that switch it back off - which leaves an invisible popup
+    // Never write pointer-events inline. The controls already opt in through
+    // CSS, and an inline value outranks the hidden-state rules - leaving a popup
     // sitting at screen centre swallowing every click that reaches the overlay.
     return {
       isOpen: () => open,
-      close: () => applyOpen(false),
+      close: () => applyOpen(false, false),
       syncFontSize: (value) => syncFontSize(fontSizeSlider, fontSizeDisplay, value),
       syncPlate: (light) => syncPlate(plateInputs, light),
     };

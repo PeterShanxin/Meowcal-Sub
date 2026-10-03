@@ -102,6 +102,21 @@ test("browser mode reports Tauri-only capture as unavailable", async ({ request 
   });
 });
 
+test("browser mode refuses native translation exit", async ({ page, request }) => {
+  const response = await request.post(`${backendOrigin}/api/translation/exit`);
+  expect(response.status()).toBe(501);
+  await expect(response.json()).resolves.toMatchObject({ browserMode: true });
+  await page.goto("/");
+  const error = await page.evaluate(async () => {
+    try {
+      await window.TauriBridge.invoke("exit_translation");
+    } catch (reason) {
+      return reason.message;
+    }
+  });
+  expect(error).toContain("Translation control requires Tauri runtime");
+});
+
 test("normal setup presents one private HY-MT engine without infrastructure choices", async ({
   page,
 }) => {

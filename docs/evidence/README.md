@@ -154,3 +154,10 @@ or model inference; the earlier end-to-end evidence covers the unchanged
 translation runtime. Full `scripts/verify.ps1` passed on the updated source:
 538 app unit tests, 456 frontend tests, and six browser/Rust bridge smoke tests,
 plus Core, IPC, command, lint, build, and audit checks.
+
+The [overlay toolbar preview](2026-10-04-overlay-toolbar-browser.png) shows
+the style and exit controls in Chromium at 200% device scale with keyboard
+focus. Browser tests also cover 100% and 125% scale, exit retries, clip payloads,
+and small-region placement. This is browser presentation evidence; Windows
+session teardown, window restoration, WebView2 rendering and native DPI
+validation remain outstanding.
