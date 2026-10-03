@@ -71,8 +71,8 @@ fn configure_overlay_as_chromeless_popup(window: &WebviewWindow) -> Result<(), S
     use windows::Win32::Foundation::HANDLE;
     use windows::Win32::UI::WindowsAndMessaging::{
         GetSystemMetrics, SetPropW, SetWindowLongPtrW, SetWindowPos, GWL_STYLE, SM_CXVIRTUALSCREEN,
-        SM_CYVIRTUALSCREEN, SM_XVIRTUALSCREEN, SM_YVIRTUALSCREEN, SWP_FRAMECHANGED, SWP_NOZORDER,
-        WS_POPUP, WS_VISIBLE,
+        SM_CYVIRTUALSCREEN, SM_XVIRTUALSCREEN, SM_YVIRTUALSCREEN, SWP_FRAMECHANGED, SWP_NOACTIVATE,
+        SWP_NOZORDER, WS_POPUP, WS_VISIBLE,
     };
 
     // Get the raw window handle from Tauri
@@ -112,7 +112,7 @@ fn configure_overlay_as_chromeless_popup(window: &WebviewWindow) -> Result<(), S
                 y,
                 width,
                 height,
-                SWP_FRAMECHANGED | SWP_NOZORDER,
+                SWP_FRAMECHANGED | SWP_NOZORDER | SWP_NOACTIVATE,
             )
             .map_err(|e| format!("SetWindowPos failed: {}", e))?;
 

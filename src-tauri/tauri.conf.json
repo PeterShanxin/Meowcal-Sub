@@ -43,7 +43,7 @@
         "resizable": false
       },
       {
-        "title": "",
+        "title": "Translation controls",
         "label": "overlay",
         "url": "overlay.html",
         "width": 800,
@@ -57,7 +57,7 @@
         "alwaysOnTop": true,
         "visible": false,
         "focus": false,
-        "focusable": false,
+        "focusable": true,
         "skipTaskbar": true,
         "resizable": false
       },
