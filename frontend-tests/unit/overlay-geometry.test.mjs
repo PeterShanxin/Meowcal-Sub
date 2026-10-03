@@ -5,6 +5,7 @@ const require = createRequire(import.meta.url);
 const {
   frameScaleTokens,
   resolveSubtitlePlacement,
+  resolveToolbarPlacement,
   roundedRectBounds,
   subtitleHeightEstimate,
 } = require("../../src/scripts/overlay-geometry.js");
@@ -102,4 +103,42 @@ describe("overlay clip bounds rounding", () => {
       height: 50,
     });
   });
+});
+
+describe("overlay toolbar placement", () => {
+  const viewport = { width: 560, height: 430 };
+  const size = { width: 92, height: 46 };
+
+  it.each([
+    [
+      { x: 100, y: 180, width: 350, height: 100 },
+      { left: 336, top: 124 },
+    ],
+    [
+      { x: 0, y: 0, width: 50, height: 50 },
+      { left: 64, top: 14 },
+    ],
+    [
+      { x: 510, y: 0, width: 50, height: 50 },
+      { left: 404, top: 14 },
+    ],
+    [
+      { x: 0, y: 0, width: 50, height: 50 },
+      { left: 8, top: 64 },
+      { width: 140, height: 120 },
+    ],
+    [
+      { x: 100, y: 410, width: 460, height: 20 },
+      { left: 446, top: 354 },
+    ],
+    [
+      { x: -100, y: -30, width: 350, height: 100 },
+      { left: 136, top: 8 },
+    ],
+  ])(
+    "keeps controls accessible and clear of small-frame handles for %j",
+    (region, expected, screen) => {
+      expect(resolveToolbarPlacement(region, screen ?? viewport, size)).toEqual(expected);
+    },
+  );
 });

@@ -32,6 +32,7 @@
         'close_area_selector',
         'start_translation',
         'stop_translation',
+        'exit_translation',
     ];
 
     // =============================================================================
@@ -87,6 +88,7 @@
         'open_area_selector': { method: 'POST', path: '/area-selector' },
         'start_translation': { method: 'POST', path: '/translation/start' },
         'stop_translation': { method: 'POST', path: '/translation/stop' },
+        'exit_translation': { method: 'POST', path: '/translation/exit' },
     };
 
     // =============================================================================

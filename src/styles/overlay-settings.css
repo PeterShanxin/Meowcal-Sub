@@ -1,64 +1,86 @@
-/* =============================================================================
-   SETTINGS BUTTON - Gear icon in capture frame (top-right corner)
-   ============================================================================= */
-
-.settings-button {
-  position: absolute;
-  /* Centred on the top edge like the resize handles, and inset far enough to
-     clear the NE handle. The native clip ORs this rect back into the window
-     region, so overlapping the inner click-through hole is safe. */
-  top: -9px;
-  right: 22px;
-  width: 18px;
-  height: 18px;
-  padding: 0;
-
-  color: var(--accent);
-  background: #10141d;
-  border: 1px solid rgba(232, 238, 247, 0.6);
-  border-radius: 50%;
-  cursor: pointer;
-
-  display: flex;
-  align-items: center;
-  justify-content: center;
-
-  transition:
-    background 0.2s ease,
-    color 0.2s ease,
-    opacity 0.2s ease,
-    transform 0.2s ease;
-
-  opacity: 0; /* Hidden by default like resize handles */
-  transform: scale(0.5);
+/* The opaque toolbar is clipped as one surface, including its focus rings. */
+.overlay-toolbar {
+  position: fixed;
+  padding: 4px;
+  color: var(--text-1);
+  background: var(--surface-menu);
+  border: 1px solid var(--line-control);
+  border-radius: 10px;
+  box-shadow: var(--inset-highlight);
   pointer-events: auto;
+  cursor: default;
   z-index: 100;
 }
 
-/* Show button when hovering capture frame (like resize handles) */
-.capture-frame:hover .settings-button,
-.capture-frame.dragging .settings-button {
-  opacity: 1;
-  transform: scale(1);
+.overlay-toolbar[hidden],
+.overlay-toolbar-error[hidden] {
+  display: none;
 }
 
-/* Hide when frame is faded/entering/exiting */
-.capture-frame.faded .settings-button,
-.capture-frame.entering .settings-button,
-.capture-frame.exiting .settings-button {
-  opacity: 0;
-  pointer-events: none;
+.overlay-toolbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  justify-content: flex-end;
 }
 
-.settings-button:hover {
-  color: #10141d;
-  background: var(--accent);
+.overlay-tool-button {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  color: var(--text-1);
+  background: transparent;
+  border: 0;
+  border-radius: 6px;
+  cursor: pointer;
+  transition:
+    background 0.15s ease,
+    color 0.15s ease;
 }
 
-.settings-button svg {
+.overlay-tool-button:hover,
+.overlay-tool-button[aria-expanded="true"] {
+  color: var(--accent);
+  background: rgba(232, 238, 247, 0.12);
+}
+
+.overlay-tool-button:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 0;
+}
+
+.overlay-exit-button:hover {
+  color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 16%, transparent);
+}
+
+.overlay-tool-button:disabled {
+  color: var(--text-3);
+  background: transparent;
+  cursor: progress;
+}
+
+.overlay-tool-button svg {
   display: block;
-  width: 12px;
-  height: 12px;
+  width: 20px;
+  height: 20px;
+}
+
+.overlay-toolbar-divider {
+  width: 1px;
+  height: 20px;
+  background: var(--line-control);
+}
+
+.overlay-toolbar-error {
+  max-width: 240px;
+  padding: 6px 8px;
+  color: var(--danger);
+  font-size: 12px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
 }
 
 /* =============================================================================
@@ -85,21 +107,19 @@
 
   z-index: 10000;
 
-  transition:
-    opacity 0.2s ease,
-    transform 0.2s ease;
+  transition: opacity 0.2s ease;
   pointer-events: auto;
 }
 
 .settings-menu.hidden {
+  visibility: hidden;
   opacity: 0;
-  transform: translate(-50%, -50%) scale(0.95);
   pointer-events: none;
 }
 
 .settings-menu.visible {
+  visibility: visible;
   opacity: 1;
-  transform: translate(-50%, -50%) scale(1);
 }
 
 .settings-menu-title {
@@ -199,7 +219,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .settings-button,
+  .overlay-tool-button,
   .settings-menu {
     transition-duration: 0.01ms;
   }

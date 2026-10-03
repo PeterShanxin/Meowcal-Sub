@@ -1,15 +1,21 @@
 // =============================================================================
 // OVERLAY WINDOW COMMANDS - shape and input behaviour of the floating overlay
 // =============================================================================
-// These live beside the window code they drive rather than in the general
-// command surface: both of them exist only because the overlay is a chromeless
-// window whose translucency and hit-testing are managed by hand on Windows.
+// Session exit and native translucency/hit-testing commands live beside the
+// overlay window code they drive.
 // =============================================================================
 
-use tauri::{AppHandle, Manager};
+use tauri::{AppHandle, Manager, State};
 use tracing::warn;
 
+use crate::app_state::AppState;
 use crate::config::CaptureRegion;
+
+#[tauri::command]
+pub async fn exit_translation(state: State<'_, AppState>, app: AppHandle) -> Result<(), String> {
+    crate::commands::stop_translation(state, app.clone()).await?;
+    crate::window_lifecycle::return_to_home(&app)
+}
 
 /// Set whether the overlay window ignores cursor events (click-through)
 ///

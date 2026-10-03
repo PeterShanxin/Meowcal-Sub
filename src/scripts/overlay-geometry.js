@@ -64,9 +64,29 @@
     };
   }
 
+  function resolveToolbarPlacement(region, viewport, size) {
+    let left = region.x + region.width - size.width - 22;
+    let top = region.y >= size.height + 10 ? region.y - size.height - 10 : region.y + 14;
+    // A narrow region at the top edge cannot fit both controls and handles.
+    if (region.y < size.height + 10 && region.width < size.width + 44) {
+      if (region.x + region.width + 14 + size.width <= viewport.width - 8) {
+        left = region.x + region.width + 14;
+      } else if (region.x - size.width - 14 >= 8) {
+        left = region.x - size.width - 14;
+      } else {
+        top = region.y + region.height + 14;
+      }
+    }
+    return {
+      left: Math.round(Math.max(8, Math.min(left, viewport.width - size.width - 8))),
+      top: Math.round(Math.max(8, Math.min(top, viewport.height - size.height - 8))),
+    };
+  }
+
   const api = {
     frameScaleTokens,
     resolveSubtitlePlacement,
+    resolveToolbarPlacement,
     roundedRectBounds,
     subtitleHeightEstimate,
   };

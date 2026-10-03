@@ -57,6 +57,6 @@
     "src-tauri/src/llm/prompt_router.rs": 471,
     "src/scripts/overlay.js": 1046,
     "src/scripts/selector.js": 636,
-    "src/styles/overlay.css": 453
+    "src/styles/overlay.css": 438
   }
 }

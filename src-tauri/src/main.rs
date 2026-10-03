@@ -108,6 +108,7 @@ fn main() {
             commands::prepare_engine,
             commands::make_engine_ready,
             // Overlay commands
+            meowcal_sub::overlay::commands::exit_translation,
             meowcal_sub::overlay::commands::set_overlay_click_through,
             meowcal_sub::overlay::commands::set_overlay_window_clip,
             // Engine setup wizard commands
