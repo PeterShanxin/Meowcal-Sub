@@ -4,8 +4,13 @@ const test = base.extend({
   page: async ({ page }, use) => {
     const errors = [];
     page.on("pageerror", (error) => errors.push(error.message));
+    await page.addInitScript(() => {
+      window.overlayErrors = [];
+      window.addEventListener("error", (event) => window.overlayErrors.push(event.message));
+    });
     await use(page);
     expect(errors).toEqual([]);
+    expect(await page.evaluate(() => window.overlayErrors)).toEqual([]);
   },
 });
 

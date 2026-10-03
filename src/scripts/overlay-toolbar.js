@@ -74,7 +74,7 @@ function setupOverlayToolbar({ frame, onInteraction, onGeometryChange }) {
     attributes: true,
     attributeFilter: ["class", "style"],
   });
-  const observer = new ResizeObserver(sync);
+  const observer = new ResizeObserver(() => requestAnimationFrame(sync));
   observer.observe(toolbar);
   observer.observe(frame);
   frame.addEventListener("transitionend", sync);
