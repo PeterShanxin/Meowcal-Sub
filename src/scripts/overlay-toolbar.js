@@ -74,6 +74,7 @@ function setupOverlayToolbar({ frame, onInteraction, onGeometryChange }) {
     attributes: true,
     attributeFilter: ["class", "style"],
   });
+  window.TauriBridge.event.listen("overlay-exit-requested", () => exitButton.click());
   const observer = new ResizeObserver(() => requestAnimationFrame(sync));
   observer.observe(toolbar);
   observer.observe(frame);

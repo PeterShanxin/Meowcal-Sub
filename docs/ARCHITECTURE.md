@@ -208,6 +208,8 @@ Shared contracts have one owner before parallel decomposition begins:
   after show and cursor-style changes. Tao remains non-focusable during those
   operations so they cannot activate the window; explicit click or Alt+Tab
   reveals the toolbar and gives its controls keyboard focus.
+  Native close requests invoke the same guarded exit action, preserving the
+  overlay renderer for the next session.
 - Subtitle evaluation: `subtitle_eval.rs` and
   `evals/subtitle-eval-v1.json` own the deterministic validator contract and
   opt-in live engine gate. Reports exclude source and translated text while

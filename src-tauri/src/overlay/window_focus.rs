@@ -6,6 +6,22 @@
 //! native no-activate flag so an explicit click or Alt+Tab can focus the WebView.
 //! Reapply after every cursor-style change, just like the window alpha.
 
+pub fn register_close_handler(app: &tauri::AppHandle) {
+    use tauri::Emitter;
+    let Some(window) = super::get_overlay_window(app) else {
+        return;
+    };
+    let target = window.clone();
+    window.on_window_event(move |event| {
+        if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+            // Alt+F4 must stop the session through the toolbar rather than
+            // destroy the reusable renderer while capture continues.
+            api.prevent_close();
+            let _ = target.emit("overlay-exit-requested", ());
+        }
+    });
+}
+
 #[cfg(windows)]
 pub fn allow_interaction(window: &tauri::WebviewWindow) -> Result<(), String> {
     let target = window.clone();

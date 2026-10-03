@@ -102,6 +102,20 @@ test("failed exit stays usable with an error and a working retry", async ({ page
   await expect(exit).toBeDisabled();
 });
 
+test("native close requests use the same guarded exit action", async ({ page }) => {
+  await openOverlay(page);
+  await page.evaluate(() => {
+    window.overlayTest.emit("overlay-exit-requested");
+    window.overlayTest.emit("overlay-exit-requested");
+  });
+  await expect(page.getByRole("button", { name: "Exit translation", exact: true })).toBeDisabled();
+  expect(
+    await page.evaluate(
+      () => window.overlayTest.calls.filter((c) => c.command === "exit_translation").length,
+    ),
+  ).toBe(1);
+});
+
 for (const scale of [1, 1.25, 2]) {
   test.describe(`Overlay at ${scale}x scale`, () => {
     test.use({ deviceScaleFactor: scale });
