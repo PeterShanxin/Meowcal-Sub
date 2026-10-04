@@ -198,6 +198,7 @@ fn main() {
             // heartbeats; the timestamps drive bounded recovery in
             // `overlay::liveness`.
             meowcal_sub::overlay::liveness::register_listeners(app.handle());
+            meowcal_sub::overlay::window_focus::register_close_handler(app.handle());
 
             Ok(())
         })

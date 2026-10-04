@@ -18,6 +18,7 @@ pub mod commands;
 pub mod liveness;
 pub mod window_alpha;
 pub mod window_clip;
+pub mod window_focus;
 
 // =============================================================================
 // OVERLAY PAYLOADS (sent to frontend)
@@ -71,8 +72,8 @@ fn configure_overlay_as_chromeless_popup(window: &WebviewWindow) -> Result<(), S
     use windows::Win32::Foundation::HANDLE;
     use windows::Win32::UI::WindowsAndMessaging::{
         GetSystemMetrics, SetPropW, SetWindowLongPtrW, SetWindowPos, GWL_STYLE, SM_CXVIRTUALSCREEN,
-        SM_CYVIRTUALSCREEN, SM_XVIRTUALSCREEN, SM_YVIRTUALSCREEN, SWP_FRAMECHANGED, SWP_NOZORDER,
-        WS_POPUP, WS_VISIBLE,
+        SM_CYVIRTUALSCREEN, SM_XVIRTUALSCREEN, SM_YVIRTUALSCREEN, SWP_FRAMECHANGED, SWP_NOACTIVATE,
+        SWP_NOZORDER, WS_POPUP, WS_VISIBLE,
     };
 
     // Get the raw window handle from Tauri
@@ -112,7 +113,7 @@ fn configure_overlay_as_chromeless_popup(window: &WebviewWindow) -> Result<(), S
                 y,
                 width,
                 height,
-                SWP_FRAMECHANGED | SWP_NOZORDER,
+                SWP_FRAMECHANGED | SWP_NOZORDER | SWP_NOACTIVATE,
             )
             .map_err(|e| format!("SetWindowPos failed: {}", e))?;
 
@@ -201,6 +202,8 @@ pub async fn show_overlay(app: &AppHandle) -> Result<(), String> {
     if let Err(e) = window_alpha::apply(&window) {
         tracing::warn!("Failed to apply overlay translucency: {}", e);
     }
+
+    window_focus::allow_interaction(&window, true)?;
 
     // Emit visibility event
     app.emit("overlay-visibility", true)

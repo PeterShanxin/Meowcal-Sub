@@ -4,8 +4,13 @@ const test = base.extend({
   page: async ({ page }, use) => {
     const errors = [];
     page.on("pageerror", (error) => errors.push(error.message));
+    await page.addInitScript(() => {
+      window.overlayErrors = [];
+      window.addEventListener("error", (event) => window.overlayErrors.push(event.message));
+    });
     await use(page);
     expect(errors).toEqual([]);
+    expect(await page.evaluate(() => window.overlayErrors)).toEqual([]);
   },
 });
 
@@ -97,6 +102,20 @@ test("failed exit stays usable with an error and a working retry", async ({ page
   await expect(exit).toBeDisabled();
 });
 
+test("native close requests use the same guarded exit action", async ({ page }) => {
+  await openOverlay(page);
+  await page.evaluate(() => {
+    window.overlayTest.emit("overlay-exit-requested");
+    window.overlayTest.emit("overlay-exit-requested");
+  });
+  await expect(page.getByRole("button", { name: "Exit translation", exact: true })).toBeDisabled();
+  expect(
+    await page.evaluate(
+      () => window.overlayTest.calls.filter((c) => c.command === "exit_translation").length,
+    ),
+  ).toBe(1);
+});
+
 for (const scale of [1, 1.25, 2]) {
   test.describe(`Overlay at ${scale}x scale`, () => {
     test.use({ deviceScaleFactor: scale });
@@ -183,4 +202,50 @@ test("controls fit a small region at the screen edge and fade without leaving cl
   });
   await page.clock.runFor(300);
   await expect(toolbar).toBeVisible();
+});
+
+test("wide top-edge capture keeps the toolbar entirely outside source pixels", async ({ page }) => {
+  const width = page.viewportSize().width;
+  await openOverlay(page, { x: 0, y: 0, width, height: 100 });
+  const toolbar = page.locator("#overlay-toolbar");
+  await expect(toolbar).toBeInViewport();
+  expect((await toolbar.boundingBox()).y).toBeGreaterThan(100);
+});
+
+test("capture covering the viewport hides controls and recovers when space is available", async ({
+  page,
+}) => {
+  const { width, height } = page.viewportSize();
+  await openOverlay(page, { x: 0, y: 0, width, height });
+  await expect(page.locator("#overlay-toolbar")).toBeHidden();
+  await page.evaluate(() =>
+    window.overlayTest.emit("overlay-update-region", {
+      x: 100,
+      y: 180,
+      width: 350,
+      height: 100,
+    }),
+  );
+  await expect(page.locator("#overlay-toolbar")).toBeVisible();
+});
+
+test("keyboard window activation reveals faded controls and preserves Tab order", async ({
+  page,
+}) => {
+  await page.clock.install();
+  await openOverlay(page);
+  await page.evaluate(() => {
+    window.overlayTest.cursor = { x: 2000, y: 2000 };
+  });
+  await page.mouse.move(500, 400);
+  await page.clock.runFor(4700);
+  await expect(page.locator("#overlay-toolbar")).toBeHidden();
+  await page.evaluate(() => window.dispatchEvent(new Event("focus")));
+  await expect(page.getByRole("button", { name: "Subtitle style", exact: true })).toBeFocused();
+  await page.keyboard.press("Tab");
+  await expect(page.getByRole("button", { name: "Exit translation", exact: true })).toBeFocused();
+  await page.clock.runFor(4700);
+  await expect(page.locator("#overlay-toolbar")).toBeVisible();
+  await page.keyboard.press("Enter");
+  await expect(page.getByRole("button", { name: "Exit translation", exact: true })).toBeDisabled();
 });

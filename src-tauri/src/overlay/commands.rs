@@ -39,6 +39,8 @@ pub fn set_overlay_click_through(app: AppHandle, ignore: bool) -> Result<(), Str
         warn!("Failed to restore overlay translucency: {}", e);
     }
 
+    super::window_focus::allow_interaction(&window, false)?;
+
     Ok(())
 }
 

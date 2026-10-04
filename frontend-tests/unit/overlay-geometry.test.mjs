@@ -111,6 +111,15 @@ describe("overlay toolbar placement", () => {
 
   it.each([
     [
+      { x: 0, y: 0, width: 560, height: 100 },
+      { left: 446, top: 114 },
+    ],
+    [{ x: 0, y: 0, width: 560, height: 430 }, null],
+    [
+      { x: 0, y: 56, width: 560, height: 300 },
+      { left: 446, top: 370 },
+    ],
+    [
       { x: 100, y: 180, width: 350, height: 100 },
       { left: 336, top: 124 },
     ],
@@ -133,7 +142,7 @@ describe("overlay toolbar placement", () => {
     ],
     [
       { x: -100, y: -30, width: 350, height: 100 },
-      { left: 136, top: 8 },
+      { left: 264, top: 8 },
     ],
   ])(
     "keeps controls accessible and clear of small-frame handles for %j",
