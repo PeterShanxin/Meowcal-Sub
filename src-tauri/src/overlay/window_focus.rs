@@ -23,12 +23,23 @@ pub fn register_close_handler(app: &tauri::AppHandle) {
 }
 
 #[cfg(windows)]
-pub fn allow_interaction(window: &tauri::WebviewWindow) -> Result<(), String> {
+pub fn allow_interaction(
+    window: &tauri::WebviewWindow,
+    register_in_switcher: bool,
+) -> Result<(), String> {
     let target = window.clone();
     window
         .run_on_main_thread(move || {
             if let Err(error) = apply(&target) {
                 tracing::warn!("Failed to enable overlay keyboard interaction: {error}");
+                return;
+            }
+            // A window shown with WS_EX_NOACTIVATE can remain absent from the
+            // shell's switcher even after clearing the bit. Register after show.
+            if register_in_switcher {
+                if let Err(error) = target.set_skip_taskbar(false) {
+                    tracing::warn!("Failed to register overlay in the window switcher: {error}");
+                }
             }
         })
         .map_err(|e| e.to_string())
@@ -65,7 +76,10 @@ unsafe fn allow_hwnd_interaction(hwnd: windows::Win32::Foundation::HWND) {
 }
 
 #[cfg(not(windows))]
-pub fn allow_interaction(_window: &tauri::WebviewWindow) -> Result<(), String> {
+pub fn allow_interaction(
+    _window: &tauri::WebviewWindow,
+    _register_in_switcher: bool,
+) -> Result<(), String> {
     Ok(())
 }
 

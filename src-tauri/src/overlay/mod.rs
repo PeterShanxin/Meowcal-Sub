@@ -203,7 +203,7 @@ pub async fn show_overlay(app: &AppHandle) -> Result<(), String> {
         tracing::warn!("Failed to apply overlay translucency: {}", e);
     }
 
-    window_focus::allow_interaction(&window)?;
+    window_focus::allow_interaction(&window, true)?;
 
     // Emit visibility event
     app.emit("overlay-visibility", true)
