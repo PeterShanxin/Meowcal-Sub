@@ -14,7 +14,8 @@
 ## Native result
 
 The native WebView controller received the selector's `set_capture_region` and
-`region-selected` contract, then a focus event exercised the main window refresh before clicking Start while preparation was pending.
+`region-selected` contract, then a focus event exercised the main window refresh
+before clicking Start while preparation was pending.
 The bridge was instrumented without replacing command responses. This checks the
 native event, controller and real Core boundary, not the mouse-drag gesture.
 
@@ -56,3 +57,5 @@ format/lint/types/build/coverage and dependency audit. Focused cases cover selec
 events and polling, restored/cancelled areas, repeated selections, immediate Start,
 failure/retry, stale completion, execution-policy refresh and ineligible states.
 
+The Home-route regressions failed before their respective fixes: focus refresh
+disabled Start, and a failed warmup replaced Start with Repair. Both now pass.
