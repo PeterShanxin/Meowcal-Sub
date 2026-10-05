@@ -15,6 +15,12 @@ export class EngineStatusController {
   constructor(private readonly publish: (patch: Partial<UiSnapshot>) => void) {}
 
   async read(command: string, fallback: EngineStatus): Promise<EngineStatus> {
+    // Focus returns as the selector closes. Keep Start available while our warmup owns Core.
+    if (
+      this.preparation &&
+      (this.current?.phase === "notRunning" || this.current?.phase === "notrunning")
+    )
+      return this.current;
     const revision = ++this.revision;
     let engine: EngineStatus;
     try {
@@ -81,7 +87,7 @@ export class EngineStatusController {
       if (!this.disposed && revision === this.revision) this.accept(ready);
     } catch (error) {
       if (!this.disposed && revision === this.revision) {
-        this.accept({ ...engine, phase: "error" });
+        if (engine.phase === "preparing") this.accept({ ...engine, phase: "error" });
         this.publish({ error: error instanceof Error ? error.message : String(error) });
       }
     }

@@ -27,7 +27,6 @@ function setup(phase = "notRunning") {
     publish,
     finish,
     fail,
-    setStatus: (phase: string) => (status = { phase }),
   };
 }
 
@@ -77,15 +76,11 @@ it("reports background failure and releases preparation for an explicit retry", 
   controller.dispose();
 });
 
-it.each([false, true])("does not publish stale warmup after dispose=%s", async (disposed) => {
-  const { controller, publish, finish, setStatus } = setup();
+it("does not publish warmup after disposal", async () => {
+  const { controller, publish, finish } = setup();
   await controller.read("get_engine_status", {});
   const warmup = controller.prewarm();
-  if (disposed) controller.dispose();
-  else {
-    setStatus("error");
-    await controller.read("refresh_engine_status", {});
-  }
+  controller.dispose();
   publish.mockClear();
   finish({ phase: "ready" });
   await warmup;

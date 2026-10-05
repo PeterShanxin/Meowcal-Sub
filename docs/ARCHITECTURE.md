@@ -183,6 +183,10 @@ Shared contracts have one owner before parallel decomposition begins:
   preparation before refreshing readiness. Restored areas and cancelled selectors
   do not trigger prewarming. This moves model loading earlier, including its memory
   use; capture and translation still wait for Start.
+  Focus refresh preserves the stopped state during owned preparation so Start
+  stays available. A speculative preparation failure reports its error while
+  retaining the stopped state for retry. An engine already reporting `preparing`
+  still transitions to `error` on preparation failure.
 - Product version: `src-tauri/tauri.conf.json` is the product version record.
   `package.json` and `src-tauri/Cargo.toml` are synchronized mirrors.
 - Display state: the pipeline owns translated/source-only/failure semantics.
