@@ -64,6 +64,17 @@ export class EngineStatusController {
 
   async finishPreparation(engine: EngineStatus | undefined): Promise<void> {
     if (this.disposed || engine !== this.current || engine?.phase !== "preparing") return;
+    await this.completePreparation(engine);
+  }
+
+  async prewarm(): Promise<void> {
+    const engine = this.current;
+    if (this.disposed || !engine || !["notRunning", "notrunning"].includes(engine.phase ?? ""))
+      return;
+    await this.completePreparation(engine);
+  }
+
+  private async completePreparation(engine: EngineStatus): Promise<void> {
     const revision = this.revision;
     try {
       const ready = await this.prepare();
@@ -87,6 +98,8 @@ export class EngineStatusController {
 
   async ready(): Promise<EngineStatus> {
     const revision = ++this.revision;
+    // A status read during preparation can report busy; join it before checking again.
+    if (this.preparation) await this.preparation;
     let engine = await window.TauriBridge.invoke<EngineStatus>("refresh_engine_status");
     if (["notRunning", "notrunning", "preparing"].includes(engine.phase ?? "")) {
       engine = await this.prepare();

@@ -178,6 +178,11 @@ Shared contracts have one owner before parallel decomposition begins:
   readiness and rejects older status writes. Without confirmed readiness the app
   reports `busy`; the UI follows it with one bounded status recheck at a time.
   In-flight preparation is shared and cleared on success and failure.
+  Confirming a subtitle area in the native app prewarms an installed, stopped
+  engine while idle, provided settings have finished saving. Start joins that
+  preparation before refreshing readiness. Restored areas and cancelled selectors
+  do not trigger prewarming. This moves model loading earlier, including its memory
+  use; capture and translation still wait for Start.
 - Product version: `src-tauri/tauri.conf.json` is the product version record.
   `package.json` and `src-tauri/Cargo.toml` are synchronized mirrors.
 - Display state: the pipeline owns translated/source-only/failure semantics.

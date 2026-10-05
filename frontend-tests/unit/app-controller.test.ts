@@ -216,7 +216,59 @@ describe("AppController settings persistence", () => {
     expect(invoke).toHaveBeenCalledTimes(1);
   });
 
-  // The engine is not loaded at launch, so the first Start finds it stopped.
+  it.each(["event", "poll"])("prewarms only after area confirmation via %s", async (via) => {
+    vi.useFakeTimers();
+    let region = { x: 10, y: 800, width: 1200, height: 120 };
+    let finish!: (value: unknown) => void;
+    const pending = new Promise((resolve) => (finish = resolve));
+    const invoke = vi.fn(async (command: string) => {
+      if (command === "get_engine_status") return { phase: "notRunning" };
+      if (command === "get_capture_region") return region;
+      if (command === "is_translation_running") return false;
+      if (command === "make_engine_ready") return pending;
+      return undefined;
+    });
+    const { controller, listeners } = createController(
+      invoke as TauriBridgeApi["invoke"],
+      undefined,
+      false,
+    );
+    await controller.initialize();
+    await controller.selectRegion();
+    await vi.advanceTimersByTimeAsync(500);
+    expect(invoke).not.toHaveBeenCalledWith("make_engine_ready");
+    region = { ...region, y: 760 };
+    if (via === "event") listeners.get("region-selected")?.({ payload: region });
+    else await vi.advanceTimersByTimeAsync(250);
+    expect(invoke.mock.calls.filter(([name]) => name === "make_engine_ready")).toHaveLength(1);
+    expect(controller.current()).toMatchObject({ busy: "idle", running: false, region });
+    expect(invoke).not.toHaveBeenCalledWith("start_translation");
+    finish({ phase: "ready" });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(controller.current().engine?.phase).toBe("ready");
+    controller.dispose();
+  });
+
+  it.each(["browser", "running", "saving"])("skips area prewarming while %s", async (state) => {
+    const invoke = vi.fn(async (command: string) => {
+      if (command === "get_engine_status") return { phase: "notRunning" };
+      if (command === "is_translation_running") return state === "running";
+      if (command === "save_settings") return new Promise(() => {});
+      return undefined;
+    });
+    const { controller, listeners } = createController(
+      invoke as TauriBridgeApi["invoke"],
+      undefined,
+      state === "browser",
+    );
+    await controller.initialize();
+    if (state === "saving") void controller.setCpuOnly(true);
+    listeners.get("region-selected")?.({ payload: { x: 0, y: 0, width: 800, height: 100 } });
+    expect(invoke).not.toHaveBeenCalledWith("make_engine_ready");
+    controller.dispose();
+  });
+
+  // Restored regions do not load the engine at launch.
   it("readies a stopped engine before starting translation", async () => {
     const invoke = vi.fn(async (command: string) => {
       if (command === "refresh_engine_status") return { phase: "notRunning" };
