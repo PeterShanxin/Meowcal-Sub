@@ -117,8 +117,7 @@ export class AppController {
 
   private async setupEvents(): Promise<void> {
     const regionUnlisten = await window.TauriBridge.event.listen("region-selected", (event) => {
-      this.stopRegionPolling();
-      this.publish({ region: event.payload as CaptureRegion, notice: "Subtitle area selected" });
+      this.confirmRegion(event.payload as CaptureRegion);
     });
     const captureUnlisten = await window.TauriBridge.event.listen("capture-status", (event) => {
       const payload = event.payload as { isError?: boolean; message?: string };
@@ -188,8 +187,7 @@ export class AppController {
       const region = await this.safeInvoke<CaptureRegion | null>("get_capture_region", null);
       const same = (key: keyof CaptureRegion) => region?.[key] === saved?.[key];
       if (region && !(saved && same("x") && same("y") && same("width") && same("height"))) {
-        this.stopRegionPolling();
-        this.publish({ region, notice: "Subtitle area selected" });
+        this.confirmRegion(region);
       } else if (++attempts >= 40) this.stopRegionPolling();
     }, 250);
   }
@@ -197,6 +195,14 @@ export class AppController {
   private stopRegionPolling(): void {
     if (this.pollingId !== null) window.clearInterval(this.pollingId);
     this.pollingId = null;
+  }
+
+  private confirmRegion(region: CaptureRegion): void {
+    this.stopRegionPolling();
+    this.publish({ region, notice: "Subtitle area selected" });
+    if (this.disposed || window.TauriBridge.isBrowserMode()) return;
+    const { running, busy, settingsSave } = this.snapshot;
+    if (!running && busy === "idle" && settingsSave.kind === "idle") void this.engines.prewarm();
   }
 
   async installOcr(): Promise<void> {

@@ -15,6 +15,12 @@ export class EngineStatusController {
   constructor(private readonly publish: (patch: Partial<UiSnapshot>) => void) {}
 
   async read(command: string, fallback: EngineStatus): Promise<EngineStatus> {
+    // Focus returns as the selector closes. Keep Start available while our warmup owns Core.
+    if (
+      this.preparation &&
+      (this.current?.phase === "notRunning" || this.current?.phase === "notrunning")
+    )
+      return this.current;
     const revision = ++this.revision;
     let engine: EngineStatus;
     try {
@@ -64,13 +70,24 @@ export class EngineStatusController {
 
   async finishPreparation(engine: EngineStatus | undefined): Promise<void> {
     if (this.disposed || engine !== this.current || engine?.phase !== "preparing") return;
+    await this.completePreparation(engine);
+  }
+
+  async prewarm(): Promise<void> {
+    const engine = this.current;
+    if (this.disposed || !engine || !["notRunning", "notrunning"].includes(engine.phase ?? ""))
+      return;
+    await this.completePreparation(engine);
+  }
+
+  private async completePreparation(engine: EngineStatus): Promise<void> {
     const revision = this.revision;
     try {
       const ready = await this.prepare();
       if (!this.disposed && revision === this.revision) this.accept(ready);
     } catch (error) {
       if (!this.disposed && revision === this.revision) {
-        this.accept({ ...engine, phase: "error" });
+        if (engine.phase === "preparing") this.accept({ ...engine, phase: "error" });
         this.publish({ error: error instanceof Error ? error.message : String(error) });
       }
     }
@@ -87,6 +104,8 @@ export class EngineStatusController {
 
   async ready(): Promise<EngineStatus> {
     const revision = ++this.revision;
+    // A status read during preparation can report busy; join it before checking again.
+    if (this.preparation) await this.preparation;
     let engine = await window.TauriBridge.invoke<EngineStatus>("refresh_engine_status");
     if (["notRunning", "notrunning", "preparing"].includes(engine.phase ?? "")) {
       engine = await this.prepare();
