@@ -57,22 +57,14 @@ fn get_overlay_window(app: &AppHandle) -> Option<WebviewWindow> {
     window
 }
 
-/// Configure the overlay window as a chromeless popup covering the full screen.
-///
-/// This approach:
-/// 1. Sets WS_POPUP style - removes all window chrome (titlebar, borders)
-/// 2. Covers the entire virtual screen (all monitors)
-/// 3. Sets NonRudeHWND property - prevents Windows from hiding the taskbar
-///
-/// This is how professional overlays (OBS, Discord, game overlays) work.
+/// Cover the capture monitor without window chrome or hiding the taskbar.
 #[cfg(windows)]
 fn configure_overlay_as_chromeless_popup(window: &WebviewWindow) -> Result<(), String> {
     use raw_window_handle::HasWindowHandle;
     use windows::core::w;
     use windows::Win32::Foundation::HANDLE;
     use windows::Win32::UI::WindowsAndMessaging::{
-        GetSystemMetrics, SetPropW, SetWindowLongPtrW, SetWindowPos, GWL_STYLE, SM_CXVIRTUALSCREEN,
-        SM_CYVIRTUALSCREEN, SM_XVIRTUALSCREEN, SM_YVIRTUALSCREEN, SWP_FRAMECHANGED, SWP_NOACTIVATE,
+        SetPropW, SetWindowLongPtrW, SetWindowPos, GWL_STYLE, SWP_FRAMECHANGED, SWP_NOACTIVATE,
         SWP_NOZORDER, WS_POPUP, WS_VISIBLE,
     };
 
@@ -95,15 +87,20 @@ fn configure_overlay_as_chromeless_popup(window: &WebviewWindow) -> Result<(), S
             let new_style = WS_POPUP.0 | WS_VISIBLE.0;
             SetWindowLongPtrW(hwnd, GWL_STYLE, new_style as isize);
 
-            // 2. Get virtual screen bounds (covers all monitors)
-            let x = GetSystemMetrics(SM_XVIRTUALSCREEN);
-            let y = GetSystemMetrics(SM_YVIRTUALSCREEN);
-            let width = GetSystemMetrics(SM_CXVIRTUALSCREEN);
-            let height = GetSystemMetrics(SM_CYVIRTUALSCREEN);
+            // Capture and selector coordinates are relative to the primary monitor.
+            let CaptureRegion {
+                x,
+                y,
+                width,
+                height,
+            } = overlay_screen_bounds();
 
-            info!("Virtual screen: ({}, {}) {}x{}", x, y, width, height);
+            info!(
+                "Overlay capture screen: ({}, {}) {}x{}",
+                x, y, width, height
+            );
 
-            // 3. Resize and reposition to cover full virtual screen
+            // Keep the overlay in the same coordinate space and DPI as capture.
             // SWP_FRAMECHANGED forces Windows to recalculate the frame after style change
             // Using None for hwndInsertAfter with SWP_NOZORDER keeps current z-order
             SetWindowPos(
@@ -132,6 +129,12 @@ fn configure_overlay_as_chromeless_popup(window: &WebviewWindow) -> Result<(), S
     } else {
         Err("Window handle is not Win32".to_string())
     }
+}
+
+#[cfg(windows)]
+fn overlay_screen_bounds() -> CaptureRegion {
+    let (width, height) = crate::capture::get_screen_dimensions();
+    CaptureRegion::new(0, 0, width, height)
 }
 
 /// Show the overlay window
@@ -341,6 +344,30 @@ impl Default for OverlayManager {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(windows)]
+    #[test]
+    fn overlay_bounds_share_the_capture_coordinate_space() {
+        use windows::Win32::Graphics::Gdi::{
+            GetMonitorInfoW, MonitorFromWindow, MONITORINFO, MONITOR_DEFAULTTOPRIMARY,
+        };
+        let monitor = unsafe { MonitorFromWindow(Default::default(), MONITOR_DEFAULTTOPRIMARY) };
+        let mut info = MONITORINFO {
+            cbSize: std::mem::size_of::<MONITORINFO>() as u32,
+            ..Default::default()
+        };
+        assert!(unsafe { GetMonitorInfoW(monitor, &mut info) }.as_bool());
+        let bounds = info.rcMonitor;
+        assert_eq!(
+            overlay_screen_bounds(),
+            CaptureRegion::new(
+                bounds.left,
+                bounds.top,
+                bounds.right - bounds.left,
+                bounds.bottom - bounds.top
+            )
+        );
+    }
 
     #[test]
     fn test_overlay_position_from_capture() {
