@@ -182,6 +182,10 @@ Shared contracts have one owner before parallel decomposition begins:
   `package.json` and `src-tauri/Cargo.toml` are synchronized mirrors.
 - Display state: the pipeline owns translated/source-only/failure semantics.
   The overlay renders the supplied state and cannot relabel OCR as translation.
+- Overlay coordinates: capture and selection use primary-monitor logical pixels.
+  The native overlay covers that same monitor at physical origin `(0, 0)`;
+  spanning the virtual desktop would shift the frame and subtitles when another
+  monitor sits to the left or above it, and can select a different DPI scale.
 - Overlay liveness: `overlay-ready` and `overlay-heartbeat` are emitted by the
   overlay frontend and owned by `overlay/liveness.rs`, which distinguishes a
   live native window from a renderer still consuming events. A stale renderer
