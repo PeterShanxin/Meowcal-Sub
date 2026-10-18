@@ -45,6 +45,32 @@ Do not silently choose the more convenient interpretation.
   stop lifecycle retries and preserve evidence before reassessing. Do not
   change host power state, virtualization features, or drivers to unblock tests.
 
+## Local build storage
+
+- Check free space and resolved build-output sizes before a new worktree or large
+  build, at handoff, and weekly during active development. Suggested review
+  thresholds are 20 GiB per output tree or 50 GiB across this repo's worktrees.
+  Below 100 GiB free, estimate the next build's needs and report capacity risk;
+  proceed when the available capacity is sufficient. These are not deletion rules.
+- Keep warm incremental outputs; do not `cargo clean` after routine verification.
+  Development launchers default to `%LOCALAPPDATA%/meowcal-sub/cargo-build`,
+  verification to `src-tauri/target`, Core to `core/target`, and packaging to
+  `-CargoTargetDir` or a temporary architecture-specific directory. Record actual
+  overrides and reuse compatible outputs through existing options, coordinating
+  concurrent writers and keeping incompatible toolchains/build policies separate.
+- Before retiring a worktree or output, check tracked, untracked and ignored
+  files, branch/upstream state, active tasks and process ownership. Clean Git,
+  pushed commits, merged branches or age do not make local files disposable.
+  Original media, evidence, private inputs, exports and signed packages need
+  retention decisions; only outputs with known inputs/rebuild commands are
+  rebuildable candidates. Preserve needed local files separately and read them
+  back (compare binary hashes); Git snapshots do not cover ignored files.
+- Follow existing user authority without asking again for covered actions; request
+  authority only where missing. These guidelines grant no new deletion authority.
+  Stop maintenance on uncertain ownership or failed preservation checks. After
+  authorised maintenance, verify retained work and use the normal build gate;
+  report recovery failures without broadening cleanup or data access.
+
 ## Delivery
 
 - Use small, reviewable changes with a coherent checkpoint commit.
