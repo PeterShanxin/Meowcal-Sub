@@ -20,7 +20,7 @@ establish certified ASD-STE100 compliance.
 Apply these principles in the language appropriate to the project and reader.
 Do not force English or English word-count limits onto Chinese or other languages.
 Preserve domain precision, necessary warnings, and the product's voice.
-Review meaning in context; do not add mechanical CI prose lint or dependencies.
+Review meaning in context. This writing standard does not require mechanical CI prose lint or new dependencies.
 
 ## Example
 
