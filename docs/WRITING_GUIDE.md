@@ -1,8 +1,8 @@
 # STE-inspired clarity
 
 This project-wide writing standard applies to human contributors and agents.
-Use it for new or changed documentation, README files, help text, error messages,
-UI text, comments, and delivery notes. Apply it when touching relevant text;
+Apply it to all new or revised repository text, including documentation, README
+files, help text, error messages, UI text, comments, and delivery notes;
 it does not require a bulk rewrite of existing content.
 
 These principles are inspired by Simplified Technical English. They do not
