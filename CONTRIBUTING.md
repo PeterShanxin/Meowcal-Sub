@@ -335,3 +335,9 @@ npm run commits:check
 ```
 
 That run is local feedback. CI is the gate.
+
+## Writing clarity
+
+Human contributors and agents follow the project-wide
+[STE-inspired clarity standard](docs/WRITING_GUIDE.md) for new or changed README,
+documentation, help, error and UI text, comments, and delivery notes.

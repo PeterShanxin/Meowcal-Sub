@@ -386,3 +386,8 @@ actively whenever an update would help the next agent:
 Guide edits are normative and reviewable: state what changed and why in the
 change description. Do not weaken a safety, privacy, or evidence rule here to
 make a task easier — raise the conflict instead.
+
+## Writing clarity
+
+Follow [STE-inspired clarity](WRITING_GUIDE.md) for new or changed text and delivery
+notes. This project-wide standard applies to human contributors and agents.
