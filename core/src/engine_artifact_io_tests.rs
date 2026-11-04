@@ -55,6 +55,32 @@ async fn an_unsafe_archive_path_is_rejected() {
 }
 
 #[tokio::test]
+async fn an_archive_path_with_a_nul_byte_is_rejected() {
+    let root = fixture_path("extract-nul", "dir");
+    let archive = root.join("runtime.zip");
+    let destination = root.join("destination");
+    std::fs::create_dir_all(&root).unwrap();
+    write_archive(&archive, "badXname", b"payload");
+    let mut bytes = std::fs::read(&archive).unwrap();
+    for index in (0..bytes.len() - 8).rev() {
+        if &bytes[index..index + 8] == b"badXname" {
+            bytes[index + 3] = 0;
+        }
+    }
+    std::fs::write(&archive, bytes).unwrap();
+
+    let error = extract_zip(&archive, &destination)
+        .await
+        .expect_err("NUL path");
+    assert!(
+        error.contains("unsafe archive path") || error.contains("invalid archive"),
+        "{error}"
+    );
+    assert!(!destination.join("bad").exists());
+    std::fs::remove_dir_all(root).ok();
+}
+
+#[tokio::test]
 async fn duplicate_case_insensitive_archive_paths_are_rejected() {
     let root = fixture_path("extract-duplicate", "dir");
     let archive = root.join("runtime.zip");
