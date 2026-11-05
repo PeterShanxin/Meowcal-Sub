@@ -94,6 +94,39 @@ and final application outcomes separately.
   Chinese and English detection and recognition. Verify the selected detector,
   recognizer, runtime and Windows architecture rather than assuming support.
 
+
+## Adapter feasibility checkpoint
+
+The host is Windows ARM64; the available Python 3.12 interpreter reports AMD64
+and therefore runs under x64 emulation. Its environment did not contain Pillow,
+Paddle, PyTorch, ONNX Runtime or winocr. The Windows baseline requires a
+compatible, explicitly version-pinned Core executable and an installed language
+pack; a historical ARM64 Core 0.1.4 package was located but not run or established
+as the current baseline.
+
+The PaddleOCR pipeline accepts explicit detection and recognition model names.
+Pair `PP-OCRv6_small_det` with `PP-OCRv6_small_rec`, and
+`PP-OCRv6_medium_det` with `PP-OCRv6_medium_rec`. Disable optional document
+orientation, unwarping and text-line orientation for the initial comparison;
+record that choice. The published pipeline can use different inference engines,
+but neither an ARM64 native combination nor x64 emulation has been verified here.
+
+OpenOCR's [quick start](https://github.com/Topdu/OpenOCR/blob/main/QUICKSTART.md)
+documents `openocr-python==0.1.5` and `openocr --task ocr` for detection plus
+recognition. Its server example uses the Torch backend; the project also offers
+ONNX export. Confirm which detector and SVTRv2 weights the selected package
+actually loads and record them before accepting a result. Its documented system
+supports Chinese and English; no other language is assumed. Windows ARM64 and
+x64 package, model and backend combinations remain unverified.
+
+On this machine, separate `pip download --no-deps --timeout 5 --retries 0`
+probes for `openocr-python==0.1.5`, `paddleocr==3.7.0` and `paddlepaddle`
+each returned “No matching distribution found” from the configured package
+source. This does not establish that upstream has no compatible packages or
+identify why this source returned no versions. No candidate was installed or
+executed. Obtain verified dependencies and weights in an isolated environment
+before building or evaluating adapters.
+
 ## Preparation and remaining work
 
 The frame extraction and scoring helpers in `scripts/ocr_experiment_*.py` were
@@ -106,7 +139,8 @@ with `seconds,cue_id,cue_start_seconds,truth,output,phase`; use a unique cue ID
 for each appearance, `ignore` for uncertain frames, and empty truth for blank
 frames. Run `python scripts/ocr_experiment_score.py LABELS.csv`. The scorer
 reports frame-level character error, output changes and three-frame stability;
-it does not measure latency, process resources or final application behavior. Before implementation,
+it does not measure latency, process resources or final application behavior.
+Before implementation,
 confirm the source recording and its timing, verify dependencies and complete
 pipeline availability, define evaluation thresholds, and build a reproducible
 frame runner and scorer. Review a draft PR without merging or deploying it
