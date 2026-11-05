@@ -96,8 +96,17 @@ and final application outcomes separately.
 
 ## Preparation and remaining work
 
-The local frame extraction helper was checked only on a synthetic five-frame
-sample. That check is not OCR or real-video evidence. Before implementation,
+The frame extraction and scoring helpers in `scripts/ocr_experiment_*.py` were
+checked only with synthetic inputs. Those checks are not OCR or real-video
+evidence. Extract frames with `python scripts/ocr_experiment_extract_frames.py
+VIDEO NEW_DIRECTORY --start SECONDS --duration SECONDS --crop W:H:X:Y`.
+Omit `--crop` for both lines. The helper writes PNGs, source timestamps and a
+manifest. Inspect the output before use. The scorer accepts a time-ordered CSV
+with `seconds,cue_id,cue_start_seconds,truth,output,phase`; use a unique cue ID
+for each appearance, `ignore` for uncertain frames, and empty truth for blank
+frames. Run `python scripts/ocr_experiment_score.py LABELS.csv`. The scorer
+reports frame-level character error, output changes and three-frame stability;
+it does not measure latency, process resources or final application behavior. Before implementation,
 confirm the source recording and its timing, verify dependencies and complete
 pipeline availability, define evaluation thresholds, and build a reproducible
 frame runner and scorer. Review a draft PR without merging or deploying it
