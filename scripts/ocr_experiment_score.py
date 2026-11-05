@@ -25,6 +25,7 @@ def normalize(text):
 def score(rows):
     errors = chars = blank = false_positive = comparisons = changes = normalized_changes = 0
     groups = defaultdict(list)
+    scorable_cues = set()
     previous = None
     for row in rows:
         if row["phase"] == "ignore":
@@ -43,17 +44,20 @@ def score(rows):
             comparisons += 1
             changes += output != previous["output"]
             normalized_changes += normalize(output) != normalize(previous["output"])
-        if row["cue_id"] and truth:
+        if row["cue_id"]:
             groups[row["cue_id"]].append(row)
+            if truth:
+                scorable_cues.add(row["cue_id"])
         previous = row
     delays = []
-    for cue_rows in groups.values():
+    for cue_id in sorted(scorable_cues):
+        cue_rows = groups[cue_id]
         run = 0
         for row in cue_rows:
             if row["phase"] == "ignore":
                 run = 0
                 continue
-            run = run + 1 if row["truth"] == row["output"] else 0
+            run = run + 1 if row["truth"] and row["truth"] == row["output"] else 0
             if run == 3:
                 delays.append(float(row["seconds"]) - float(row["cue_start_seconds"]))
                 break
@@ -63,8 +67,8 @@ def score(rows):
             "blank_frames": blank, "blank_false_positive_rate": ratio(false_positive, blank),
             "unchanged_frame_pairs": comparisons, "exact_change_rate": ratio(changes, comparisons),
             "normalized_change_rate": ratio(normalized_changes, comparisons),
-            "cues": len(groups), "cues_stable": len(delays),
-            "unstable_cues": len(groups) - len(delays), "stable_delays_seconds": delays}
+            "cues": len(scorable_cues), "cues_stable": len(delays),
+            "unstable_cues": len(scorable_cues) - len(delays), "stable_delays_seconds": delays}
 
 
 def main():
