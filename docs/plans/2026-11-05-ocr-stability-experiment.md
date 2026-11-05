@@ -122,8 +122,10 @@ x64 package, model and backend combinations remain unverified.
 On this machine, separate `pip download --no-deps --timeout 5 --retries 0`
 probes for `openocr-python==0.1.5`, `paddleocr==3.7.0` and `paddlepaddle`
 each returned “No matching distribution found” from the configured package
-source. This does not establish that upstream has no compatible packages or
-identify why this source returned no versions. No candidate was installed or
+source. The pip configuration shows no index override; a verbose OpenOCR probe
+showed the default PyPI host `pypi.org` failed DNS resolution with Windows error
+11001 before pip reported no matching distribution. This does not establish
+that upstream has no compatible packages. No candidate was installed or
 executed. Obtain verified dependencies and weights in an isolated environment
 before building or evaluating adapters.
 
