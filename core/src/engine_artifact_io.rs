@@ -186,7 +186,8 @@ pub async fn extract_zip(archive: &Path, destination: &Path) -> Result<(), Strin
 pub(crate) fn enclosed_archive_path<R: std::io::Read>(
     entry: &zip::read::ZipFile<'_, R>,
 ) -> Option<PathBuf> {
-    let name = entry.name().as_bytes();
+    let name = entry.name().ok()?;
+    let name = name.as_bytes();
     let rooted = matches!(name.first(), Some(b'/' | b'\\'));
     let drive = name.len() >= 2 && name[0].is_ascii_alphabetic() && name[1] == b':';
     if rooted || drive {
@@ -215,8 +216,12 @@ fn extract_zip_blocking(archive: &Path, destination: &Path) -> Result<(), String
         let mut entry = zip
             .by_index(index)
             .map_err(|error| failure(format!("could not read entry {index}: {error}")))?;
+        let name = entry
+            .name()
+            .map_err(|error| failure(format!("invalid archive path for entry {index}: {error}")))?
+            .into_owned();
         let relative = enclosed_archive_path(&entry)
-            .ok_or_else(|| failure(format!("unsafe archive path: {}", entry.name())))?;
+            .ok_or_else(|| failure(format!("unsafe archive path: {name}")))?;
         let normalized = relative
             .components()
             .filter_map(|component| match component {
@@ -226,16 +231,13 @@ fn extract_zip_blocking(archive: &Path, destination: &Path) -> Result<(), String
             .collect::<Vec<_>>()
             .join("/");
         if !archive_names.insert(normalized) {
-            return Err(failure(format!("duplicate archive path: {}", entry.name())));
+            return Err(failure(format!("duplicate archive path: {name}")));
         }
         if entry
             .unix_mode()
             .is_some_and(|mode| mode & 0o170000 == 0o120000)
         {
-            return Err(failure(format!(
-                "symbolic links are not supported: {}",
-                entry.name()
-            )));
+            return Err(failure(format!("symbolic links are not supported: {name}")));
         }
         let output_path = destination.join(&relative);
         if entry.is_dir() {
