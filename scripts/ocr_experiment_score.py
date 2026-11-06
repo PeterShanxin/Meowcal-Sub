@@ -40,7 +40,7 @@ def score(rows):
         else:
             blank += 1
             false_positive += bool(output)
-        if previous and row["cue_id"] == previous["cue_id"] and truth == previous["truth"]:
+        if truth and previous and row["cue_id"] == previous["cue_id"] and truth == previous["truth"]:
             comparisons += 1
             changes += output != previous["output"]
             normalized_changes += normalize(output) != normalize(previous["output"])

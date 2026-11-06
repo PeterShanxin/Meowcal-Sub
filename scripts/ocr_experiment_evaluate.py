@@ -48,12 +48,15 @@ def load_truth(corpus):
                  "truth": norm([r["truth"]]), "phase": r["phase"]} for r in rows]
     labels = {r["cue_id"]: r["truth"] for r in csv.DictReader((corpus / "labels.csv").open(encoding="utf-8"))}
     rows = list(csv.DictReader((corpus / "cues.csv").open(encoding="utf-8")))
+    unlabelled = sorted({r["cue_id"] for r in rows if r["cue_id"]} - labels.keys())
+    if unlabelled:
+        raise SystemExit(f"labels.csv has no entry for cues: {', '.join(unlabelled)}")
     starts = {}
     for r in rows:
         starts.setdefault(r["cue_id"], r["seconds"])
     out = []
     for r in rows:
-        truth = labels.get(r["cue_id"], "") if r["cue_id"] else ""
+        truth = labels[r["cue_id"]] if r["cue_id"] else ""
         phase = "ignore" if truth == "IGNORE" else r["phase"]
         out.append({"frame": int(r["frame"]), "seconds": r["seconds"], "cue_id": r["cue_id"],
                     "cue_start_seconds": starts.get(r["cue_id"], "0"),

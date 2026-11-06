@@ -153,7 +153,7 @@ Text is compared after NFKC and the application's cue-identity normalization
 punctuation differences do not count. Only lines at least 60% as tall as the
 tallest line in the frame are kept, which drops small scene text equally for
 every engine. Transition frames (cue edges and fades) are excluded; blank
-frames are reported separately. "Readings per cue" counts distinct non-empty
+frames are reported separately and do not enter the change rate. "Readings per cue" counts distinct non-empty
 outputs over a cue's stable frames - each distinct reading is a potential
 retranslation.
 
@@ -163,12 +163,12 @@ retranslation.
 | `real-zh` | `winocr-mask` | 0.064 | 67% | 7% | 1.73 | 28/40 | 0% |
 | `real-zh` | `rapid-v5-mobile` | 0.000 | 100% | 0% | 1.02 | 40/40 | 0% |
 | `real-zh` | `rapid-v6-small` | 0.000 | 100% | 0% | 1.00 | 40/40 | 0% |
-| `zh-nat` | `winocr` | 0.147 | 39% | 51% | 8.80 | 14/20 | 2% |
-| `zh-nat` | `winocr-mask` | 0.136 | 29% | 43% | 9.00 | 8/20 | 2% |
-| `zh-nat` | `rapid-v6-small` | 0.077 | 87% | 11% | 2.10 | 19/20 | 50% |
-| `en-nat` | `winocr` | 0.046 | 51% | 45% | 8.60 | 15/20 | 0% |
-| `en-nat` | `winocr-mask` | 0.072 | 34% | 48% | 9.65 | 10/20 | 0% |
-| `en-nat` | `rapid-v6-small` | 0.060 | 91% | 12% | 2.15 | 20/20 | 48% |
+| `zh-nat` | `winocr` | 0.147 | 39% | 54% | 8.80 | 14/20 | 2% |
+| `zh-nat` | `winocr-mask` | 0.136 | 29% | 45% | 9.00 | 8/20 | 2% |
+| `zh-nat` | `rapid-v6-small` | 0.077 | 87% | 9% | 2.10 | 19/20 | 50% |
+| `en-nat` | `winocr` | 0.046 | 51% | 48% | 8.60 | 15/20 | 0% |
+| `en-nat` | `winocr-mask` | 0.072 | 34% | 51% | 9.65 | 10/20 | 0% |
+| `en-nat` | `rapid-v6-small` | 0.060 | 91% | 10% | 2.15 | 20/20 | 48% |
 
 "Cue majority correct" is the most frequent reading over a cue's stable frames.
 Stable cues last about 22 frames on the synthetic corpora.
@@ -182,7 +182,7 @@ The one recurring recognition error was `脚` read as the traditional form
 `腳` in 17 stable frames.
 
 Windows OCR's errors are not random noise around a fixed reading: on the
-natural-scene corpora the same unchanged subtitle reads differently in 43-51%
+natural-scene corpora the same unchanged subtitle reads differently in 45-54%
 of adjacent frame pairs, splitting characters into radicals or substituting
 look-alikes (`你今天` read as `你萨天`, `亻`, or with `今` dropped). The white
 glyph mask reduces this on the real video but barely over bright scenery.
