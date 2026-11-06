@@ -267,6 +267,13 @@ PP-OCRv6 started 4-5 translations outside any cue on the synthetic corpora,
 against 0-1 for Windows OCR; the likely source is the watermark read alone on
 frames without a subtitle, which was not checked line by line.
 
+The same replay over the [band-gate fixture](../../evals/band-gate/README.md),
+rendered headlessly at 10 frames per second with a paused page clock, gave both
+engines identical outcomes: every cue of `equal-width-120s` (30) and
+`negative-band-recovery-120s` (5) translated once and exactly, and two
+translations outside subtitle cues in the negative-band run for each engine.
+This is a replay of rendered frames, not the native capture gate.
+
 ## Remaining work
 
 - Stage 2 with the real translation engine and live capture, including whether
