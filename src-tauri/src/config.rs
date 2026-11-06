@@ -178,17 +178,14 @@ pub struct OcrConfig {
 
     /// Convert image to grayscale before OCR.
     /// Recommended: true for most subtitle scenarios.
-    #[serde(default = "default_grayscale")]
     pub grayscale: bool,
 
     /// Apply a linear contrast stretch before OCR. Not equalisation: on a
     /// subtitle strip that promotes half the background into the glyph range.
-    #[serde(default = "default_contrast_enhancement")]
     pub contrast_enhancement: bool,
 
     /// Split glyphs from background at an automatically chosen threshold, then
     /// normalise to dark text on a light page. Recommended: true.
-    #[serde(default = "default_binarize")]
     pub binarize: bool,
 
     /// Run OCR several times with weaker preprocessing and keep the longest
@@ -204,6 +201,8 @@ pub struct OcrConfig {
     /// How many significant characters a line must carry to be worth
     /// translating. See `ValidationStrictness::min_significant_chars`.
     pub validation_strictness: ValidationStrictness,
+    /// Subtitle recognizer; `ocr::session_engine` keeps Korean on Windows OCR.
+    pub engine: meowcal_core::ocr::Engine,
 }
 
 fn default_confidence_threshold() -> f32 {
@@ -446,6 +445,7 @@ impl Default for OcrConfig {
             enable_multi_pass: default_multi_pass_enabled(),
             multi_pass_count: default_multi_pass_count(),
             validation_strictness: ValidationStrictness::default(),
+            engine: meowcal_core::ocr::Engine::PpOcrV6,
         }
     }
 }

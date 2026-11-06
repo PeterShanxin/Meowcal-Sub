@@ -1,4 +1,4 @@
-import type { AppScreen, AppSettings, CaptureRegion, UiSnapshot } from "./contracts";
+import type { AppScreen, AppSettings, CaptureRegion, OcrEngine, UiSnapshot } from "./contracts";
 import { pickSampleTranslation } from "./sample-translations";
 import { applyLanguageSelection } from "./languages";
 import { backendUnavailablePhase } from "./home-state";
@@ -294,8 +294,12 @@ export class AppController {
   }
 
   async setRecognitionPreset(value: keyof typeof recognitionPresets): Promise<void> {
-    const ocr = recognitionPresets[value];
-    await this.editSettings((settings) => (settings.translation.ocr = { ...ocr }));
+    const preset = recognitionPresets[value];
+    await this.editSettings((settings) => Object.assign(settings.translation.ocr, preset));
+  }
+
+  async setOcrEngine(engine: OcrEngine): Promise<void> {
+    await this.editSettings((settings) => (settings.translation.ocr.engine = engine));
   }
 
   async setTranslateAllOcrText(enabled: boolean): Promise<void> {

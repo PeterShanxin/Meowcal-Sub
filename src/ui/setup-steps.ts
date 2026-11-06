@@ -17,6 +17,8 @@ export interface SetupView {
   settings: AppSettings | null;
   loading: boolean;
   ocrReady: boolean;
+  /** PP-OCRv6 reads the original subtitles; no Windows language pack needed. */
+  ocrBuiltIn: boolean;
   installingOcr: boolean;
   working: boolean;
   error: string | null;
@@ -123,7 +125,7 @@ function chooseLanguages(view: SetupView, actions: SetupActions): TemplateResult
   }
   const { sourceLanguage, targetLanguage } = view.settings;
   return html`<section class="wizard-content">
-    ${heading("Choose your languages", "Windows reads the original subtitles; the engine translates them.")}
+    ${heading("Choose your languages", "Meowcal reads the original subtitles; the engine translates them.")}
     <div class="wizard-body">
       <div class="language-pair">
         ${languageField("Original subtitles", sourceLanguage, (value) => actions.setLanguage("source", value))}
@@ -134,7 +136,11 @@ function chooseLanguages(view: SetupView, actions: SetupActions): TemplateResult
         <div class="list-row">
           <span>
             <strong>${languageLabel(sourceLanguage)} text recognition</strong>
-            <small>Windows may ask for permission to add it.</small>
+            <small
+              >${
+                view.ocrBuiltIn ? "Built into Meowcal" : "Windows may ask for permission to add it."
+              }</small
+            >
           </span>
           <span class=${`status-chip ${view.ocrReady ? "tone-success" : "tone-warning"}`}>
             <span class="dot"></span>${view.ocrReady ? "Ready" : "Not installed"}

@@ -82,6 +82,7 @@ export class MeowcalApp extends LitElement {
     if (snapshot.screen === "settings") {
       return renderSettings(snapshot, {
         onRecognition: (value) => void this.controller.setRecognitionPreset(value),
+        onOcrEngine: (engine) => void this.controller.setOcrEngine(engine),
         onContinuity: (enabled) => void this.controller.setContinuity(enabled),
         onTranslateAllOcrText: (enabled) => void this.controller.setTranslateAllOcrText(enabled),
         onRepair: () => void this.controller.openSetup(),

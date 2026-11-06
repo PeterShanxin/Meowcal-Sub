@@ -1,5 +1,6 @@
 import type { HomePresentation, UiSnapshot } from "./contracts";
 import { describeCaptureWarning } from "./error-copy";
+import { recognitionReady } from "./recognition";
 
 const repairPhases = new Set(["error", "noModels", "nomodels", "damaged", "invalid"]);
 const missingPhases = new Set(["notInstalled", "notinstalled"]);
@@ -7,13 +8,6 @@ const preparingPhases = new Set(["preparing", "busy"]);
 const readyPhases = new Set(["ready", "notRunning", "notrunning"]);
 /** Browser mode only: its HTTP backend did not answer. Core never reports it. */
 export const backendUnavailablePhase = "backendUnavailable";
-
-function ocrReady(snapshot: UiSnapshot): boolean {
-  return window.OcrLanguageTags.isOcrLanguageAvailable(
-    snapshot.ocrLanguages,
-    snapshot.settings.sourceLanguage,
-  );
-}
 
 /**
  * The language pair and subtitle area feed the session, so they cannot change
@@ -142,7 +136,7 @@ export function deriveHomePresentation(snapshot: UiSnapshot): HomePresentation {
     };
   }
 
-  if (!ocrReady(snapshot)) {
+  if (!recognitionReady(snapshot.settings, snapshot.ocrLanguages)) {
     return {
       state: "notReady",
       statusLabel: "Almost ready",

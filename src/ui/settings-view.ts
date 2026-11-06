@@ -1,5 +1,5 @@
 import { html, nothing, type TemplateResult } from "lit";
-import type { Tone, UiSnapshot } from "./contracts";
+import type { OcrEngine, Tone, UiSnapshot } from "./contracts";
 import { icon } from "./icons";
 import { backendUnavailablePhase } from "./home-state";
 import { deriveUpdatePresentation } from "./update-state";
@@ -9,6 +9,7 @@ type Recognition = "fast" | "balanced" | "accurate";
 
 interface SettingsActions {
   onRecognition(value: Recognition): void;
+  onOcrEngine(engine: OcrEngine): void;
   onContinuity(enabled: boolean): void;
   onTranslateAllOcrText(enabled: boolean): void;
   onRepair(): void;
@@ -241,6 +242,23 @@ export function renderSettings(snapshot: UiSnapshot, actions: SettingsActions): 
             snapshot.settings.translation.enableContextAware,
             actions.onContinuity,
           )}
+          <label class="list-row">
+            <span
+              ><strong>Text recognition</strong
+              ><small
+                >PP-OCRv6 reads subtitles more steadily. Korean always uses Windows OCR.</small
+              ></span
+            >
+            <select
+              class="select compact"
+              .value=${snapshot.settings.translation.ocr.engine}
+              @change=${(event: Event) =>
+                actions.onOcrEngine((event.target as HTMLSelectElement).value as OcrEngine)}
+            >
+              <option value="ppOcrV6">PP-OCRv6</option>
+              <option value="windows">Windows OCR</option>
+            </select>
+          </label>
           <label class="list-row">
             <span
               ><strong>Recognition quality</strong

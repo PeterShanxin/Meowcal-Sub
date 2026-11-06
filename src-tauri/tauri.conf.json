@@ -119,7 +119,9 @@
       "resources/core/LICENSE",
       "../licenses/tencent-hy/License.txt",
       "../licenses/tencent-hy/Notice.txt",
-      "../licenses/llama.cpp/LICENSE"
+      "../licenses/llama.cpp/LICENSE",
+      "../licenses/paddleocr/LICENSE",
+      "../licenses/paddleocr/Notice.txt"
     ],
     "windows": {
       "certificateThumbprint": null,

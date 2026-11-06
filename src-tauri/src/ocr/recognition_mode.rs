@@ -15,6 +15,7 @@
 
 use super::{CoreOcr, OcrError, OcrResult, PreprocessingConfig};
 use crate::config::TranslationConfig;
+use meowcal_core::ocr::Engine;
 
 /// The recognition settings that decide which path a frame takes.
 ///
@@ -55,6 +56,14 @@ impl RecognitionMode {
         width: u32,
         height: u32,
     ) -> Result<OcrResult, (OcrError, &'static str)> {
+        // PP-OCRv6 was measured on raw frames; the passes below exist to
+        // steady Windows OCR and only cost it time.
+        if ocr.engine() == Engine::PpOcrV6 {
+            return ocr
+                .recognize_without_preprocessing(frame, width, height)
+                .await
+                .map_err(|error| (error, "OCR failed"));
+        }
         if self.white_glyphs_first {
             let result = ocr
                 .recognize_white_glyphs(frame, width, height)

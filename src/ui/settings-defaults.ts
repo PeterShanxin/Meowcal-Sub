@@ -1,7 +1,9 @@
 import type { AppSettings, OcrConfig } from "./contracts";
 import { ensureDistinctLanguagePair } from "./languages";
 
-export const defaultOcr: OcrConfig = {
+type RecognitionPreset = Omit<OcrConfig, "engine">;
+
+const balanced: RecognitionPreset = {
   confidenceThreshold: 0.5,
   preprocessingEnabled: true,
   grayscale: true,
@@ -12,16 +14,19 @@ export const defaultOcr: OcrConfig = {
   validationStrictness: "moderate",
 };
 
+export const defaultOcr: OcrConfig = { ...balanced, engine: "ppOcrV6" };
+
+/** Quality presets leave the engine choice alone. */
 export const recognitionPresets = {
-  fast: { ...defaultOcr, preprocessingEnabled: false, validationStrictness: "permissive" },
-  balanced: defaultOcr,
+  fast: { ...balanced, preprocessingEnabled: false, validationStrictness: "permissive" },
+  balanced,
   accurate: {
-    ...defaultOcr,
+    ...balanced,
     enableMultiPass: true,
     multiPassCount: 2,
     validationStrictness: "strict",
   },
-} satisfies Record<string, OcrConfig>;
+} satisfies Record<string, RecognitionPreset>;
 
 export const defaultSettings: AppSettings = {
   sourceLanguage: "zh-CN",

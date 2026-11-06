@@ -493,6 +493,7 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
     };
 
     let recognition_mode = crate::ocr::RecognitionMode::from_config(&translation_config);
+    let ocr_engine = crate::ocr::session_engine(translation_config.ocr.engine, &source_language);
     let strictness = translation_config.ocr.validation_strictness;
     let min_chars = strictness.min_significant_chars();
     let eligibility = translation_config.eligibility();
@@ -580,7 +581,7 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
             }
         }
 
-        let Some(ocr) = crate::pipeline_ocr::open(&app, &source_language) else {
+        let Some(ocr) = crate::pipeline_ocr::open(&app, ocr_engine, &source_language) else {
             return;
         };
         let ocr = ocr.for_capture_scale(scale_factor);

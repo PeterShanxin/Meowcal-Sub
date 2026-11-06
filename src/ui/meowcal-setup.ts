@@ -3,6 +3,7 @@ import { customElement, state } from "lit/decorators.js";
 import type { AppSettings, EngineStatus } from "./contracts";
 import { applyLanguageSelection, ensureDistinctLanguagePair } from "./languages";
 import { pickSampleTranslation } from "./sample-translations";
+import { recognitionReady, sessionEngine } from "./recognition";
 import {
   activateStage,
   classifyWizardOutput,
@@ -109,10 +110,7 @@ export class MeowcalSetup extends LitElement {
 
   private sourceReady(): boolean {
     if (!this.settings) return false;
-    return window.OcrLanguageTags.isOcrLanguageAvailable(
-      this.ocrLanguages,
-      this.settings.sourceLanguage,
-    );
+    return recognitionReady(this.settings, this.ocrLanguages);
   }
 
   private async installSourceOcr(): Promise<void> {
@@ -250,6 +248,7 @@ export class MeowcalSetup extends LitElement {
       settings: this.settings,
       loading: this.loading,
       ocrReady: this.sourceReady(),
+      ocrBuiltIn: this.settings !== null && sessionEngine(this.settings) === "ppOcrV6",
       installingOcr: this.installingOcr,
       working: this.working,
       error: this.error,

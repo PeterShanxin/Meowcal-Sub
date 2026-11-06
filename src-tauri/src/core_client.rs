@@ -158,11 +158,16 @@ pub fn ocr_languages_blocking() -> Result<Vec<String>, String> {
     .map(|result| result.languages)
 }
 
-pub fn ocr_initialize_blocking(language: Option<String>) -> Result<String, String> {
+/// Starts `engine` in the OCR process and returns the language Windows OCR
+/// resolved, or `None` for PP-OCRv6, which takes no language.
+pub fn ocr_initialize_blocking(
+    engine: meowcal_core::ocr::Engine,
+    language: Option<String>,
+) -> Result<Option<String>, String> {
     call::<OcrInitializeResult>(
         &OCR,
         "ocrInitialize",
-        json!({"language":language}),
+        json!({"engine":engine,"language":language}),
         Duration::from_secs(5),
         None,
         None,

@@ -2,14 +2,21 @@
 
 use crate::event_payloads::CaptureStatusPayload;
 use crate::ocr::CoreOcr;
+use meowcal_core::ocr::Engine;
 use tauri::{AppHandle, Emitter};
 use tracing::{info, warn};
 
 /// The session's OCR client, or `None` when no recognizer could start.
 ///
-/// When Windows has no recognizer for `source_language`, this falls back to
-/// the user-profile languages and tells the UI why.
-pub(crate) fn open(app: &AppHandle, source_language: &str) -> Option<CoreOcr> {
+/// When Windows OCR has no recognizer for `source_language`, this falls back
+/// to the user-profile languages and tells the UI why.
+pub(crate) fn open(app: &AppHandle, engine: Engine, source_language: &str) -> Option<CoreOcr> {
+    if engine == Engine::PpOcrV6 {
+        return CoreOcr::pp_ocr()
+            .inspect(|_| info!("OCR initialized with PP-OCRv6"))
+            .inspect_err(|e| warn!("❌ Failed to initialize PP-OCRv6: {}", e))
+            .ok();
+    }
     match CoreOcr::with_language(source_language) {
         Ok(ocr) => {
             info!("OCR initialized with language: {}", source_language);

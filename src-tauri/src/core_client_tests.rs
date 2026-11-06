@@ -330,11 +330,11 @@ fn completion_request(model: &str) -> Value {
 #[test]
 fn binary_ocr_validates_dimensions_stride_size_and_timeout() {
     let valid = OcrRecognizeParams {
-        language: None,
         width: 1,
         height: 1,
         stride: 4,
         timeout_ms: 30_000,
+        ..Default::default()
     };
     assert!(Request::ocr(valid.clone(), vec![0; 4]).is_ok());
     assert!(Request::ocr(valid.clone(), vec![0; 3]).is_err());

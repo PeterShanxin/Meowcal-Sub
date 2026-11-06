@@ -16,7 +16,7 @@ pub(super) struct OcrLanguagesResult {
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub(super) struct OcrInitializeResult {
-    pub resolved_language: String,
+    pub resolved_language: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -50,9 +50,10 @@ pub enum StatusPoll {
     Busy,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Default, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct OcrRecognizeParams {
+    pub engine: meowcal_core::ocr::Engine,
     pub language: Option<String>,
     pub width: u32,
     pub height: u32,

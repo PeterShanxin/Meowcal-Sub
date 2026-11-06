@@ -1,8 +1,12 @@
 use super::{preprocess_image, OcrError, OcrResult, PreprocessingConfig};
 use crate::core_client::{self, OcrRecognizeParams};
+use meowcal_core::ocr::Engine;
 use tracing::{debug, info, warn};
 
+/// A recognizer in Core's OCR process: Windows OCR for one language, or the
+/// language-independent PP-OCRv6.
 pub struct CoreOcr {
+    engine: Engine,
     language: Option<String>,
     capture_scale: f64,
 }
@@ -13,20 +17,38 @@ impl CoreOcr {
         self
     }
 
+    pub fn engine(&self) -> Engine {
+        self.engine
+    }
+
+    /// Windows OCR in the user-profile languages.
     pub fn new() -> Result<Self, OcrError> {
-        let language = core_client::ocr_initialize_blocking(None).map_err(OcrError::InitError)?;
+        let language = core_client::ocr_initialize_blocking(Engine::Windows, None)
+            .map_err(OcrError::InitError)?;
         Ok(Self {
-            language: Some(language),
+            engine: Engine::Windows,
+            language,
             capture_scale: 1.0,
         })
     }
 
+    pub fn pp_ocr() -> Result<Self, OcrError> {
+        core_client::ocr_initialize_blocking(Engine::PpOcrV6, None).map_err(OcrError::InitError)?;
+        Ok(Self {
+            engine: Engine::PpOcrV6,
+            language: None,
+            capture_scale: 1.0,
+        })
+    }
+
+    /// Windows OCR in `language_tag`.
     pub fn with_language(language_tag: &str) -> Result<Self, OcrError> {
         let language = super::normalize_language_tag(language_tag);
-        let resolved = core_client::ocr_initialize_blocking(Some(language))
+        let resolved = core_client::ocr_initialize_blocking(Engine::Windows, Some(language))
             .map_err(OcrError::LanguageNotSupported)?;
         Ok(Self {
-            language: Some(resolved),
+            engine: Engine::Windows,
+            language: resolved,
             capture_scale: 1.0,
         })
     }
@@ -98,6 +120,7 @@ impl CoreOcr {
     ) -> Result<OcrResult, OcrError> {
         let result = core_client::ocr_recognize(
             OcrRecognizeParams {
+                engine: self.engine,
                 language: self.language.clone(),
                 width,
                 height,

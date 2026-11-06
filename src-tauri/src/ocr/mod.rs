@@ -38,7 +38,7 @@ mod band_replay;
 
 pub use band_filter::BandFilter;
 pub use core_ocr::*;
-pub use language::normalize_language_tag;
+pub use language::{normalize_language_tag, session_engine};
 pub use preprocessing::*;
 pub use recognition_mode::RecognitionMode;
 
