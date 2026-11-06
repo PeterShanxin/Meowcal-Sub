@@ -1,9 +1,11 @@
 # Meowcal Core
 
-Independent Windows runtime for Meowcal Sub and Meowcal Sub 2. Core owns native
-OCR and the managed HY-MT engine. It does not depend on Tauri or either
-application executable. Source is licensed under AGPL-3.0-only; upstream runtime
-and model licenses remain separate.
+Independent Windows runtime for Meowcal Sub and Meowcal Sub 2. Core owns OCR,
+by Windows OCR or the embedded PP-OCRv6 models, and the managed HY-MT engine. It
+does not depend on Tauri or either application executable. Source is licensed
+under AGPL-3.0-only; upstream runtime and model licenses remain separate. The
+executable embeds PP-OCRv6 under the Apache License 2.0: a consumer that
+redistributes Core also ships [`licenses/paddleocr`](../licenses/paddleocr/).
 
 ## Build and verify
 
@@ -50,22 +52,31 @@ Replies are `{"id":1,"result":{...}}` or
 `{"id":1,"event":"progress","message":"..."}` before the final reply.
 Consumers verify version, API, required capabilities, IDs, and reply shape.
 
-| Method             | Parameters                                                       | Result                                                                                     |
-| ------------------ | ---------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
-| `hello`            | Client, profile, expected version, optional storage/import roots | Version, API, capabilities, model, storage root                                            |
-| `status`           | `{}`                                                             | Installed/ready state and installation paths; no installation or launch                    |
-| `install`          | `{}`                                                             | Verified installation state; progress frames precede the result                            |
-| `ready`            | `{}`                                                             | Ready state after verified launch; may import matching local artifacts without downloading |
-| `complete`         | `request`: bounded chat-completion payload; `timeoutMs`: 1–90000 | Chat-completion response from the owned HY-MT runtime                                      |
-| `recoverInference` | `receipt`: returned inference receipt; `reason`: output rejection code | Validated readiness after a bounded check or CPU recovery |
-| `ocrLanguages`     | `{}`                                                             | Installed Windows OCR language tags                                                        |
-| `ocrInitialize`    | Optional `language` tag; null selects user-profile languages     | Resolved OCR language                                                                      |
-| `ocrRecognizeBgra` | Language, width, height, stride, timeout; raw BGRA body          | Raw native text, lines, line boxes, frame width                                            |
-| `shutdown`         | `{}`                                                             | Acknowledgement, then process exit                                                         |
+| Method             | Parameters                                                                                            | Result                                                                                     |
+| ------------------ | ----------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| `hello`            | Client, profile, expected version, optional storage/import roots                                      | Version, API, capabilities, model, storage root                                            |
+| `status`           | `{}`                                                                                                  | Installed/ready state and installation paths; no installation or launch                    |
+| `install`          | `{}`                                                                                                  | Verified installation state; progress frames precede the result                            |
+| `ready`            | `{}`                                                                                                  | Ready state after verified launch; may import matching local artifacts without downloading |
+| `complete`         | `request`: bounded chat-completion payload; `timeoutMs`: 1–90000                                      | Chat-completion response from the owned HY-MT runtime                                      |
+| `recoverInference` | `receipt`: returned inference receipt; `reason`: output rejection code                                | Validated readiness after a bounded check or CPU recovery                                  |
+| `ocrLanguages`     | `{}`                                                                                                  | Installed Windows OCR language tags                                                        |
+| `ocrInitialize`    | Optional `engine`; optional `language` tag for Windows OCR, where null selects user-profile languages | Resolved OCR language; null for PP-OCRv6                                                   |
+| `ocrRecognizeBgra` | Optional `engine`, language, width, height, stride, timeout; raw BGRA body                            | Raw text, lines, line boxes, frame width                                                   |
+| `shutdown`         | `{}`                                                                                                  | Acknowledgement, then process exit                                                         |
 
 OCR pixels are packed BGRA8, `stride = width * 4`; alpha is ignored. Dimensions
-must fit Windows OCR's native limit and the Core limit of 4096 per axis and
-64 MiB of pixels. No rescaling or thresholding occurs in this API. All JSON
+must fit the Core limit of 4096 per axis and 64 MiB of pixels, and Windows OCR's
+native limit when that engine reads them. This API does not threshold pixels;
+PP-OCRv6 resizes internally and reports boxes in the frame's own pixels.
+
+`engine` is `windows` (the default when absent) or `ppOcrV6`. A Core that can
+run PP-OCRv6 advertises the `ocrPpOcrV6` capability. PP-OCRv6 reads Chinese,
+Japanese and Latin-script text with one model, so its requests carry no
+`language`; one that does is `INVALID_PARAMS`. It has no Korean. It runs on the
+CPU with at most four threads, leaving cores to the translation engine, and
+cannot be cancelled: its timeout is enforced by ending the session, as for an
+unresponsive native call. All JSON
 headers and responses are limited to 256 KiB. OCR timeouts are 1–30000 ms.
 
 `ocrRecognizeBgra` requires top-level `payloadBytes = width * height * 4` and
