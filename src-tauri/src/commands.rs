@@ -11,7 +11,7 @@ use crate::llm::{
     FoundryLocalPhase, TranslationDiagnostics, TranslationManager, TranslationOutcome,
     TranslatorBackend,
 };
-use crate::ocr::WindowsOcr;
+use crate::ocr::CoreOcr;
 use crate::overlay;
 use crate::overlay_ipc::send_overlay_message;
 use crate::pipeline_repeat_policy as repeat_policy;
@@ -581,7 +581,7 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
             }
         }
 
-        let ocr = match WindowsOcr::with_language(&source_language) {
+        let ocr = match CoreOcr::with_language(&source_language) {
             Ok(o) => {
                 info!("OCR initialized with language: {}", source_language);
                 o.for_capture_scale(scale_factor)
@@ -603,7 +603,7 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
                         is_error: false,
                     },
                 );
-                match WindowsOcr::new() {
+                match CoreOcr::new() {
                     Ok(o) => o.for_capture_scale(scale_factor),
                     Err(e) => {
                         warn!("❌ Failed to initialize OCR: {}", e);

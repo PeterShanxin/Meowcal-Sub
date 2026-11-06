@@ -2,12 +2,12 @@ use super::{preprocess_image, OcrError, OcrResult, PreprocessingConfig};
 use crate::core_client::{self, OcrRecognizeParams};
 use tracing::{debug, info, warn};
 
-pub struct WindowsOcr {
+pub struct CoreOcr {
     language: Option<String>,
     capture_scale: f64,
 }
 
-impl WindowsOcr {
+impl CoreOcr {
     pub fn for_capture_scale(mut self, capture_scale: f64) -> Self {
         self.capture_scale = capture_scale;
         self

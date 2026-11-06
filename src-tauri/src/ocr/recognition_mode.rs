@@ -13,7 +13,7 @@
 // usually dark on light, which the white-glyph mask would erase.
 // =============================================================================
 
-use super::{OcrError, OcrResult, PreprocessingConfig, WindowsOcr};
+use super::{CoreOcr, OcrError, OcrResult, PreprocessingConfig};
 use crate::config::TranslationConfig;
 
 /// The recognition settings that decide which path a frame takes.
@@ -50,7 +50,7 @@ impl RecognitionMode {
     /// frame and waits out its budget - so this only says which path failed.
     pub async fn recognize(
         &self,
-        ocr: &WindowsOcr,
+        ocr: &CoreOcr,
         frame: &[u8],
         width: u32,
         height: u32,

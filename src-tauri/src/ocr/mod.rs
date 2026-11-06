@@ -17,6 +17,7 @@ mod band_tracker;
 mod band_verdict;
 mod band_window;
 mod banding;
+mod core_ocr;
 pub mod frame_budget;
 mod glyph_mask;
 mod language;
@@ -24,7 +25,6 @@ mod line_geometry;
 mod preprocessing;
 mod recognition_mode;
 mod text_cleanup;
-mod windows_ocr;
 
 /// Operator-run comparison of preprocessing variants against a real captured
 /// frame. See the module header; it asserts nothing and is `#[ignore]`d.
@@ -37,10 +37,10 @@ mod preprocessing_ab;
 mod band_replay;
 
 pub use band_filter::BandFilter;
+pub use core_ocr::*;
 pub use language::normalize_language_tag;
 pub use preprocessing::*;
 pub use recognition_mode::RecognitionMode;
-pub use windows_ocr::*;
 
 use thiserror::Error;
 

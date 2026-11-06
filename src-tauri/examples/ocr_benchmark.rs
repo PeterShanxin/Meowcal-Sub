@@ -1,5 +1,5 @@
 //! Opt-in synthetic-frame OCR benchmark. Capture, translation and UI are excluded.
-use meowcal_sub::ocr::WindowsOcr;
+use meowcal_sub::ocr::CoreOcr;
 use serde_json::json;
 use std::path::PathBuf;
 use std::time::Instant;
@@ -24,7 +24,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     meowcal_sub::core_client::register_headless(Some(output.with_extension("storage")), vec![])?;
     let _shutdown = scopeguard::guard((), |_| meowcal_sub::core_client::shutdown_owned());
     let initialized = Instant::now();
-    let ocr = WindowsOcr::with_language(&args[3])?;
+    let ocr = CoreOcr::with_language(&args[3])?;
     let initialization_ms = initialized.elapsed().as_secs_f64() * 1000.0;
     let mut samples = Vec::with_capacity(runs);
     let mut outputs = Vec::with_capacity(runs);
