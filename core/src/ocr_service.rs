@@ -95,6 +95,16 @@ fn validate_language(engine: Engine, language: Option<&str>) -> Result<(), Error
 }
 
 impl Frame {
+    /// How long the worker may hold this frame. Windows OCR enforces
+    /// `timeout_ms` itself, so its watchdog allows a grace second. PP-OCRv6
+    /// cannot be interrupted, so the watchdog is its deadline.
+    fn worker_deadline(&self) -> Duration {
+        match self.engine {
+            Engine::Windows => Duration::from_millis(self.timeout_ms + 1000),
+            Engine::PpOcrV6 => Duration::from_millis(self.timeout_ms),
+        }
+    }
+
     fn validate(&self, payload_bytes: u64) -> Result<usize, Error> {
         let expected = frame_bytes(self.width, self.height, self.stride).map_err(map_error)?;
         if !(1..=30_000).contains(&self.timeout_ms) {
@@ -169,40 +179,37 @@ impl OcrService {
                 let frame: Frame = serde_json::from_value(Value::Object(params.clone()))
                     .map_err(|_| Error::new("INVALID_PARAMS", "Invalid OCR frame parameters"))?;
                 frame.validate(bytes.len() as u64)?;
-                self.bounded_worker(
-                    Duration::from_millis(frame.timeout_ms + 1000),
-                    move |worker| {
-                        if frame.engine == Engine::PpOcrV6 {
-                            let result = worker
-                                .pp_ocr()?
-                                .recognize_bgra(&bytes, frame.width, frame.height)
-                                .map_err(map_error)?;
-                            return serde_json::to_value(result).map_err(|_| {
-                                Error::new("OCR_ERROR", "OCR result serialization failed")
-                            });
+                self.bounded_worker(frame.worker_deadline(), move |worker| {
+                    if frame.engine == Engine::PpOcrV6 {
+                        let result = worker
+                            .pp_ocr()?
+                            .recognize_bgra(&bytes, frame.width, frame.height)
+                            .map_err(map_error)?;
+                        return serde_json::to_value(result).map_err(|_| {
+                            Error::new("OCR_ERROR", "OCR result serialization failed")
+                        });
+                    }
+                    let engine = worker.windows(frame.language.as_deref())?;
+                    let result = engine.recognize_bgra(
+                        &bytes,
+                        frame.width,
+                        frame.height,
+                        Duration::from_millis(frame.timeout_ms),
+                    );
+                    let poisoned = engine.is_poisoned();
+                    if poisoned {
+                        worker.windows = None;
+                    }
+                    match result {
+                        Ok(result) => serde_json::to_value(result).map_err(|_| {
+                            Error::new("OCR_ERROR", "OCR result serialization failed")
+                        }),
+                        Err(error) if poisoned && !matches!(error, OcrError::Timeout) => {
+                            Err(Error::new("OCR_PROCESS_UNUSABLE", &error.to_string()))
                         }
-                        let engine = worker.windows(frame.language.as_deref())?;
-                        let result = engine.recognize_bgra(
-                            &bytes,
-                            frame.width,
-                            frame.height,
-                            Duration::from_millis(frame.timeout_ms),
-                        );
-                        let poisoned = engine.is_poisoned();
-                        if poisoned {
-                            worker.windows = None;
-                        }
-                        match result {
-                            Ok(result) => serde_json::to_value(result).map_err(|_| {
-                                Error::new("OCR_ERROR", "OCR result serialization failed")
-                            }),
-                            Err(error) if poisoned && !matches!(error, OcrError::Timeout) => {
-                                Err(Error::new("OCR_PROCESS_UNUSABLE", &error.to_string()))
-                            }
-                            Err(error) => Err(map_error(error)),
-                        }
-                    },
-                )
+                        Err(error) => Err(map_error(error)),
+                    }
+                })
                 .await
             }
             _ => Err(Error::new("UNKNOWN_METHOD", "Unknown OCR method")),

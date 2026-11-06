@@ -219,6 +219,15 @@ async fn worker_panic_permanently_invalidates_the_session() {
     );
 }
 
+#[test]
+fn only_windows_ocr_gets_a_grace_second_beyond_the_frame_timeout() {
+    let windows = frame(1, 4);
+    let mut pp_ocr = frame(1, 4);
+    pp_ocr.engine = Engine::PpOcrV6;
+    assert_eq!(windows.worker_deadline(), Duration::from_millis(2000));
+    assert_eq!(pp_ocr.worker_deadline(), Duration::from_millis(1000));
+}
+
 #[cfg(feature = "ppocr")]
 #[tokio::test]
 async fn pp_ocr_initializes_and_reads_without_a_language() {
