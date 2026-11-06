@@ -68,7 +68,7 @@ Windows 也可能需要为原字幕语言安装对应的 OCR 识别组件。
 3. **开始翻译。** 点击 **Start translation**，通过悬浮字幕阅读译文。
    在 **Subtitle style** 调整字号和深色／浅色底板；结束后点击 **Stop translation**。
 
-![流程示意图：圈选已有字幕，使用 Windows OCR 识别，在本机通过 HY-MT 翻译，再显示悬浮字幕。](docs/assets/architecture.svg)
+![流程示意图：圈选已有字幕，在本机识别文字，在本机通过 HY-MT 翻译，再显示悬浮字幕。](docs/assets/architecture.svg)
 
 [设置、故障排查与常见问题（英文）→](docs/USAGE.md)
 
@@ -80,7 +80,7 @@ Windows 也可能需要为原字幕语言安装对应的 OCR 识别组件。
 
 | 你需要什么 | Meowcal Sub 怎么做 |
 | --- | --- |
-| 看懂画面里的字幕，不想再找字幕文件 | 用 Windows OCR 读取圈选区域。 |
+| 看懂画面里的字幕，不想再找字幕文件 | 用内置的 PP-OCRv6 读取圈选区域，也可以改用 Windows OCR。 |
 | 不把识别内容和译文交给云服务 | OCR 与腾讯 HY-MT 翻译都在本机运行。 |
 | 不离开视频就能阅读译文 | 始终置顶的悬浮字幕，支持调整字号与深色／浅色底板。 |
 | 偶尔翻译字幕以外的可读文字 | 在 Settings 开启 **Translate any text**，放宽字幕专用筛选；默认关闭。 |
@@ -100,7 +100,7 @@ GPU 就绪检查超时后可尝试 CPU 回退。x64 版使用 Vulkan，当前**�
 
 | 留在你的电脑上 | 需要联网的情况 |
 | --- | --- |
-| 圈选区域的画面捕获、Windows OCR、翻译推理和悬浮显示 | 引擎／模型安装或修复下载、必要的 Windows 识别语言安装，以及应用更新检查与下载 |
+| 圈选区域的画面捕获、文字识别、翻译推理和悬浮显示 | 引擎／模型安装或修复下载、必要的 Windows 识别语言安装，以及应用更新检查与下载 |
 
 正常模式下，**识别的字幕文字与译文不会上传**。
 生产日志记录支持代码、耗时和计数，不记录字幕文字。
@@ -120,14 +120,14 @@ GPU 就绪检查超时后可尝试 CPU 回退。x64 版使用 Vulkan，当前**�
 | **[Meowcal Sub](https://github.com/PeterShanxin/Meowcal-Sub)** | 直接捕获屏幕字幕并在本地翻译，就是当前这个应用。 |
 | **[Meowcal Sub 2](https://github.com/PeterShanxin/Meowcal-Sub-2)** | 搜索字幕，并让字幕会话跟随视频播放进度。 |
 | **[MeowWatch](https://github.com/PeterShanxin/MeowWatch)** | 同步看视频，同时使用悬浮聊天。 |
-| **[Meowcal Core](core/README.md)** | 面向开发者的共享、版本化 Windows OCR 与本地翻译运行环境；源码位于本仓库。 |
+| **[Meowcal Core](core/README.md)** | 面向开发者的共享、版本化的文字识别与本地翻译运行环境；源码位于本仓库。 |
 
 Sub 2 是另一种工作流，不是 Sub 1 用户必须升级到的版本。
 Core 是底层运行环境，不是用户需要额外手动安装的应用。
 
 ## 技术实现
 
-桌面应用采用 Tauri 2 与 Rust。[Meowcal Core](core/README.md) 负责原生 OCR 和
+桌面应用采用 Tauri 2 与 Rust。[Meowcal Core](core/README.md) 负责文字识别（PP-OCRv6 或 Windows OCR）和
 托管的 HY-MT 引擎；应用负责捕获、字幕筛选、翻译策略与显示。
 本仓库发布 Windows x64 和 ARM64 安装包。
 

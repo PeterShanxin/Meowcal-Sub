@@ -3,8 +3,8 @@
 [Back to the project](../README.md) · [简体中文简介](../README.zh-CN.md)
 
 Meowcal Sub translates **visible text in a selected screen region**, not audio.
-Start with a video that already displays subtitles in a language supported by
-your Windows OCR installation.
+Start with a video that already displays subtitles in Chinese, Japanese,
+Korean, English, Spanish, French, or German.
 
 ## Installation
 
@@ -22,8 +22,12 @@ benchmark. Extra memory headroom is needed for your video player and other apps.
 
 First-time setup downloads approximately **1.1 GB** of local translation assets.
 That is a download estimate, **not a total installed-disk requirement**: allow
-additional space for extraction, caches, and retained runtime versions. A missing
-Windows OCR language is a separate setup requirement.
+additional space for extraction, caches, and retained runtime versions.
+
+Meowcal reads subtitles with its built-in PP-OCRv6 recognizer, which needs no
+Windows language pack. Korean subtitles, and **Settings > Text recognition >
+Windows OCR**, use Windows OCR instead; that needs the Windows OCR language for
+the original subtitles.
 
 ### Check a download
 
@@ -68,7 +72,7 @@ up. **Subtitle style** controls text size and a Dark or Light plate; use
 
 | Symptom | Check first |
 | --- | --- |
-| Home says the recognition language is missing | Install the Windows OCR language matching the original subtitles, not just the target translation language. |
+| Home says the recognition language is missing | Windows OCR is reading the subtitles (Korean, or selected in Settings). Install the Windows OCR language matching the original subtitles, not just the target translation language. |
 | Home offers **Repair engine** | Use that action to check and restore the managed engine. Keep the displayed support code if repair fails. |
 | Setup reports `ENGINE_INCOMPATIBLE` or `ENGINE_DISK_SPACE` | Check the Windows 11, 8 GiB system-RAM, and 3 GiB free-installation-space requirements above. A missing architecture/runtime or unsupported installation path can also produce an incompatibility error; include the exact support message in a report. |
 | Text is missing or misread | Check that the selected region is still aligned and visible, contains every subtitle line, and does not include player controls or the translation overlay. Try clearer, larger source subtitles. |
@@ -86,7 +90,7 @@ itself download an application update.
 
 ### Can it create subtitles for a video that has none?
 
-No. This app reads screen text with Windows OCR; it does not transcribe audio.
+No. This app reads screen text with OCR; it does not transcribe audio.
 For subtitle-file search and playback-aligned sessions, see
 [Meowcal Sub 2](https://github.com/PeterShanxin/Meowcal-Sub-2), a separate project.
 
