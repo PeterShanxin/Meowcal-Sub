@@ -59,10 +59,15 @@ impl RecognitionMode {
         // PP-OCRv6 was measured on raw frames; the passes below exist to
         // steady Windows OCR and only cost it time.
         if ocr.engine() == Engine::PpOcrV6 {
-            return ocr
+            let result = ocr
                 .recognize_without_preprocessing(frame, width, height)
                 .await
-                .map_err(|error| (error, "OCR failed"));
+                .map_err(|error| (error, "OCR failed"))?;
+            return Ok(if self.white_glyphs_first {
+                without_small_lines(result)
+            } else {
+                result
+            });
         }
         if self.white_glyphs_first {
             let result = ocr
@@ -96,9 +101,62 @@ impl RecognitionMode {
     }
 }
 
+/// Below this share of the tallest line's height, a line is not subtitle text.
+const MIN_SUBTITLE_LINE_HEIGHT: f32 = 0.6;
+
+/// Drop lines much shorter than the frame's tallest. PP-OCRv6 reads the raw
+/// frame, so it also reads watermarks and channel logos; one beside a subtitle
+/// shares its band and would be translated as part of it. The white-glyph mask
+/// keeps such text from Windows OCR. Translate any text keeps every line.
+fn without_small_lines(result: OcrResult) -> OcrResult {
+    if result.boxes.len() != result.lines.len() {
+        return result;
+    }
+    let tallest = result
+        .boxes
+        .iter()
+        .map(|area| area.height)
+        .fold(0.0, f32::max);
+    let (lines, boxes) = result
+        .lines
+        .into_iter()
+        .zip(result.boxes)
+        .filter(|(_, area)| area.height >= MIN_SUBTITLE_LINE_HEIGHT * tallest)
+        .unzip();
+    OcrResult::with_boxes(lines, boxes, result.frame_width)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn line(y: f32, height: f32) -> crate::ocr::LineBox {
+        crate::ocr::LineBox {
+            x: 0.0,
+            y,
+            width: 100.0,
+            height,
+        }
+    }
+
+    #[test]
+    fn a_small_watermark_beside_a_subtitle_is_dropped() {
+        let result = OcrResult::with_boxes(
+            vec!["We have to go.".into(), "Veo".into(), "Before dark.".into()],
+            vec![line(60.0, 52.0), line(100.0, 29.0), line(120.0, 48.0)],
+            1440.0,
+        );
+        let kept = without_small_lines(result);
+        assert_eq!(kept.lines, ["We have to go.", "Before dark."]);
+        assert_eq!(kept.text, "We have to go. Before dark.");
+        assert_eq!(kept.boxes.len(), 2);
+    }
+
+    #[test]
+    fn lines_without_geometry_are_kept() {
+        let result = OcrResult::with_boxes(vec!["text".into()], Vec::new(), 0.0);
+        assert_eq!(without_small_lines(result).lines, ["text"]);
+    }
 
     fn mode() -> RecognitionMode {
         RecognitionMode {
