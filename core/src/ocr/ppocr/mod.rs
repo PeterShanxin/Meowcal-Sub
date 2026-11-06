@@ -6,11 +6,13 @@
 //! reviewed Core archive digest authenticates them like the rest of Core.
 //!
 //! Pre- and post-processing follow RapidOCR's defaults, the configuration
-//! measured in `docs/plans/2026-11-05-ocr-stability-experiment.md`, with two
-//! exceptions: there is no text-orientation classifier, and wide strips are not
-//! padded with black rows before detection. On subtitle strips that padding
-//! doubled detection time and made the detector read the whole strip as one
-//! line of invented text.
+//! measured in `docs/plans/2026-11-05-ocr-stability-experiment.md`, except:
+//! - there is no text-orientation classifier;
+//! - wide strips are not padded with black rows before detection. On subtitle
+//!   strips that padding doubled detection time and made the detector read the
+//!   whole strip as one line of invented text;
+//! - detection boxes are axis-aligned and sized differently, as `detect.rs`
+//!   describes.
 
 mod detect;
 mod image;

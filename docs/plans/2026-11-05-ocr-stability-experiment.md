@@ -94,6 +94,7 @@ and final application outcomes separately.
   Chinese and English detection and recognition. Verify the selected detector,
   recognizer, runtime and Windows architecture rather than assuming support.
 
+
 ## Stage 1 first pass
 
 ### Environment
@@ -157,18 +158,18 @@ frames are reported separately and do not enter the change rate. "Readings per c
 outputs over a cue's stable frames - each distinct reading is a potential
 retranslation.
 
-| Corpus    | Engine            |   CER | Stable frames exact | Adjacent change rate | Readings per cue | Cue majority correct | Blank frames with output |
-| --------- | ----------------- | ----: | ------------------: | -------------------: | ---------------: | -------------------: | -----------------------: |
-| `real-zh` | `winocr`          | 0.044 |                 70% |                  17% |             2.67 |                31/40 |                       0% |
-| `real-zh` | `winocr-mask`     | 0.064 |                 67% |                   7% |             1.73 |                28/40 |                       0% |
-| `real-zh` | `rapid-v5-mobile` | 0.000 |                100% |                   0% |             1.02 |                40/40 |                       0% |
-| `real-zh` | `rapid-v6-small`  | 0.000 |                100% |                   0% |             1.00 |                40/40 |                       0% |
-| `zh-nat`  | `winocr`          | 0.147 |                 39% |                  54% |             8.80 |                14/20 |                       2% |
-| `zh-nat`  | `winocr-mask`     | 0.136 |                 29% |                  45% |             9.00 |                 8/20 |                       2% |
-| `zh-nat`  | `rapid-v6-small`  | 0.077 |                 87% |                   9% |             2.10 |                19/20 |                      50% |
-| `en-nat`  | `winocr`          | 0.046 |                 51% |                  48% |             8.60 |                15/20 |                       0% |
-| `en-nat`  | `winocr-mask`     | 0.072 |                 34% |                  51% |             9.65 |                10/20 |                       0% |
-| `en-nat`  | `rapid-v6-small`  | 0.060 |                 91% |                  10% |             2.15 |                20/20 |                      48% |
+| Corpus | Engine | CER | Stable frames exact | Adjacent change rate | Readings per cue | Cue majority correct | Blank frames with output |
+|---|---|---:|---:|---:|---:|---:|---:|
+| `real-zh` | `winocr` | 0.044 | 70% | 17% | 2.67 | 31/40 | 0% |
+| `real-zh` | `winocr-mask` | 0.064 | 67% | 7% | 1.73 | 28/40 | 0% |
+| `real-zh` | `rapid-v5-mobile` | 0.000 | 100% | 0% | 1.02 | 40/40 | 0% |
+| `real-zh` | `rapid-v6-small` | 0.000 | 100% | 0% | 1.00 | 40/40 | 0% |
+| `zh-nat` | `winocr` | 0.147 | 39% | 54% | 8.80 | 14/20 | 2% |
+| `zh-nat` | `winocr-mask` | 0.136 | 29% | 45% | 9.00 | 8/20 | 2% |
+| `zh-nat` | `rapid-v6-small` | 0.077 | 87% | 9% | 2.10 | 19/20 | 50% |
+| `en-nat` | `winocr` | 0.046 | 51% | 48% | 8.60 | 15/20 | 0% |
+| `en-nat` | `winocr-mask` | 0.072 | 34% | 51% | 9.65 | 10/20 | 0% |
+| `en-nat` | `rapid-v6-small` | 0.060 | 91% | 10% | 2.15 | 20/20 | 48% |
 
 "Cue majority correct" is the most frequent reading over a cue's stable frames.
 Stable cues last about 22 frames on the synthetic corpora.
@@ -193,10 +194,10 @@ Model inference alone, measured natively on ARM64 with
 `ocr_experiment_bench_onnx.py` (pre- and post-processing excluded):
 
 | Model pair (ONNX Runtime 1.31.1 CPU, 4 threads) | Detector p50 | Recognizer p50 |
-| ----------------------------------------------- | -----------: | -------------: |
-| PP-OCRv6 small                                  |     20-24 ms |       25-29 ms |
-| PP-OCRv5 mobile                                 |     15-16 ms |       25-27 ms |
-| PP-OCRv6 medium                                 |       121 ms |         132 ms |
+|---|---:|---:|
+| PP-OCRv6 small | 20-24 ms | 25-29 ms |
+| PP-OCRv5 mobile | 15-16 ms | 25-27 ms |
+| PP-OCRv6 medium | 121 ms | 132 ms |
 
 Inputs were a 1120x96 detector tensor and one 640x48 recognizer line. Ranges
 are two runs in rotated order after the CPU was otherwise idle; a cold first run
@@ -219,14 +220,14 @@ of strips wider than 8:1. It matched the RapidOCR results within noise: real
 Chinese 99.9% exact stable frames, synthetic Chinese CER 0.071, synthetic
 English CER 0.059. Without the padding:
 
-| Corpus  | Pipeline         |   CER | Stable frames exact | Readings/cue | Cue majority correct | p50 ms | p95 ms |
-| ------- | ---------------- | ----: | ------------------: | -----------: | -------------------: | -----: | -----: |
-| real-zh | RapidOCR         |     0 |                100% |         1.00 |                40/40 |      - |      - |
-| real-zh | Core, no padding |     0 |                100% |         1.00 |                40/40 |     52 |     71 |
-| zh-nat  | RapidOCR         | 0.077 |                 87% |         2.10 |                19/20 |      - |      - |
-| zh-nat  | Core, no padding | 0.003 |                 97% |         1.05 |                19/20 |     82 |    109 |
-| en-nat  | RapidOCR         | 0.060 |                 91% |         2.15 |                20/20 |      - |      - |
-| en-nat  | Core, no padding | 0.001 |                 99% |         1.05 |                20/20 |    104 |    122 |
+| Corpus | Pipeline | CER | Stable frames exact | Readings/cue | Cue majority correct | p50 ms | p95 ms |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| real-zh | RapidOCR | 0 | 100% | 1.00 | 40/40 | - | - |
+| real-zh | Core, no padding | 0 | 100% | 1.00 | 40/40 | 52 | 71 |
+| zh-nat | RapidOCR | 0.077 | 87% | 2.10 | 19/20 | - | - |
+| zh-nat | Core, no padding | 0.003 | 97% | 1.05 | 19/20 | 82 | 109 |
+| en-nat | RapidOCR | 0.060 | 91% | 2.15 | 20/20 | - | - |
+| en-nat | Core, no padding | 0.001 | 99% | 1.05 | 20/20 | 104 | 122 |
 
 With padding, the detector read whole blank strips as one invented line
 (`KZOOWY`), and the padded frame doubled detection time. Without it, the
@@ -251,11 +252,11 @@ Pre-packing RTen weights made no measurable difference.
 All scripts are in `scripts/` and work on a corpus directory holding `frames/`.
 
 - Real clip: `ocr_experiment_extract_frames.py VIDEO CORPUS --start S
---duration S --crop W:H:X:Y`, then `ocr_experiment_segment_cues.py CORPUS`,
+  --duration S --crop W:H:X:Y`, then `ocr_experiment_segment_cues.py CORPUS`,
   then write `labels.csv` (`cue_id,truth`; `IGNORE` for unreadable cues, empty
   for no subtitle) from the generated `cues_sheet.png`.
 - Synthetic clip: `ocr_experiment_synthetic_corpus.py BACKGROUND CORPUS --lang
-zh|en [--loop]` writes frames and `truth.csv`.
+  zh|en [--loop]` writes frames and `truth.csv`.
 - `ocr_experiment_run.py CORPUS ENGINE --lang zh|en` writes `ocr/ENGINE.jsonl`;
   engines are `winocr`, `winocr-mask` and `rapid-<v4|v5|v6>-<size>`.
 - `ocr_experiment_evaluate.py CORPUS --size-filter` scores every engine output

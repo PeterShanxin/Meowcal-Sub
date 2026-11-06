@@ -68,7 +68,8 @@ Consumers verify version, API, required capabilities, IDs, and reply shape.
 OCR pixels are packed BGRA8, `stride = width * 4`; alpha is ignored. Dimensions
 must fit the Core limit of 4096 per axis and 64 MiB of pixels, and Windows OCR's
 native limit when that engine reads them. This API does not threshold pixels;
-PP-OCRv6 resizes internally and reports boxes in the frame's own pixels.
+PP-OCRv6 resizes internally and reports boxes in the frame's own pixels. All
+JSON headers and responses are limited to 256 KiB. OCR timeouts are 1–30000 ms.
 
 `engine` is `windows` (the default when absent) or `ppOcrV6`. A Core that can
 run PP-OCRv6 advertises the `ocrPpOcrV6` capability. PP-OCRv6 reads Chinese,
@@ -76,8 +77,8 @@ Japanese and Latin-script text with one model, so its requests carry no
 `language`; one that does is `INVALID_PARAMS`. It has no Korean. It runs on the
 CPU with at most four threads, leaving cores to the translation engine, and
 cannot be cancelled: its timeout is enforced by ending the session, as for an
-unresponsive native call. All JSON
-headers and responses are limited to 256 KiB. OCR timeouts are 1–30000 ms.
+unresponsive native call. The first PP-OCRv6 request loads the models; send
+`ocrInitialize` first so that load is not counted against a frame's timeout.
 
 `ocrRecognizeBgra` requires top-level `payloadBytes = width * height * 4` and
 parameters `language`, `width`, `height`, `stride`, and `timeoutMs`. Exactly that

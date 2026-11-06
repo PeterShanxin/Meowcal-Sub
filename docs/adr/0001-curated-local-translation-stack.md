@@ -22,8 +22,8 @@ An older MeoCoSub2 design proposes a Python/OpenSubtitles rewrite and batch subt
 
 Meowcal Sub will remain a Tauri 2 and Rust Windows application using Windows OCR.
 
-[ADR-0007](0007-embedded-pp-ocr-recognizer.md) amends the OCR choice: PP-OCRv6 in Core
-is the default recognizer and Windows OCR remains selectable.
+[ADR-0007](0007-embedded-pp-ocr-recognizer.md) amends the OCR choice: Meowcal Sub will default to
+PP-OCRv6 in Core and keep Windows OCR selectable.
 
 Tencent HY-MT will be the only supported translation engine in normal mode. The application will own:
 

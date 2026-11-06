@@ -39,9 +39,9 @@ and older Sub 1 releases keep their behavior.
 - Inference uses at most four CPU threads, because the translation engine runs
   on the same CPU.
 
-Meowcal Sub defaults to PP-OCRv6. Windows OCR stays selectable, and Sub uses it
-for Korean, which the PP-OCRv6 recognizer cannot read. This amends ADR-0001's
-OCR clause; the rest of ADR-0001 stands.
+Meowcal Sub will default to PP-OCRv6. Windows OCR will stay selectable, and Sub
+will use it for Korean, which the PP-OCRv6 recognizer cannot read. This amends
+ADR-0001's OCR clause; the rest of ADR-0001 stands.
 
 ## Consequences
 
