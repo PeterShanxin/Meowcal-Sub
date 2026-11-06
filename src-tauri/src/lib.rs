@@ -41,6 +41,9 @@ pub mod ocr_language_packs;
 /// Decides when to tell the viewer why nothing is showing
 pub mod pipeline_notices;
 
+/// Opens the OCR client a translation session reads frames with
+mod pipeline_ocr;
+
 /// Compares a read against the last few lines, not just the last one
 pub mod ocr_recent_lines;
 
