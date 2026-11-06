@@ -1,5 +1,6 @@
-//! Native recognition of tightly packed BGRA8 frames. Capture, preprocessing,
-//! text cleanup and pass selection belong to the consuming product.
+//! Recognition of tightly packed BGRA8 frames, by Windows OCR or PP-OCRv6.
+//! Capture, preprocessing, text cleanup and pass selection belong to the
+//! consuming product.
 
 #[cfg(windows)]
 mod geometry;
@@ -9,12 +10,33 @@ mod native;
 #[path = "unsupported.rs"]
 mod native;
 
+#[cfg(feature = "ppocr")]
+mod ppocr;
+#[cfg(not(feature = "ppocr"))]
+#[path = "ppocr_unavailable.rs"]
+mod ppocr;
+
 pub use native::NativeOcr;
+pub use ppocr::PpOcr;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 pub const MAX_DIMENSION: u32 = 4096;
 pub const MAX_FRAME_BYTES: usize = 64 * 1024 * 1024;
+/// Advertised when this Core can run [`Engine::PpOcrV6`].
+pub const PP_OCR_CAPABILITY: &str = "ocrPpOcrV6";
+
+/// Which recogniser reads a frame. Requests without one use Windows OCR, so
+/// API 1 clients that predate the choice keep their behaviour.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum Engine {
+    #[default]
+    Windows,
+    /// Language-independent: one model reads Chinese, Japanese and Latin
+    /// scripts, so requests for it carry no language.
+    PpOcrV6,
+}
 
 #[derive(Debug, Error)]
 pub enum OcrError {

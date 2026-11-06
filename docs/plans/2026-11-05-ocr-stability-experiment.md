@@ -1,7 +1,8 @@
 # Subtitle OCR stability experiment
 
-Status: stage 1 first pass measured, 2026-11-06. Stage 2 (application replay)
-has not run. This plan does not change the production engine.
+Status: stage 1 first pass and the Core implementation check measured,
+2026-11-06. Stage 2 (application replay) has not run. ADR-0007 records the
+engine decision that followed.
 
 ## Question and scope
 
@@ -207,16 +208,43 @@ Windows OCR on the same strips took 5-17 ms raw and 16-33 ms with the mask
 (p50, native). The medium pair was not run end to end; at five times the small
 pair's cost it is not a candidate for per-frame use.
 
+## Core implementation check
+
+[ADR-0007](../adr/0007-embedded-pp-ocr-recognizer.md) puts PP-OCRv6 small in
+Core, in Rust on RTen. Before relying on it, the Rust pipeline was run over the
+same corpora with the same scoring (application normalization, size filter) on
+the same Snapdragon X machine, native ARM64, four inference threads.
+
+The first version reproduced RapidOCR's defaults, including its black padding
+of strips wider than 8:1. It matched the RapidOCR results within noise: real
+Chinese 99.9% exact stable frames, synthetic Chinese CER 0.071, synthetic
+English CER 0.059. Without the padding:
+
+| Corpus | Pipeline | CER | Stable frames exact | Readings/cue | Cue majority correct | p50 ms | p95 ms |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| real-zh | RapidOCR | 0 | 100% | 1.00 | 40/40 | - | - |
+| real-zh | Core, no padding | 0 | 100% | 1.00 | 40/40 | 52 | 71 |
+| zh-nat | RapidOCR | 0.077 | 87% | 2.10 | 19/20 | - | - |
+| zh-nat | Core, no padding | 0.003 | 97% | 1.05 | 19/20 | 82 | 109 |
+| en-nat | RapidOCR | 0.060 | 91% | 2.15 | 20/20 | - | - |
+| en-nat | Core, no padding | 0.001 | 99% | 1.05 | 20/20 | 104 | 122 |
+
+With padding, the detector read whole blank strips as one invented line
+(`KZOOWY`), and the padded frame doubled detection time. Without it, the
+remaining output on blank synthetic frames (67-81% of them) is the `Veo`
+watermark in the background video: real text, not a misreading. The RapidOCR
+latencies were measured under x64 emulation and are not comparable.
+
+Capping the detector's long side at 960 instead of 1440 cut real-zh to 38 ms
+but lowered synthetic Chinese stable frames to 91%, so Core keeps 1440.
+Pre-packing RTen weights made no measurable difference.
+
 ## Remaining work
 
 - Stage 2 application replay, including whether a pixel-identity cue tracker
   (the segmenter above recognises cue changes without OCR) should decide when
   to translate, instead of OCR text identity.
 - A real English corpus and a hand-checked second Chinese source.
-- Native ARM64 end-to-end latency and memory through a Rust ONNX Runtime
-  adapter in Core; packaging size of ONNX Runtime and models.
-- Model licensing review (PP-OCR weights are Apache-2.0 upstream; confirm the
-  distributed ONNX conversions).
 - Windows AI `TextRecognizer` on Copilot+ hardware was not evaluated.
 
 ## Running the experiment

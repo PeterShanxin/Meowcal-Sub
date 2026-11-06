@@ -54,3 +54,7 @@
 *.resx text eol=crlf
 *.xaml text eol=crlf
 *.cs text eol=crlf
+
+# Embedded OCR models and their character list
+*.onnx binary
+core/models/ppocr/*.txt text eol=lf

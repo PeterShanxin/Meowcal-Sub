@@ -1,4 +1,4 @@
-use crate::ocr::{frame_bytes, NativeOcr, OcrError};
+use crate::ocr::{frame_bytes, Engine, NativeOcr, OcrError, PpOcr};
 use crate::protocol::Error;
 use serde::Deserialize;
 use serde_json::{Map, Value};
@@ -14,33 +14,46 @@ pub struct OcrService {
 
 #[derive(Default)]
 struct Worker {
-    cached: Option<CachedEngine>,
+    windows: Option<CachedWindowsOcr>,
+    pp_ocr: Option<PpOcr>,
 }
 
-struct CachedEngine {
+struct CachedWindowsOcr {
     requested_language: Option<String>,
     engine: NativeOcr,
 }
 
 impl Worker {
-    fn engine(&mut self, language: Option<&str>) -> Result<&mut NativeOcr, Error> {
+    fn windows(&mut self, language: Option<&str>) -> Result<&mut NativeOcr, Error> {
         if self
-            .cached
+            .windows
             .as_ref()
             .is_none_or(|cached| cached.requested_language.as_deref() != language)
         {
-            self.cached = None;
+            self.windows = None;
             let engine = NativeOcr::new(language).map_err(map_error)?;
             engine.language().map_err(map_error)?;
-            self.cached = Some(CachedEngine {
+            self.windows = Some(CachedWindowsOcr {
                 requested_language: language.map(str::to_owned),
                 engine,
             });
         }
-        self.cached
+        self.windows
             .as_mut()
             .map(|cached| &mut cached.engine)
             .ok_or_else(unusable_error)
+    }
+
+    fn pp_ocr(&mut self) -> Result<&PpOcr, Error> {
+        if self.pp_ocr.is_none() {
+            self.pp_ocr = Some(PpOcr::new().map_err(map_error)?);
+        }
+        self.pp_ocr.as_ref().ok_or_else(unusable_error)
+    }
+
+    fn clear(&mut self) {
+        self.windows = None;
+        self.pp_ocr = None;
     }
 }
 
@@ -54,6 +67,8 @@ fn unusable_error() -> Error {
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct Frame {
+    #[serde(default)]
+    engine: Engine,
     language: Option<String>,
     width: u32,
     height: u32,
@@ -64,10 +79,32 @@ struct Frame {
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct Initialize {
+    #[serde(default)]
+    engine: Engine,
     language: Option<String>,
 }
 
+fn validate_language(engine: Engine, language: Option<&str>) -> Result<(), Error> {
+    if language.is_some_and(|tag| tag.is_empty() || tag.len() > 128) {
+        return Err(Error::new("INVALID_PARAMS", "Invalid language tag"));
+    }
+    if engine == Engine::PpOcrV6 && language.is_some() {
+        return Err(Error::new("INVALID_PARAMS", "PP-OCRv6 takes no language"));
+    }
+    Ok(())
+}
+
 impl Frame {
+    /// How long the worker may hold this frame. Windows OCR enforces
+    /// `timeout_ms` itself, so its watchdog allows a grace second. PP-OCRv6
+    /// cannot be interrupted, so the watchdog is its deadline.
+    fn worker_deadline(&self) -> Duration {
+        match self.engine {
+            Engine::Windows => Duration::from_millis(self.timeout_ms + 1000),
+            Engine::PpOcrV6 => Duration::from_millis(self.timeout_ms),
+        }
+    }
+
     fn validate(&self, payload_bytes: u64) -> Result<usize, Error> {
         let expected = frame_bytes(self.width, self.height, self.stride).map_err(map_error)?;
         if !(1..=30_000).contains(&self.timeout_ms) {
@@ -76,13 +113,7 @@ impl Frame {
                 "timeoutMs must be within 1..=30000",
             ));
         }
-        if self
-            .language
-            .as_ref()
-            .is_some_and(|tag| tag.is_empty() || tag.len() > 128)
-        {
-            return Err(Error::new("INVALID_PARAMS", "Invalid language tag"));
-        }
+        validate_language(self.engine, self.language.as_deref())?;
         if payload_bytes != expected as u64 {
             return Err(Error::new(
                 "INVALID_IMAGE",
@@ -113,20 +144,18 @@ impl OcrService {
             "ocrInitialize" => {
                 let options: Initialize = serde_json::from_value(Value::Object(params.clone()))
                     .map_err(|_| Error::new("INVALID_PARAMS", "Invalid OCR language parameters"))?;
-                if options
-                    .language
-                    .as_ref()
-                    .is_some_and(|tag| tag.is_empty() || tag.len() > 128)
-                {
-                    return Err(Error::new("INVALID_PARAMS", "Invalid language tag"));
-                }
+                validate_language(options.engine, options.language.as_deref())?;
                 self.bounded_worker(Duration::from_secs(5), move |worker| {
+                    if options.engine == Engine::PpOcrV6 {
+                        worker.pp_ocr()?;
+                        return Ok(serde_json::json!({"engine": Engine::PpOcrV6, "resolvedLanguage": null}));
+                    }
                     let result = worker
-                        .engine(options.language.as_deref())?
+                        .windows(options.language.as_deref())?
                         .language()
                         .map_err(map_error);
                     if result.is_err() {
-                        worker.cached = None;
+                        worker.windows = None;
                     }
                     result.map(|language| serde_json::json!({"resolvedLanguage": language}))
                 })
@@ -150,31 +179,37 @@ impl OcrService {
                 let frame: Frame = serde_json::from_value(Value::Object(params.clone()))
                     .map_err(|_| Error::new("INVALID_PARAMS", "Invalid OCR frame parameters"))?;
                 frame.validate(bytes.len() as u64)?;
-                self.bounded_worker(
-                    Duration::from_millis(frame.timeout_ms + 1000),
-                    move |worker| {
-                        let engine = worker.engine(frame.language.as_deref())?;
-                        let result = engine.recognize_bgra(
-                            &bytes,
-                            frame.width,
-                            frame.height,
-                            Duration::from_millis(frame.timeout_ms),
-                        );
-                        let poisoned = engine.is_poisoned();
-                        if poisoned {
-                            worker.cached = None;
+                self.bounded_worker(frame.worker_deadline(), move |worker| {
+                    if frame.engine == Engine::PpOcrV6 {
+                        let result = worker
+                            .pp_ocr()?
+                            .recognize_bgra(&bytes, frame.width, frame.height)
+                            .map_err(map_error)?;
+                        return serde_json::to_value(result).map_err(|_| {
+                            Error::new("OCR_ERROR", "OCR result serialization failed")
+                        });
+                    }
+                    let engine = worker.windows(frame.language.as_deref())?;
+                    let result = engine.recognize_bgra(
+                        &bytes,
+                        frame.width,
+                        frame.height,
+                        Duration::from_millis(frame.timeout_ms),
+                    );
+                    let poisoned = engine.is_poisoned();
+                    if poisoned {
+                        worker.windows = None;
+                    }
+                    match result {
+                        Ok(result) => serde_json::to_value(result).map_err(|_| {
+                            Error::new("OCR_ERROR", "OCR result serialization failed")
+                        }),
+                        Err(error) if poisoned && !matches!(error, OcrError::Timeout) => {
+                            Err(Error::new("OCR_PROCESS_UNUSABLE", &error.to_string()))
                         }
-                        match result {
-                            Ok(result) => serde_json::to_value(result).map_err(|_| {
-                                Error::new("OCR_ERROR", "OCR result serialization failed")
-                            }),
-                            Err(error) if poisoned && !matches!(error, OcrError::Timeout) => {
-                                Err(Error::new("OCR_PROCESS_UNUSABLE", &error.to_string()))
-                            }
-                            Err(error) => Err(map_error(error)),
-                        }
-                    },
-                )
+                        Err(error) => Err(map_error(error)),
+                    }
+                })
                 .await
             }
             _ => Err(Error::new("UNKNOWN_METHOD", "Unknown OCR method")),
@@ -191,7 +226,7 @@ impl OcrService {
         let task = tokio::task::spawn_blocking(move || {
             let mut worker = worker.lock().map_err(|_| unusable_error())?;
             if unusable.load(Ordering::Acquire) {
-                worker.cached = None;
+                worker.clear();
                 return Err(unusable_error());
             }
             let result = work(&mut worker);
@@ -203,7 +238,7 @@ impl OcrService {
             // A timed-out native call may finish after its caller has left.
             // It must never restore a usable engine to the session.
             if unusable.load(Ordering::Acquire) {
-                worker.cached = None;
+                worker.clear();
             }
             result
         });
