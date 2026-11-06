@@ -29,11 +29,7 @@ pub fn normalize_language_tag(tag: &str) -> String {
 /// recognizer has no Hangul, so Korean reads with Windows OCR whatever the
 /// setting says. `src/ui/recognition.ts` applies the same rule to readiness.
 pub fn session_engine(configured: Engine, source_language: &str) -> Engine {
-    if source_language
-        .trim()
-        .to_ascii_lowercase()
-        .starts_with("ko")
-    {
+    if source_language.to_ascii_lowercase().starts_with("ko") {
         Engine::Windows
     } else {
         configured

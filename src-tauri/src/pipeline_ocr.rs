@@ -6,16 +6,33 @@ use meowcal_core::ocr::Engine;
 use tauri::{AppHandle, Emitter};
 use tracing::{info, warn};
 
-/// The session's OCR client, or `None` when no recognizer could start.
+/// The session's OCR client, or `None` when no recognizer could start; the UI
+/// is told why either way.
 ///
 /// When Windows OCR has no recognizer for `source_language`, this falls back
-/// to the user-profile languages and tells the UI why.
+/// to the user-profile languages.
 pub(crate) fn open(app: &AppHandle, engine: Engine, source_language: &str) -> Option<CoreOcr> {
     if engine == Engine::PpOcrV6 {
-        return CoreOcr::pp_ocr()
-            .inspect(|_| info!("OCR initialized with PP-OCRv6"))
-            .inspect_err(|e| warn!("❌ Failed to initialize PP-OCRv6: {}", e))
-            .ok();
+        return match CoreOcr::pp_ocr() {
+            Ok(ocr) => {
+                info!("OCR initialized with PP-OCRv6");
+                Some(ocr)
+            }
+            Err(e) => {
+                warn!("❌ Failed to initialize PP-OCRv6: {}", e);
+                let _ = app.emit(
+                    "capture-status",
+                    CaptureStatusPayload {
+                        using_fallback: false,
+                        message: format!(
+                            "Text recognition could not start: {e}.                              Try Windows OCR in Settings > Text recognition."
+                        ),
+                        is_error: true,
+                    },
+                );
+                None
+            }
+        };
     }
     match CoreOcr::with_language(source_language) {
         Ok(ocr) => {
