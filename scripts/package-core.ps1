@@ -101,8 +101,24 @@ try {
     if (-not (Test-Path -LiteralPath $licensePath -PathType Leaf)) {
         throw "Missing Core distribution license: $licensePath"
     }
+    # The executable embeds the PP-OCRv6 models, so their Apache-2.0 license
+    # and notice travel in the archive's single LICENSE file after Core's own.
+    $modelLicenseDirectory = Join-Path $repositoryRoot "licenses\paddleocr"
+    $licenseParts = @(
+        $licensePath,
+        (Join-Path $modelLicenseDirectory "Notice.txt"),
+        (Join-Path $modelLicenseDirectory "LICENSE")
+    )
+    foreach ($part in $licenseParts) {
+        if (-not (Test-Path -LiteralPath $part -PathType Leaf)) {
+            throw "Missing Core distribution license: $part"
+        }
+    }
+    $licenseText = ($licenseParts | ForEach-Object {
+        [IO.File]::ReadAllText($_).TrimEnd()
+    }) -join "`n`n----------------------------------------------------------------------`n`n"
     $stagedLicense = Join-Path $temporaryDirectory "LICENSE"
-    Copy-Item -LiteralPath $licensePath -Destination $stagedLicense
+    [IO.File]::WriteAllText($stagedLicense, $licenseText + "`n", [Text.UTF8Encoding]::new($false))
     $licenseHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $stagedLicense).Hash.ToLowerInvariant()
 
     $metadata = [ordered]@{

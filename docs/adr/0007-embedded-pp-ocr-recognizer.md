@@ -54,8 +54,8 @@ ADR-0001's OCR clause; the rest of ADR-0001 stands.
   installer. Replacing a model needs a repository change and a new Core release.
 - PP-OCRv6 needs no Windows language pack for the languages it reads. Windows
   OCR language setup still applies to Korean and to users who select Windows OCR.
-- The models are Apache-2.0. Distributions of Core include
-  `licenses/paddleocr`.
+- The models are Apache-2.0. The Core archive's `LICENSE` file carries their
+  license and notice after Core's own, so the archive layout stays the same.
 
 ## Alternatives considered
 

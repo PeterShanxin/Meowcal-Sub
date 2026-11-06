@@ -4,8 +4,9 @@ Independent Windows runtime for Meowcal Sub and Meowcal Sub 2. Core owns OCR,
 by Windows OCR or the embedded PP-OCRv6 models, and the managed HY-MT engine. It
 does not depend on Tauri or either application executable. Source is licensed
 under AGPL-3.0-only; upstream runtime and model licenses remain separate. The
-executable embeds PP-OCRv6 under the Apache License 2.0: a consumer that
-redistributes Core also ships [`licenses/paddleocr`](../licenses/paddleocr/).
+executable embeds PP-OCRv6 under the Apache License 2.0; the archive's `LICENSE`
+file carries that license and its notice after Core's own
+([`licenses/paddleocr`](../licenses/paddleocr/)).
 
 ## Build and verify
 
