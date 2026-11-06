@@ -12,9 +12,17 @@ path = "src/lib.rs"
 name = "meowcal-core"
 path = "src/main.rs"
 
+[features]
+default = ["ppocr"]
+# PP-OCRv6 recognition. Consumers that link only Core's protocol types turn it
+# off to skip compiling the inference runtime and embedding the models.
+ppocr = ["dep:rten", "dep:rten-tensor"]
+
 [dependencies]
 fs2 = "0.4"
 reqwest = { version = "0.13", default-features = false, features = ["native-tls", "json", "stream"] }
+rten = { version = "0.27", optional = true, default-features = false, features = ["onnx_format"] }
+rten-tensor = { version = "0.27", optional = true }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 sha2 = "0.11"
@@ -47,4 +55,20 @@ windows-version = "0.100"
 windows-future = "0.3"
 
 [dev-dependencies]
+png = "0.18"
 tokio = { version = "1", features = ["test-util"] }
+
+# Unoptimized inference makes PP-OCR tests take minutes; optimize the runtime
+# even in test builds. Core's own code stays a normal debug build.
+[profile.dev.package.rten]
+opt-level = 3
+[profile.dev.package.rten-base]
+opt-level = 3
+[profile.dev.package.rten-gemm]
+opt-level = 3
+[profile.dev.package.rten-simd]
+opt-level = 3
+[profile.dev.package.rten-tensor]
+opt-level = 3
+[profile.dev.package.rten-vecmath]
+opt-level = 3

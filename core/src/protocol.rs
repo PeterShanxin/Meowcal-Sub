@@ -22,6 +22,7 @@ pub fn capabilities() -> Vec<&'static str> {
         .iter()
         .copied()
         .chain([crate::inference_health::CAPABILITY])
+        .chain(cfg!(feature = "ppocr").then_some(crate::ocr::PP_OCR_CAPABILITY))
         .collect()
 }
 

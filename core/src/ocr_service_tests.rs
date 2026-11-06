@@ -2,6 +2,7 @@ use super::*;
 
 fn frame(width: u32, stride: u32) -> Frame {
     Frame {
+        engine: Engine::Windows,
         language: None,
         width,
         height: 1,
@@ -50,7 +51,7 @@ async fn initialization_recognition_and_language_changes_share_one_worker() {
         .worker
         .lock()
         .unwrap()
-        .cached
+        .windows
         .as_ref()
         .unwrap()
         .requested_language
@@ -69,7 +70,7 @@ async fn initialization_recognition_and_language_changes_share_one_worker() {
     assert!(result["text"].as_str().unwrap().trim().is_empty());
     {
         let worker = service.worker.lock().unwrap();
-        let cached = worker.cached.as_ref().unwrap();
+        let cached = worker.windows.as_ref().unwrap();
         assert!(cached.requested_language.is_none());
         assert_eq!(
             cached.engine.language().unwrap(),
@@ -93,7 +94,7 @@ async fn initialization_recognition_and_language_changes_share_one_worker() {
             .worker
             .lock()
             .unwrap()
-            .cached
+            .windows
             .as_ref()
             .unwrap()
             .requested_language
@@ -109,7 +110,7 @@ async fn initialization_recognition_and_language_changes_share_one_worker() {
         .await
         .unwrap_err();
     assert_eq!(unavailable.code, "OCR_LANGUAGE_UNAVAILABLE");
-    assert!(service.worker.lock().unwrap().cached.is_none());
+    assert!(service.worker.lock().unwrap().windows.is_none());
     let mut parameters = parameters;
     parameters["language"] = serde_json::json!(language);
     assert!(service
@@ -125,7 +126,7 @@ async fn initialization_recognition_and_language_changes_share_one_worker() {
             .worker
             .lock()
             .unwrap()
-            .cached
+            .windows
             .as_ref()
             .unwrap()
             .requested_language
@@ -141,7 +142,7 @@ async fn timed_out_worker_cannot_accept_another_operation_or_restore_cache() {
     let (release, blocked) = std::sync::mpsc::channel();
     let operation = service.bounded_worker(Duration::from_millis(50), move |_worker| {
         #[cfg(windows)]
-        _worker.engine(None)?;
+        _worker.windows(None)?;
         let _ = entered.send(());
         let _ = blocked.recv_timeout(Duration::from_secs(1));
         Ok(serde_json::json!({}))
@@ -164,7 +165,7 @@ async fn timed_out_worker_cannot_accept_another_operation_or_restore_cache() {
     );
     let worker = Arc::clone(&service.worker);
     assert!(
-        tokio::task::spawn_blocking(move || worker.lock().unwrap().cached.is_none())
+        tokio::task::spawn_blocking(move || worker.lock().unwrap().windows.is_none())
             .await
             .unwrap()
     );
@@ -194,7 +195,7 @@ async fn native_ocr_is_explicitly_unsupported_without_poisoning_the_worker() {
             .unwrap_err();
         assert_eq!(error.code, "OCR_UNSUPPORTED_PLATFORM");
         assert!(error.message.contains("Windows"));
-        assert!(service.worker.lock().unwrap().cached.is_none());
+        assert!(service.worker.lock().unwrap().windows.is_none());
     }
 }
 
@@ -216,4 +217,56 @@ async fn worker_panic_permanently_invalidates_the_session() {
             .code,
         "OCR_PROCESS_UNUSABLE"
     );
+}
+
+#[cfg(feature = "ppocr")]
+#[tokio::test]
+async fn pp_ocr_initializes_and_reads_without_a_language() {
+    let service = OcrService::default();
+    let initialized = service
+        .dispatch(
+            "ocrInitialize",
+            serde_json::json!({"engine":"ppOcrV6"}).as_object().unwrap(),
+            Vec::new(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        initialized,
+        serde_json::json!({"engine":"ppOcrV6","resolvedLanguage":null})
+    );
+    let parameters = serde_json::json!({
+        "engine":"ppOcrV6","width":100,"height":80,"stride":400,"timeoutMs":5000
+    });
+    let result = service
+        .dispatch(
+            "ocrRecognizeBgra",
+            parameters.as_object().unwrap(),
+            vec![255; 32000],
+        )
+        .await
+        .unwrap();
+    assert_eq!(result["frameWidth"], 100.0);
+    assert!(result["lines"].as_array().unwrap().is_empty());
+    let worker = service.worker.lock().unwrap();
+    assert!(worker.pp_ocr.is_some() && worker.windows.is_none());
+}
+
+#[tokio::test]
+async fn pp_ocr_rejects_a_language_and_unknown_engines_are_invalid() {
+    let service = OcrService::default();
+    for params in [
+        serde_json::json!({"engine":"ppOcrV6","language":"zh-CN"}),
+        serde_json::json!({"engine":"tesseract"}),
+    ] {
+        let error = service
+            .dispatch("ocrInitialize", params.as_object().unwrap(), Vec::new())
+            .await
+            .unwrap_err();
+        assert_eq!(error.code, "INVALID_PARAMS");
+    }
+    let mut pp_ocr = frame(1, 4);
+    pp_ocr.engine = Engine::PpOcrV6;
+    pp_ocr.language = Some("en".into());
+    assert_eq!(pp_ocr.validate(4).unwrap_err().code, "INVALID_PARAMS");
 }
