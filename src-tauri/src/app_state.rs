@@ -63,6 +63,14 @@ impl Default for AppState {
 }
 
 impl AppState {
+    /// The settings loaded from disk. The WebView can call commands before
+    /// Tauri setup has read them, and the in-memory defaults would report an
+    /// installed engine as missing.
+    pub async fn loaded_config(&self) -> Result<AppConfig, String> {
+        self.startup_gate.wait_until_ready().await?;
+        Ok(lock_or_recover(&self.config).clone())
+    }
+
     /// Record the region to capture and the DPI scale it was measured at.
     ///
     /// Work already in flight was framed against the old region, so it is
