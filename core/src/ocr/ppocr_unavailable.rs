@@ -12,6 +12,8 @@ impl PpOcr {
         ))
     }
 
+    pub fn limit_threads(&mut self, _limit: Option<usize>) {}
+
     pub fn recognize_bgra(
         &self,
         _bytes: &[u8],
