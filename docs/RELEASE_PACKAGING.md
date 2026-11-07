@@ -25,8 +25,12 @@ checked through the literals it can produce.
 
 ## Packaging is native per architecture
 
-`.github/workflows/package.yml` is a reusable workflow taking one input,
-`architecture`, which is `x64` or `arm64`.
+`.github/workflows/package.yml` packages `x64` or `arm64`. The optional
+`arm64_build_jobs` input selects 1, 2 or 4 compiler processes on the hosted
+ARM64 runner (default 4). `use_rust_cache` defaults to false. Enable it only
+when the dependency footprint fits the repository's shared cache budget.
+`store-package.yml` accepts the same build controls. Release and preflight
+forward their explicit cache choice to all package variants.
 
 | Architecture | Runner | Rust target |
 | --- | --- | --- |
@@ -51,8 +55,22 @@ not match the requested one, so a wrong-image build can never reach
 The application package job declares its own toolchain rather than inheriting
 one from the image:
 Node from `actions/setup-node`, the .NET SDK from `actions/setup-dotnet`, and the
-Rust toolchain plus the one target it needs from `rustup`. It restores no Rust
-cache: a release build starts cold.
+Rust toolchain plus the one target it needs from `rustup`.
+`.github/actions/windows-package-build` owns Rust setup, hosted parallelism,
+and the dependency cache for both direct and Store packages. x64 uses the
+runner's processor count. Local ARM64 packaging still defaults to one compiler
+process and respects an explicit `CARGO_BUILD_JOBS`, including x64 cross-builds.
+Both local scripts restore the caller's build environment after success or
+failure. ARM64 release profile safeguards remain target-specific.
+
+When enabled, the pinned `Swatinem/rust-cache` action caches dependencies in
+`package-output` or `store-target`. Direct and Store builds use separate keys
+for each native target; they do not share the merge gate or Core package cache. Only `main`
+saves entries. Branch preflights can restore matching `main` entries. Workspace
+crates are rebuilt, and cached installer directories are removed before every
+build. Default packaging leaves the merge gate's cache budget available.
+Tests, the pinned Core handshake, signing and release asset validation
+still run on cache hits. Both Tauri build commands pass `--locked` to Cargo.
 
 ## What a release run produces
 
@@ -167,6 +185,32 @@ but creates neither a tag nor a GitHub release.
 Both workflows call the same two scripts rather than each carrying a copy of the
 logic, because a preflight that validated assets differently from the release
 would pass while the release failed.
+
+### Comparing package build times
+
+Use `release-preflight.yml` on one immutable commit. Supply the same Store
+identity and version for every run. Run with `use_rust_cache=false` and
+`arm64_build_jobs=1`, then repeat with 4. If 4 fails, run with 2. Complete each
+run before dispatching the next: another preflight on the same ref cancels the
+previous run. Repeat each successful setting to check runner variance.
+
+Retain the run IDs, commit, runner image, `rustc -Vv`, cache result, and package
+job durations (`completed_at - started_at`, excluding queue time). Compare
+direct and Store packages separately, with x64 as a control. A successful
+comparison also requires the final asset, checksum and updater-manifest checks.
+Inspect failed build logs for `STATUS_STACK_BUFFER_OVERRUN` (`0xc0000409`) and
+memory failures; do not hide a failure with an automatic retry.
+
+Each build writes `package-build.json` under its Cargo output directory. The
+report records effective parallelism, host, commit, total script time and named
+stage times, including the failing stage. Package workflows upload these reports
+after success or failure. They are separate from release assets. Rust toolchain
+setup and cache restore time remain in the job timings. Compare cold runs with
+cold runs; compare warm runs only after a successful `main` run has populated
+the relevant cache. Report cache sizes to check the repository's shared budget.
+
+These controls prepare a release-profile experiment. Debug CI results and Linux
+script tests do not establish Windows packaging speed or compiler stability.
 
 ## Who may run a privileged job
 

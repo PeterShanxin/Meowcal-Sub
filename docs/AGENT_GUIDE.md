@@ -209,7 +209,9 @@ dependency problem and is not one. rustc is a host-architecture process whatever
 it targets, so a cross-build to x64 needs this too. `verify.ps1` now applies it
 itself when the host is ARM64 _and_ the target directory is cold, and
 `build-package.ps1` applies it on any ARM64 host. An explicit `CARGO_BUILD_JOBS`
-from the caller always wins. A bare `cargo test` still does neither.
+from the caller always wins. Both application packaging scripts restore the
+caller's Cargo environment after success or failure. A bare `cargo test` still
+does neither.
 
 That default is for a local ARM64 machine. The hosted `windows-11-arm` gate sets
 `CARGO_BUILD_JOBS` to the runner's core count instead, because the failure does
@@ -285,6 +287,16 @@ DPI/window behavior.
   in the release profile to reuse dependencies when building the distributable.
   The ordinary merge gate still runs debug tests. Hosted packaging uses the
   runner's CPU count; local ARM64 compiler safeguards remain unchanged.
+- Direct and Store packaging share `.github/actions/windows-package-build`.
+  Hosted ARM64 packaging defaults to four Cargo jobs; preflight can select 1,
+  2 or 4 and disable Rust caching for comparable cold runs. Keep local ARM64's
+  one-job default and the existing target-specific release profile safeguards.
+  Package dependency caching is opt-in to protect the shared cache budget.
+  Separate entries by package channel and native target; only `main` writes
+  them. Discard cached installers before building.
+  Preserve `package-build.json` timing reports on failures and keep them out of
+  release assets. Follow the comparison method in `docs/RELEASE_PACKAGING.md`;
+  debug CI does not prove release-profile compiler stability.
 - Every job runs on a GitHub-hosted runner. `ubuntu-24.04`, `ubuntu-latest`,
   `windows-11-arm`, and `windows-2025` are the only runners a workflow may name;
   `windows-latest`, `windows-2022`, macOS, and any indirect value such as a

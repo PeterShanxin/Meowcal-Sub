@@ -12,6 +12,10 @@ name: Prepare Draft Release
 on:
   workflow_dispatch:
     inputs:
+      use_rust_cache:
+        description: Use Rust dependency cache (requires shared cache budget)
+        default: false
+        type: boolean
       version:
         description: Semantic version without the v prefix, for example 0.6.0
         required: true
@@ -151,6 +155,7 @@ jobs:
     uses: ./.github/workflows/package.yml
     with:
       architecture: x64
+      use_rust_cache: ${{ inputs.use_rust_cache }}
     # Without this the called workflow sees empty signing secrets and builds
     # unsignable installers. A reusable workflow inherits nothing by default.
     secrets: inherit
@@ -166,6 +171,7 @@ jobs:
     uses: ./.github/workflows/package.yml
     with:
       architecture: arm64
+      use_rust_cache: ${{ inputs.use_rust_cache }}
     secrets: inherit
     permissions:
       contents: read
@@ -183,6 +189,7 @@ jobs:
     uses: ./.github/workflows/store-package.yml
     with:
       architecture: ${{ matrix.architecture }}
+      use_rust_cache: ${{ inputs.use_rust_cache }}
       package_name: ${{ inputs.store_package_name }}
       publisher: ${{ inputs.store_publisher }}
       publisher_display_name: ${{ inputs.store_publisher_display_name }}
@@ -224,6 +231,7 @@ jobs:
       - name: Download package artifacts
         uses: actions/download-artifact@v8
         with:
+          pattern: meowcal-sub-*
           path: release-assets
           merge-multiple: true
 

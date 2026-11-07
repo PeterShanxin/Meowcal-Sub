@@ -17,6 +17,15 @@ name: Windows Packages
 on:
   workflow_dispatch:
     inputs:
+      arm64_build_jobs:
+        description: Hosted ARM64 Cargo jobs
+        default: '4'
+        type: choice
+        options: ['1', '2', '4']
+      use_rust_cache:
+        description: Use Rust dependency cache (requires shared cache budget)
+        default: false
+        type: boolean
       architecture:
         description: Windows architecture to package
         required: true
@@ -27,6 +36,14 @@ on:
           - arm64
   workflow_call:
     inputs:
+      arm64_build_jobs:
+        description: Hosted ARM64 Cargo jobs
+        default: '4'
+        type: string
+      use_rust_cache:
+        description: Use Rust dependency cache (requires shared cache budget)
+        default: false
+        type: boolean
       architecture:
         description: Windows architecture to package
         required: true
@@ -52,8 +69,6 @@ jobs:
       ${{ inputs.architecture == 'arm64'
       && 'windows-11-arm'
       || 'windows-2025' }}
-    # A cold release build with CARGO_BUILD_JOBS serialized on ARM64 is well
-    # inside this, and the default six hours is far too long to notice a hang.
     timeout-minutes: 180
     steps:
       - name: Require a trusted actor
@@ -112,10 +127,6 @@ jobs:
         with:
           persist-credentials: false
 
-      # Every toolchain this build needs is declared here rather than assumed
-      # from the image, so a release does not silently change when GitHub
-      # refreshes the runner. Packaging deliberately restores no Rust cache: a
-      # release build starts cold.
       - uses: actions/setup-node@v7
         with:
           node-version: 24
@@ -126,12 +137,13 @@ jobs:
           # OverlayHost targets net9.0-windows10.0.22621.0.
           dotnet-version: 9.0.x
 
-      - name: Install the Rust toolchain and the package target
-        shell: pwsh
-        run: |
-          rustup toolchain install stable --profile minimal
-          rustup target add ${{ steps.package.outputs.target }}
-          rustup default stable
+      - uses: ./.github/actions/windows-package-build
+        with:
+          target: ${{ steps.package.outputs.target }}
+          target-directory: package-output
+          variant: direct
+          arm64-build-jobs: ${{ inputs.arm64_build_jobs }}
+          use-rust-cache: ${{ inputs.use_rust_cache }}
 
       - name: Install locked frontend dependencies
         shell: pwsh
@@ -145,9 +157,7 @@ jobs:
         shell: pwsh
         env:
           PACKAGE_ARCHITECTURE: ${{ steps.package.outputs.architecture }}
-          # Signs the installers for the in-app updater. Absent on forks, where
-          # the build still produces installers, just no `.sig` beside them -
-          # the release workflow is what refuses to publish that.
+          # Signs the installers for the in-app updater.
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: >-
@@ -161,3 +171,11 @@ jobs:
           name: ${{ steps.package.outputs.artifact }}
           path: package-output/${{ steps.package.outputs.target }}/release/bundle/*/*
           if-no-files-found: error
+
+      - name: Preserve package build timings
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: package-build-report-${{ steps.package.outputs.architecture }}
+          path: package-output/package-build.json
+          if-no-files-found: ignore
