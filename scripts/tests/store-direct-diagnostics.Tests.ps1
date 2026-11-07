@@ -37,7 +37,8 @@ try {
     if (Get-ChildItem $output -Filter '*.log') { throw 'Raw startup log entered the uploaded output directory.' }
 } finally {
     $resolvedRoot = [IO.Path]::GetFullPath($testRoot)
-    $temporaryRoot = [IO.Path]::GetFullPath([IO.Path]::GetTempPath()).TrimEnd('\') + '\'
+    $separator = [IO.Path]::DirectorySeparatorChar
+    $temporaryRoot = [IO.Path]::GetFullPath([IO.Path]::GetTempPath()).TrimEnd($separator) + $separator
     if (-not $resolvedRoot.StartsWith($temporaryRoot, [StringComparison]::OrdinalIgnoreCase)) { throw 'Unsafe test cleanup path.' }
     Remove-Item -LiteralPath $resolvedRoot -Recurse -Force
 }
