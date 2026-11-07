@@ -330,11 +330,11 @@ impl Translator {
 
 /// The manager never calls a backend that is not ready, so a managed engine
 /// that stopped mid-session - its process exited, or a CPU-only change replaced
-/// Core - stays stopped: no request fails and nothing else starts recovery
-/// (#245). Recovering and failed engines report other codes.
+/// Core - would stay stopped: no request fails and nothing else starts recovery
+/// (#245). A failed engine is restarted too; `recover_transport` paces those.
 fn engine_needs_restart(managed: bool, warnings: &[String]) -> bool {
-    let not_ready = format!("{}: not_ready", BackendId::FoundryLocal.as_str());
-    managed && warnings.contains(&not_ready)
+    let warned = |code| warnings.contains(&format!("{}: {code}", BackendId::FoundryLocal.as_str()));
+    managed && (warned("not_ready") || warned("engine_recovery_failed"))
 }
 
 #[cfg(test)]
@@ -378,15 +378,14 @@ mod tests {
     }
 
     #[test]
-    fn a_stopped_managed_engine_is_asked_to_start_again() {
-        assert!(engine_needs_restart(true, &warnings(&["not_ready"])));
-    }
-
-    #[test]
-    fn a_recovering_or_failed_engine_is_left_alone() {
-        for code in ["engine_recovering", "engine_recovery_failed"] {
-            assert!(!engine_needs_restart(true, &warnings(&[code])), "{code}");
+    fn a_stopped_or_failed_engine_is_asked_to_start_and_a_recovering_one_is_not() {
+        for code in ["not_ready", "engine_recovery_failed"] {
+            assert!(engine_needs_restart(true, &warnings(&[code])), "{code}");
         }
+        assert!(!engine_needs_restart(
+            true,
+            &warnings(&["engine_recovering"])
+        ));
         assert!(!engine_needs_restart(true, &[]));
     }
 

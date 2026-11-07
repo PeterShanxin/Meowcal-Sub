@@ -12,6 +12,7 @@ mod context;
 mod context_leakage;
 mod context_summarization;
 mod core_translation;
+mod display_state;
 mod foundry_local;
 mod manager;
 mod mock;

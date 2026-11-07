@@ -410,7 +410,7 @@ impl TranslationManager {
                         "Translation backend used"
                     );
                     let display_state = if id == BackendId::Mock {
-                        Self::fallback_display_state(&warnings)
+                        super::display_state::after_fallback(&warnings)
                     } else {
                         TranslationDisplayState::Translated
                     };
@@ -463,7 +463,7 @@ impl TranslationManager {
                             .unwrap()
                             .record_success(BackendId::Mock, 0);
                         warnings.push("mock: fallback used".to_string());
-                        let display_state = Self::fallback_display_state(&warnings);
+                        let display_state = super::display_state::after_fallback(&warnings);
                         return TranslationOutcome {
                             translated,
                             backend_used: BackendId::Mock,
@@ -490,38 +490,13 @@ impl TranslationManager {
             "no_backend_available",
             None,
         );
-        let display_state = Self::fallback_display_state(&warnings);
+        let display_state = super::display_state::after_fallback(&warnings);
         TranslationOutcome {
             translated: text.to_string(),
             backend_used: BackendId::Mock,
             warnings,
             display_state,
         }
-    }
-
-    fn fallback_display_state(warnings: &[String]) -> TranslationDisplayState {
-        let engine_warnings: Vec<String> = warnings
-            .iter()
-            .filter(|warning| warning.starts_with("local_engine:"))
-            .map(|warning| warning.to_ascii_lowercase())
-            .collect();
-
-        if engine_warnings
-            .iter()
-            .any(|warning| warning.contains("not_ready") || warning.contains("engine_recovering"))
-        {
-            return TranslationDisplayState::Warming;
-        }
-
-        if engine_warnings.iter().any(|warning| {
-            !warning.contains("disabled")
-                && !warning.contains("not_available")
-                && !warning.contains("fallback used")
-        }) {
-            return TranslationDisplayState::TemporarilyUnavailable;
-        }
-
-        TranslationDisplayState::SourceOnly
     }
 
     /// Check if text is duplicate (for deduplication in capture loop)

@@ -54,7 +54,7 @@
     "src-tauri/src/config.rs": 475,
     "src-tauri/src/llm/context.rs": 620,
     "src-tauri/src/llm/foundry_local.rs": 1557,
-    "src-tauri/src/llm/manager.rs": 724,
+    "src-tauri/src/llm/manager.rs": 699,
     "src-tauri/src/llm/prompt_router.rs": 471,
     "src/scripts/overlay.js": 1046,
     "src/scripts/selector.js": 636,

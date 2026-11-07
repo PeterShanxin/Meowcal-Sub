@@ -171,10 +171,7 @@ async fn test_backend_timeout_fallback() {
 
     assert_eq!(outcome.backend_used, BackendId::Mock);
     assert_eq!(outcome.translated, "fast");
-    assert_eq!(
-        outcome.display_state,
-        TranslationDisplayState::TemporarilyUnavailable
-    );
+    assert_eq!(outcome.display_state, TranslationDisplayState::EngineSlow);
 }
 
 #[tokio::test]

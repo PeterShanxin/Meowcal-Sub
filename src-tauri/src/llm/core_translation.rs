@@ -25,7 +25,7 @@ pub(super) fn notes() -> String {
         return "Translation engine is recovering. Please wait.".into();
     }
     if crate::core_client::recovery_failed() {
-        return "Engine recovery failed. Retry the engine in Settings.".into();
+        return "Engine recovery failed. Translation retries it shortly.".into();
     }
     match crate::core_client::cached_status() {
         Some(status) if status.ready => "Local Translation Engine is ready.".to_string(),

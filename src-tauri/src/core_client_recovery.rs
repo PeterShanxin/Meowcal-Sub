@@ -2,7 +2,24 @@ use super::{call, CoreStatus, TRANSLATION};
 use serde_json::{json, Value};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
-use std::time::Duration;
+use std::time::{Duration, Instant};
+
+/// How long a translation session waits before restarting a failed engine,
+/// by consecutive failure; the last wait repeats. A machine too busy for the
+/// readiness check can recover without the user, and a broken engine is not
+/// restarted in a loop.
+const RETRY_DELAYS: [Duration; 4] = [
+    Duration::from_secs(30),
+    Duration::from_secs(60),
+    Duration::from_secs(120),
+    Duration::from_secs(300),
+];
+
+#[derive(Clone, Copy)]
+struct Failures {
+    last: Option<Instant>,
+    consecutive: usize,
+}
 
 struct Flight {
     cancelled: Arc<AtomicBool>,
@@ -13,6 +30,7 @@ struct RecoveryState {
     active: Mutex<Option<Flight>>,
     stopped: AtomicBool,
     failed: AtomicBool,
+    failures: Mutex<Failures>,
     cpu_locked: AtomicBool,
 }
 impl RecoveryState {
@@ -21,6 +39,10 @@ impl RecoveryState {
             active: Mutex::new(None),
             stopped: AtomicBool::new(false),
             failed: AtomicBool::new(false),
+            failures: Mutex::new(Failures {
+                last: None,
+                consecutive: 0,
+            }),
             cpu_locked: AtomicBool::new(false),
         }
     }
@@ -46,6 +68,31 @@ impl RecoveryState {
                 flight.cancelled.store(true, Ordering::SeqCst);
             }
         }
+    }
+    fn record(&self, ready: bool, now: Instant) {
+        self.failed.store(!ready, Ordering::SeqCst);
+        if let Ok(mut failures) = self.failures.lock() {
+            *failures = if ready {
+                Failures {
+                    last: None,
+                    consecutive: 0,
+                }
+            } else {
+                Failures {
+                    last: Some(now),
+                    consecutive: failures.consecutive + 1,
+                }
+            };
+        }
+    }
+    fn retry_due(&self, now: Instant) -> bool {
+        let Ok(failures) = self.failures.lock() else {
+            return false;
+        };
+        let wait = RETRY_DELAYS[failures.consecutive.clamp(1, RETRY_DELAYS.len()) - 1];
+        failures
+            .last
+            .is_none_or(|last| now.saturating_duration_since(last) >= wait)
     }
     fn finish(&self, cancelled: &Arc<AtomicBool>) {
         if let Ok(mut active) = self.active.lock() {
@@ -73,7 +120,7 @@ pub fn recovery_failed() -> bool {
     STATE.failed.load(Ordering::SeqCst)
 }
 pub(super) fn clear_failure() {
-    STATE.failed.store(false, Ordering::SeqCst);
+    STATE.record(true, Instant::now());
     STATE.stopped.store(false, Ordering::SeqCst);
 }
 pub(super) fn cancel() {
@@ -87,8 +134,9 @@ pub fn recover_inference(receipt: String, reason: &'static str) {
     );
 }
 
+/// Start a stopped engine again; a failed one only once its wait has passed.
 pub fn recover_transport() {
-    if !recovery_failed() {
+    if !recovery_failed() || STATE.retry_due(Instant::now()) {
         start("ready", json!({}));
     }
 }
@@ -110,16 +158,14 @@ fn start(method: &'static str, params: Value) {
         );
         if !cancelled.load(Ordering::SeqCst) {
             match result {
-                Ok(status) => {
-                    STATE.failed.store(!status.ready, Ordering::SeqCst);
-                }
+                Ok(status) => STATE.record(status.ready, Instant::now()),
                 Err(error) => {
                     // An interrupted correctness check cannot certify another GPU
                     // start. Keep the app-lifetime CPU policy across Core replacement.
                     if method == "recoverInference" {
                         lock_cpu();
                     }
-                    STATE.failed.store(true, Ordering::SeqCst);
+                    STATE.record(false, Instant::now());
                     super::invalidate_readiness();
                     tracing::warn!(%error, "Translation engine recovery failed");
                 }
@@ -164,6 +210,25 @@ mod tests {
         );
         assert!(state.cpu_locked.load(Ordering::SeqCst));
         state.finish(&next);
+    }
+    #[test]
+    fn a_failed_engine_is_retried_after_a_growing_wait() {
+        let state = RecoveryState::new();
+        let start = Instant::now();
+        assert!(state.retry_due(start), "nothing has failed yet");
+        let mut failed_at = start;
+        for wait in [30, 60, 120, 300, 300] {
+            state.record(false, failed_at);
+            let due = failed_at + Duration::from_secs(wait);
+            assert!(!state.retry_due(due - Duration::from_secs(1)), "{wait}");
+            assert!(state.retry_due(due), "{wait}");
+            failed_at = due;
+        }
+        state.record(true, failed_at);
+        assert!(!state.failed.load(Ordering::SeqCst));
+        state.record(false, failed_at);
+        assert!(!state.retry_due(failed_at + Duration::from_secs(29)));
+        assert!(state.retry_due(failed_at + Duration::from_secs(30)));
     }
     #[test]
     fn a_transport_timeout_does_not_lock_cpu() {
