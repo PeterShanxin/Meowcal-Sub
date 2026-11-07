@@ -76,8 +76,11 @@ JSON headers and responses are limited to 256 KiB. OCR timeouts are 1–30000 ms
 run PP-OCRv6 advertises the `ocrPpOcrV6` capability. PP-OCRv6 reads Chinese,
 Japanese and Latin-script text with one model, so its requests carry no
 `language`; one that does is `INVALID_PARAMS`. It has no Korean. It runs on the
-CPU with at most four threads, leaving cores to the translation engine, and
-cannot be cancelled: its timeout is enforced by ending the session, as for an
+CPU with at most four threads, leaving cores to the translation engine. Its
+`ocrInitialize` and `ocrRecognizeBgra` requests may carry `maxThreads` (1–4) to
+use fewer, for example while the translation engine runs on the CPU; a request
+without it uses a third of the cores, up to four. `maxThreads` on a Windows OCR
+request is `INVALID_PARAMS`. PP-OCRv6 cannot be cancelled: its timeout is enforced by ending the session, as for an
 unresponsive native call. The first PP-OCRv6 request loads the models; send
 `ocrInitialize` first so that load is not counted against a frame's timeout.
 

@@ -25,6 +25,9 @@ pub const MAX_DIMENSION: u32 = 4096;
 pub const MAX_FRAME_BYTES: usize = 64 * 1024 * 1024;
 /// Advertised when this Core can run [`Engine::PpOcrV6`].
 pub const PP_OCR_CAPABILITY: &str = "ocrPpOcrV6";
+/// PP-OCRv6 never uses more threads than this. The translation engine shares
+/// the CPU, and more threads take cores from it for little OCR gain.
+pub const PP_OCR_MAX_THREADS: usize = 4;
 
 /// Which recogniser reads a frame. Requests without one use Windows OCR, so
 /// API 1 clients that predate the choice keep their behaviour.

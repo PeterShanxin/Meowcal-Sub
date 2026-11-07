@@ -4,6 +4,7 @@ fn frame(width: u32, stride: u32) -> Frame {
     Frame {
         engine: Engine::Windows,
         language: None,
+        max_threads: None,
         width,
         height: 1,
         stride,
@@ -278,4 +279,75 @@ async fn pp_ocr_rejects_a_language_and_unknown_engines_are_invalid() {
     pp_ocr.engine = Engine::PpOcrV6;
     pp_ocr.language = Some("en".into());
     assert_eq!(pp_ocr.validate(4).unwrap_err().code, "INVALID_PARAMS");
+}
+
+#[tokio::test]
+async fn max_threads_is_bounded_and_only_for_pp_ocr() {
+    let service = OcrService::default();
+    for params in [
+        serde_json::json!({"engine":"windows","maxThreads":2}),
+        serde_json::json!({"engine":"ppOcrV6","maxThreads":0}),
+        serde_json::json!({"engine":"ppOcrV6","maxThreads":5}),
+    ] {
+        let error = service
+            .dispatch("ocrInitialize", params.as_object().unwrap(), Vec::new())
+            .await
+            .unwrap_err();
+        assert_eq!(error.code, "INVALID_PARAMS", "{params}");
+    }
+    let mut windows = frame(1, 4);
+    windows.max_threads = Some(2);
+    assert_eq!(windows.validate(4).unwrap_err().code, "INVALID_PARAMS");
+}
+
+#[cfg(feature = "ppocr")]
+async fn read_blank_with_pp_ocr(service: &OcrService, max_threads: Option<u8>) {
+    let mut parameters = serde_json::json!({
+        "engine":"ppOcrV6","width":100,"height":80,"stride":400,"timeoutMs":5000
+    });
+    if let Some(limit) = max_threads {
+        parameters["maxThreads"] = limit.into();
+    }
+    service
+        .dispatch(
+            "ocrRecognizeBgra",
+            parameters.as_object().unwrap(),
+            vec![255; 32000],
+        )
+        .await
+        .unwrap();
+}
+
+#[cfg(feature = "ppocr")]
+#[tokio::test]
+async fn each_pp_ocr_request_sets_its_thread_limit() {
+    let service = OcrService::default();
+    service
+        .dispatch(
+            "ocrInitialize",
+            serde_json::json!({"engine":"ppOcrV6","maxThreads":2})
+                .as_object()
+                .unwrap(),
+            Vec::new(),
+        )
+        .await
+        .unwrap();
+    let threads = || {
+        service
+            .worker
+            .lock()
+            .unwrap()
+            .pp_ocr
+            .as_ref()
+            .unwrap()
+            .threads()
+    };
+    assert_eq!(threads(), 2);
+    read_blank_with_pp_ocr(&service, Some(1)).await;
+    assert_eq!(threads(), 1);
+    read_blank_with_pp_ocr(&service, None).await;
+    let default = std::thread::available_parallelism()
+        .map_or(1, |count| count.get() / 3)
+        .clamp(1, crate::ocr::PP_OCR_MAX_THREADS);
+    assert_eq!(threads(), default);
 }

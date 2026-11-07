@@ -18,7 +18,7 @@ mod detect;
 mod image;
 mod recognize;
 
-use super::{frame_bytes, LineBox, NativeResult, OcrError};
+use super::{frame_bytes, LineBox, NativeResult, OcrError, PP_OCR_MAX_THREADS};
 use detect::TextBox;
 use image::Bgr;
 use rten::{Model, ModelOptions, RunOptions, ThreadPool};
@@ -35,15 +35,24 @@ const MIN_LINE_SCORE: f32 = 0.5;
 /// Images are resized into these side bounds before detection.
 const MIN_SIDE: usize = 30;
 const MAX_SIDE: usize = 2000;
-/// The translation engine shares the CPU; more threads than this take cores
-/// from it for little OCR gain.
-const MAX_THREADS: usize = 4;
 
 pub struct PpOcr {
     detector: Model,
     recognizer: Model,
     charset: Vec<String>,
+    threads: usize,
     options: RunOptions,
+}
+
+/// A third of the machine's cores, within `1..=PP_OCR_MAX_THREADS`.
+fn default_threads() -> usize {
+    std::thread::available_parallelism()
+        .map_or(1, |count| count.get() / 3)
+        .clamp(1, PP_OCR_MAX_THREADS)
+}
+
+fn run_options(threads: usize) -> RunOptions {
+    RunOptions::default().with_thread_pool(Some(Arc::new(ThreadPool::with_num_threads(threads))))
 }
 
 impl PpOcr {
@@ -53,17 +62,32 @@ impl PpOcr {
                 .load_static_slice(bytes)
                 .map_err(|error| OcrError::Init(error.to_string()))
         };
-        let threads = std::thread::available_parallelism()
-            .map_or(1, |count| count.get() / 3)
-            .clamp(1, MAX_THREADS);
+        let threads = default_threads();
         Ok(Self {
             detector: load(DETECTOR)?,
             recognizer: load(RECOGNIZER)?,
             // CTC class 0 is the blank; the space class follows the dictionary.
             charset: CHARSET.lines().chain([" "]).map(str::to_owned).collect(),
-            options: RunOptions::default()
-                .with_thread_pool(Some(Arc::new(ThreadPool::with_num_threads(threads)))),
+            threads,
+            options: run_options(threads),
         })
+    }
+
+    /// Use at most `limit` threads, or the default share of the machine when
+    /// `None`. The caller knows whether the translation engine needs the CPU;
+    /// only the thread pool changes, so the models stay loaded.
+    pub fn limit_threads(&mut self, limit: Option<usize>) {
+        let threads = limit
+            .unwrap_or_else(default_threads)
+            .clamp(1, PP_OCR_MAX_THREADS);
+        if threads != self.threads {
+            self.threads = threads;
+            self.options = run_options(threads);
+        }
+    }
+
+    pub fn threads(&self) -> usize {
+        self.threads
     }
 
     pub fn recognize_bgra(
