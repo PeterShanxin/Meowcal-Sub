@@ -1,4 +1,4 @@
-use crate::ocr::{frame_bytes, Engine, NativeOcr, OcrError, PpOcr};
+use crate::ocr::{frame_bytes, Engine, NativeOcr, OcrError, PpOcr, PP_OCR_MAX_THREADS};
 use crate::protocol::Error;
 use serde::Deserialize;
 use serde_json::{Map, Value};
@@ -44,11 +44,13 @@ impl Worker {
             .ok_or_else(unusable_error)
     }
 
-    fn pp_ocr(&mut self) -> Result<&PpOcr, Error> {
+    fn pp_ocr(&mut self, max_threads: Option<u8>) -> Result<&PpOcr, Error> {
         if self.pp_ocr.is_none() {
             self.pp_ocr = Some(PpOcr::new().map_err(map_error)?);
         }
-        self.pp_ocr.as_ref().ok_or_else(unusable_error)
+        let pp_ocr = self.pp_ocr.as_mut().ok_or_else(unusable_error)?;
+        pp_ocr.limit_threads(max_threads.map(usize::from));
+        Ok(pp_ocr)
     }
 
     fn clear(&mut self) {
@@ -70,6 +72,7 @@ struct Frame {
     #[serde(default)]
     engine: Engine,
     language: Option<String>,
+    max_threads: Option<u8>,
     width: u32,
     height: u32,
     stride: u32,
@@ -77,19 +80,38 @@ struct Frame {
 }
 
 #[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct Initialize {
     #[serde(default)]
     engine: Engine,
     language: Option<String>,
+    max_threads: Option<u8>,
 }
 
-fn validate_language(engine: Engine, language: Option<&str>) -> Result<(), Error> {
+fn validate_options(
+    engine: Engine,
+    language: Option<&str>,
+    max_threads: Option<u8>,
+) -> Result<(), Error> {
     if language.is_some_and(|tag| tag.is_empty() || tag.len() > 128) {
         return Err(Error::new("INVALID_PARAMS", "Invalid language tag"));
     }
     if engine == Engine::PpOcrV6 && language.is_some() {
         return Err(Error::new("INVALID_PARAMS", "PP-OCRv6 takes no language"));
+    }
+    if let Some(threads) = max_threads {
+        if engine != Engine::PpOcrV6 {
+            return Err(Error::new(
+                "INVALID_PARAMS",
+                "maxThreads applies only to PP-OCRv6",
+            ));
+        }
+        if !(1..=PP_OCR_MAX_THREADS).contains(&usize::from(threads)) {
+            return Err(Error::new(
+                "INVALID_PARAMS",
+                "maxThreads must be within 1..=4",
+            ));
+        }
     }
     Ok(())
 }
@@ -113,7 +135,7 @@ impl Frame {
                 "timeoutMs must be within 1..=30000",
             ));
         }
-        validate_language(self.engine, self.language.as_deref())?;
+        validate_options(self.engine, self.language.as_deref(), self.max_threads)?;
         if payload_bytes != expected as u64 {
             return Err(Error::new(
                 "INVALID_IMAGE",
@@ -144,10 +166,14 @@ impl OcrService {
             "ocrInitialize" => {
                 let options: Initialize = serde_json::from_value(Value::Object(params.clone()))
                     .map_err(|_| Error::new("INVALID_PARAMS", "Invalid OCR language parameters"))?;
-                validate_language(options.engine, options.language.as_deref())?;
+                validate_options(
+                    options.engine,
+                    options.language.as_deref(),
+                    options.max_threads,
+                )?;
                 self.bounded_worker(Duration::from_secs(5), move |worker| {
                     if options.engine == Engine::PpOcrV6 {
-                        worker.pp_ocr()?;
+                        worker.pp_ocr(options.max_threads)?;
                         return Ok(serde_json::json!({"engine": Engine::PpOcrV6, "resolvedLanguage": null}));
                     }
                     let result = worker
@@ -182,7 +208,7 @@ impl OcrService {
                 self.bounded_worker(frame.worker_deadline(), move |worker| {
                     if frame.engine == Engine::PpOcrV6 {
                         let result = worker
-                            .pp_ocr()?
+                            .pp_ocr(frame.max_threads)?
                             .recognize_bgra(&bytes, frame.width, frame.height)
                             .map_err(map_error)?;
                         return serde_json::to_value(result).map_err(|_| {
