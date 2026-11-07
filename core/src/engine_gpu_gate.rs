@@ -8,6 +8,9 @@
 // returns to CPU until measured evidence expands the allowlist: translation on
 // CPU beats GPU acceleration that might wedge the only inference slot.
 //
+// The x64 Vulkan runtime is gated on a discrete GPU; see
+// `discrete_gpu_present`.
+//
 // Every failure direction is CPU: any enumeration error, a non-Windows host,
 // or no matching adapter means "not validated".
 
@@ -75,9 +78,31 @@ fn available_memory() -> Option<(u64, u64)> {
     None
 }
 
+/// Whether this host has a discrete hardware GPU for the x64 Vulkan runtime.
+///
+/// Measured on one host (Core Ultra 7 255HX, RTX 5060 Laptop, llama.cpp
+/// b10155, docs/plans/2026-11-07-x64-vulkan-gpu-benchmark.md): the RTX
+/// generated about 220 tokens/s against 50 on the CPU, but the integrated
+/// Intel GPU managed 23 - half the CPU. With no usable Vulkan device,
+/// `-ngl 99` silently runs on the CPU. Only a discrete GPU therefore earns the
+/// GPU policy; llama.cpp itself prefers discrete devices when both exist.
+pub(crate) fn discrete_gpu_present() -> bool {
+    detect_discrete_adapter()
+}
+
+/// Whether a launch of this runtime may use its GPU policy now. A runtime
+/// without a measured gate stays on CPU.
+pub(crate) fn gpu_allowed(runtime_spec: &crate::engine_manifest::RuntimeSpec) -> bool {
+    use crate::engine_manifest::{ADRENO_B10155_RUNTIME_ID, VULKAN_X64_B10155_RUNTIME_ID};
+    match runtime_spec.id.as_str() {
+        ADRENO_B10155_RUNTIME_ID => adreno_gpu_allowed(),
+        VULKAN_X64_B10155_RUNTIME_ID => discrete_gpu_present(),
+        _ => false,
+    }
+}
+
 /// The acceleration policy a launch actually runs with. The manifest asks;
-/// this decides: the Adreno GPU policy applies only where
-/// `adreno_gpu_allowed` holds and can be forced off for the startup fallback.
+/// `gpu_allowed` decides, and the startup fallback can force CPU.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct LaunchPolicy {
     pub gpu_layers: u32,
@@ -87,24 +112,20 @@ pub(crate) struct LaunchPolicy {
     pub gpu_active: bool,
 }
 
-/// The effective policy for a runtime on this host. Three outcomes:
+/// The effective policy for a runtime on this host:
 ///
-/// - not the Adreno runtime (e.g. x64 Vulkan), or it requests no layers:
-///   the manifest policy exactly as shipped;
-/// - the Adreno runtime where `adreno_gpu_allowed` holds, not forced off: the
-///   benchmarked `-ngl 99 --no-kv-offload` configuration;
-/// - the Adreno runtime anywhere else, or forced off after a failed GPU
-///   start: the pre-GPU CPU policy (`-ngl 0`, no KV flag - the flag only
-///   constrains GPU KV offload, and the fallback line should be exactly what
-///   CPU-only releases ran).
+/// - the runtime requests layers, its gate allows the GPU, and nothing forced
+///   CPU: the manifest policy exactly as shipped (Adreno: the benchmarked
+///   `-ngl 99 --no-kv-offload`; x64 Vulkan: `-ngl 99`);
+/// - anything else, including the fallback after a failed GPU start: the CPU
+///   policy (`-ngl 0`, no runtime-specific flags - they only constrain GPU
+///   offload, and the CPU line should be exactly what CPU-only releases ran).
 pub(crate) fn effective_launch_policy(
     runtime_spec: &crate::engine_manifest::RuntimeSpec,
-    adreno_gpu_allowed: bool,
+    gpu_allowed: bool,
     force_cpu: bool,
 ) -> LaunchPolicy {
-    let adreno_gpu_requested = runtime_spec.id == crate::engine_manifest::ADRENO_B10155_RUNTIME_ID
-        && runtime_spec.gpu_layers > 0;
-    if force_cpu || (adreno_gpu_requested && !adreno_gpu_allowed) {
+    if force_cpu || !gpu_allowed || runtime_spec.gpu_layers == 0 {
         return LaunchPolicy {
             gpu_layers: 0,
             launch_args: Vec::new(),
@@ -114,7 +135,7 @@ pub(crate) fn effective_launch_policy(
     LaunchPolicy {
         gpu_layers: runtime_spec.gpu_layers,
         launch_args: runtime_spec.launch_args.clone(),
-        gpu_active: adreno_gpu_requested,
+        gpu_active: true,
     }
 }
 
@@ -165,6 +186,64 @@ fn detect_validated_adapter() -> bool {
         }
         index += 1;
     }
+}
+
+/// A discrete adapter is DXCore hardware that is not integrated. DXGI's
+/// software rasterizer and virtual display drivers fail the hardware test.
+#[cfg(target_os = "windows")]
+fn detect_discrete_adapter() -> bool {
+    use windows::Win32::Graphics::DXCore::{
+        DXCoreCreateAdapterFactory, IDXCoreAdapter, IDXCoreAdapterFactory, IsHardware, IsIntegrated,
+    };
+    use windows::Win32::Graphics::Dxgi::{CreateDXGIFactory1, IDXGIFactory1};
+
+    let Ok(factory) = (unsafe { CreateDXGIFactory1::<IDXGIFactory1>() }) else {
+        return false;
+    };
+    let Ok(driver_factory) = (unsafe { DXCoreCreateAdapterFactory::<IDXCoreAdapterFactory>() })
+    else {
+        return false;
+    };
+    let mut index = 0u32;
+    while let Ok(adapter) = unsafe { factory.EnumAdapters1(index) } {
+        index += 1;
+        let Ok(desc) = (unsafe { adapter.GetDesc1() }) else {
+            continue;
+        };
+        let Ok(core_adapter) =
+            (unsafe { driver_factory.GetAdapterByLuid::<IDXCoreAdapter>(&desc.AdapterLuid) })
+        else {
+            continue;
+        };
+        if adapter_flag(&core_adapter, IsHardware) == Some(true)
+            && adapter_flag(&core_adapter, IsIntegrated) == Some(false)
+        {
+            return true;
+        }
+    }
+    false
+}
+
+#[cfg(not(target_os = "windows"))]
+fn detect_discrete_adapter() -> bool {
+    false
+}
+
+#[cfg(target_os = "windows")]
+fn adapter_flag(
+    adapter: &windows::Win32::Graphics::DXCore::IDXCoreAdapter,
+    property: windows::Win32::Graphics::DXCore::DXCoreAdapterProperty,
+) -> Option<bool> {
+    if !unsafe { adapter.IsPropertySupported(property) } {
+        return None;
+    }
+    let mut value = 0u8;
+    unsafe {
+        adapter
+            .GetProperty(property, 1, (&mut value as *mut u8).cast())
+            .ok()?;
+    }
+    Some(value != 0)
 }
 
 #[cfg(target_os = "windows")]
@@ -275,5 +354,18 @@ mod tests {
     #[ignore = "asserts this machine IS the validated Adreno X1-85 host"]
     fn the_validated_machine_is_detected() {
         assert!(validated_adreno_gpu_present());
+    }
+
+    #[test]
+    fn discrete_detection_is_a_total_function() {
+        let _ = discrete_gpu_present();
+    }
+
+    // Run explicitly on an x64 host with a discrete GPU (the 2026-11-07
+    // benchmark host has an RTX 5060 Laptop beside an Intel iGPU).
+    #[test]
+    #[ignore = "asserts this machine has a discrete GPU"]
+    fn a_discrete_gpu_host_is_detected() {
+        assert!(discrete_gpu_present());
     }
 }

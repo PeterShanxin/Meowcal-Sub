@@ -150,7 +150,7 @@ Shared contracts have one owner before parallel decomposition begins:
 - Engine execution policy: the embedded manifest selects acceleration per
   architecture. ARM64 runs the Adreno OpenCL path with full layer offload and
   the KV cache pinned to the CPU (`gpuLayers: 99` + `--no-kv-offload`); x64
-  retains Vulkan acceleration. The pairing is mandatory: on the tested
+  requests Vulkan offload (`gpuLayers: 99`). The pairing is mandatory: on the tested
   llama.cpp b10155 + Qualcomm Adreno/OpenCL driver combination, offloading
   the KV cache to the GPU is associated with permanent hangs after minutes of
   sustained load and multi-second stalls (measured 2026-08-09, issue #60),
@@ -163,7 +163,12 @@ Shared contracts have one owner before parallel decomposition begins:
   any GPU launch that never becomes healthy or fails the sample translation,
   runs the previous CPU policy instead - translation on CPU beats an unusable
   accelerator. A driver update returns to CPU until new
-  sustained evidence deliberately expands the allowlist. The
+  sustained evidence deliberately expands the allowlist. The x64 Vulkan
+  runtime uses its GPU policy only when DXCore reports a discrete hardware
+  adapter: on the measured host the integrated GPU was slower than the CPU
+  (docs/plans/2026-11-07-x64-vulkan-gpu-benchmark.md). Other x64 hosts run the
+  CPU policy, and a failed x64 GPU start retries on CPU in the same way. Core's
+  `acceleration` status reports the policy that launched the engine. The
   manifest also limits the app-owned server to one request slot; subtitle
   translation is serialized intentionally to avoid the ARM64 runtime's
   unstable automatic multi-slot latency. This remains subject to x64 and
