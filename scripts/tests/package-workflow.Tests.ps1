@@ -19,6 +19,9 @@ foreach ($required in @(
 }
 foreach ($variant in @('package', 'store-package')) {
     $workflow = Get-Content "$repositoryRoot/.github/workflows/$variant.yml" -Raw
+    if ([regex]::Matches($workflow, '(?ms)^      use_rust_cache:\r?\n(?:(?!^      \w).)*?^        default: false\r?$').Count -ne 2) {
+        throw 'Manual and reusable packaging must leave target caching opt-in.'
+    }
     foreach ($required in @(
         'uses: ./.github/actions/windows-package-build',
         'arm64-build-jobs: ${{ inputs.arm64_build_jobs }}',
@@ -37,6 +40,10 @@ foreach ($variant in @('package', 'store-package')) {
 foreach ($name in @('release', 'release-preflight')) {
     $workflow = Get-Content "$repositoryRoot/.github/workflows/$name.yml" -Raw
     if (-not $workflow.Contains('pattern: meowcal-sub-*')) { throw 'Release assets must exclude build report artifacts.' }
+    if ($workflow -notmatch '(?ms)^      use_rust_cache:\r?\n(?:(?!^      \w).)*?^        default: false\r?$' -or
+        [regex]::Matches($workflow, 'use_rust_cache: \$\{\{ inputs.use_rust_cache \}\}').Count -ne 3) {
+        throw 'Release and preflight must forward opt-in caching to every package variant.'
+    }
 }
 $preflight = Get-Content "$repositoryRoot/.github/workflows/release-preflight.yml" -Raw
 if ([regex]::Matches($preflight, 'use_rust_cache: \$\{\{ inputs.use_rust_cache \}\}').Count -ne 3 -or

@@ -15,8 +15,8 @@ inputs:
     default: '4'
     description: Hosted ARM64 compiler processes (1, 2 or 4).
   use-rust-cache:
-    default: 'true'
-    description: Restore dependencies; disable for a cold benchmark.
+    default: 'false'
+    description: Use the dependency cache when the shared repository budget permits.
 
 runs:
   using: composite

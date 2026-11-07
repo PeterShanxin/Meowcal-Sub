@@ -23,8 +23,8 @@ on:
         type: choice
         options: ['1', '2', '4']
       use_rust_cache:
-        description: Restore Rust dependencies (disable for cold benchmarks)
-        default: true
+        description: Use Rust dependency cache (requires shared cache budget)
+        default: false
         type: boolean
       store_package_name:
         description: Partner Center Package/Identity/Name

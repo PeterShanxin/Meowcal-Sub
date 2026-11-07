@@ -291,8 +291,9 @@ DPI/window behavior.
   Hosted ARM64 packaging defaults to four Cargo jobs; preflight can select 1,
   2 or 4 and disable Rust caching for comparable cold runs. Keep local ARM64's
   one-job default and the existing target-specific release profile safeguards.
-  Dependency caches are separate by package channel and native target, with
-  only `main` writing entries. Discard cached installers before building.
+  Package dependency caching is opt-in to protect the shared cache budget.
+  Separate entries by package channel and native target; only `main` writes
+  them. Discard cached installers before building.
   Preserve `package-build.json` timing reports on failures and keep them out of
   release assets. Follow the comparison method in `docs/RELEASE_PACKAGING.md`;
   debug CI does not prove release-profile compiler stability.

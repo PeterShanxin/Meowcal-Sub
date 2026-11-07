@@ -27,8 +27,10 @@ checked through the literals it can produce.
 
 `.github/workflows/package.yml` packages `x64` or `arm64`. The optional
 `arm64_build_jobs` input selects 1, 2 or 4 compiler processes on the hosted
-ARM64 runner (default 4). `use_rust_cache` defaults to true; disable it for a
-cold benchmark. `store-package.yml` accepts the same build controls.
+ARM64 runner (default 4). `use_rust_cache` defaults to false. Enable it only
+when the dependency footprint fits the repository's shared cache budget.
+`store-package.yml` accepts the same build controls. Release and preflight
+forward their explicit cache choice to all package variants.
 
 | Architecture | Runner | Rust target |
 | --- | --- | --- |
@@ -61,12 +63,13 @@ process and respects an explicit `CARGO_BUILD_JOBS`, including x64 cross-builds.
 Both local scripts restore the caller's build environment after success or
 failure. ARM64 release profile safeguards remain target-specific.
 
-The pinned `Swatinem/rust-cache` action caches dependencies in `package-output`
-or `store-target`. Direct and Store builds use separate keys for each native
-target; they do not share the merge gate or Core package cache. Only `main`
+When enabled, the pinned `Swatinem/rust-cache` action caches dependencies in
+`package-output` or `store-target`. Direct and Store builds use separate keys
+for each native target; they do not share the merge gate or Core package cache. Only `main`
 saves entries. Branch preflights can restore matching `main` entries. Workspace
 crates are rebuilt, and cached installer directories are removed before every
-build. Tests, the pinned Core handshake, signing and release asset validation
+build. Default packaging leaves the merge gate's cache budget available.
+Tests, the pinned Core handshake, signing and release asset validation
 still run on cache hits. Both Tauri build commands pass `--locked` to Cargo.
 
 ## What a release run produces

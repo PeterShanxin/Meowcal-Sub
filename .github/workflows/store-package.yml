@@ -8,8 +8,8 @@ on:
         default: '4'
         type: string
       use_rust_cache:
-        description: Restore Rust dependencies (disable for cold benchmarks)
-        default: true
+        description: Use Rust dependency cache (requires shared cache budget)
+        default: false
         type: boolean
       architecture:
         required: true
@@ -34,8 +34,8 @@ on:
         type: choice
         options: ['1', '2', '4']
       use_rust_cache:
-        description: Restore Rust dependencies (disable for cold benchmarks)
-        default: true
+        description: Use Rust dependency cache (requires shared cache budget)
+        default: false
         type: boolean
       architecture:
         description: Native Windows architecture
