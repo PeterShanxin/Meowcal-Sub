@@ -3,6 +3,22 @@ use crate::core_client::{self, OcrRecognizeParams};
 use meowcal_core::ocr::Engine;
 use tracing::{debug, info, warn};
 
+/// PP-OCRv6 threads while translation runs on the GPU, and while it shares the
+/// CPU. With HY-MT on the CPU and other work on the machine, four threads made
+/// translation time out; two kept frames under the 250 ms capture interval.
+const PP_OCR_THREADS_BESIDE_GPU: u8 = 4;
+const PP_OCR_THREADS_BESIDE_CPU: u8 = 2;
+
+/// Decided per frame, so a session whose engine finishes starting on the GPU
+/// gets the larger share from then on.
+fn pp_ocr_threads() -> u8 {
+    if core_client::translation_on_gpu() {
+        PP_OCR_THREADS_BESIDE_GPU
+    } else {
+        PP_OCR_THREADS_BESIDE_CPU
+    }
+}
+
 /// A recognizer in Core's OCR process: Windows OCR for one language, or the
 /// language-independent PP-OCRv6.
 pub struct CoreOcr {
@@ -23,7 +39,7 @@ impl CoreOcr {
 
     /// Windows OCR in the user-profile languages.
     pub fn new() -> Result<Self, OcrError> {
-        let language = core_client::ocr_initialize_blocking(Engine::Windows, None)
+        let language = core_client::ocr_initialize_blocking(Engine::Windows, None, None)
             .map_err(OcrError::InitError)?;
         Ok(Self {
             engine: Engine::Windows,
@@ -33,7 +49,8 @@ impl CoreOcr {
     }
 
     pub fn pp_ocr() -> Result<Self, OcrError> {
-        core_client::ocr_initialize_blocking(Engine::PpOcrV6, None).map_err(OcrError::InitError)?;
+        core_client::ocr_initialize_blocking(Engine::PpOcrV6, None, Some(pp_ocr_threads()))
+            .map_err(OcrError::InitError)?;
         Ok(Self {
             engine: Engine::PpOcrV6,
             language: None,
@@ -44,7 +61,7 @@ impl CoreOcr {
     /// Windows OCR in `language_tag`.
     pub fn with_language(language_tag: &str) -> Result<Self, OcrError> {
         let language = super::normalize_language_tag(language_tag);
-        let resolved = core_client::ocr_initialize_blocking(Engine::Windows, Some(language))
+        let resolved = core_client::ocr_initialize_blocking(Engine::Windows, Some(language), None)
             .map_err(OcrError::LanguageNotSupported)?;
         Ok(Self {
             engine: Engine::Windows,
@@ -122,6 +139,7 @@ impl CoreOcr {
             OcrRecognizeParams {
                 engine: self.engine,
                 language: self.language.clone(),
+                max_threads: (self.engine == Engine::PpOcrV6).then(pp_ocr_threads),
                 width,
                 height,
                 stride: width * 4,

@@ -1,11 +1,12 @@
 use super::tests::hold_readiness;
 use super::*;
 
-fn ready_test_status() -> CoreStatus {
+pub(super) fn ready_test_status() -> CoreStatus {
     CoreStatus {
         installed: true,
         ready: true,
         cpu_locked: false,
+        acceleration: None,
         model: "test".into(),
         version: CORE_VERSION.into(),
         storage_root: PathBuf::new(),
@@ -198,4 +199,28 @@ fn in_flight_status_cannot_restore_ready_when_install_is_admitted() {
         };
     }
     readiness::CACHE.lock().unwrap().status = None;
+}
+
+#[test]
+fn only_a_ready_engine_reporting_gpu_counts_as_translation_on_gpu() {
+    let _readiness = hold_readiness();
+    for (acceleration, ready, on_gpu) in [
+        (Some("gpu"), true, true),
+        (Some("cpu"), true, false),
+        (Some("gpu"), false, false),
+        (None, true, false),
+    ] {
+        readiness::CACHE.lock().unwrap().status = Some(CoreStatus {
+            ready,
+            acceleration: acceleration.map(str::to_owned),
+            ..ready_test_status()
+        });
+        assert_eq!(
+            translation_on_gpu(),
+            on_gpu,
+            "{acceleration:?} ready={ready}"
+        );
+    }
+    readiness::CACHE.lock().unwrap().status = None;
+    assert!(!translation_on_gpu());
 }

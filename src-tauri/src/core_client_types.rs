@@ -37,6 +37,9 @@ pub struct CoreStatus {
     pub ready: bool,
     #[serde(default)]
     pub cpu_locked: bool,
+    /// `gpu` or `cpu` while Core owns a running translation engine.
+    #[serde(default)]
+    pub acceleration: Option<String>,
     pub model: String,
     pub version: String,
     pub storage_root: PathBuf,
@@ -55,6 +58,8 @@ pub enum StatusPoll {
 pub struct OcrRecognizeParams {
     pub engine: meowcal_core::ocr::Engine,
     pub language: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_threads: Option<u8>,
     pub width: u32,
     pub height: u32,
     pub stride: u32,
