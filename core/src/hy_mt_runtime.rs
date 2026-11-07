@@ -126,7 +126,7 @@ pub fn start(runtime: &ManagedLocalRuntimeConfig) -> Result<String, String> {
         .map_err(|error| error.to_string())?;
     let policy = effective_launch_policy(
         runtime_spec,
-        crate::engine_gpu_gate::adreno_gpu_allowed(),
+        crate::engine_gpu_gate::gpu_allowed(runtime_spec),
         cpu_locked(),
     );
     start_with_policy(runtime, &manifest, &policy)
@@ -203,13 +203,7 @@ fn start_with_policy(
 
     info!(
         "HY-MT launch policy: {}",
-        if policy.gpu_active {
-            "Adreno GPU (validated host, KV cache on CPU)"
-        } else if policy.gpu_layers == 0 {
-            "CPU"
-        } else {
-            "manifest acceleration"
-        }
+        if policy.gpu_active { "GPU" } else { "CPU" }
     );
     let child = command
         .spawn()
@@ -229,7 +223,7 @@ fn start_with_policy(
         child,
         config: runtime.clone(),
         port: selected_port,
-        acceleration: if policy.gpu_layers > 0 { "gpu" } else { "cpu" },
+        acceleration: if policy.gpu_active { "gpu" } else { "cpu" },
     });
     Ok(format!("http://127.0.0.1:{selected_port}"))
 }

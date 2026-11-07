@@ -10,6 +10,7 @@ const SHIPPED_MANIFEST: &str = include_str!("../config/engine-manifest.v1.json")
 /// The KV-cache constraint and the hardware gate are scoped to this id so a
 /// future runtime version inherits neither.
 pub(crate) const ADRENO_B10155_RUNTIME_ID: &str = "llama-b10155-opencl-adreno-arm64";
+pub(crate) const VULKAN_X64_B10155_RUNTIME_ID: &str = "llama-b10155-vulkan-x64";
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
