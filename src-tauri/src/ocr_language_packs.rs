@@ -7,13 +7,13 @@
 use tauri::async_runtime;
 use tracing::{info, warn};
 
-use crate::ocr::WindowsOcr;
+use crate::ocr::CoreOcr;
 
 /// List OCR language packs installed on this system.
 /// Returns BCP-47 tags (e.g. ["en-US", "zh-CN"]).
 pub async fn available() -> Vec<String> {
     info!("Getting available OCR languages...");
-    let result = async_runtime::spawn_blocking(WindowsOcr::available_languages).await;
+    let result = async_runtime::spawn_blocking(CoreOcr::available_languages).await;
     match result {
         Ok(Ok(langs)) => {
             info!("Found {} OCR language(s): {:?}", langs.len(), langs);

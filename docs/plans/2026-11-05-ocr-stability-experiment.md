@@ -1,8 +1,8 @@
 # Subtitle OCR stability experiment
 
-Status: stage 1 first pass and the Core implementation check measured,
-2026-11-06. Stage 2 (application replay) has not run. ADR-0007 records the
-engine decision that followed.
+Status: stage 1, the Core implementation check, and an application recognition
+replay measured, 2026-11-06. Stage 2 with live capture and translation has not
+run. ADR-0007 records the engine decision that followed.
 
 ## Question and scope
 
@@ -239,11 +239,46 @@ Capping the detector's long side at 960 instead of 1440 cut real-zh to 38 ms
 but lowered synthetic Chinese stable frames to 91%, so Core keeps 1440.
 Pre-packing RTen weights made no measurable difference.
 
+## Application recognition replay
+
+With the engine choice in the app, each corpus was read through the app's own
+recognition path (`RecognitionMode` and `CoreOcr` against a source-built Core
+0.2.0, ARM64 release) for each engine. A Python port of the app's text policy
+(band grouping, `band_cue::Cue` admission, `RecentLines` with
+`ocr_stability::classify`, a free translation slot) then replayed those reads
+at the 250 ms capture interval. No translation engine ran.
+
+The first PP-OCRv6 replay translated the synthetic English cues correctly only
+2 times in 20: the background's `Veo` watermark overlapped the subtitle row,
+joined its band, and was translated with it. In subtitle mode the app now drops
+PP-OCRv6 lines under 60% of the tallest line's height, the size filter the
+engine comparison was scored with. With it:
+
+| Corpus | Engine | Translations per cue | Cues never translated | Last translation exact | Median onset to translation | p50 OCR ms |
+| --- | --- | ---: | ---: | ---: | ---: | ---: |
+| real-zh | Windows OCR, white-glyph mask | 0.93 | 3/40 | 27/40 | 300 ms | 6 |
+| real-zh | PP-OCRv6 | 1.00 | 0/40 | 40/40 | 300 ms | 56 |
+| zh-nat | Windows OCR, white-glyph mask | 1.05 | 2/20 | 10/20 | 900 ms | 10 |
+| zh-nat | PP-OCRv6 | 1.05 | 0/20 | 19/20 | 300 ms | 88 |
+| en-nat | Windows OCR, white-glyph mask | 1.15 | 0/20 | 10/20 | 350 ms | 9 |
+| en-nat | PP-OCRv6 | 1.00 | 0/20 | 20/20 | 300 ms | 98 |
+
+PP-OCRv6 started 4-5 translations outside any cue on the synthetic corpora,
+against 0-1 for Windows OCR; the likely source is the watermark read alone on
+frames without a subtitle, which was not checked line by line.
+
+The same replay over the [band-gate fixture](../../evals/band-gate/README.md),
+rendered headlessly at 10 frames per second with a paused page clock, gave both
+engines identical outcomes: every cue of `equal-width-120s` (30) and
+`negative-band-recovery-120s` (5) translated once and exactly, and two
+translations outside subtitle cues in the negative-band run for each engine.
+This is a replay of rendered frames, not the native capture gate.
+
 ## Remaining work
 
-- Stage 2 application replay, including whether a pixel-identity cue tracker
-  (the segmenter above recognises cue changes without OCR) should decide when
-  to translate, instead of OCR text identity.
+- Stage 2 with the real translation engine and live capture, including whether
+  a pixel-identity cue tracker (the segmenter above recognises cue changes
+  without OCR) should decide when to translate, instead of OCR text identity.
 - A real English corpus and a hand-checked second Chinese source.
 - Windows AI `TextRecognizer` on Copilot+ hardware was not evaluated.
 

@@ -131,7 +131,7 @@ it("shows recovery and terminal failure without presenting source as translation
       "local_engine: engine_recovery_failed",
     ]),
   ).toMatchObject({
-    hint: "Engine recovery failed — retry the engine in Settings",
+    hint: "Translation engine stopped — restarting it shortly",
     replaceText: false,
   });
 });

@@ -26,16 +26,7 @@ fn readiness_deadline_covers_server_budget_and_handshake() {
 fn managed_backend_snapshots_do_not_wait_for_an_active_core_request() {
     use crate::llm::{FoundryLocalBackend, ReadyState, TranslatorBackend};
     let _readiness = hold_readiness();
-    let status = CoreStatus {
-        installed: true,
-        ready: true,
-        cpu_locked: false,
-        model: "test".into(),
-        version: CORE_VERSION.into(),
-        storage_root: PathBuf::new(),
-        managed_config: None,
-        install_paths: None,
-    };
+    let status = super::readiness_tests::ready_test_status();
     readiness::CACHE.lock().unwrap().status = Some(status);
     let config = crate::config::FoundryLocalConfig {
         managed_runtime: Some(crate::config::ManagedLocalRuntimeConfig {
@@ -330,11 +321,11 @@ fn completion_request(model: &str) -> Value {
 #[test]
 fn binary_ocr_validates_dimensions_stride_size_and_timeout() {
     let valid = OcrRecognizeParams {
-        language: None,
         width: 1,
         height: 1,
         stride: 4,
         timeout_ms: 30_000,
+        ..Default::default()
     };
     assert!(Request::ocr(valid.clone(), vec![0; 4]).is_ok());
     assert!(Request::ocr(valid.clone(), vec![0; 3]).is_err());

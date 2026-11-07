@@ -37,6 +37,8 @@ export interface CaptureRegion {
   height: number;
 }
 
+export type OcrEngine = "ppOcrV6" | "windows";
+
 export interface OcrConfig {
   confidenceThreshold: number;
   preprocessingEnabled: boolean;
@@ -46,6 +48,7 @@ export interface OcrConfig {
   enableMultiPass: boolean;
   multiPassCount: number;
   validationStrictness: "permissive" | "moderate" | "strict";
+  engine: OcrEngine;
 }
 
 export interface OverlayConfig {

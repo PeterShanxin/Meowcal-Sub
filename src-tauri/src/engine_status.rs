@@ -135,7 +135,7 @@ fn managed_snapshot(
         FoundryLocalPhase::NotInstalled
     };
     let notes = if crate::core_client::recovery_failed() {
-        "Engine recovery failed. Retry the engine in Settings.".to_string()
+        "Engine recovery failed. Translation retries it shortly.".to_string()
     } else if status.ready && config.cpu_only {
         "Translation is ready on CPU, as set in Settings.".to_string()
     } else if status.ready && status.cpu_locked {

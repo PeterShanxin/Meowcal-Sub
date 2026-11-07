@@ -1067,6 +1067,24 @@ describe("AppController automatic update checks", () => {
     expect(check).not.toHaveBeenCalled();
   });
 
+  it("switches the OCR engine and keeps it across quality presets", async () => {
+    const invoke = vi.fn().mockResolvedValue(undefined);
+    const { controller, snapshots } = createController(invoke);
+
+    await controller.setRecognition({ engine: "windows" });
+    await controller.setRecognitionPreset("accurate");
+
+    const ocr = snapshots.at(-1)?.settings.translation.ocr;
+    expect(ocr).toMatchObject({ engine: "windows", enableMultiPass: true });
+    expect(invoke).toHaveBeenLastCalledWith("save_settings", {
+      settings: expect.objectContaining({
+        translation: expect.objectContaining({
+          ocr: expect.objectContaining({ engine: "windows" }),
+        }),
+      }),
+    });
+  });
+
   it("updates autoCheckUpdates preference and persists settings", async () => {
     const invoke = vi.fn().mockResolvedValue(undefined);
     const { controller, snapshots } = createController(invoke);

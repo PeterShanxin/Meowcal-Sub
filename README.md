@@ -37,12 +37,12 @@ https://github.com/user-attachments/assets/58fbac67-9032-42e2-8d4d-8e4df6c01e59
 
 ## Download
 
-**Windows 11 public beta · v0.8.8** — [release notes and all files](https://github.com/PeterShanxin/Meowcal-Sub/releases/tag/v0.8.8).
+**Windows 11 public beta · v0.9.0** — [release notes and all files](https://github.com/PeterShanxin/Meowcal-Sub/releases/tag/v0.9.0).
 
 | Your PC | Installer |
 | --- | --- |
-| Intel or AMD Windows PC | **[Download x64 (.exe)](https://github.com/PeterShanxin/Meowcal-Sub/releases/download/v0.8.8/Meowcal.Sub_0.8.8_x64-setup.exe)** |
-| Snapdragon or other Windows on ARM PC | **[Download ARM64 (.exe)](https://github.com/PeterShanxin/Meowcal-Sub/releases/download/v0.8.8/Meowcal.Sub_0.8.8_arm64-setup.exe)** |
+| Intel or AMD Windows PC | **[Download x64 (.exe)](https://github.com/PeterShanxin/Meowcal-Sub/releases/download/v0.9.0/Meowcal.Sub_0.9.0_x64-setup.exe)** |
+| Snapdragon or other Windows on ARM PC | **[Download ARM64 (.exe)](https://github.com/PeterShanxin/Meowcal-Sub/releases/download/v0.9.0/Meowcal.Sub_0.9.0_arm64-setup.exe)** |
 
 MSI installers and `SHA256SUMS.txt` are on the release page. For newer versions,
 use [the latest application release](https://github.com/PeterShanxin/Meowcal-Sub/releases/latest).
@@ -73,7 +73,7 @@ SHA-256 with the release checksums; do not disable Windows security globally.
    **Subtitle style** for text size and a Dark or Light plate; use
    **Stop translation** when you are done.
 
-![Workflow diagram: select visible subtitles, read them with Windows OCR, translate with local HY-MT, and show a floating overlay.](docs/assets/architecture.svg)
+![Workflow diagram: select visible subtitles, read them with on-device OCR, translate with local HY-MT, and show a floating overlay.](docs/assets/architecture.svg)
 
 [Setup, troubleshooting, and frequently asked questions →](docs/USAGE.md)
 
@@ -85,7 +85,7 @@ SHA-256 with the release checksums; do not disable Windows security globally.
 
 | What you need | What Meowcal Sub does |
 | --- | --- |
-| Translate visible subtitles without finding a separate subtitle file | Reads the selected screen region with Windows OCR. |
+| Translate visible subtitles without finding a separate subtitle file | Reads the selected screen region with the built-in PP-OCRv6 recognizer, or Windows OCR if you choose it. |
 | Keep captured and translated words off cloud services | Runs OCR and Tencent HY-MT translation on your PC. |
 | Read the translation without leaving the video | Shows an always-on-top overlay with adjustable text size and a Dark or Light plate. |
 | Translate readable text beyond subtitles | **Translate any text** in Settings relaxes the subtitle-only filter. It is off by default. |
@@ -101,14 +101,14 @@ Translation is not instant or error-free; speed depends on your PC and the text.
 validated hardware/drivers and can retry on CPU after a GPU readiness timeout.
 The x64 build uses Vulkan only on a discrete GPU, runs on CPU otherwise, and can
 also retry on CPU after a GPU readiness timeout. If GPU translation misbehaves on either
-architecture, turn on **Settings → Engine and updates → Run the engine on CPU only**.
+architecture, choose **Settings → Profile → Compatibility**.
 [GPU compatibility details →](docs/USAGE.md#how-does-gpu-support-differ-by-architecture)
 
 ## Privacy, without the fine-print surprise
 
 | Stays on your PC | Uses the network |
 | --- | --- |
-| Capture of the selected region, Windows OCR, translation inference, and the overlay | Engine/model setup or repair downloads, Windows recognition-language installation when needed, and application update checks/downloads |
+| Capture of the selected region, OCR, translation inference, and the overlay | Engine/model setup or repair downloads, Windows recognition-language installation when needed, and application update checks/downloads |
 
 In normal mode, **captured and translated subtitle text is not uploaded**.
 Production logs record support codes, timings, and counts, not subtitle text.
@@ -129,7 +129,7 @@ Small tools for watching, understanding, and building. Same cats, different jobs
 | **[Meowcal Sub](https://github.com/PeterShanxin/Meowcal-Sub)** | Direct screen-subtitle capture and local translation — this app. |
 | **[Meowcal Sub 2](https://github.com/PeterShanxin/Meowcal-Sub-2)** | Subtitle search and playback-aligned subtitle sessions. |
 | **[MeowWatch](https://github.com/PeterShanxin/MeowWatch)** | Watching together with synchronized playback and floating chat. |
-| **[Meowcal Core](core/README.md)** | The shared, versioned Windows OCR and local translation runtime for developers; its source lives in this repository. |
+| **[Meowcal Core](core/README.md)** | The shared, versioned OCR and local translation runtime for developers; its source lives in this repository. |
 
 Sub 2 is a separate workflow, not a required upgrade for Sub 1. Core is
 infrastructure, not another app you need to install manually.
@@ -137,7 +137,7 @@ infrastructure, not another app you need to install manually.
 ## Under the hood
 
 Tauri 2 and Rust provide the desktop shell. [Meowcal Core](core/README.md) owns
-native OCR and the managed HY-MT engine; the app owns capture, subtitle
+OCR (PP-OCRv6 or Windows OCR) and the managed HY-MT engine; the app owns capture, subtitle
 filtering, translation policy, and presentation. Both Windows x64 and ARM64
 installers are published here.
 

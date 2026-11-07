@@ -22,6 +22,7 @@ fn core_status(installed: bool, ready: bool) -> CoreStatus {
         installed,
         ready,
         cpu_locked: false,
+        acceleration: None,
         model: "HY-MT1.5-1.8B-Q4_K_M".to_string(),
         version: "0.1.0".to_string(),
         storage_root: PathBuf::from(r"C:\core"),

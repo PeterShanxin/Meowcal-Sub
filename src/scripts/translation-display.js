@@ -68,7 +68,7 @@
           replaceText: false,
           clearText: false,
           hint: warnings?.includes("local_engine: engine_recovery_failed")
-            ? "Engine recovery failed — retry the engine in Settings"
+            ? "Translation engine stopped — restarting it shortly"
             : "Translation temporarily unavailable",
           severity: "error",
           persist: true,

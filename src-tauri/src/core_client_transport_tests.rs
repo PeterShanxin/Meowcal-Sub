@@ -198,7 +198,7 @@ fn pipe_fixture() {
     assert_eq!(header["payloadBytes"], 8);
     assert_eq!(
         header["params"],
-        json!({"language":null,"width":2,"height":1,"stride":8,"timeoutMs":1000})
+        json!({"engine":"windows","language":null,"width":2,"height":1,"stride":8,"timeoutMs":1000})
     );
     let mut payload = [0; 8];
     input.read_exact(&mut payload).unwrap();
@@ -219,11 +219,11 @@ fn pipe_fixture() {
 fn binary_payload_preserves_bytes_and_next_request_alignment() -> Result<(), String> {
     let mut process = fixture("binary")?;
     let params = super::super::OcrRecognizeParams {
-        language: None,
         width: 2,
         height: 1,
         stride: 8,
         timeout_ms: 1000,
+        ..Default::default()
     };
     let request = super::super::Request::ocr(params, vec![0, 10, 13, 255, 123, 34, 0, 128])?;
     process

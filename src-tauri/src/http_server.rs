@@ -133,8 +133,8 @@ async fn get_system_info() -> impl IntoResponse {
 
 /// GET /api/ocr/languages - List installed OCR language packs
 async fn get_ocr_languages_http() -> impl IntoResponse {
-    use crate::ocr::WindowsOcr;
-    let result = tokio::task::spawn_blocking(WindowsOcr::available_languages).await;
+    use crate::ocr::CoreOcr;
+    let result = tokio::task::spawn_blocking(CoreOcr::available_languages).await;
     match result {
         Ok(Ok(langs)) => Json(langs),
         _ => Json(vec![]),

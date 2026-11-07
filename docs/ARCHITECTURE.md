@@ -3,7 +3,9 @@
 This document describes the live Meowcal Sub architecture and the reviewed
 boundaries for its staged redesign.
 [ADR-0001](adr/0001-curated-local-translation-stack.md) owns the product
-decision: Tauri 2, Rust, Windows OCR, and Tencent HY-MT in normal mode.
+decision: Tauri 2, Rust, and Tencent HY-MT in normal mode;
+[ADR-0007](adr/0007-embedded-pp-ocr-recognizer.md) makes PP-OCRv6 in Core the
+default recognizer, with Windows OCR selectable.
 [ADR-0004](adr/0004-versioned-meowcal-core.md) defines the independent Core
 runtime shared with Meowcal Sub 2. [`adr/README.md`](adr/README.md) says which decisions belong in
 an ADR and which belong here.
@@ -60,7 +62,7 @@ application's update changes the other's pin.
 The current session path is:
 
 ```text
-capture -> preprocess -> Windows OCR -> normalize/dedupe
+capture -> OCR in Core (PP-OCRv6, or preprocess -> Windows OCR) -> normalize/dedupe
         -> translate -> validate -> display event -> overlay
 ```
 

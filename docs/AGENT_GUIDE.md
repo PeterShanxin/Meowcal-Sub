@@ -17,7 +17,9 @@ Do not silently choose the more convenient interpretation.
 
 ## Product boundary
 
-- Keep Tauri 2, Rust, and Windows OCR.
+- Keep Tauri 2 and Rust. Core reads subtitles with PP-OCRv6 by default and
+  with Windows OCR when the user selects it or the source is Korean
+  ([ADR-0007](adr/0007-embedded-pp-ocr-recognizer.md)).
 - Tencent HY-MT is the only supported normal-mode translation engine.
 - Meowcal Core owns engine installation, verification, lifecycle, health,
   repair, rollback, sample inference, and native OCR. The app consumes a pinned

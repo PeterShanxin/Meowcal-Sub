@@ -20,7 +20,7 @@
 // cargo test --lib preprocessing_variants -- --ignored --nocapture
 // ```
 //
-// The language matters: `WindowsOcr::new` builds an engine from the user's
+// The language matters: `CoreOcr::new` builds an engine from the user's
 // profile languages, which on an English install reads a Chinese subtitle as
 // nothing at all. The pipeline passes the configured source language, so this
 // does too.
@@ -29,7 +29,7 @@
 // asks for before the shipped default is changed.
 // =============================================================================
 
-use super::{PreprocessingConfig, WindowsOcr};
+use super::{CoreOcr, PreprocessingConfig};
 
 /// The variants, weakest preprocessing last. `None` means the frame reaches
 /// Windows OCR exactly as captured.
@@ -67,7 +67,7 @@ async fn preprocessing_variants_over_a_captured_frame() {
     let target = std::env::var("MEOWCAL_OCR_AB_FRAME")
         .expect("set MEOWCAL_OCR_AB_FRAME to a captured frame or a directory of them");
     let language = std::env::var("MEOWCAL_OCR_AB_LANG").unwrap_or_else(|_| "zh-CN".to_string());
-    let ocr = WindowsOcr::with_language(&language)
+    let ocr = CoreOcr::with_language(&language)
         .unwrap_or_else(|e| panic!("OCR engine for {language}: {e}"));
 
     let mut frames: Vec<std::path::PathBuf> = if std::path::Path::new(&target).is_dir() {

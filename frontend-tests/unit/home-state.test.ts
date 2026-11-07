@@ -62,6 +62,7 @@ function snapshot(patch: Partial<UiSnapshot> = {}): UiSnapshot {
           enableMultiPass: false,
           multiPassCount: 2,
           validationStrictness: "moderate",
+          engine: "windows",
         },
       },
       minimizeToTray: true,
@@ -79,6 +80,32 @@ function snapshot(patch: Partial<UiSnapshot> = {}): UiSnapshot {
     ...patch,
   };
 }
+
+describe("recognition readiness", () => {
+  const withEngine = (engine: "ppOcrV6" | "windows", sourceLanguage = "zh-CN") => {
+    const base = snapshot({ ocrLanguages: new Set() });
+    return {
+      ...base,
+      settings: {
+        ...base.settings,
+        sourceLanguage,
+        translation: {
+          ...base.settings.translation,
+          ocr: { ...base.settings.translation.ocr, engine },
+        },
+      },
+    };
+  };
+
+  it("needs no Windows language pack when PP-OCRv6 reads the subtitles", () => {
+    expect(deriveHomePresentation(withEngine("ppOcrV6")).action).toBe("start");
+    expect(deriveHomePresentation(withEngine("windows")).action).toBe("installOcr");
+  });
+
+  it("asks for the Windows language pack for Korean even with PP-OCRv6 selected", () => {
+    expect(deriveHomePresentation(withEngine("ppOcrV6", "ko-KR")).action).toBe("installOcr");
+  });
+});
 
 describe("deriveHomePresentation", () => {
   it.each([

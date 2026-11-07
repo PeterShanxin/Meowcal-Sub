@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 272" role="img" aria-labelledby="title description">
   <title id="title">From on-screen subtitles to a local translation overlay</title>
-  <desc id="description">Workflow diagram, not an application screenshot. Meowcal Sub captures the selected subtitle area, reads it with Windows OCR, translates with local HY-MT, and displays a floating overlay. Subtitle text is not uploaded.</desc>
+  <desc id="description">Workflow diagram, not an application screenshot. Meowcal Sub captures the selected subtitle area, reads it with on-device OCR, translates with local HY-MT, and displays a floating overlay. Subtitle text is not uploaded.</desc>
   <defs>
     <linearGradient id="background" x2="1" y2="1">
       <stop stop-color="#171d28"/>
@@ -31,7 +31,7 @@
     <rect class="step" width="200" height="119" rx="14"/>
     <text class="number" x="20" y="28">02</text>
     <text class="label" x="20" y="59">Read the text</text>
-    <text class="detail" x="20" y="89">Windows OCR</text>
+    <text class="detail" x="20" y="89">On-device OCR</text>
   </g>
   <path class="connector" d="M471 128H485"/>
   <g transform="translate(496 68)">

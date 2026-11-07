@@ -13,8 +13,9 @@
 // usually dark on light, which the white-glyph mask would erase.
 // =============================================================================
 
-use super::{OcrError, OcrResult, PreprocessingConfig, WindowsOcr};
+use super::{CoreOcr, OcrError, OcrResult, PreprocessingConfig};
 use crate::config::TranslationConfig;
+use meowcal_core::ocr::Engine;
 
 /// The recognition settings that decide which path a frame takes.
 ///
@@ -50,11 +51,24 @@ impl RecognitionMode {
     /// frame and waits out its budget - so this only says which path failed.
     pub async fn recognize(
         &self,
-        ocr: &WindowsOcr,
+        ocr: &CoreOcr,
         frame: &[u8],
         width: u32,
         height: u32,
     ) -> Result<OcrResult, (OcrError, &'static str)> {
+        // PP-OCRv6 was measured on raw frames; the passes below exist to
+        // steady Windows OCR and only cost it time.
+        if ocr.engine() == Engine::PpOcrV6 {
+            let result = ocr
+                .recognize_without_preprocessing(frame, width, height)
+                .await
+                .map_err(|error| (error, "OCR failed"))?;
+            return Ok(if self.white_glyphs_first {
+                without_small_lines(result)
+            } else {
+                result
+            });
+        }
         if self.white_glyphs_first {
             let result = ocr
                 .recognize_white_glyphs(frame, width, height)
@@ -87,9 +101,86 @@ impl RecognitionMode {
     }
 }
 
+/// Below this share of the tallest line in its band, a line is not subtitle text.
+const MIN_SUBTITLE_LINE_HEIGHT: f32 = 0.6;
+
+/// Drop lines much shorter than another line in the same band. PP-OCRv6 reads
+/// the raw frame, so it also reads watermarks and channel logos; one beside a
+/// subtitle shares its band and would be translated as part of it. The
+/// white-glyph mask keeps such text from Windows OCR. Heights are compared
+/// only within a band, so larger text elsewhere in the region never removes a
+/// subtitle before the band tracker judges it. Translate any text keeps every
+/// line.
+fn without_small_lines(result: OcrResult) -> OcrResult {
+    if result.boxes.len() != result.lines.len() {
+        return result;
+    }
+    let tolerance = super::band_geometry::tolerance(&result.boxes);
+    let overshadowed: Vec<bool> = result
+        .boxes
+        .iter()
+        .map(|area| {
+            result.boxes.iter().any(|other| {
+                (other.middle_y() - area.middle_y()).abs() <= tolerance
+                    && area.height < MIN_SUBTITLE_LINE_HEIGHT * other.height
+            })
+        })
+        .collect();
+    let (lines, boxes) = result
+        .lines
+        .into_iter()
+        .zip(result.boxes)
+        .zip(overshadowed)
+        .filter(|(_, small)| !small)
+        .map(|(line, _)| line)
+        .unzip();
+    OcrResult::with_boxes(lines, boxes, result.frame_width)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn line(y: f32, height: f32) -> crate::ocr::LineBox {
+        crate::ocr::LineBox {
+            x: 0.0,
+            y,
+            width: 100.0,
+            height,
+        }
+    }
+
+    #[test]
+    fn a_small_watermark_beside_a_subtitle_is_dropped() {
+        let result = OcrResult::with_boxes(
+            vec!["We have to go.".into(), "Veo".into(), "Before dark.".into()],
+            vec![line(60.0, 52.0), line(100.0, 29.0), line(120.0, 48.0)],
+            1440.0,
+        );
+        let kept = without_small_lines(result);
+        assert_eq!(kept.lines, ["We have to go.", "Before dark."]);
+        assert_eq!(kept.text, "We have to go. Before dark.");
+        assert_eq!(kept.boxes.len(), 2);
+    }
+
+    #[test]
+    fn larger_text_in_another_band_keeps_the_subtitle() {
+        let result = OcrResult::with_boxes(
+            vec!["EXIT".into(), "We have to go.".into()],
+            vec![line(20.0, 60.0), line(300.0, 30.0)],
+            1440.0,
+        );
+        assert_eq!(
+            without_small_lines(result).lines,
+            ["EXIT", "We have to go."]
+        );
+    }
+
+    #[test]
+    fn lines_without_geometry_are_kept() {
+        let result = OcrResult::with_boxes(vec!["text".into()], Vec::new(), 0.0);
+        assert_eq!(without_small_lines(result).lines, ["text"]);
+    }
 
     fn mode() -> RecognitionMode {
         RecognitionMode {

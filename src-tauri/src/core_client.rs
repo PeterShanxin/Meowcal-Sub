@@ -64,6 +64,12 @@ pub fn cached_status() -> Option<CoreStatus> {
     readiness::cached_status()
 }
 
+/// Whether the last status Core reported has translation running on the GPU.
+pub fn translation_on_gpu() -> bool {
+    cached_status()
+        .is_some_and(|status| status.ready && status.acceleration.as_deref() == Some("gpu"))
+}
+
 pub fn status_blocking() -> Result<CoreStatus, String> {
     call(
         &TRANSLATION,
@@ -158,11 +164,21 @@ pub fn ocr_languages_blocking() -> Result<Vec<String>, String> {
     .map(|result| result.languages)
 }
 
-pub fn ocr_initialize_blocking(language: Option<String>) -> Result<String, String> {
+/// Starts `engine` in the OCR process and returns the language Windows OCR
+/// resolved, or `None` for PP-OCRv6, which takes no language.
+pub fn ocr_initialize_blocking(
+    engine: meowcal_core::ocr::Engine,
+    language: Option<String>,
+    max_threads: Option<u8>,
+) -> Result<Option<String>, String> {
+    let mut params = json!({"engine":engine,"language":language});
+    if let Some(threads) = max_threads {
+        params["maxThreads"] = threads.into();
+    }
     call::<OcrInitializeResult>(
         &OCR,
         "ocrInitialize",
-        json!({"language":language}),
+        params,
         Duration::from_secs(5),
         None,
         None,

@@ -39,6 +39,11 @@ describe("settings defaults", () => {
     expect(settingsDefaults).toMatch(/translateAllOcrText: false,/);
   });
 
+  it("agrees with the backend that PP-OCRv6 is the default OCR engine", () => {
+    expect(configRs).toMatch(/engine: meowcal_core::ocr::Engine::PpOcrV6,/);
+    expect(settingsDefaults).toMatch(/engine: "ppOcrV6"/);
+  });
+
   it("agrees with the backend that the engine is not forced onto CPU by default", () => {
     expect(configRs).toMatch(/cpu_only: false,/);
     expect(settingsDefaults).toMatch(/cpuOnly: false/);

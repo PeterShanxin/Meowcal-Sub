@@ -186,3 +186,19 @@ fn translate_all_ocr_text_defaults_off_and_survives_a_round_trip() {
     // The key is modelled, so it never falls through to the carry-through map.
     assert!(!reloaded.unmodelled.contains_key("translateAllOcrText"));
 }
+
+// Every settings file from before the engine choice reads as the new default.
+#[test]
+fn ocr_engine_defaults_to_pp_ocr_and_survives_a_round_trip() {
+    use meowcal_core::ocr::Engine;
+    let old: TranslationConfig =
+        serde_json::from_str(r#"{ "ocr": { "validationStrictness": "moderate" } }"#).unwrap();
+    assert_eq!(old.ocr.engine, Engine::PpOcrV6);
+
+    let mut windows = TranslationConfig::default();
+    windows.ocr.engine = Engine::Windows;
+    let json = serde_json::to_string(&windows).unwrap();
+    assert!(json.contains(r#""engine":"windows""#));
+    let reloaded: TranslationConfig = serde_json::from_str(&json).unwrap();
+    assert_eq!(reloaded.ocr.engine, Engine::Windows);
+}

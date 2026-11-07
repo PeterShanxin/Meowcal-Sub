@@ -1,3 +1,5 @@
+use meowcal_core::ocr::Engine;
+
 /// Convert Windows OCR language aliases to the stable tags used by app config.
 ///
 /// Windows may report script-qualified tags such as `zh-Hans-CN`, while older
@@ -23,9 +25,28 @@ pub fn normalize_language_tag(tag: &str) -> String {
     normalized
 }
 
+/// The recognizer a session reading `source_language` uses. PP-OCRv6's
+/// recognizer has no Hangul, so Korean reads with Windows OCR whatever the
+/// setting says. `src/ui/recognition.ts` applies the same rule to readiness.
+pub fn session_engine(configured: Engine, source_language: &str) -> Engine {
+    if source_language.to_ascii_lowercase().starts_with("ko") {
+        Engine::Windows
+    } else {
+        configured
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use super::normalize_language_tag;
+    use super::{normalize_language_tag, session_engine, Engine};
+
+    #[test]
+    fn korean_sessions_read_with_windows_ocr_whatever_the_setting() {
+        assert_eq!(session_engine(Engine::PpOcrV6, "ko-KR"), Engine::Windows);
+        assert_eq!(session_engine(Engine::PpOcrV6, "zh-CN"), Engine::PpOcrV6);
+        assert_eq!(session_engine(Engine::PpOcrV6, "ja-JP"), Engine::PpOcrV6);
+        assert_eq!(session_engine(Engine::Windows, "en-US"), Engine::Windows);
+    }
 
     #[test]
     fn normalizes_simplified_chinese_aliases() {
