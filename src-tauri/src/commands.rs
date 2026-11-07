@@ -106,11 +106,7 @@ fn foundry_status_from_snapshot(snapshot: EngineStatusSnapshot) -> FoundryLocalS
 /// Get the status of the local translation engine (fast, no probe)
 #[tauri::command]
 pub async fn get_engine_status(state: State<'_, AppState>) -> Result<FoundryLocalStatus, String> {
-    state.startup_gate.wait_until_ready().await?;
-    let config = {
-        let guard = lock_or_recover(&state.config);
-        guard.translation.foundry_local.clone()
-    };
+    let config = state.loaded_config().await?.translation.foundry_local;
     engine_status::get_status_tauri(config)
         .await
         .map(foundry_status_from_snapshot)
@@ -119,10 +115,7 @@ pub async fn get_engine_status(state: State<'_, AppState>) -> Result<FoundryLoca
 /// List available models from the local translation engine
 #[tauri::command]
 pub async fn list_engine_models(state: State<'_, AppState>) -> Result<Vec<String>, String> {
-    let config = {
-        let guard = lock_or_recover(&state.config);
-        guard.translation.foundry_local.clone()
-    };
+    let config = state.loaded_config().await?.translation.foundry_local;
     if config.managed_runtime.is_some() {
         return Ok(config.model.clone().into_iter().collect());
     }
@@ -137,10 +130,7 @@ pub async fn list_engine_models(state: State<'_, AppState>) -> Result<Vec<String
 pub async fn refresh_engine_status(
     state: State<'_, AppState>,
 ) -> Result<FoundryLocalStatus, String> {
-    let config = {
-        let guard = lock_or_recover(&state.config);
-        guard.translation.foundry_local.clone()
-    };
+    let config = state.loaded_config().await?.translation.foundry_local;
     engine_status::refresh_status_tauri(config)
         .await
         .map(foundry_status_from_snapshot)
@@ -149,10 +139,7 @@ pub async fn refresh_engine_status(
 /// Prepare the local engine (attempt to start service + slow warmup probe)
 #[tauri::command]
 pub async fn prepare_engine(state: State<'_, AppState>) -> Result<FoundryLocalStatus, String> {
-    let config = {
-        let guard = lock_or_recover(&state.config);
-        guard.translation.foundry_local.clone()
-    };
+    let config = state.loaded_config().await?.translation.foundry_local;
     engine_status::prepare_tauri(config)
         .await
         .map(foundry_status_from_snapshot)
@@ -161,10 +148,7 @@ pub async fn prepare_engine(state: State<'_, AppState>) -> Result<FoundryLocalSt
 /// Make the local engine ready (start service if needed + keep probing until ready or timeout).
 #[tauri::command]
 pub async fn make_engine_ready(state: State<'_, AppState>) -> Result<FoundryLocalStatus, String> {
-    let config = {
-        let guard = lock_or_recover(&state.config);
-        guard.translation.foundry_local.clone()
-    };
+    let config = state.loaded_config().await?.translation.foundry_local;
     engine_status::make_ready_tauri(config)
         .await
         .map(foundry_status_from_snapshot)
@@ -381,10 +365,7 @@ pub async fn list_translation_backends(
     state: State<'_, AppState>,
     app: AppHandle,
 ) -> Result<Vec<BackendInfo>, String> {
-    let config = {
-        let guard = lock_or_recover(&state.config);
-        guard.translation.clone()
-    };
+    let config = state.loaded_config().await?.translation;
 
     let diagnostics = state.translation_diagnostics.clone();
     let app_handle = app.clone();
@@ -410,10 +391,7 @@ pub async fn translate_once(
     state: State<'_, AppState>,
     app: AppHandle,
 ) -> Result<TranslationOutcome, String> {
-    let config = {
-        let guard = lock_or_recover(&state.config);
-        guard.translation.clone()
-    };
+    let config = state.loaded_config().await?.translation;
 
     let diagnostics = state.translation_diagnostics.clone();
     let manager = TranslationManager::new(config, app, diagnostics);
@@ -428,10 +406,7 @@ pub async fn get_translation_diagnostics(
     state: State<'_, AppState>,
     app: AppHandle,
 ) -> Result<TranslationDiagnostics, String> {
-    let config = {
-        let guard = lock_or_recover(&state.config);
-        guard.translation.clone()
-    };
+    let config = state.loaded_config().await?.translation;
 
     let diagnostics = state.translation_diagnostics.clone();
     let app_handle = app.clone();
@@ -450,6 +425,7 @@ pub async fn get_translation_diagnostics(
 
 #[tauri::command]
 pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Result<(), String> {
+    state.startup_gate.wait_until_ready().await?;
     let _transition = state.session_lifecycle.control.lock().await;
     info!(">>> START_TRANSLATION COMMAND CALLED <<<");
     info!("Starting translation...");
@@ -953,10 +929,9 @@ pub async fn wizard_install_engine(
         crate::engine_manifest::EngineManifest::shipped().map_err(|error| error.to_string())?;
     // Falls back to the independently recorded root, so a lost registration no
     // longer sends setup to a different directory and a re-download (#65).
-    let cache_dir = {
-        let config = lock_or_recover(&state.config);
-        crate::engine_recovery::install_cache_root(&config.translation.foundry_local)
-    };
+    let cache_dir = crate::engine_recovery::install_cache_root(
+        &state.loaded_config().await?.translation.foundry_local,
+    );
 
     match hy_mt_installer::install(&app, cache_dir).await {
         Ok(paths) => {
@@ -996,15 +971,13 @@ pub async fn wizard_install_engine(
 
 #[tauri::command]
 pub async fn wizard_start_service(state: State<'_, AppState>) -> Result<String, String> {
-    let runtime = {
-        let config = lock_or_recover(&state.config);
-        config
-            .translation
-            .foundry_local
-            .managed_runtime
-            .clone()
-            .ok_or_else(|| "ENGINE_NOT_INSTALLED".to_string())?
-    };
+    let runtime = state
+        .loaded_config()
+        .await?
+        .translation
+        .foundry_local
+        .managed_runtime
+        .ok_or_else(|| "ENGINE_NOT_INSTALLED".to_string())?;
     hy_mt_runtime::ensure_ready(&runtime, Duration::from_secs(90)).await
 }
 
@@ -1015,10 +988,7 @@ pub async fn wizard_test_translation(
     source_language: String,
     target_language: String,
 ) -> Result<WizardTranslationTest, String> {
-    let config = {
-        let config = lock_or_recover(&state.config);
-        config.translation.foundry_local.clone()
-    };
+    let config = state.loaded_config().await?.translation.foundry_local;
     let backend = FoundryLocalBackend::new(config);
     let started = Instant::now();
     let translated_text = backend

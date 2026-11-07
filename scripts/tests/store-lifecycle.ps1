@@ -42,15 +42,21 @@ function Stop-TestApp([string]$ExecutablePath) {
         }
         if ($process -and $process.Path -eq $ExecutablePath) {
             $tree = @(Get-CimInstance Win32_Process)
-            $ownedIds = [Collections.Generic.HashSet[uint32]]::new()
-            $null = $ownedIds.Add([uint32]$script:appPid)
+            # A process whose parent exited keeps that parent's id, which Windows can
+            # reuse; only a process created after its parent is that parent's child.
+            $ownedStarts = [Collections.Generic.Dictionary[uint32,datetime]]::new()
+            $ownedStarts[[uint32]$script:appPid] = ($tree | Where-Object ProcessId -eq $script:appPid).CreationDate
             do {
                 $changed = $false
                 foreach ($child in $tree) {
-                    if ($ownedIds.Contains([uint32]$child.ParentProcessId) -and $ownedIds.Add([uint32]$child.ProcessId)) { $changed = $true }
+                    $parent = [uint32]$child.ParentProcessId
+                    if ($ownedStarts.ContainsKey($parent) -and -not $ownedStarts.ContainsKey([uint32]$child.ProcessId) -and $child.CreationDate -ge $ownedStarts[$parent]) {
+                        $ownedStarts[[uint32]$child.ProcessId] = $child.CreationDate
+                        $changed = $true
+                    }
                 }
             } while ($changed)
-            $owned = @(foreach ($ownedId in $ownedIds) {
+            $owned = @(foreach ($ownedId in $ownedStarts.Keys) {
                 $child = Get-Process -Id $ownedId -ErrorAction SilentlyContinue
                 if ($child) { $null = $child.Handle; $child }
             })

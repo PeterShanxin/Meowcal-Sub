@@ -69,3 +69,21 @@ fn a_capturable_region_is_accepted() {
     assert_eq!(validate_capture_region(1, 1, 0.5), Ok(()));
     assert_eq!(validate_capture_region(1920, 1080, 2.0), Ok(()));
 }
+
+// Commands can arrive before Tauri setup has read the settings file. They
+// must see the loaded settings, never the in-memory defaults (an installed
+// engine read from defaults looks uninstalled).
+#[tokio::test]
+async fn loaded_config_waits_for_startup_and_returns_the_loaded_settings() {
+    let state = std::sync::Arc::new(AppState::default());
+    let reader = std::sync::Arc::clone(&state);
+    let early = tokio::spawn(async move { reader.loaded_config().await });
+
+    tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+    assert!(!early.is_finished());
+
+    lock_or_recover(&state.config).capture_interval_ms = 1234;
+    state.startup_gate.mark_ready();
+
+    assert_eq!(early.await.unwrap().unwrap().capture_interval_ms, 1234);
+}
