@@ -25,9 +25,16 @@ That is a download estimate, **not a total installed-disk requirement**: allow
 additional space for extraction, caches, and retained runtime versions.
 
 Meowcal reads subtitles with its built-in PP-OCRv6 recognizer, which needs no
-Windows language pack. Korean subtitles, and **Settings > Text recognition >
-Windows OCR**, use Windows OCR instead; that needs the Windows OCR language for
-the original subtitles.
+Windows language pack. Korean subtitles, the **Compatibility** profile, and
+**Settings → Advanced → Text recognition → Windows OCR** use Windows OCR instead;
+that needs the Windows OCR language for the original subtitles.
+
+**Settings → Profile** sets recognition and translation together. **Automatic**
+reads with PP-OCRv6 and lets translation use the graphics card when the engine
+can; while translation runs on the CPU, PP-OCRv6 uses fewer CPU threads.
+**Compatibility** reads with Windows OCR and translates on the CPU, avoiding the
+graphics driver and PP-OCRv6's CPU load. Changing a choice under **Advanced**
+shows the profile as **Custom**.
 
 ### Check a download
 
@@ -77,7 +84,7 @@ up. **Subtitle style** controls text size and a Dark or Light plate; use
 | Setup reports `ENGINE_INCOMPATIBLE` or `ENGINE_DISK_SPACE` | Check the Windows 11, 8 GiB system-RAM, and 3 GiB free-installation-space requirements above. A missing architecture/runtime or unsupported installation path can also produce an incompatibility error; include the exact support message in a report. |
 | Text is missing or misread | Check that the selected region is still aligned and visible, contains every subtitle line, and does not include player controls or the translation overlay. Try clearer, larger source subtitles. |
 | Readable non-subtitle text is ignored | Normal mode filters for subtitle-like text. Enable **Translate any text** in Settings only when that is your intended use. It does not improve the OCR model itself. |
-| Translations come out garbled, or the PC stalls while the engine runs | Turn on **Settings → Engine and updates → Run the engine on CPU only**. The engine restarts on CPU. Include the support code and your GPU and driver version in a report. |
+| Translations come out garbled, or the PC stalls while the engine runs | Choose **Settings → Profile → Compatibility**, or turn on only **Settings → Advanced → Run the engine on CPU only**. The engine restarts on CPU. Include the support code and your GPU and driver version in a report. |
 | Translation feels slow | Allow for the initial model warm-up. Check local CPU and memory pressure and the size of the selected region. Different hardware, source text, and model load produce different latency. |
 | Video capture is blank or incomplete | Protected content or a player's display mode may not be capturable. Test with a non-protected local clip in a normal window; this app is not a capture-protection bypass. |
 | The app says it is up to date | Check the installed version against the application release, not a `core-v...` runtime tag. A merged code change is not necessarily a released update. |
@@ -112,8 +119,8 @@ apply the ARM64 hardware-validation gate or its CPU-retry behavior to x64. Do
 not assume an incompatible or failing Vulkan configuration will automatically
 switch to CPU.
 
-**On either architecture**, **Settings → Engine and updates → Run the engine on
-CPU only** starts the engine without GPU offload. Changing it restarts the
+**On either architecture**, **Settings → Advanced → Run the engine on CPU only**
+(part of the **Compatibility** profile) starts the engine without GPU offload. Changing it restarts the
 engine. Translation can be slower on CPU.
 
 Both paths require the system RAM listed above. See

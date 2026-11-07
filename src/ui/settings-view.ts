@@ -4,12 +4,14 @@ import { icon } from "./icons";
 import { backendUnavailablePhase } from "./home-state";
 import { deriveUpdatePresentation } from "./update-state";
 import { renderModelLicense } from "./model-license";
+import { profileOf, type Profile } from "./recognition";
 
 type Recognition = "fast" | "balanced" | "accurate";
 
 interface SettingsActions {
   onRecognition(value: Recognition): void;
   onOcrEngine(engine: OcrEngine): void;
+  onProfile(profile: Profile): void;
   onContinuity(enabled: boolean): void;
   onTranslateAllOcrText(enabled: boolean): void;
   onRepair(): void;
@@ -150,12 +152,6 @@ function renderEngineAndUpdates(snapshot: UiSnapshot, actions: SettingsActions):
           }
         </span>
       </div>
-      ${switchRow(
-        "Run the engine on CPU only",
-        "Try this if translations come out garbled or your PC stalls",
-        snapshot.settings.translation.localEngine.cpuOnly,
-        actions.onCpuOnly,
-      )}
       ${
         snapshot.update.kind === "store"
           ? nothing
@@ -222,6 +218,93 @@ function renderDeveloper(snapshot: UiSnapshot, actions: SettingsActions): Templa
   `;
 }
 
+const profileDetail: Record<Profile | "custom", string> = {
+  automatic: "PP-OCRv6 reads subtitles; translation uses the graphics card when it can",
+  compatibility: "Windows OCR and CPU translation, for graphics drivers that misbehave",
+  custom: "Set under Advanced",
+};
+
+const koreanNote = "Korean subtitles always use Windows OCR, because PP-OCRv6 cannot read Korean.";
+
+function renderProfile(snapshot: UiSnapshot, actions: SettingsActions): TemplateResult {
+  const profile = profileOf(snapshot.settings);
+  return html`
+    <label class="list-row">
+      <span
+        ><strong
+          >Profile
+          <span class="info-hint" role="img" aria-label=${koreanNote} title=${koreanNote}
+            >${icon("info")}</span
+          ></strong
+        ><small>${profileDetail[profile]}</small></span
+      >
+      <select
+        class="select compact"
+        @change=${(event: Event) =>
+          actions.onProfile((event.target as HTMLSelectElement).value as Profile)}
+      >
+        <option value="automatic" .selected=${profile === "automatic"}>Automatic</option>
+        <option value="compatibility" .selected=${profile === "compatibility"}>
+          Compatibility
+        </option>
+        ${profile === "custom" ? html`<option value="custom" disabled .selected=${true}>Custom</option>` : nothing}
+      </select>
+    </label>
+  `;
+}
+
+function renderAdvanced(snapshot: UiSnapshot, actions: SettingsActions): TemplateResult {
+  const ocr = snapshot.settings.translation.ocr;
+  return html`
+    <details class="disclosure">
+      <summary>${icon("chevron-right")}Advanced</summary>
+      <div class="list">
+        <label class="list-row">
+          <span
+            ><strong>Text recognition</strong
+            ><small>PP-OCRv6 reads subtitles more steadily</small></span
+          >
+          <select
+            class="select compact"
+            .value=${ocr.engine}
+            @change=${(event: Event) =>
+              actions.onOcrEngine((event.target as HTMLSelectElement).value as OcrEngine)}
+          >
+            <option value="ppOcrV6">PP-OCRv6</option>
+            <option value="windows">Windows OCR</option>
+          </select>
+        </label>
+        ${switchRow(
+          "Run the engine on CPU only",
+          "Try this if translations come out garbled or your PC stalls",
+          snapshot.settings.translation.localEngine.cpuOnly,
+          actions.onCpuOnly,
+        )}
+        ${
+          ocr.engine === "windows"
+            ? html`<label class="list-row">
+                <span
+                  ><strong>Recognition quality</strong
+                  ><small>Balanced suits most subtitles</small></span
+                >
+                <select
+                  class="select compact"
+                  .value=${recognition(snapshot)}
+                  @change=${(event: Event) =>
+                    actions.onRecognition((event.target as HTMLSelectElement).value as Recognition)}
+                >
+                  <option value="fast">Fast</option>
+                  <option value="balanced">Balanced</option>
+                  <option value="accurate">Accurate</option>
+                </select>
+              </label>`
+            : nothing
+        }
+      </div>
+    </details>
+  `;
+}
+
 export function renderSettings(snapshot: UiSnapshot, actions: SettingsActions): TemplateResult {
   return html`
     <main class="screen" aria-labelledby="settings-title">
@@ -242,43 +325,10 @@ export function renderSettings(snapshot: UiSnapshot, actions: SettingsActions): 
             snapshot.settings.translation.enableContextAware,
             actions.onContinuity,
           )}
-          <label class="list-row">
-            <span
-              ><strong>Text recognition</strong
-              ><small
-                >PP-OCRv6 reads subtitles more steadily. Korean always uses Windows OCR.</small
-              ></span
-            >
-            <select
-              class="select compact"
-              .value=${snapshot.settings.translation.ocr.engine}
-              @change=${(event: Event) =>
-                actions.onOcrEngine((event.target as HTMLSelectElement).value as OcrEngine)}
-            >
-              <option value="ppOcrV6">PP-OCRv6</option>
-              <option value="windows">Windows OCR</option>
-            </select>
-          </label>
-          <label class="list-row">
-            <span
-              ><strong>Recognition quality</strong
-              ><small>Balanced suits most subtitles</small></span
-            >
-            <select
-              class="select compact"
-              .value=${recognition(snapshot)}
-              @change=${(event: Event) =>
-                actions.onRecognition((event.target as HTMLSelectElement).value as Recognition)}
-            >
-              <option value="fast">Fast</option>
-              <option value="balanced">Balanced</option>
-              <option value="accurate">Accurate</option>
-            </select>
-          </label>
+          ${renderProfile(snapshot, actions)}
         </div>
-
-        ${renderEngineAndUpdates(snapshot, actions)} ${renderModelLicense()}
-        ${renderDeveloper(snapshot, actions)}
+        ${renderAdvanced(snapshot, actions)} ${renderEngineAndUpdates(snapshot, actions)}
+        ${renderModelLicense()} ${renderDeveloper(snapshot, actions)}
       </div>
     </main>
   `;

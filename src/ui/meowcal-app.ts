@@ -7,6 +7,7 @@ import { describeError, type MessageAction, type MessagePresentation } from "./e
 import { deriveHomePresentation } from "./home-state";
 import { renderHome } from "./home-view";
 import { icon } from "./icons";
+import { profiles } from "./recognition";
 import { renderSettings } from "./settings-view";
 import "./meowcal-titlebar";
 
@@ -82,7 +83,8 @@ export class MeowcalApp extends LitElement {
     if (snapshot.screen === "settings") {
       return renderSettings(snapshot, {
         onRecognition: (value) => void this.controller.setRecognitionPreset(value),
-        onOcrEngine: (engine) => void this.controller.setOcrEngine(engine),
+        onOcrEngine: (engine) => void this.controller.setRecognition({ engine }),
+        onProfile: (profile) => void this.controller.setRecognition(profiles[profile]),
         onContinuity: (enabled) => void this.controller.setContinuity(enabled),
         onTranslateAllOcrText: (enabled) => void this.controller.setTranslateAllOcrText(enabled),
         onRepair: () => void this.controller.openSetup(),

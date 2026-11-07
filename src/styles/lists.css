@@ -34,6 +34,18 @@ label.list-row {
   line-height: 18px;
 }
 
+.info-hint {
+  display: inline-flex;
+  vertical-align: -2px;
+  color: var(--text-3);
+  cursor: help;
+}
+
+.info-hint .icon {
+  width: 13px;
+  height: 13px;
+}
+
 .list-row small {
   display: block;
   color: var(--text-3);

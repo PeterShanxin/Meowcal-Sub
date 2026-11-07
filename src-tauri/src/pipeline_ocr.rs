@@ -26,7 +26,7 @@ pub(crate) fn open(app: &AppHandle, engine: Engine, source_language: &str) -> Op
                         using_fallback: false,
                         message: format!(
                             "Text recognition could not start: {e}. \
-                             Try Windows OCR in Settings > Text recognition."
+                             Try the Compatibility profile in Settings."
                         ),
                         is_error: true,
                     },

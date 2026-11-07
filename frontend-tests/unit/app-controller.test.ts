@@ -1071,7 +1071,7 @@ describe("AppController automatic update checks", () => {
     const invoke = vi.fn().mockResolvedValue(undefined);
     const { controller, snapshots } = createController(invoke);
 
-    await controller.setOcrEngine("windows");
+    await controller.setRecognition({ engine: "windows" });
     await controller.setRecognitionPreset("accurate");
 
     const ocr = snapshots.at(-1)?.settings.translation.ocr;
