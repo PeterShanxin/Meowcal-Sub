@@ -43,6 +43,7 @@ $repositoryRoot = Split-Path -Parent $PSScriptRoot
 $resourceScript = Join-Path $PSScriptRoot "prepare-validation-resources.ps1"
 $contractTest = Join-Path $PSScriptRoot "tests\verify.Tests.ps1"
 $corePackageTest = Join-Path $PSScriptRoot "tests\core-package.Tests.ps1"
+$packageBuildTest = Join-Path $PSScriptRoot "tests\build-package.Tests.ps1"
 $storePackageTest = Join-Path $PSScriptRoot "tests\store-package.Tests.ps1"
 $coreUpgradeTest = Join-Path $PSScriptRoot "tests\core-upgrade.Tests.ps1"
 $browserBackendTest = Join-Path $PSScriptRoot "tests\browser-backend.Tests.ps1"
@@ -138,6 +139,11 @@ if ($env:MEOWCAL_VERIFY_CONTRACT_ACTIVE -ne "1") {
     }
     Write-Host "==> Core package contract tests" -ForegroundColor Cyan
     & pwsh -NoProfile -File $corePackageTest
+    if ($LASTEXITCODE -ne 0) {
+        exit $LASTEXITCODE
+    }
+    Write-Host "==> Package build contract tests" -ForegroundColor Cyan
+    & pwsh -NoProfile -File $packageBuildTest
     if ($LASTEXITCODE -ne 0) {
         exit $LASTEXITCODE
     }

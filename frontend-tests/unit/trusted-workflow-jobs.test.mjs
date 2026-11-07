@@ -259,10 +259,15 @@ describe("packaging builds both architectures natively", () => {
   });
 
   it("installs its own toolchain rather than inheriting one from the image", () => {
+    const setup = readFileSync(
+      path.join(repositoryRoot, ".github/actions/windows-package-build/action.yml"),
+      "utf8",
+    );
     expect(contents).toContain("actions/setup-node@");
     expect(contents).toContain("actions/setup-dotnet@");
-    expect(contents).toContain("rustup toolchain install stable");
-    expect(contents).toContain("rustup target add");
+    expect(contents).toContain("uses: ./.github/actions/windows-package-build");
+    expect(setup).toContain("rustup toolchain install stable");
+    expect(setup).toContain("rustup target add");
     expect(contents).toContain("npm ci --ignore-scripts");
   });
 

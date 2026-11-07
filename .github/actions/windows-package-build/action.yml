@@ -1,0 +1,71 @@
+name: Windows package build setup
+description: Native Rust toolchain, bounded hosted parallelism and packaging dependency cache.
+
+inputs:
+  target:
+    required: true
+    description: Native Windows Rust target.
+  target-directory:
+    required: true
+    description: Cargo output directory relative to the checkout.
+  variant:
+    required: true
+    description: Cache partition for direct or Store packages.
+  arm64-build-jobs:
+    default: '4'
+    description: Hosted ARM64 compiler processes (1, 2 or 4).
+  use-rust-cache:
+    default: 'true'
+    description: Restore dependencies; disable for a cold benchmark.
+
+runs:
+  using: composite
+  steps:
+    - name: Install native Rust toolchain
+      shell: pwsh
+      env:
+        PACKAGE_TARGET: ${{ inputs.target }}
+      run: |
+        rustup toolchain install stable --profile minimal
+        if ($LASTEXITCODE -ne 0) { throw 'Rust toolchain installation failed.' }
+        rustup default stable
+        if ($LASTEXITCODE -ne 0) { throw 'Rust toolchain selection failed.' }
+        rustup target add $env:PACKAGE_TARGET
+        if ($LASTEXITCODE -ne 0) { throw 'Rust target installation failed.' }
+        rustc -Vv
+
+    - name: Configure hosted build parallelism
+      shell: pwsh
+      env:
+        ARM64_BUILD_JOBS: ${{ inputs.arm64-build-jobs }}
+      run: |
+        if ($env:ARM64_BUILD_JOBS -notin @('1', '2', '4')) {
+          throw 'Hosted ARM64 build jobs must be 1, 2 or 4.'
+        }
+        $buildJobs = if ([Runtime.InteropServices.RuntimeInformation]::OSArchitecture -eq 'Arm64') {
+          $env:ARM64_BUILD_JOBS
+        } else {
+          [Environment]::ProcessorCount
+        }
+        Write-Host "Hosted Cargo jobs: $buildJobs"
+        "CARGO_BUILD_JOBS=$buildJobs" >> $env:GITHUB_ENV
+
+    - name: Cache package dependencies
+      if: inputs.use-rust-cache == 'true'
+      uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+      with:
+        workspaces: src-tauri -> ../${{ inputs.target-directory }}
+        shared-key: package-${{ inputs.variant }}-${{ inputs.target }}
+        cache-workspace-crates: false
+        save-if: ${{ github.ref == 'refs/heads/main' }}
+
+    - name: Discard cached installers
+      shell: pwsh
+      env:
+        PACKAGE_TARGET: ${{ inputs.target }}
+        PACKAGE_TARGET_DIRECTORY: ${{ inputs.target-directory }}
+      run: |
+        $bundles = Join-Path $env:GITHUB_WORKSPACE "$env:PACKAGE_TARGET_DIRECTORY/$env:PACKAGE_TARGET/release/bundle"
+        if (Test-Path -LiteralPath $bundles) {
+          Remove-Item -LiteralPath $bundles -Recurse -Force
+        }

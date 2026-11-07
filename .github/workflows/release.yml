@@ -224,6 +224,7 @@ jobs:
       - name: Download package artifacts
         uses: actions/download-artifact@v8
         with:
+          pattern: meowcal-sub-*
           path: release-assets
           merge-multiple: true
 
