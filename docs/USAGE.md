@@ -103,10 +103,12 @@ its own connectivity requirements.
 Other configurations take the CPU policy. A GPU readiness timeout can trigger
 one CPU retry within the existing startup deadline.
 
-**x64:** the shipped runtime uses Vulkan. The application does not currently
-apply the ARM64 hardware-validation gate or its CPU-retry behavior to x64. Do
-not assume an incompatible or failing Vulkan configuration will automatically
-switch to CPU.
+**x64:** the shipped runtime uses Vulkan on a discrete GPU. A PC with only an
+integrated GPU, or none, runs the engine on CPU: the one integrated GPU that was
+measured was slower than the CPU. A GPU readiness timeout or a failed sample
+translation triggers one CPU retry within the existing startup deadline. A
+discrete GPU without a working Vulkan driver can still run on CPU while the
+app shows GPU.
 
 **On either architecture**, **Settings → Engine and updates → Run the engine on
 CPU only** starts the engine without GPU offload. Changing it restarts the

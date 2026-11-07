@@ -45,7 +45,7 @@ fn release_asset_matches_current_windows_architecture() {
 // it): aarch64 is the GPU candidate - full-layer Adreno offload with KV
 // pinned to the CPU (`-ngl 99 --no-kv-offload`; plain KV offload hangs on
 // the tested b10155 + Adreno/OpenCL combination, measured 2026-08-09) -
-// while x64 Vulkan stays exactly as shipped.
+// while x64 Vulkan requests full offload with no extra flags.
 #[test]
 fn runtime_acceleration_contract_per_architecture() {
     let manifest = EngineManifest::shipped().expect("manifest should be valid");
@@ -98,16 +98,16 @@ fn launch_arguments_forward_runtime_specific_args() {
     let x64_args = launch_arguments(
         &runtime,
         &manifest,
-        &effective_launch_policy(x64, false, false),
+        &effective_launch_policy(x64, true, false),
         "11436",
     );
     assert!(!x64_args.contains(&"--no-kv-offload".to_string()));
     assert!(x64_args.windows(2).any(|pair| pair == ["-ngl", "99"]));
 }
-// The compatibility decision, arch-independent: the Adreno GPU policy
-// applies only on the validated GPU without a CPU override; unvalidated
-// hardware and the startup fallback both get exactly the pre-GPU CPU policy
-// (`-ngl 0`, no KV flag); the x64 Vulkan runtime is never gated.
+// The compatibility decision, arch-independent: each runtime gets its GPU
+// policy only where its gate allows it and no CPU override applies; anything
+// else, and the startup fallback, get exactly the CPU policy (`-ngl 0`, no
+// runtime-specific flags).
 #[test]
 fn effective_policy_gates_the_adreno_gpu_path() {
     let manifest = EngineManifest::shipped().expect("manifest should be valid");
@@ -133,15 +133,17 @@ fn effective_policy_gates_the_adreno_gpu_path() {
         assert!(!policy.gpu_active, "{adreno_validated}/{force_cpu}");
     }
 
-    // The Adreno allowlist does not gate x64; an explicit recovery lock does.
-    for (adreno_validated, force_cpu) in [(false, false), (true, false), (true, true)] {
-        let policy = effective_launch_policy(x64, adreno_validated, force_cpu);
-        assert_eq!(
-            policy.gpu_layers,
-            if force_cpu { 0 } else { 99 },
-            "{adreno_validated}/{force_cpu}"
-        );
-        assert!(!policy.gpu_active, "{adreno_validated}/{force_cpu}");
+    let discrete = effective_launch_policy(x64, true, false);
+    assert_eq!(discrete.gpu_layers, 99);
+    assert!(discrete.launch_args.is_empty());
+    assert!(discrete.gpu_active);
+
+    // No discrete GPU (integrated only, or no Vulkan device) and the recovery
+    // lock both mean CPU, and the status must say so.
+    for (discrete_present, force_cpu) in [(false, false), (true, true), (false, true)] {
+        let policy = effective_launch_policy(x64, discrete_present, force_cpu);
+        assert_eq!(policy.gpu_layers, 0, "{discrete_present}/{force_cpu}");
+        assert!(!policy.gpu_active, "{discrete_present}/{force_cpu}");
     }
 }
 // A gated-out or fallback CPU launch must produce the CPU argument line:
@@ -220,9 +222,11 @@ fn short_gpu_budget_is_split_and_cpu_only_paths_keep_the_full_deadline() {
 
     let gpu_deadline = readiness_deadline(deadline, started, true);
     let unvalidated_arm = effective_launch_policy(aarch64, false, false);
-    let x64_policy = effective_launch_policy(x64, false, false);
+    let integrated_x64 = effective_launch_policy(x64, false, false);
+    let discrete_x64 = effective_launch_policy(x64, true, false);
     let cpu_deadline = readiness_deadline(deadline, started, unvalidated_arm.gpu_active);
-    let x64_deadline = readiness_deadline(deadline, started, x64_policy.gpu_active);
+    let x64_cpu_deadline = readiness_deadline(deadline, started, integrated_x64.gpu_active);
+    let x64_gpu_deadline = readiness_deadline(deadline, started, discrete_x64.gpu_active);
 
     assert_eq!(gpu_deadline, started + Duration::from_secs(10));
     assert_eq!(
@@ -231,8 +235,9 @@ fn short_gpu_budget_is_split_and_cpu_only_paths_keep_the_full_deadline() {
     );
     assert_eq!(unvalidated_arm.gpu_layers, 0);
     assert_eq!(cpu_deadline, deadline);
-    assert_eq!(x64_policy.gpu_layers, 99);
-    assert_eq!(x64_deadline, deadline);
+    assert_eq!(integrated_x64.gpu_layers, 0);
+    assert_eq!(x64_cpu_deadline, deadline);
+    assert_eq!(x64_gpu_deadline, gpu_deadline);
 }
 
 // A GPU engine that turns healthy late in its window still gets time to

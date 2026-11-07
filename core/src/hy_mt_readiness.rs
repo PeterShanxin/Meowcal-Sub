@@ -46,7 +46,7 @@ async fn ensure_ready_with_policy(
         .map_err(|error| error.to_string())?;
     let policy = effective_launch_policy(
         runtime_spec,
-        !force_cpu && crate::engine_gpu_gate::adreno_gpu_allowed(),
+        !force_cpu && crate::engine_gpu_gate::gpu_allowed(runtime_spec),
         force_cpu,
     );
     if force_cpu && owned_acceleration() == Some("gpu") {
