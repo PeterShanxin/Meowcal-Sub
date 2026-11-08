@@ -24,7 +24,7 @@
     "lint": "node scripts/run-eslint.mjs",
     "maintainability": "node scripts/check-maintainability.mjs",
     "eval:subtitles": "pwsh -NoProfile -File scripts/run-subtitle-eval.ps1",
-    "test:frontend": "vitest run --coverage",
+    "test:frontend": "vitest run --coverage && node --test evals/band-gate/report.test.mjs",
     "test:browser": "playwright test",
     "test:browser:linux": "playwright test --config playwright.linux.config.mjs",
     "frontend:check": "npm run version:check && npm run runners:check && npm run docs:check && npm run format:check && npm run lint && npm run typecheck && npm run build:web && npm run test:frontend && npm run test:browser",

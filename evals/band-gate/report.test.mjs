@@ -27,6 +27,7 @@ const state = scenario => ({
   completed: true,
 });
 const frame = (seconds, text, admitted = true, extra = {}) => ({
+  ms: seconds * 1000,
   utc_ms: timeOriginMs + seconds * 1000,
   capture_utc_ms: timeOriginMs + seconds * 1000,
   lines: [{ text, x: 120, y: 560, w: 720, h: 48 }],
@@ -52,7 +53,7 @@ test('gate evidence is assigned at capture even when OCR crosses a boundary', ()
   const scenario = {
     id: 'capture-regression', durationSeconds: 8,
     segments: [
-      { id: 'negative', onset: 0, duration: 4, warmupSeconds: 0, expected: 'negative' },
+      { id: 'negative', onset: 0, duration: 4, warmupSeconds: 0, expected: 'negative', text: 'Credits' },
       { id: 'cue', onset: 4, duration: 4, expected: 'subtitle', lines: ['Please wait.'] },
     ],
   };
@@ -69,6 +70,65 @@ test('legacy processing timestamps cannot stand in for capture evidence', () => 
   assert.equal(result.partial, true);
   assert.equal(result.gateOk, false);
   assert.equal(result.warnings.filter(warning => warning.includes('UTC timestamp')).length, 1);
+});
+
+test('negative warmup uses observation age while cue assignment uses capture time', () => {
+  const scenario = {
+    id: 'observation-clock', durationSeconds: 40,
+    segments: [{ id: 'watermark', onset: 0, duration: 40, warmupSeconds: 6, expected: 'negative', text: 'MEOWCAL LAB / DEMO' }],
+  };
+  const gateFrames = [
+    { ...frame(0, 'MEOWCAL LAB / DEMO', false), ms: 177 },
+    { ...frame(6.055, 'MEOWCAL LAB / DEMO'), ms: 6_174 },
+    { ...frame(6.306, 'MEOWCAL LAB / DEMO', false), ms: 6_426 },
+    { ...frame(39, 'MEOWCAL LAB / DEMO', false), ms: 39_100 },
+  ];
+  const result = compareFixture({ scenario, fixtureState: state(scenario), gateFrames });
+  assert.equal(result.gate.negativePostWarmupAdmittedFrameCount, 0);
+  assert.equal(result.gateOk, true);
+
+  // Exactly six seconds of observation is outside warmup: no timing grace.
+  gateFrames[1].ms = 6_177;
+  const atBoundary = compareFixture({ scenario, fixtureState: state(scenario), gateFrames });
+  assert.equal(atBoundary.gate.negativePostWarmupAdmittedFrameCount, 1);
+  assert.equal(atBoundary.gateOk, false);
+});
+
+test('missing or reset negative observation clocks cannot pass', () => {
+  const scenario = {
+    id: 'invalid-observation-clock', durationSeconds: 40,
+    segments: [{ id: 'watermark', onset: 0, duration: 40, warmupSeconds: 6, expected: 'negative', text: 'Watermark' }],
+  };
+  const gateFrames = [frame(0, 'Watermark', false), frame(7, 'Watermark', false), frame(39, 'Watermark', false)];
+  for (const ms of [undefined, -1, 0, false]) {
+    gateFrames[2].ms = ms;
+    const result = compareFixture({ scenario, fixtureState: state(scenario), gateFrames });
+    assert.equal(result.partial, true);
+    assert.equal(result.gateOk, false);
+    assert.ok(result.warnings.some(warning => warning.includes('observation timestamps')));
+  }
+});
+
+test('a preceding cue cannot start negative warmup or establish negative coverage', () => {
+  const scenario = {
+    id: 'negative-acquisition', durationSeconds: 40,
+    segments: [{ id: 'watermark', onset: 0, duration: 40, warmupSeconds: 6, expected: 'negative', text: 'Watermark' }],
+  };
+  const gateFrames = [
+    frame(0, 'Previous dialogue'),
+    frame(0.25, 'Watermark', false),
+    frame(6.1, 'Watermark'),
+    frame(6.25, 'Watermark', false),
+    frame(39, 'Watermark', false),
+  ];
+  const result = compareFixture({ scenario, fixtureState: state(scenario), gateFrames });
+  assert.equal(result.gateOk, true);
+  assert.equal(result.gate.negativePostWarmup[0].firstOcrUtcMs, timeOriginMs + 250);
+
+  for (const entry of gateFrames) entry.lines[0].text = 'Other screen';
+  const wrongScreen = compareFixture({ scenario, fixtureState: state(scenario), gateFrames });
+  assert.equal(wrongScreen.gate.negativeCoverageOk, false);
+  assert.equal(wrongScreen.gateOk, false);
 });
 
 function oneFramePerCue(scenario, omitId = null) {
@@ -183,7 +243,7 @@ test('post-completion frames cannot fabricate another negative cycle', () => {
   const gateFrames = oneFramePerCue(negativeScenario);
   for (const segment of negativeScenario.segments.filter(item => item.expected === 'negative')) {
     for (const offset of [0, segment.warmupSeconds + 1, segment.duration - 1]) {
-      gateFrames.push(frame(segment.onset + offset, segment.text || 'negative text', false));
+      gateFrames.push(frame(segment.onset + offset, segment.kind === 'timer' ? '00:48' : segment.text, false));
     }
   }
   gateFrames.push(frame(negativeScenario.durationSeconds + 0.1, 'last dialogue', true));

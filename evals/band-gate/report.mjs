@@ -36,6 +36,12 @@ function cueText(segment) {
   return normalizeText((segment.lines || [segment.text || '']).join(' '));
 }
 
+function negativeTextMatches(segment, text) {
+  if (!text) return false;
+  if (segment.kind === 'timer') return /^\d{4}$/.test(text);
+  return (segment.variants || [segment.text]).some(expected => normalizeText(expected) === text);
+}
+
 function segmentAt(scenario, seconds) {
   return (scenario.segments || []).find(segment => seconds >= segment.onset && seconds < segment.onset + segment.duration);
 }
@@ -83,7 +89,7 @@ function finiteNumber(value) {
 }
 
 function newCycleStats() {
-  return { frames: 0, admittedFrames: 0, nonemptyFrames: 0, firstUtcMs: null, lastUtcMs: null, firstNonemptyUtcMs: null };
+  return { frames: 0, admittedFrames: 0, nonemptyFrames: 0, firstUtcMs: null, lastUtcMs: null, firstNonemptyUtcMs: null, firstNonemptyObservedMs: null, lastObservedMs: null };
 }
 
 function translationEventList(input) {
@@ -186,6 +192,7 @@ export function compareFixture({ scenario, fixtureState, gateFrames, translation
       cycles: {},
     }]));
   let admissionEvidenceMissing = false;
+  let negativeObservationClockInvalid = false;
   let blankAdmittedFrameCount = 0;
   const relativeFrames = [];
 
@@ -229,25 +236,33 @@ export function compareFixture({ scenario, fixtureState, gateFrames, translation
         const stat = negativeStats.get(segment.id);
         if (!stat) continue;
         const cycleStats = stat.cycles[cycle] || newCycleStats();
-        if (text && stat.firstOcrUtcMs === null) stat.firstOcrUtcMs = utcMs;
-        if (text && cycleStats.firstNonemptyUtcMs === null) cycleStats.firstNonemptyUtcMs = utcMs;
-        const firstObserved = cycleStats.firstNonemptyUtcMs === null
-          ? utcMs
-          : cycleStats.firstNonemptyUtcMs;
-        const warmupEnd = (firstObserved - timebase.startUtcMs) / 1000 + (segment.warmupSeconds || 0);
-        if (scenarioSeconds >= warmupEnd) {
+        const observedNegative = negativeTextMatches(segment, text);
+        if (observedNegative && stat.firstOcrUtcMs === null) stat.firstOcrUtcMs = utcMs;
+        if (observedNegative && cycleStats.firstNonemptyUtcMs === null) cycleStats.firstNonemptyUtcMs = utcMs;
+        // Capture assigns the authored segment; the filter's monotonic clock
+        // measures observation age. OCR latency varies between frames.
+        const observedMs = finiteNumber(frame.ms);
+        const validClock = observedMs !== null && observedMs >= 0
+          && (cycleStats.lastObservedMs === null || observedMs >= cycleStats.lastObservedMs);
+        negativeObservationClockInvalid ||= !validClock;
+        if (validClock) {
+          cycleStats.lastObservedMs = observedMs;
+          if (observedNegative) cycleStats.firstNonemptyObservedMs ??= observedMs;
+        }
+        const firstObserved = cycleStats.firstNonemptyObservedMs;
+        if (validClock && firstObserved !== null && observedMs - firstObserved >= (segment.warmupSeconds || 0) * 1000) {
           stat.postWarmupFrames += 1;
           cycleStats.frames += 1;
-          if (text) {
+          if (observedNegative) {
             stat.nonemptyPostWarmupFrames += 1;
             cycleStats.nonemptyFrames += 1;
             cycleStats.firstNonemptyUtcMs ??= utcMs;
             cycleStats.firstUtcMs ??= utcMs;
             cycleStats.lastUtcMs = utcMs;
-            if (admitted && forwardedText) {
-              stat.postWarmupAdmittedFrames += 1;
-              cycleStats.admittedFrames += 1;
-            }
+          }
+          if (admitted && forwardedText) {
+            stat.postWarmupAdmittedFrames += 1;
+            cycleStats.admittedFrames += 1;
           }
         }
         stat.cycles[cycle] = cycleStats;
@@ -295,6 +310,7 @@ export function compareFixture({ scenario, fixtureState, gateFrames, translation
   if (fixtureState.speed !== undefined && Number(fixtureState.speed) !== 1) warnings.push('fixture state was not recorded at 1x live speed');
   if (fixtureState.completed !== true) warnings.push('fixture-state.json does not prove a completed run with Repeat disabled');
   if (admissionEvidenceMissing) warnings.push('gate log is missing admitted_texts evidence for an authored segment');
+  if (negativeObservationClockInvalid) warnings.push('negative gate observation timestamps are missing or invalid; report is partial');
   if (Number(fixtureState.elapsedSeconds) + EPSILON_SECONDS < scenario.durationSeconds) warnings.push('fixture elapsedSeconds is shorter than the authored scenario');
   if (!frames.every(frame => frameUtcMs(frame) !== null)) warnings.push('some gate frames have no UTC timestamp');
   if (relativeFrames.length && !relativeFrames.some(frame => frame.segmentId)) warnings.push('gate frames do not overlap an authored segment');
@@ -315,7 +331,7 @@ export function compareFixture({ scenario, fixtureState, gateFrames, translation
     if (translation.timingEvidencePartial) warnings.push('translation timing evidence is partial; capture origin was not proven');
   }
   if (blankAdmittedFrameCount > 0) warnings.push('text was forwarded during an authored blank');
-  const partial = warnings.some(warning => /paused|completed|shorter|1x live|UTC timestamp|timing drift|admitted_texts|translation timing/.test(warning));
+  const partial = warnings.some(warning => /paused|completed|shorter|1x live|UTC timestamp|observation timestamps|timing drift|admitted_texts|translation timing/.test(warning));
   const gateOk = fatal.length === 0
     && !partial
     && missedOCRcueIDs.size === 0
