@@ -676,6 +676,406 @@
         }
       ],
       "similarSubtitleCardWidthPx": 720
+    },
+    {
+      "id": "rapid-dialogue-30s",
+      "label": "30-second rapid dialogue",
+      "durationSeconds": 30,
+      "repeatable": true,
+      "similarSubtitleCardWidthPx": 720,
+      "notes": "One-second authored cues. Use the matching source language and a different target language.",
+      "segments": [
+        {
+          "id": "rapid-dialogue-30s-01",
+          "onset": 0,
+          "duration": 1,
+          "expected": "subtitle",
+          "lines": [
+            "I can go."
+          ]
+        },
+        {
+          "id": "rapid-dialogue-30s-02",
+          "onset": 1,
+          "duration": 1,
+          "expected": "subtitle",
+          "lines": [
+            "I can't go."
+          ]
+        },
+        {
+          "id": "rapid-dialogue-30s-03",
+          "onset": 2,
+          "duration": 1,
+          "expected": "subtitle",
+          "lines": [
+            "Wait in room 12."
+          ]
+        },
+        {
+          "id": "rapid-dialogue-30s-04",
+          "onset": 3,
+          "duration": 1,
+          "expected": "subtitle",
+          "lines": [
+            "Wait in room 13."
+          ]
+        },
+        {
+          "id": "rapid-dialogue-30s-05",
+          "onset": 4,
+          "duration": 1,
+          "expected": "subtitle",
+          "lines": [
+            "We can leave."
+          ]
+        },
+        {
+          "id": "rapid-dialogue-30s-06",
+          "onset": 5,
+          "duration": 1,
+          "expected": "subtitle",
+          "lines": [
+            "We can't leave."
+          ]
+        },
+        {
+          "id": "rapid-dialogue-30s-07",
+          "onset": 6,
+          "duration": 1,
+          "expected": "subtitle",
+          "lines": [
+            "The code is 12."
+          ]
+        },
+        {
+          "id": "rapid-dialogue-30s-08",
+          "onset": 7,
+          "duration": 1,
+          "expected": "subtitle",
+          "lines": [
+            "The code is 13."
+          ]
+        },
+        {
+          "id": "rapid-dialogue-30s-09",
+          "onset": 8,
+          "duration": 1,
+          "expected": "subtitle",
+          "lines": [
+            "Please stay."
+          ]
+        },
+        {
+          "id": "rapid-dialogue-30s-10",
+          "onset": 9,
+          "duration": 1,
+          "expected": "subtitle",
+          "lines": [
+            "Please go."
+          ]
+        },
+        {
+          "id": "rapid-dialogue-30s-11",
+          "onset": 10,
+          "duration": 1,
+          "expected": "subtitle",
+          "lines": [
+            "Yes."
+          ]
+        },
+        {
+          "id": "rapid-dialogue-30s-12",
+          "onset": 11,
+          "duration": 1,
+          "expected": "subtitle",
+          "lines": [
+            "No."
+          ]
+        },
+        {
+          "id": "rapid-dialogue-30s-13",
+          "onset": 12,
+          "duration": 1,
+          "expected": "subtitle",
+          "lines": [
+            "Stop!"
+          ]
+        },
+        {
+          "id": "rapid-dialogue-30s-14",
+          "onset": 13,
+          "duration": 1,
+          "expected": "subtitle",
+          "lines": [
+            "Go!"
+          ]
+        },
+        {
+          "id": "rapid-dialogue-30s-15",
+          "onset": 14,
+          "duration": 1,
+          "expected": "subtitle",
+          "lines": [
+            "Wait!"
+          ]
+        },
+        {
+          "id": "rapid-dialogue-30s-16",
+          "onset": 15,
+          "duration": 1,
+          "expected": "subtitle",
+          "lines": [
+            "Hurry!"
+          ]
+        },
+        {
+          "id": "rapid-dialogue-30s-17",
+          "onset": 16,
+          "duration": 1,
+          "expected": "subtitle",
+          "lines": [
+            "I can go."
+          ]
+        },
+        {
+          "id": "rapid-dialogue-30s-18",
+          "onset": 17,
+          "duration": 1,
+          "expected": "subtitle",
+          "lines": [
+            "I can't go."
+          ]
+        },
+        {
+          "id": "rapid-dialogue-30s-19",
+          "onset": 18,
+          "duration": 1,
+          "expected": "subtitle",
+          "lines": [
+            "Wait in room 12."
+          ]
+        },
+        {
+          "id": "rapid-dialogue-30s-20",
+          "onset": 19,
+          "duration": 1,
+          "expected": "subtitle",
+          "lines": [
+            "Wait in room 13."
+          ]
+        },
+        {
+          "id": "rapid-dialogue-30s-21",
+          "onset": 20,
+          "duration": 1,
+          "expected": "subtitle",
+          "lines": [
+            "Come inside."
+          ]
+        },
+        {
+          "id": "rapid-dialogue-30s-22",
+          "onset": 21,
+          "duration": 1,
+          "expected": "subtitle",
+          "lines": [
+            "Wait outside."
+          ]
+        },
+        {
+          "id": "rapid-dialogue-30s-23",
+          "onset": 22,
+          "duration": 1,
+          "expected": "subtitle",
+          "lines": [
+            "Where?"
+          ]
+        },
+        {
+          "id": "rapid-dialogue-30s-24",
+          "onset": 23,
+          "duration": 1,
+          "expected": "subtitle",
+          "lines": [
+            "Over there."
+          ]
+        },
+        {
+          "id": "rapid-dialogue-30s-25",
+          "onset": 24,
+          "duration": 1,
+          "expected": "subtitle",
+          "lines": [
+            "Why?"
+          ]
+        },
+        {
+          "id": "rapid-dialogue-30s-26",
+          "onset": 25,
+          "duration": 1,
+          "expected": "subtitle",
+          "lines": [
+            "Be careful."
+          ]
+        },
+        {
+          "id": "rapid-dialogue-30s-27",
+          "onset": 26,
+          "duration": 1,
+          "expected": "subtitle",
+          "lines": [
+            "We are ready."
+          ]
+        },
+        {
+          "id": "rapid-dialogue-30s-28",
+          "onset": 27,
+          "duration": 1,
+          "expected": "subtitle",
+          "lines": [
+            "We are not ready."
+          ]
+        },
+        {
+          "id": "rapid-dialogue-30s-29",
+          "onset": 28,
+          "duration": 1,
+          "expected": "subtitle",
+          "lines": [
+            "Keep moving."
+          ]
+        },
+        {
+          "id": "rapid-dialogue-30s-30",
+          "onset": 29,
+          "duration": 1,
+          "expected": "subtitle",
+          "lines": [
+            "Stay here."
+          ]
+        }
+      ],
+      "negativeSegments": []
+    },
+    {
+      "id": "single-character-12s",
+      "label": "12-second single-character Chinese dialogue",
+      "durationSeconds": 12,
+      "repeatable": true,
+      "similarSubtitleCardWidthPx": 720,
+      "notes": "One-second authored cues. Use the matching source language and a different target language.",
+      "segments": [
+        {
+          "id": "single-character-12s-01",
+          "onset": 0,
+          "duration": 1,
+          "expected": "subtitle",
+          "lines": [
+            "好"
+          ]
+        },
+        {
+          "id": "single-character-12s-02",
+          "onset": 1,
+          "duration": 1,
+          "expected": "subtitle",
+          "lines": [
+            "不"
+          ]
+        },
+        {
+          "id": "single-character-12s-03",
+          "onset": 2,
+          "duration": 1,
+          "expected": "subtitle",
+          "lines": [
+            "走"
+          ]
+        },
+        {
+          "id": "single-character-12s-04",
+          "onset": 3,
+          "duration": 1,
+          "expected": "subtitle",
+          "lines": [
+            "等"
+          ]
+        },
+        {
+          "id": "single-character-12s-05",
+          "onset": 4,
+          "duration": 1,
+          "expected": "subtitle",
+          "lines": [
+            "来"
+          ]
+        },
+        {
+          "id": "single-character-12s-06",
+          "onset": 5,
+          "duration": 1,
+          "expected": "subtitle",
+          "lines": [
+            "是"
+          ]
+        },
+        {
+          "id": "single-character-12s-07",
+          "onset": 6,
+          "duration": 1,
+          "expected": "subtitle",
+          "lines": [
+            "嗯"
+          ]
+        },
+        {
+          "id": "single-character-12s-08",
+          "onset": 7,
+          "duration": 1,
+          "expected": "subtitle",
+          "lines": [
+            "看"
+          ]
+        },
+        {
+          "id": "single-character-12s-09",
+          "onset": 8,
+          "duration": 1,
+          "expected": "subtitle",
+          "lines": [
+            "停"
+          ]
+        },
+        {
+          "id": "single-character-12s-10",
+          "onset": 9,
+          "duration": 1,
+          "expected": "subtitle",
+          "lines": [
+            "快"
+          ]
+        },
+        {
+          "id": "single-character-12s-11",
+          "onset": 10,
+          "duration": 1,
+          "expected": "subtitle",
+          "lines": [
+            "对"
+          ]
+        },
+        {
+          "id": "single-character-12s-12",
+          "onset": 11,
+          "duration": 1,
+          "expected": "subtitle",
+          "lines": [
+            "错"
+          ]
+        }
+      ],
+      "negativeSegments": []
     }
   ]
 }
