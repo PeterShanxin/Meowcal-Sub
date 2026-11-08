@@ -28,6 +28,7 @@
 
     // Commands that are not available in browser mode (require Tauri window APIs)
     const TAURI_ONLY_COMMANDS = [
+        'get_display_context',
         'open_area_selector',
         'close_area_selector',
         'start_translation',
@@ -85,6 +86,7 @@
         'wizard_test_translation':       { method: 'POST', path: '/wizard/test-translation' },
 
         // Tauri-only (will return graceful error)
+        'get_display_context': { method: 'GET', path: '/display-context' },
         'open_area_selector': { method: 'POST', path: '/area-selector' },
         'start_translation': { method: 'POST', path: '/translation/start' },
         'stop_translation': { method: 'POST', path: '/translation/stop' },

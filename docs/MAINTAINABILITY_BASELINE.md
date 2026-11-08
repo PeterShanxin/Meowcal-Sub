@@ -15,7 +15,7 @@ the measured coverage scope (#31 lifecycle, #32 engine/pipeline, #33 main/setup,
 - 10 explicit legacy files above that ceiling;
 - 1 existing ESLint warning, with zero allowed errors;
 - frontend coverage floors of 88% statements, 81% branches, 90% functions, and
-  90% lines, over a named 33-module scope (measured 2026-09-17).
+  90% lines, over the named scope in the machine-readable baseline.
 
 ## Frontend coverage scope
 
@@ -33,7 +33,7 @@ enforces two rules over it:
   one module would license dropping every floor to zero. Any other decrease is
   still rejected.
 
-The 33 modules are the risk areas the decomposition lanes produced: the overlay
+The scoped modules cover the risk areas the decomposition lanes produced: the overlay
 and selector geometry, appearance, timer, and payload rules from #33/#34; the
 main and setup state and controllers from #33; and the repository's own gates,
 because a gate that is wrong fails open.
@@ -55,7 +55,7 @@ other side: a module that a unit test exercises but the scope omits fails the
 suite, so coverage cannot be kept high by leaving risky code out of the
 measurement. Its exclusions are an explicit list with a reason per entry.
 
-The measured result over that scope, from the Windows `Frontend & Browser` gate
+The historical result over the 33-module scope, from the Windows `Frontend & Browser` gate
 job on 2026-09-17, is **88.41% statements, 81.36% branches, 90.69% functions, and
 90.01% lines**, and the floors are those numbers rounded down to whole percent.
 

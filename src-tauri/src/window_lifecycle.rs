@@ -80,7 +80,7 @@ pub fn persist_main_geometry(window: &Window) {
     let Some(state) = window.try_state::<AppState>() else {
         return;
     };
-    let config = lock_or_recover(&state.config).clone();
+    let config = lock_or_recover(&state.config);
     crate::config_save::save_or_warn(window.app_handle(), &config, "window geometry");
 }
 

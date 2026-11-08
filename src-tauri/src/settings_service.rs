@@ -9,7 +9,8 @@ use tauri::{async_runtime, AppHandle, Manager};
 use tracing::{info, warn};
 
 use crate::app_state::AppState;
-use crate::config::{save_config, AppConfig, CaptureRegion, WindowPreferences};
+use crate::capture_target::CaptureSelection;
+use crate::config::{save_config, AppConfig, WindowPreferences};
 use crate::sync_utils::lock_or_recover;
 
 /// The settings currently in effect, once startup has finished loading them.
@@ -22,10 +23,8 @@ pub async fn current(state: &AppState) -> Result<AppConfig, String> {
 
 /// Apply submitted settings to the running app and persist them.
 pub async fn save(app: AppHandle, state: &AppState, settings: AppConfig) -> Result<(), String> {
+    state.startup_gate.wait_until_ready().await?;
     info!("Saving settings...");
-
-    let last_region = state.current_capture_region();
-    let last_scale_factor = state.capture_scale_factor();
 
     // Through the same path the window events use, rather than reading the
     // window here: that copy lacked the minimised and offscreen guards, so
@@ -38,40 +37,32 @@ pub async fn save(app: AppHandle, state: &AppState, settings: AppConfig) -> Resu
         None => false,
     };
 
-    // Update the in-memory config
-    let updated = {
-        let mut config = lock_or_recover(&state.config);
-        let window_preferences = main_window_present.then(|| config.window_preferences.clone());
-        let merged = merge_app_owned_state(
-            settings,
-            last_region,
-            last_scale_factor,
-            window_preferences,
-            &config,
-        );
-        *config = merged.clone();
-        merged
-    };
-
-    let cpu_only = updated.translation.foundry_local.cpu_only;
-
-    // Persist to disk without blocking the UI thread
     let app_handle = app.clone();
-    let updated_clone = updated.clone();
-    async_runtime::spawn_blocking(move || save_config(&app_handle, &updated_clone))
-        .await
-        .map_err(|err| {
-            let message = format!("Failed to spawn save_config task: {}", err);
-            warn!("{}", message);
-            message
-        })?
-        .map_err(|err| {
-            let message = format!("Failed to save settings: {}", err);
-            warn!("{}", message);
-            message
-        })?;
+    let updated = async_runtime::spawn_blocking(move || {
+        let state = app_handle.state::<AppState>();
+        crate::config_save::update_live(
+            &state.config,
+            |config| {
+                let selection = state.current_capture_selection();
+                let preferences = main_window_present.then(|| config.window_preferences.clone());
+                *config = merge_app_owned_state(settings, selection.as_ref(), preferences, config);
+            },
+            |config| save_config(&app_handle, config),
+        )
+    })
+    .await
+    .map_err(|err| {
+        let message = format!("Failed to spawn save_config task: {}", err);
+        warn!("{}", message);
+        message
+    })?
+    .map_err(|err| {
+        let message = format!("Failed to save settings: {}", err);
+        warn!("{}", message);
+        message
+    })?;
 
-    crate::core_client::select_cpu_only(cpu_only)
+    crate::core_client::select_cpu_only(updated.translation.foundry_local.cpu_only)
 }
 
 /// Fold app-owned state back into the settings the UI submitted.
@@ -80,18 +71,15 @@ pub async fn save(app: AppHandle, state: &AppState, settings: AppConfig) -> Resu
 /// which case whatever the form submitted stands.
 fn merge_app_owned_state(
     submitted: AppConfig,
-    last_capture_region: Option<CaptureRegion>,
-    last_capture_scale_factor: f64,
+    selection: Option<&CaptureSelection>,
     window_preferences: Option<WindowPreferences>,
     live: &AppConfig,
 ) -> AppConfig {
     let mut updated = submitted;
 
-    // Persist the last capture region into the config
-    updated.last_capture_region = last_capture_region;
-
-    // Persist the DPI scale factor so restored regions capture the correct physical pixels.
-    updated.last_capture_scale_factor = Some(last_capture_scale_factor);
+    updated.last_capture_region = selection.map(|s| s.region);
+    updated.last_capture_scale_factor = selection.map(|s| s.monitor.scale_factor);
+    updated.last_capture_monitor = selection.map(|s| s.monitor.clone());
 
     if let Some(preferences) = window_preferences {
         updated.window_preferences = preferences;

@@ -88,7 +88,7 @@ Source OCR is never represented as successful translation.
 | -------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Tauri commands             | `src-tauri/src/commands.rs`                                                                                                                                                                                           | Thin adapters only; application services own behavior                                                                                                                                        |
 | Browser routes             | `src-tauri/src/http_server.rs`, `http_port.rs`                                                                                                                                                                        | Adapter parity with supported Tauri contracts; explicit `501` for native-only behavior. `http_port.rs` owns the listening port so verification can take a free one instead of requiring 3001 |
-| Application state          | `src-tauri/src/app_state.rs`                                                                                                                                                                                          | One owner for shared session state and the region/scale invariants                                                                                                                           |
+| Application state          | `src-tauri/src/app_state.rs`                                                                                                                                                                                          | One owner for shared session state and the region/monitor/DPI invariants                                                                                                                           |
 | App/window lifecycle       | `src-tauri/src/main.rs` (composition root), `window_lifecycle.rs`, `tray.rs`, `app_logging.rs`, `selector_window.rs`, `wizard_window.rs`                                                                              | One lifecycle service owns restore/show ordering, tray, and shutdown                                                                                                                         |
 | Persisted configuration    | `src-tauri/src/config.rs`, `capture_region.rs`, `settings_service.rs`                                                                                                                                                 | One versioned config service owns defaults, validation, migration, and writes                                                                                                                |
 | Capture and OCR            | `capture/`, `ocr/` (product policy), `core/src/ocr/` (native recognition), `ocr_language_packs.rs` (Windows pack setup)                                                                                                                                            | Separate capture/OCR services; pipeline orchestrator owns sequencing                                                                                                                         |
@@ -134,6 +134,10 @@ Shared contracts have one owner before parallel decomposition begins:
   guard, not a semantic detector for paraphrases or previously unseen leakage.
 - Configuration: Rust `config` is canonical. Frontend code may present or
   submit settings but cannot invent defaults, migrations, or readiness rules.
+  Live read-modify-write saves hold the `AppState.config` lock through the
+  durable write and publication. Settings and capture updates use
+  `config_save::update_live` on blocking workers; capture state is published
+  before releasing that lock so a settings save reads the committed selection.
 - Commands and events: Rust payload types and `ipc/protocol.rs` are canonical.
   `tauri-bridge.js` is the single frontend transport adapter. A command or event
   change updates Rust, bridge mapping, browser parity or explicit limitation,
@@ -198,10 +202,26 @@ Shared contracts have one owner before parallel decomposition begins:
   `package.json` and `src-tauri/Cargo.toml` are synchronized mirrors.
 - Display state: the pipeline owns translated/source-only/failure semantics.
   The overlay renders the supplied state and cannot relabel OCR as translation.
-- Overlay coordinates: capture and selection use primary-monitor logical pixels.
-  The native overlay covers that same monitor at physical origin `(0, 0)`;
-  spanning the virtual desktop would shift the frame and subtitles when another
-  monitor sits to the left or above it, and can select a different DPI scale.
+- Display targeting: `capture_target.rs` owns monitor identity, local geometry,
+  pending selector tokens and restore validation. `display_monitor.rs` combines
+  Tauri physical bounds/DPI with the Windows monitor device interface identity.
+  Opening the selector pins the monitor with the largest intersection with Home.
+  Selector and overlay coordinates are monitor-local logical pixels. WGC crops
+  monitor-local physical pixels; GDI adds the unscaled physical desktop origin.
+  Overlay hit tests also add the physical origin after scaling local coordinates.
+- Display lifecycle: `display_session.rs` rejects Start after an idle move to a
+  different monitor. A running session retains its selected monitor. A 250 ms
+  session-scoped probe detects identity/bounds/DPI changes independently of OCR
+  and inference; capture also checks the target and native overlay bounds before
+  and after each frame. A moved overlay stops capture instead of reading another screen.
+  Display loss invalidates in-flight work, stops capture and hides the overlay,
+  then requires a new selection. Reconnection does not restart translation.
+  Saved areas require matching screen identity, bounds, DPI and current Home
+  monitor; legacy areas restore only on a single-display desktop.
+  An app-owned one-second topology watch updates Home after idle hotplug and
+  stops at application exit.
+  `ui/display-controller.ts` refreshes display context after debounced Home moves
+  and handles display-loss notices without probing the translation engine.
 - Overlay liveness: `overlay-ready` and `overlay-heartbeat` are emitted by the
   overlay frontend and owned by `overlay/liveness.rs`, which distinguishes a
   live native window from a renderer still consuming events. A stale renderer

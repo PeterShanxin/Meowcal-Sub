@@ -1,0 +1,26 @@
+name: Prepare reviewed Core archive
+description: Download the locked release once for all Core consumers in this job.
+
+runs:
+  using: composite
+  steps:
+    - name: Download the reviewed release through the GitHub API
+      shell: pwsh
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: |
+        $ErrorActionPreference = 'Stop'
+        $architecture = switch ([Runtime.InteropServices.RuntimeInformation]::OSArchitecture) {
+          'Arm64' { 'arm64' }
+          'X64' { 'x64' }
+          default { throw 'Core requires a native Windows x64 or ARM64 runner.' }
+        }
+        $lock = Get-Content config/meowcal-core.lock.json -Raw | ConvertFrom-Json
+        $asset = $lock.architectures.$architecture.asset
+        $directory = Join-Path $env:RUNNER_TEMP 'meowcal-reviewed-core'
+        New-Item -ItemType Directory -Path $directory -Force | Out-Null
+        gh release download $lock.tag --repo $lock.repository --pattern $asset --dir $directory
+        if ($LASTEXITCODE -ne 0) { throw 'Reviewed Core archive download failed.' }
+        $archive = Join-Path $directory $asset
+        "MEOWCAL_CORE_ARCHIVE=$archive" >> $env:GITHUB_ENV
+        # Archive overrides still pass through fetch-meowcal-core.ps1 verification.

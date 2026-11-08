@@ -63,13 +63,26 @@ original subtitle language and your target language. Let setup download and
 test the local engine. Follow **Install recognition language** if Windows lacks
 the OCR language for the original subtitles.
 
-Play a video with readable subtitles on your **primary monitor**, choose
+Move the app window onto the screen playing the subtitled video, choose
 **Select subtitle area**, and draw a box around the original lines. Include space
 for all subtitle lines, while avoiding player controls, unrelated text, and the
 translated overlay itself. The box is a screen region, not an object tracker:
-reselect it when the video moves or changes size on that monitor. The normal
-selector/capture workflow does not support secondary-display capture; move the
-video back to the primary monitor before selecting its subtitle area.
+reselect it when the video moves or changes size.
+
+With multiple displays, Home shows a quiet hint. The selector, OCR and overlay
+use the screen containing the largest part of the app window when you open the
+selector. A running session stays on that screen even if you move Home. To switch
+screens, stop translation, move Home, and select the new subtitle area. No screen
+picker or simultaneous multi-screen translation is needed.
+
+If the capture screen disconnects, or its position, resolution or DPI changes,
+translation stops and the overlay hides. Reconnecting does not resume capture;
+select the subtitle area again in the current session. Restart can restore the
+saved area only when its screen identity, bounds and DPI still match the screen
+containing Home. Older
+configs without a screen identity restore an area only on a single-display
+desktop. The experimental WinUI windows are limited to one display; multi-display
+desktops use the standard Tauri selector and overlay.
 
 Choose **Start translation**. The first start takes longer while the model warms
 up. **Subtitle style** controls text size and a Dark or Light plate; use

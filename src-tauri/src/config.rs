@@ -39,13 +39,10 @@ pub struct AppConfig {
     /// Translation backend settings
     pub translation: TranslationConfig,
 
-    /// Last selected capture region
+    /// Monitor-local logical capture region and its verified screen identity.
     pub last_capture_region: Option<CaptureRegion>,
-
-    /// Last known DPI scale factor for the capture region (logical -> physical pixels).
-    ///
-    /// This is persisted so restored regions behave correctly on high-DPI displays.
     pub last_capture_scale_factor: Option<f64>,
+    pub last_capture_monitor: Option<crate::capture_target::CaptureMonitor>,
 
     /// Window size/position preferences
     pub window_preferences: WindowPreferences,
@@ -390,6 +387,7 @@ impl Default for AppConfig {
             translation: TranslationConfig::default(),
             last_capture_region: None,
             last_capture_scale_factor: None,
+            last_capture_monitor: None,
             window_preferences: WindowPreferences::default(),
             minimize_to_tray: true,
             unmodelled: serde_json::Map::new(),

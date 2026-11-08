@@ -4,17 +4,17 @@
 //
 // The monitor compares the OS cursor position (device pixels, screen space)
 // against overlay surfaces measured in CSS pixels (window space), so every rect
-// needs the window origin added before scaling.
+// scales local coordinates, then adds the physical window origin.
 (function exposeOverlayHitBounds(root) {
   function rectToPhysicalBounds(rect, origin, scaleFactor) {
     const offsetX = origin?.x || 0;
     const offsetY = origin?.y || 0;
 
     return {
-      left: (rect.left + offsetX) * scaleFactor,
-      top: (rect.top + offsetY) * scaleFactor,
-      right: (rect.right + offsetX) * scaleFactor,
-      bottom: (rect.bottom + offsetY) * scaleFactor,
+      left: rect.left * scaleFactor + offsetX,
+      top: rect.top * scaleFactor + offsetY,
+      right: rect.right * scaleFactor + offsetX,
+      bottom: rect.bottom * scaleFactor + offsetY,
     };
   }
 

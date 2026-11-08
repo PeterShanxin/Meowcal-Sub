@@ -2,7 +2,7 @@ use crate::app_state::AppState;
 use crate::capture;
 use crate::config::{save_config, AppConfig, CaptureRegion};
 use crate::engine_status::{self, EngineStatusSnapshot};
-use crate::event_payloads::{CaptureStatusPayload, TranslationPayload};
+use crate::event_payloads::TranslationPayload;
 use crate::ipc::{
     IpcMessage, OverlaySettingsData, RegionData, SetRegionPayload, SettingsSyncPayload,
 };
@@ -13,6 +13,7 @@ use crate::llm::{
 };
 use crate::overlay;
 use crate::overlay_ipc::send_overlay_message;
+use crate::pipeline_capture::{try_capture, CaptureAttemptResult, CaptureSessionState};
 use crate::pipeline_repeat_policy as repeat_policy;
 use crate::selector_window::{self, OpenAreaSelectorResult, SelectorSnapshot};
 use crate::session_lifecycle::sleep_until_stopped;
@@ -186,12 +187,16 @@ pub async fn save_settings(
 /// Called from JavaScript:
 /// `await invoke('set_capture_region', { x: 100, y: 100, width: 800, height: 100, scaleFactor: 1.0 });`
 #[tauri::command]
-pub fn set_capture_region(
+#[allow(clippy::too_many_arguments)] // Preserve the flat Tauri region payload.
+pub async fn set_capture_region(
     x: i32,
     y: i32,
     width: i32,
     height: i32,
     scale_factor: f64,
+    selection_id: Option<u64>,
+    window: tauri::WebviewWindow,
+    app: AppHandle,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
     info!(
@@ -199,27 +204,37 @@ pub fn set_capture_region(
         x, y, width, height
     );
 
-    crate::app_state::validate_capture_region(width, height, scale_factor)?;
-
-    state.set_capture_region(
-        CaptureRegion {
-            x,
-            y,
-            width,
-            height,
-        },
+    state.startup_gate.wait_until_ready().await?;
+    crate::display_session::set_region(
+        &app,
+        &state,
+        CaptureRegion::new(x, y, width, height),
         scale_factor,
-    );
-
-    Ok(())
+        selection_id,
+        window.label(),
+    )
+    .await
 }
 
 /// Get the current capture region (if set)
 ///
 /// Called from JavaScript: `const region = await invoke('get_capture_region');`
 #[tauri::command]
-pub fn get_capture_region(state: State<'_, AppState>) -> Option<CaptureRegion> {
-    state.current_capture_region()
+pub async fn get_capture_region(
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> Result<Option<CaptureRegion>, String> {
+    state.startup_gate.wait_until_ready().await?;
+    Ok(crate::display_session::context(&app, &state)?.region)
+}
+
+#[tauri::command]
+pub async fn get_display_context(
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> Result<crate::display_session::DisplayContext, String> {
+    state.startup_gate.wait_until_ready().await?;
+    crate::display_session::context(&app, &state)
 }
 
 /// Open the area selector overlay window
@@ -230,7 +245,12 @@ pub async fn open_area_selector(
     app: AppHandle,
     state: State<'_, AppState>,
 ) -> Result<OpenAreaSelectorResult, String> {
-    selector_window::open(app, &state.selector_snapshot).await
+    state.startup_gate.wait_until_ready().await?;
+    let _transition = state.session_lifecycle.control.lock().await;
+    if state.is_translation_running() {
+        return Err("Stop translation before selecting another area.".into());
+    }
+    selector_window::open(app, &state.selector_snapshot, &state.capture).await
 }
 
 /// Get the most recent selector background snapshot (if available).
@@ -246,108 +266,13 @@ pub fn get_selector_snapshot(state: State<'_, AppState>) -> Option<SelectorSnaps
 /// Called from JavaScript: `await invoke('close_area_selector');`
 #[tauri::command]
 pub async fn close_area_selector(app: AppHandle, state: State<'_, AppState>) -> Result<(), String> {
+    lock_or_recover(&state.capture).cancel_selection();
     selector_window::close(&app, &state.selector_snapshot)
 }
 
 // =============================================================================
 // TRANSLATION COMMANDS
 // =============================================================================
-
-/// Result of a capture attempt with session state
-enum CaptureAttemptResult {
-    /// Capture succeeded with the image data
-    Success(capture::CaptureResult),
-    /// Capture failed and should be retried after a delay
-    RetryAfterDelay,
-}
-
-/// State for the capture session fallback logic
-struct CaptureSessionState {
-    use_persistent: bool,
-    failure_count: u32,
-    fallback_notified: bool,
-}
-
-impl CaptureSessionState {
-    fn new(use_persistent: bool) -> Self {
-        Self {
-            use_persistent,
-            failure_count: 0,
-            fallback_notified: false,
-        }
-    }
-}
-
-/// Attempt to capture the screen region, handling session recovery and fallback.
-///
-/// This flattens the deeply nested capture logic into a single function.
-fn try_capture(
-    region: &CaptureRegion,
-    state: &mut CaptureSessionState,
-    app: &AppHandle,
-) -> CaptureAttemptResult {
-    // Try persistent session first if available
-    if state.use_persistent {
-        match capture::capture_with_session(region) {
-            Ok(result) => {
-                state.failure_count = 0;
-                return CaptureAttemptResult::Success(result);
-            }
-            Err(e) => {
-                state.failure_count += 1;
-                warn!(
-                    "⚠️ Session capture failed (attempt {}): {}",
-                    state.failure_count, e
-                );
-
-                // Try to recover the session on first failure
-                if state.failure_count == 1 {
-                    capture::close_capture_session();
-                    if let Err(restart_err) = capture::init_capture_session() {
-                        warn!(
-                            "⚠️ Failed to restart capture session, falling back: {}",
-                            restart_err
-                        );
-                        state.use_persistent = false;
-                    } else {
-                        info!("✅ Capture session restarted");
-                    }
-                } else if state.failure_count >= 3 {
-                    warn!("⚠️ Disabling persistent capture after repeated failures");
-                    capture::close_capture_session();
-                    state.use_persistent = false;
-                }
-            }
-        }
-    }
-
-    // Fall back to smart_capture
-    match capture::smart_capture(region) {
-        Ok((result, using_fallback)) => {
-            if using_fallback && !state.fallback_notified {
-                state.fallback_notified = true;
-                let status = CaptureStatusPayload {
-                    using_fallback: true,
-                    message: "Using GDI fallback - video content may not capture correctly"
-                        .to_string(),
-                    is_error: false,
-                };
-                let _ = app.emit("capture-status", status);
-            }
-            CaptureAttemptResult::Success(result)
-        }
-        Err(e) => {
-            warn!("⚠️ Capture failed: {}", e);
-            let status = CaptureStatusPayload {
-                using_fallback: false,
-                message: format!("Capture failed: {}", e),
-                is_error: true,
-            };
-            let _ = app.emit("capture-status", status);
-            CaptureAttemptResult::RetryAfterDelay
-        }
-    }
-}
 
 /// Check if translation is currently running
 ///
@@ -430,33 +355,18 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
     info!(">>> START_TRANSLATION COMMAND CALLED <<<");
     info!("Starting translation...");
 
-    let region = {
-        let region_guard = lock_or_recover(&state.capture_region);
-        match *region_guard {
-            Some(r) => r,
-            None => return Err("No capture region set. Please select an area first.".to_string()),
-        }
-    };
-
-    {
-        let mut is_running = lock_or_recover(&state.is_running);
-        if *is_running {
-            return Err("Translation is already running".to_string());
-        }
-        *is_running = true;
+    if state.is_translation_running() {
+        return Err("Translation is already running".into());
     }
+    state.session_lifecycle.wait_stopped().await?;
+
+    let selection = crate::display_session::for_start(&app, &state)?;
+    let region = selection.region;
+    let scale_factor = selection.monitor.scale_factor;
+
+    *lock_or_recover(&state.is_running) = true;
     let pipeline_clock = Arc::clone(&state.pipeline_clock);
     let session_id = pipeline_clock.begin_session();
-
-    let scale_factor = {
-        let scale_guard = lock_or_recover(&state.capture_scale_factor);
-        *scale_guard
-    };
-    let capture_region = region.scaled(scale_factor);
-    debug!(
-        "Capture scale factor: {}, logical: {:?}, physical: {:?}",
-        scale_factor, region, capture_region
-    );
 
     let (interval_ms, source_language, target_language, translation_config) = {
         let config = lock_or_recover(&state.config);
@@ -494,8 +404,12 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
         interval_ms, target_language, eligibility
     );
 
-    if let Err(e) = overlay::show_overlay(&app).await {
-        warn!("⚠️ Failed to show overlay: {}", e);
+    if let Err(error) = overlay::show_overlay(&app, &selection.monitor).await {
+        state.pipeline_clock.invalidate_session();
+        *lock_or_recover(&state.is_running) = false;
+        *lock_or_recover(&state.stop_signal) = None;
+        let _ = overlay::hide_overlay(&app);
+        return Err(error);
     }
     if let Err(e) = overlay::update_overlay_region(&app, &region) {
         warn!("⚠️ Failed to update overlay region: {}", e);
@@ -536,6 +450,12 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
     ));
 
     let app_for_region = app.clone();
+    drop(crate::display_session::watch(
+        app.clone(),
+        selection.clone(),
+        session_id,
+        stop_rx.clone(),
+    ));
 
     let translation_handle = tokio::spawn(async move {
         let app_for_guard = app.clone();
@@ -543,6 +463,7 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
             let state = app_for_guard.state::<AppState>();
             capture::close_capture_session();
             *lock_or_recover(&state.is_running) = false;
+            let _ = app_for_guard.emit("display-context-changed", ());
             info!("Translation loop cleanup complete");
         }
 
@@ -579,7 +500,7 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
         let mut last_capture_region: Option<CaptureRegion> = None;
         let mut notices = crate::pipeline_notices::Notices::new();
 
-        let use_persistent = match capture::init_capture_session() {
+        let use_persistent = match capture::init_capture_session(&selection.monitor) {
             Ok(_) => {
                 info!("✅ Persistent capture session initialized");
                 true
@@ -613,26 +534,13 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
 
             let current_capture_region = {
                 let state = app_for_region.state::<AppState>();
-                let region_opt = *lock_or_recover(&state.capture_region);
-                let scale = *lock_or_recover(&state.capture_scale_factor);
-                match region_opt {
-                    Some(r) => {
-                        let scaled = r.scaled(scale);
-                        let (screen_width, screen_height) = capture::get_screen_dimensions();
-
-                        if scaled.intersects_origin_bounds(screen_width, screen_height) {
-                            scaled
-                                .clamp_to_bounds(screen_width, screen_height)
-                                .unwrap_or(scaled)
-                        } else {
-                            scaled
-                        }
-                    }
-                    None => {
-                        warn!("⚠️ No capture region set, skipping frame");
-                        sleep_until_stopped(pacer.period(), &mut stop_rx).await;
-                        continue;
-                    }
+                match state
+                    .current_capture_selection()
+                    .filter(|s| s.monitor == selection.monitor)
+                    .and_then(|s| s.physical_local().ok())
+                {
+                    Some(region) => region,
+                    None => break,
                 }
             };
 
@@ -658,14 +566,25 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
             let token = pipeline_clock.next_capture(session_id);
             let capture_started = Instant::now();
             let captured_at = std::time::SystemTime::now();
-            let capture_result =
-                match try_capture(&current_capture_region, &mut capture_state, &app) {
-                    CaptureAttemptResult::Success(result) => result,
-                    CaptureAttemptResult::RetryAfterDelay => {
-                        sleep_until_stopped(pacer.remaining_for(frame_started), &mut stop_rx).await;
-                        continue;
+            let capture_result = match try_capture(
+                &current_capture_region,
+                &selection.monitor,
+                &mut capture_state,
+                &app,
+            ) {
+                CaptureAttemptResult::Success(result) => result,
+                CaptureAttemptResult::RetryAfterDelay => {
+                    sleep_until_stopped(pacer.remaining_for(frame_started), &mut stop_rx).await;
+                    continue;
+                }
+                CaptureAttemptResult::DisplayChanged => {
+                    let state = app.state::<AppState>();
+                    if crate::display_session::invalidate(&app, &state, session_id) {
+                        send_overlay_message(&app, IpcMessage::new("Overlay.Hide")).await;
                     }
-                };
+                    break;
+                }
+            };
             let capture_ms = capture_started.elapsed().as_millis() as u64;
 
             if *stop_rx.borrow() {
@@ -842,7 +761,6 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
     });
 
     state.session_lifecycle.monitor(translation_handle);
-
     Ok(())
 }
 
@@ -936,7 +854,7 @@ pub async fn wizard_install_engine(
     match hy_mt_installer::install(&app, cache_dir).await {
         Ok(paths) => {
             let runtime = paths.managed_config(&manifest);
-            let updated = {
+            {
                 let mut config = lock_or_recover(&state.config);
                 config.translation.enable_foundry_local = true;
                 config.translation.allow_mock_fallback = false;
@@ -948,9 +866,8 @@ pub async fn wizard_install_engine(
                 // problem cannot hide this install from setup (#65).
                 config.translation.foundry_local.engine_cache_root =
                     crate::engine_recovery::cache_root_of(&paths);
-                config.clone()
-            };
-            save_config(&app, &updated)?;
+                save_config(&app, &config)?;
+            }
             let _ = app.emit_to(
                 "foundry-wizard",
                 "wizard-download-complete",

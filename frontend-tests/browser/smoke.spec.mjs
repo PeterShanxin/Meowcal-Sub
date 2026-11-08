@@ -42,6 +42,33 @@ test("status notices do not intercept the primary action in a compact window", a
   await page.getByRole("button", { name: "Start translation", exact: true }).click({ trial: true });
 });
 
+test("the multi-display hint is quiet, fits a compact Home and explains session pinning", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 544, height: 400 });
+  await page.goto("/");
+  await page.waitForFunction(() => document.querySelector("meowcal-app")?.snapshot.busy === "idle");
+  await expect(page.locator(".display-notice")).toHaveCount(0);
+  await page.evaluate(() => {
+    const app = document.querySelector("meowcal-app");
+    app.snapshot = {
+      ...app.snapshot,
+      multipleDisplays: true,
+      engine: { phase: "ready" },
+      region: { x: 100, y: 200, width: 600, height: 80 },
+    };
+  });
+  await expect(page.locator(".display-notice")).toHaveText(
+    "检测到多个显示器，将使用当前窗口所在的屏幕。",
+  );
+  await page.getByRole("button", { name: "Start translation", exact: true }).click({ trial: true });
+  await page.evaluate(() => {
+    const app = document.querySelector("meowcal-app");
+    app.snapshot = { ...app.snapshot, running: true };
+  });
+  await expect(page.locator(".display-notice")).toHaveText("翻译期间将保持使用已选屏幕。");
+});
+
 test("browser bridge reads backend health, settings, and readiness", async ({ page, request }) => {
   const pageErrors = [];
   page.on("pageerror", (error) => pageErrors.push(error.message));
@@ -100,6 +127,9 @@ test("browser mode reports Tauri-only capture as unavailable", async ({ request 
   await expect(response.json()).resolves.toMatchObject({
     browserMode: true,
   });
+  const display = await request.get(`${backendOrigin}/api/display-context`);
+  expect(display.status()).toBe(501);
+  await expect(display.json()).resolves.toMatchObject({ browserMode: true });
 });
 
 test("browser mode refuses native translation exit", async ({ page, request }) => {

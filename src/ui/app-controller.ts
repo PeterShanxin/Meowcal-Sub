@@ -7,10 +7,10 @@ import { defaultSettings, mergeSettings, recognitionPresets } from "./settings-d
 import { UpdateController } from "./update-controller";
 import { SettingsWriter } from "./settings-writer";
 import { EngineStatusController } from "./engine-status-controller";
+import { DisplayController } from "./display-controller";
 
 type Subscriber = (snapshot: UiSnapshot) => void;
 
-// Keep the stored key so completed setup does not reopen.
 const ONBOARDING_SEEN_KEY = "meowcal.onboardingComplete";
 const NOTICE_DURATION_MS = 4000;
 
@@ -34,6 +34,7 @@ export class AppController {
     busy: "loading",
     settings: structuredClone(defaultSettings),
     region: null,
+    multipleDisplays: false,
     engine: null,
     ocrLanguages: new Set(),
     running: false,
@@ -45,6 +46,7 @@ export class AppController {
     appVersion: null,
   };
   private engines = new EngineStatusController((patch) => this.publish(patch));
+  private displays = new DisplayController((patch) => this.publish(patch));
   private updates = new UpdateController((patch) => this.publish(patch));
   private settingsWriter = new SettingsWriter((settingsSave) => this.publish({ settingsSave }));
 
@@ -75,7 +77,6 @@ export class AppController {
   dismissMessage(): void {
     this.publish({ error: null, notice: null });
   }
-
   async initialize(): Promise<void> {
     this.publish({ busy: "loading", error: null });
     const browserMode = window.TauriBridge.isBrowserMode();
@@ -93,13 +94,15 @@ export class AppController {
     this.publish({
       settings: merged,
       ocrLanguages: new Set(languages),
-      region: region ?? merged.lastCaptureRegion ?? null,
+      region: browserMode ? (region ?? merged.lastCaptureRegion ?? null) : region,
       running,
       busy: "idle",
       ...(await this.updates.initialState()),
+      ...(await this.displays.read()),
     });
     this.hideDiagnosticsOutsideDeveloperMode();
     await this.setupEvents();
+    await this.displays.start();
     if (!browserMode && localStorage.getItem(ONBOARDING_SEEN_KEY) !== "true") {
       await this.openSetup();
     }
@@ -125,7 +128,6 @@ export class AppController {
       if (payload.isError) this.publish({ error: payload.message ?? "Screen capture failed" });
       else if (payload.message) this.publish({ captureWarning: payload.message });
     });
-    // A dismissed wizard must not reopen automatically (#74).
     const wizardUnlisten = await window.TauriBridge.event.listen("engine-wizard-closed", () => {
       localStorage.setItem(ONBOARDING_SEEN_KEY, "true");
     });
@@ -155,6 +157,7 @@ export class AppController {
   dispose(): void {
     this.disposed = true;
     this.engines.dispose();
+    this.displays.dispose();
     this.stopRegionPolling();
     if (this.overlaySaveId !== null) window.clearTimeout(this.overlaySaveId);
     if (this.autoCheckTimer !== null) window.clearTimeout(this.autoCheckTimer);
@@ -165,13 +168,11 @@ export class AppController {
   setScreen(screen: AppScreen): void {
     this.publish({ screen, notice: null });
   }
-
   async setLanguage(kind: "source" | "target", value: string): Promise<void> {
     const settings = applyLanguageSelection(structuredClone(this.snapshot.settings), kind, value);
     this.publish({ settings, notice: null });
     await this.persistSettingsInBackground();
   }
-
   async selectRegion(): Promise<void> {
     try {
       await window.TauriBridge.invoke("open_area_selector");
@@ -200,7 +201,7 @@ export class AppController {
 
   private confirmRegion(region: CaptureRegion): void {
     this.stopRegionPolling();
-    this.publish({ region, notice: "Subtitle area selected" });
+    this.publish({ region, notice: "Subtitle area selected", error: null, captureWarning: null });
     if (this.disposed || window.TauriBridge.isBrowserMode()) return;
     const { running, busy, settingsSave } = this.snapshot;
     if (!running && busy === "idle" && settingsSave.kind === "idle") void this.engines.prewarm();
@@ -240,9 +241,7 @@ export class AppController {
       this.safeInvoke<CaptureRegion | null>("get_capture_region", this.snapshot.region),
       this.safeInvoke<Partial<AppSettings> | null>("get_settings", null),
     ]);
-    // Refresh cannot establish whether a capture error has cleared.
-    const patch: Partial<UiSnapshot> = { region };
-    // Import the overlay menu's saved appearance without overwriting pending edits.
+    const patch: Partial<UiSnapshot> = { region, ...(await this.displays.read()) };
     if (stored && this.overlaySaveId === null && this.snapshot.settingsSave.kind === "idle") {
       patch.settings = { ...this.snapshot.settings, overlay: mergeSettings(stored).overlay };
     }
@@ -391,7 +390,6 @@ export class AppController {
     this.hideDiagnosticsOutsideDeveloperMode();
   }
 
-  // Hide persisted raw-text diagnostics outside Developer options, including on startup.
   private hideDiagnosticsOutsideDeveloperMode(): void {
     if (!this.snapshot.developerMode && this.snapshot.settings.overlay.showDiagnostics) {
       void this.updateOverlay({ showDiagnostics: false });

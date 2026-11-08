@@ -7,6 +7,7 @@ import "../scripts/overlay-subtitle-surface.js";
 import "../scripts/overlay-clip-payload.js";
 import "../scripts/overlay-hit-bounds.js";
 import "../scripts/region-geometry.js";
+import "../scripts/selector-geometry.js";
 import "../scripts/overlay-geometry.js";
 import "../scripts/overlay-appearance.js";
 import "../scripts/overlay-timers.js";

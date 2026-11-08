@@ -1,0 +1,187 @@
+{
+  "schemaVersion": 1,
+  "scenarioId": "negative-band-recovery-120s",
+  "ok": true,
+  "gateOk": true,
+  "endToEndOk": true,
+  "partial": false,
+  "fatal": [],
+  "warnings": [
+    "ignored 1868 non-gate log entries"
+  ],
+  "authored": {
+    "durationSeconds": 120,
+    "subtitleCueCount": 5,
+    "negativeSegmentCount": 3,
+    "startUtcMs": 1794136369762.7
+  },
+  "gate": {
+    "inputFrameCount": 3736,
+    "frameCount": 1868,
+    "ignoredFrameCount": 1868,
+    "relativeFrameCount": 458,
+    "missedOCRcueIDs": [],
+    "observedAnyAdmissionCueIDs": [
+      "nb-dialogue-01",
+      "nb-dialogue-02",
+      "nb-dialogue-03",
+      "nb-dialogue-04",
+      "nb-dialogue-05"
+    ],
+    "gateAdmittedCueIDs": [
+      "nb-dialogue-01",
+      "nb-dialogue-02",
+      "nb-dialogue-03",
+      "nb-dialogue-04",
+      "nb-dialogue-05"
+    ],
+    "correctlyAdmittedCueIDs": [
+      "nb-dialogue-01",
+      "nb-dialogue-02",
+      "nb-dialogue-03",
+      "nb-dialogue-04",
+      "nb-dialogue-05"
+    ],
+    "missedAdmissionCueIDs": [],
+    "gateDelayMs": {
+      "samples": [
+        1312,
+        251,
+        266,
+        264,
+        263
+      ],
+      "p50": 264,
+      "p95": 1102.7999999999997
+    },
+    "negativePostWarmup": [
+      {
+        "segmentId": "nb-watermark-band",
+        "durationSeconds": 40,
+        "warmupSeconds": 6,
+        "firstOcrUtcMs": 1794136370166,
+        "postWarmupFrames": 129,
+        "postWarmupAdmittedFrames": 0,
+        "nonemptyPostWarmupFrames": 129,
+        "cycles": {
+          "0": {
+            "frames": 129,
+            "admittedFrames": 0,
+            "nonemptyFrames": 129,
+            "firstUtcMs": 1794136376183,
+            "lastUtcMs": 1794136409679,
+            "firstNonemptyUtcMs": 1794136370166,
+            "firstNonemptyObservedMs": 120821,
+            "lastObservedMs": 160334
+          }
+        }
+      },
+      {
+        "segmentId": "nb-timer-band",
+        "durationSeconds": 40,
+        "warmupSeconds": 6,
+        "firstOcrUtcMs": 1794136410207,
+        "postWarmupFrames": 128,
+        "postWarmupAdmittedFrames": 0,
+        "nonemptyPostWarmupFrames": 128,
+        "cycles": {
+          "0": {
+            "frames": 128,
+            "admittedFrames": 0,
+            "nonemptyFrames": 128,
+            "firstUtcMs": 1794136416251,
+            "lastUtcMs": 1794136449612,
+            "firstNonemptyUtcMs": 1794136410207,
+            "firstNonemptyObservedMs": 160854,
+            "lastObservedMs": 200247
+          }
+        }
+      },
+      {
+        "segmentId": "nb-credits-band",
+        "durationSeconds": 20,
+        "warmupSeconds": 3,
+        "firstOcrUtcMs": 1794136450142,
+        "postWarmupFrames": 63,
+        "postWarmupAdmittedFrames": 0,
+        "nonemptyPostWarmupFrames": 63,
+        "cycles": {
+          "0": {
+            "frames": 63,
+            "admittedFrames": 0,
+            "nonemptyFrames": 63,
+            "firstUtcMs": 1794136453299,
+            "lastUtcMs": 1794136469548,
+            "firstNonemptyUtcMs": 1794136450142,
+            "firstNonemptyObservedMs": 200779,
+            "lastObservedMs": 220181
+          }
+        }
+      }
+    ],
+    "negativePostWarmupAdmittedFrameCount": 0,
+    "blankAdmittedFrameCount": 0,
+    "negativeCoverage": [
+      {
+        "segmentId": "nb-watermark-band",
+        "cycle": 0,
+        "expectedPostWarmupSeconds": 34,
+        "observedPostWarmupFrames": 129,
+        "observedSpanSeconds": 33.496,
+        "coverageFraction": 0.9851764705882353,
+        "missing": false,
+        "sufficient": true
+      },
+      {
+        "segmentId": "nb-timer-band",
+        "cycle": 0,
+        "expectedPostWarmupSeconds": 34,
+        "observedPostWarmupFrames": 128,
+        "observedSpanSeconds": 33.361,
+        "coverageFraction": 0.981205882352941,
+        "missing": false,
+        "sufficient": true
+      },
+      {
+        "segmentId": "nb-credits-band",
+        "cycle": 0,
+        "expectedPostWarmupSeconds": 17,
+        "observedPostWarmupFrames": 63,
+        "observedSpanSeconds": 16.249,
+        "coverageFraction": 0.9558235294117646,
+        "missing": false,
+        "sufficient": true
+      }
+    ],
+    "negativeCoverageMissing": [],
+    "negativeCoverageInsufficient": [],
+    "negativeCoverageOk": true
+  },
+  "translation": {
+    "eventCount": 9,
+    "trueTranslatedCueIDs": [
+      "nb-dialogue-01",
+      "nb-dialogue-02",
+      "nb-dialogue-03",
+      "nb-dialogue-04",
+      "nb-dialogue-05"
+    ],
+    "rejectedNonempty": [],
+    "unmatchedCount": 4,
+    "unmatchedNonemptyCount": 0,
+    "timingEvidencePartial": false,
+    "latencyMs": {
+      "samples": [
+        559,
+        592,
+        517,
+        474,
+        624
+      ],
+      "p50": 559,
+      "p95": 617.6
+    },
+    "missedTranslationCueIDs": [],
+    "ok": true
+  }
+}

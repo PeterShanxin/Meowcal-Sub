@@ -52,6 +52,16 @@ describe("selector action bar placement", () => {
 });
 
 describe("selector geometry", () => {
+  it("saves monitor-local coordinates on a display left of and above the primary", () => {
+    expect(
+      buildCaptureRegionPayload(
+        { x: -1460, y: -400, width: 600, height: 80 },
+        { left: -1560, top: -520, right: 0, bottom: 520 },
+        2,
+      ),
+    ).toEqual({ x: 100, y: 120, width: 600, height: 80, scaleFactor: 2 });
+  });
+
   it("normalizes forward and reverse screen drags", () => {
     expect(selectionRectFromPoints(100, 200, 340, 280)).toEqual({
       x: 100,
@@ -115,7 +125,7 @@ describe("selector geometry", () => {
         { left: 100, top: 50, right: 500, bottom: 300 },
         1.25,
       ),
-    ).toEqual({ x: 105, y: 55, width: 100, height: 40, scaleFactor: 1.25 });
+    ).toEqual({ x: 5, y: 5, width: 100, height: 40, scaleFactor: 1.25 });
   });
 
   it("clamps a selection crossing the screen edge without adding padding", () => {
@@ -125,17 +135,17 @@ describe("selector geometry", () => {
         { left: 100, top: 50, right: 500, bottom: 300 },
         1.5,
       ),
-    ).toEqual({ x: 480, y: 280, width: 20, height: 20, scaleFactor: 1.5 });
+    ).toEqual({ x: 380, y: 230, width: 20, height: 20, scaleFactor: 1.5 });
   });
 
-  it("applies the existing non-negative clamp for a negative screen origin", () => {
+  it("keeps the full area on a monitor with a negative desktop origin", () => {
     expect(
       buildCaptureRegionPayload(
         { x: -100, y: -50, width: 20, height: 20 },
         { left: -1920, top: -1080, right: 0, bottom: 1080 },
         1.5,
       ),
-    ).toEqual({ x: 0, y: 0, width: 1, height: 1, scaleFactor: 1.5 });
+    ).toEqual({ x: 1820, y: 1030, width: 20, height: 20, scaleFactor: 1.5 });
   });
 });
 

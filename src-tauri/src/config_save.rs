@@ -69,6 +69,21 @@ pub fn save_config(app: &tauri::AppHandle, config: &AppConfig) -> Result<(), Str
     save_to(&path, config, session_provenance())
 }
 
+/// Serialize read-modify-write and publication under the live config lock.
+/// Run on a blocking worker; callbacks must not lock `live` again.
+pub fn update_live(
+    live: &std::sync::Mutex<AppConfig>,
+    update: impl FnOnce(&mut AppConfig),
+    persist: impl FnOnce(&AppConfig) -> Result<(), String>,
+) -> Result<AppConfig, String> {
+    let mut current = crate::sync_utils::lock_or_recover(live);
+    let mut next = current.clone();
+    update(&mut next);
+    persist(&next)?;
+    *current = next.clone();
+    Ok(next)
+}
+
 /// Save, and say so when it fails.
 ///
 /// The background save sites - the capture region, the window geometry - had no
@@ -153,6 +168,11 @@ fn preserve_app_owned(on_disk: &AppConfig, config: &mut AppConfig) {
     }
     if config.last_capture_scale_factor.is_none() {
         config.last_capture_scale_factor = on_disk.last_capture_scale_factor;
+    }
+    if config.last_capture_monitor.is_none()
+        && config.last_capture_region == on_disk.last_capture_region
+    {
+        config.last_capture_monitor = on_disk.last_capture_monitor.clone();
     }
     // Geometry is a struct rather than an `Option`, so "not supplied" has to be
     // read off the fields. A window with no position and no size was never

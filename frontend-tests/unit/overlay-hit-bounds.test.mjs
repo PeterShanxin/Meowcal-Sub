@@ -9,6 +9,15 @@ const {
 } = require("../../src/scripts/overlay-hit-bounds.js");
 
 describe("overlay hit bounds", () => {
+  it("adds a negative physical origin after scaling local coordinates", () => {
+    expect(
+      rectToPhysicalBounds(
+        { left: 100, top: 120, right: 700, bottom: 200 },
+        { x: -3120, y: -520 },
+        2,
+      ),
+    ).toEqual({ left: -2920, top: -280, right: -1720, bottom: -120 });
+  });
   it("scales a window-relative rect into device pixels", () => {
     const rect = { left: 10, top: 20, right: 110, bottom: 70 };
 

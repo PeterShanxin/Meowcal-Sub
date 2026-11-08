@@ -62,17 +62,22 @@ The report reads only `kind: "gate"` entries from a mixed JSONL log and compares
 
 Negative admissions are counted only when non-empty forwarded text appears after each segment's warmup allowance. A negative segment also needs at least two non-empty post-warmup frames spanning at least half of its remaining authored interval; empty OCR frames do not prove sustained exclusion. Optional translation events count as `trueTranslated` only when the original source matches an authored subtitle capture window and `displayState` is exactly `translated` with a non-empty target. Capture time is derived from numeric `payload.timestamp - payload.totalMs`; events captured in negative or out-of-window intervals are ignored for subtitle mismatch evidence. When translation events are supplied, every authored subtitle cue must have true translated evidence for `endToEndOk`; the OCR gate result remains separately visible as `gateOk`. A non-empty target in another state is recorded as rejected evidence. Paused, incomplete, missing-timebase, or non-1x runs are reported as partial and cannot pass the gate.
 
-Warmup starts at the first non-empty OCR observation of a negative segment.
-This separates capture startup latency from the gate's hold duration. Fixture
-onset drift beyond 250ms makes the report partial, since nominal timestamps
-can no longer reliably identify the visible cue.
+Warmup and coverage start with recognized negative content: the authored static
+text, a four-digit timer, or one of the authored credit names. A preceding cue
+or text captured from another window cannot establish negative coverage.
+Its duration uses the gate's monotonic `ms` observation clock, matching the
+filter; varying OCR latency must not move a frame across the warmup boundary.
+Missing or decreasing negative observation timestamps make the report partial.
+Capture UTC still assigns authored segments, measures coverage and aligns
+translation latency. Fixture onset drift beyond 250ms makes the report partial,
+since nominal timestamps can no longer reliably identify the visible cue.
 
 Any forwarded text during an authored blank fails the gate. Negative exclusion
 measures new admissions; the existing `bandHeld` display policy may retain a
 translation admitted during warmup, so zero later admissions does not prove
 that the overlay is empty.
 
-The small deterministic report checks run with:
+The deterministic report checks run in `npm run test:frontend`, or separately:
 
 ```powershell
 node --test .\evals\band-gate\report.test.mjs

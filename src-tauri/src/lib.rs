@@ -22,6 +22,10 @@ pub mod app_logging;
 /// Screen capture functionality - takes screenshots of selected areas
 pub mod capture;
 pub mod capture_region;
+pub mod capture_target;
+pub mod display_monitor;
+pub mod display_session;
+mod pipeline_capture;
 
 /// Opt-in switches read from the environment
 pub mod env_flags;

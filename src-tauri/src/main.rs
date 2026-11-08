@@ -86,6 +86,7 @@ fn main() {
             commands::save_settings,
             commands::set_capture_region,
             commands::get_capture_region,
+            commands::get_display_context,
             commands::open_area_selector,
             commands::close_area_selector,
             commands::get_selector_snapshot,
@@ -139,24 +140,21 @@ fn main() {
             {
                 let state = app.state::<AppState>();
                 *lock_or_recover(&state.config) = loaded_config.clone();
-                if let Some(region) = loaded_config.last_capture_region {
-                    *lock_or_recover(&state.capture_region) = Some(region);
-                }
-
-                // If the scale factor wasn't persisted yet (older configs), fall back to the
-                // current window's scale factor so restored regions capture correctly.
-                let scale_factor = loaded_config.last_capture_scale_factor.or_else(|| {
-                    app.get_webview_window("main")
-                        .and_then(|window| window.scale_factor().ok())
-                });
-                *lock_or_recover(&state.capture_scale_factor) = scale_factor.unwrap_or(1.0);
-                state.startup_gate.mark_ready();
+                let monitors =
+                    meowcal_sub::display_monitor::available(app.handle()).unwrap_or_default();
+                lock_or_recover(&state.capture).restore(
+                    loaded_config.last_capture_region,
+                    loaded_config.last_capture_monitor.clone(),
+                    loaded_config.last_capture_scale_factor,
+                    &monitors,
+                );
             }
 
             meowcal_sub::window_lifecycle::restore_and_show_main(
                 app.handle(),
                 &loaded_config.window_preferences,
             );
+            app.state::<AppState>().startup_gate.mark_ready();
 
             // --- Spawn OverlayHost.exe + start IPC server (WinUI features) ---
             //
@@ -199,12 +197,27 @@ fn main() {
             // `overlay::liveness`.
             meowcal_sub::overlay::liveness::register_listeners(app.handle());
             meowcal_sub::overlay::window_focus::register_close_handler(app.handle());
+            meowcal_sub::display_session::watch_topology(
+                app.handle().clone(),
+                &app.state::<AppState>(),
+            );
 
             Ok(())
         })
         // Keep long-lived windows available from the tray.
         .on_window_event(|window, event| {
             meowcal_sub::window_lifecycle::handle_geometry_event(window, event);
+            if window.label() == "main"
+                && matches!(
+                    event,
+                    tauri::WindowEvent::Moved(_)
+                        | tauri::WindowEvent::Resized(_)
+                        | tauri::WindowEvent::ScaleFactorChanged { .. }
+                )
+            {
+                use tauri::Emitter;
+                let _ = window.emit("display-context-changed", ());
+            }
             match event {
                 tauri::WindowEvent::CloseRequested { api, .. } => {
                     meowcal_sub::window_lifecycle::handle_close_requested(window, api);
@@ -218,6 +231,7 @@ fn main() {
 
     app.run(|app_handle, event| {
         if matches!(event, tauri::RunEvent::Exit) {
+            meowcal_sub::display_session::stop_topology_watch(&app_handle.state::<AppState>());
             meowcal_sub::window_lifecycle::persist_main_geometry_from_app(app_handle);
             meowcal_sub::hy_mt_runtime::shutdown_owned();
             meowcal_sub::overlay_host_process::stop(app_handle);

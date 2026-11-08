@@ -41,6 +41,7 @@ const state = {
     currentX: 0,
     currentY: 0,
     region: null,
+    selectionId: null,
 };
 
 // DOM elements - will be set after DOM loads
@@ -154,9 +155,9 @@ async function setupSelectorSnapshotBackground() {
 
 function applySelectorSnapshot(snapshot) {
     if (!desktopSnapshot) return;
-    if (!snapshot?.dataUrl) return;
-
-    desktopSnapshot.src = snapshot.dataUrl;
+    state.selectionId = snapshot?.selectionId ?? null;
+    if (snapshot?.dataUrl) desktopSnapshot.src = snapshot.dataUrl;
+    else desktopSnapshot.removeAttribute('src');
 }
 
 // =============================================================================
@@ -308,10 +309,10 @@ function handleMouseDown(e) {
 
     // Start selection
     state.isSelecting = true;
-    state.startX = e.screenX;
-    state.startY = e.screenY;
-    state.currentX = e.screenX;
-    state.currentY = e.screenY;
+    state.startX = e.clientX;
+    state.startY = e.clientY;
+    state.currentX = e.clientX;
+    state.currentY = e.clientY;
 
     actionButtons.classList.remove('visible');
     selectionBox.classList.add('active');
@@ -337,8 +338,8 @@ function handleMouseMove(e) {
     if (!state.isSelecting) return;
 
     e.preventDefault();
-    state.currentX = e.screenX;
-    state.currentY = e.screenY;
+    state.currentX = e.clientX;
+    state.currentY = e.clientY;
 
     updateSelectionBox();
 }
@@ -363,8 +364,8 @@ function handleMouseUp(e) {
 
     e.preventDefault();
     state.isSelecting = false;
-    state.currentX = e.screenX;
-    state.currentY = e.screenY;
+    state.currentX = e.clientX;
+    state.currentY = e.clientY;
 
     const region = calculateRegion();
 
@@ -388,7 +389,7 @@ function handleKeyDown(e) {
         return;
     }
 
-    const viewport = { x: window.screenX, y: window.screenY, width: window.innerWidth, height: window.innerHeight };
+    const viewport = { x: 0, y: 0, width: window.innerWidth, height: window.innerHeight };
     if (e.key === 'Enter') {
         // A focused button acts on Enter itself - Redraw must not confirm.
         if (e.target instanceof Element && e.target.closest('button')) return;
@@ -427,8 +428,8 @@ function updateSelectionBox() {
 
     // Use client coordinates for positioning the visual box.
     const clientRect = screenRectToClientRect(region, {
-        x: window.screenX,
-        y: window.screenY,
+        x: 0,
+        y: 0,
     });
 
     selectionBox.style.left = `${clientRect.left}px`;
@@ -471,14 +472,11 @@ async function confirmSelection() {
         console.warn('Failed to read scale factor, defaulting to 1:', e);
     }
 
-    // The selector tracks the region in screen coordinates (MouseEvent.screenX/Y), which matches
-    // what the backend capture expects (logical/CSS pixels + a DPI scale factor).
-    //
-    // Clamp the selected bounds without expanding the OCR region.
-    const winLeft = Math.round(window.screenX || 0);
-    const winTop = Math.round(window.screenY || 0);
-    const winRight = winLeft + Math.round(window.innerWidth || 0);
-    const winBottom = winTop + Math.round(window.innerHeight || 0);
+    // Client coordinates avoid mixed-DPI virtual-desktop scaling.
+    const winLeft = 0;
+    const winTop = 0;
+    const winRight = Math.round(window.innerWidth || 0);
+    const winBottom = Math.round(window.innerHeight || 0);
     const regionData = buildCaptureRegionPayload(
         state.region,
         { left: winLeft, top: winTop, right: winRight, bottom: winBottom },
@@ -486,7 +484,7 @@ async function confirmSelection() {
     );
 
     try {
-        await window.__TAURI__.core.invoke('set_capture_region', regionData);
+        await window.__TAURI__.core.invoke('set_capture_region', { ...regionData, selectionId: state.selectionId });
 
         // Emit event to all windows
         try {
@@ -499,7 +497,7 @@ async function confirmSelection() {
         resetSelection();
     } catch (error) {
         console.error('Failed to save region:', error);
-        setPhase('error', SAVE_FAILED_MESSAGE);
+        setPhase('error', typeof error === 'string' ? error : SAVE_FAILED_MESSAGE);
     } finally {
         state.isSaving = false;
     }
@@ -582,8 +580,8 @@ function handleResizeStart(e) {
 
     isResizing = true;
     resizeHandle = e.target.dataset.position;
-    dragStartX = e.screenX;
-    dragStartY = e.screenY;
+    dragStartX = e.clientX;
+    dragStartY = e.clientY;
     dragRegionStart = { ...state.region };
     setPhase('adjust');
 }
@@ -603,8 +601,8 @@ function handleDragStart(e) {
     e.stopPropagation();
 
     isDragging = true;
-    dragStartX = e.screenX;
-    dragStartY = e.screenY;
+    dragStartX = e.clientX;
+    dragStartY = e.clientY;
     dragRegionStart = { ...state.region };
     setPhase('adjust');
 }
@@ -615,8 +613,8 @@ function handleDragStart(e) {
 function handleDrag(e) {
     if (!dragRegionStart) return;
 
-    const deltaX = e.screenX - dragStartX;
-    const deltaY = e.screenY - dragStartY;
+    const deltaX = e.clientX - dragStartX;
+    const deltaY = e.clientY - dragStartY;
 
     setRegion(moveRegion(dragRegionStart, deltaX, deltaY));
     updateSelectionBox();
@@ -628,8 +626,8 @@ function handleDrag(e) {
 function handleResize(e) {
     if (!dragRegionStart || !resizeHandle) return;
 
-    const deltaX = e.screenX - dragStartX;
-    const deltaY = e.screenY - dragStartY;
+    const deltaX = e.clientX - dragStartX;
+    const deltaY = e.clientY - dragStartY;
 
     setRegion(resizeRegion(dragRegionStart, resizeHandle, deltaX, deltaY, MIN_RESIZE_SIZE));
     updateSelectionBox();

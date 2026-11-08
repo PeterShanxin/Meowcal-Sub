@@ -46,18 +46,19 @@
     "scripts/store-release-assets.mjs",
     "scripts/store-submission.mjs",
     "scripts/workflow-runner-policy.mjs",
-    "src/ui/settings-writer.ts"
+    "src/ui/settings-writer.ts",
+    "src/ui/display-controller.ts"
   ],
   "legacyFileMaxLines": {
-    "src-tauri/src/capture/graphics_capture.rs": 522,
-    "src-tauri/src/commands.rs": 1005,
-    "src-tauri/src/config.rs": 475,
+    "src-tauri/src/capture/graphics_capture.rs": 469,
+    "src-tauri/src/commands.rs": 922,
+    "src-tauri/src/config.rs": 473,
     "src-tauri/src/llm/context.rs": 620,
     "src-tauri/src/llm/foundry_local.rs": 1557,
     "src-tauri/src/llm/manager.rs": 699,
     "src-tauri/src/llm/prompt_router.rs": 471,
-    "src/scripts/overlay.js": 1046,
-    "src/scripts/selector.js": 636,
+    "src/scripts/overlay.js": 1045,
+    "src/scripts/selector.js": 634,
     "src/styles/overlay.css": 438
   }
 }

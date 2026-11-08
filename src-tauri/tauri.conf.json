@@ -30,7 +30,7 @@
         "label": "selector",
         "create": false,
         "url": "selector.html",
-        "fullscreen": true,
+        "fullscreen": false,
         "transparent": true,
         "backgroundColor": [0, 0, 0, 0],
         "decorations": false,

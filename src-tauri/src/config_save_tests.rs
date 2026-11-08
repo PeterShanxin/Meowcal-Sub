@@ -176,3 +176,104 @@ fn an_authoritative_session_saves_and_refreshes() {
     };
     assert_eq!(backup.target_language, "ko-KR");
 }
+
+#[test]
+fn concurrent_live_region_and_settings_saves_survive_restart() {
+    for region_first in [true, false] {
+        assert_concurrent_live_saves(region_first);
+    }
+}
+
+fn assert_concurrent_live_saves(region_first: bool) {
+    use std::sync::{mpsc, Arc, Mutex};
+    use std::time::Duration;
+
+    let dir = temp_dir(&format!("concurrent-live-region-settings-{region_first}"));
+    let path = dir.join("config.json");
+    let live = Arc::new(Mutex::new(AppConfig::default()));
+    let region = crate::config::CaptureRegion::new(50, 60, 640, 100);
+    let monitor = crate::capture_target::CaptureMonitor {
+        device_id: "test-monitor".into(),
+        bounds: crate::config::CaptureRegion::new(-2560, 0, 2560, 1440),
+        scale_factor: 1.25,
+    };
+    let (writing, is_writing) = mpsc::channel();
+    let (release, released) = mpsc::channel();
+    let first_live = live.clone();
+    let first_path = path.clone();
+    let first_monitor = monitor.clone();
+    let first = std::thread::spawn(move || {
+        update_live(
+            &first_live,
+            |config| {
+                if region_first {
+                    config.last_capture_region = Some(region);
+                    config.last_capture_scale_factor = Some(1.25);
+                    config.last_capture_monitor = Some(first_monitor);
+                } else {
+                    config.target_language = "ja-JP".into();
+                }
+            },
+            |config| {
+                writing.send(()).unwrap();
+                released.recv().unwrap();
+                save_to(&first_path, config, Provenance::Authoritative)
+            },
+        )
+        .unwrap();
+    });
+    is_writing.recv_timeout(Duration::from_secs(5)).unwrap();
+    let (attempting, attempted) = mpsc::channel();
+    let (finished, is_finished) = mpsc::channel();
+    let second_live = live.clone();
+    let second_path = path.clone();
+    let second_monitor = monitor.clone();
+    let second = std::thread::spawn(move || {
+        attempting.send(()).unwrap();
+        update_live(
+            &second_live,
+            |config| {
+                if region_first {
+                    config.target_language = "ja-JP".into();
+                } else {
+                    config.last_capture_region = Some(region);
+                    config.last_capture_scale_factor = Some(1.25);
+                    config.last_capture_monitor = Some(second_monitor);
+                }
+            },
+            |config| save_to(&second_path, config, Provenance::Authoritative),
+        )
+        .unwrap();
+        finished.send(()).unwrap();
+    });
+    attempted.recv_timeout(Duration::from_secs(5)).unwrap();
+    // Hold the first write while a second writer tries to save. The assertion
+    // is the persisted result, regardless of how the threads were scheduled.
+    let _ = is_finished.recv_timeout(Duration::from_millis(100));
+    release.send(()).unwrap();
+    first.join().unwrap();
+    second.join().unwrap();
+
+    for config in [load_durable(&path).0, live.lock().unwrap().clone()] {
+        assert_eq!(config.target_language, "ja-JP");
+        assert_eq!(config.last_capture_region, Some(region));
+        assert_eq!(config.last_capture_scale_factor, Some(1.25));
+        assert_eq!(config.last_capture_monitor, Some(monitor.clone()));
+    }
+}
+
+#[test]
+fn a_failed_live_save_does_not_publish_unpersisted_settings() {
+    let live = std::sync::Mutex::new(registered());
+    let original = serde_json::to_value(live.lock().unwrap().clone()).unwrap();
+    let error = update_live(
+        &live,
+        |config| config.target_language = "ja-JP".into(),
+        |_| Err("disk unavailable".into()),
+    );
+    assert_eq!(error.unwrap_err(), "disk unavailable");
+    assert_eq!(
+        serde_json::to_value(live.lock().unwrap().clone()).unwrap(),
+        original
+    );
+}

@@ -99,6 +99,7 @@ export function renderHome(
           </span>
         </button>
       </section>
+      ${snapshot.multipleDisplays ? html`<p class="display-notice" lang="zh-CN" role="status">${snapshot.running ? "翻译期间将保持使用已选屏幕。" : "检测到多个显示器，将使用当前窗口所在的屏幕。"}</p>` : nothing}
 
       <button
         class="primary-button home-action"

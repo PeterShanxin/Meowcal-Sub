@@ -229,13 +229,12 @@ async fn make_engine_ready(State(state): State<HttpAppState>) -> impl IntoRespon
     Json(foundry_status_from_snapshot(snapshot))
 }
 
-/// POST /api/area-selector - Not available in browser mode
-async fn open_area_selector() -> impl IntoResponse {
+async fn display_not_available() -> impl IntoResponse {
     (
         StatusCode::NOT_IMPLEMENTED,
         Json(BrowserModeInfo {
             browser_mode: true,
-            message: "Area selector requires Tauri window. Not available in browser mode."
+            message: "Display discovery and selection require the desktop app. Not available in browser mode."
                 .to_string(),
         }),
     )
@@ -357,7 +356,8 @@ pub fn create_router(state: HttpAppState) -> Router {
         .route("/api/ocr/languages", get(get_ocr_languages_http))
         .route("/api/ocr/install-language", post(ocr_install_not_available))
         // Tauri-only endpoints (return 501)
-        .route("/api/area-selector", post(open_area_selector))
+        .route("/api/area-selector", post(display_not_available))
+        .route("/api/display-context", get(display_not_available))
         .route("/api/translation/start", post(start_translation))
         .route("/api/translation/stop", post(stop_translation))
         .route("/api/translation/exit", post(stop_translation))

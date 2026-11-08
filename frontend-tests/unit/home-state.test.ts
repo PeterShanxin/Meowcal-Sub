@@ -25,6 +25,7 @@ function snapshot(patch: Partial<UiSnapshot> = {}): UiSnapshot {
     settingsSave: { kind: "idle" },
     screen: "home",
     busy: "idle",
+    multipleDisplays: false,
     settings: {
       sourceLanguage: "zh-CN",
       targetLanguage: "en-US",

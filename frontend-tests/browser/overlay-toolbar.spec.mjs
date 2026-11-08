@@ -51,7 +51,10 @@ async function openOverlay(page, region = { x: 100, y: 180, width: 350, height: 
       },
       webview: { getCurrentWebview: () => ({ setBackgroundColor: async () => {} }) },
       window: {
-        getCurrentWindow: () => ({ scaleFactor: async () => devicePixelRatio }),
+        getCurrentWindow: () => ({
+          scaleFactor: async () => devicePixelRatio,
+          innerPosition: async () => ({ x: 0, y: 0 }),
+        }),
         cursorPosition: async () => window.overlayTest.cursor,
       },
     };

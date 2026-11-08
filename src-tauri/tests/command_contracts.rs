@@ -7,6 +7,20 @@
 
 use meowcal_sub::commands::get_system_info;
 
+#[test]
+fn display_context_uses_camel_case_and_monitor_local_geometry() {
+    let value = serde_json::to_value(meowcal_sub::display_session::DisplayContext {
+        multiple_displays: true,
+        region: Some(meowcal_sub::config::CaptureRegion::new(100, 200, 600, 80)),
+    })
+    .expect("serialize display context");
+    assert_eq!(
+        value,
+        serde_json::json!({ "multipleDisplays": true,
+        "region": { "x": 100, "y": 200, "width": 600, "height": 80 } })
+    );
+}
+
 /// The frontend reads `info.is_copilot_plus` and `info.windows_ocr_available`
 /// directly, so this payload is snake_case even though most Tauri payloads in
 /// this crate are camelCase.
