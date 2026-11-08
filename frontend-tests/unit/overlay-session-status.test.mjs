@@ -14,7 +14,23 @@ const payload = (displayState, captureId = 1, warnings = [], sessionId = 1) => (
 });
 
 describe("overlay session status", () => {
-  it("shows one preparation state and keeps normal gaps and retries quiet", () => {
+  it.each(["noSubtitleText", "waiting"])(
+    "ends recovery preparation when a healthy quiet region reports %s",
+    (quietState) => {
+      const state = createSessionStatus();
+      state.visibility(true);
+      state.activity({ sessionId: 1, captureId: 1, state: "active" });
+      state.translation(payload("warming", 2));
+      expect(state.view()).toEqual({ text: "Preparing translation…", error: false });
+      if (quietState === "noSubtitleText") state.translation(payload(quietState, 3));
+      else state.activity({ sessionId: 1, captureId: 60, state: quietState });
+      expect(state.view()).toEqual(
+        quietState === "waiting" ? { text: "Waiting for subtitles…", error: false } : null,
+      );
+    },
+  );
+
+  it("shows preparation, keeps short gaps quiet and reports a prolonged gap", () => {
     const state = createSessionStatus();
     expect(state.view()).toBeNull();
     state.visibility(true);
@@ -30,7 +46,28 @@ describe("overlay session status", () => {
       expect(state.view()).toBeNull();
     }
     state.activity({ sessionId: 1, captureId: 7, state: "waiting" });
+    expect(state.view()).toEqual({ text: "Waiting for subtitles…", error: false });
+  });
+
+  it("keeps waiting until source subtitles return, then allows a later gap to wait again", () => {
+    const state = createSessionStatus();
+    state.visibility(true);
+    state.activity({ sessionId: 1, captureId: 1, state: "active" });
+    state.translation(payload("warming", 2));
+    state.activity({ sessionId: 1, captureId: 60, state: "waiting" });
+    state.translation(payload("translated", 3));
+    state.translation(payload("noSubtitleText", 61));
+    expect(state.view()).toEqual({ text: "Waiting for subtitles…", error: false });
+    state.capture({ isError: true });
+    expect(state.view().error).toBe(true);
+    state.activity({ sessionId: 1, captureId: 62, state: "waiting" });
+    expect(state.view()).toEqual({ text: "Waiting for subtitles…", error: false });
+    state.activity({ sessionId: 1, captureId: 63, state: "active" });
     expect(state.view()).toBeNull();
+    state.translation(payload("noSubtitleText", 63));
+    expect(state.view()).toBeNull();
+    state.activity({ sessionId: 1, captureId: 124, state: "waiting" });
+    expect(state.view()).toEqual({ text: "Waiting for subtitles…", error: false });
   });
 
   it("keeps engine failure until translation succeeds, even across healthy capture and empty frames", () => {
@@ -54,7 +91,9 @@ describe("overlay session status", () => {
     expect(state.view()).toEqual({ text: "Translation is interrupted.", error: true });
     state.translation(payload("translated"));
     expect(state.view().error).toBe(true);
-    state.activity({ sessionId: 1, captureId: 2, state: "active" });
+    state.activity({ sessionId: 1, captureId: 2, state: "waiting" });
+    expect(state.view()).toEqual({ text: "Waiting for subtitles…", error: false });
+    state.activity({ sessionId: 1, captureId: 3, state: "active" });
     expect(state.view()).toBeNull();
   });
 
@@ -65,6 +104,8 @@ describe("overlay session status", () => {
     state.interrupted({ sessionId: 3 });
     state.activity({ sessionId: 3, captureId: 2, state: "active" });
     state.translation(payload("translated", 3, [], 3));
+    state.translation(payload("noSubtitleText", 4, [], 3));
+    state.activity({ sessionId: 3, captureId: 5, state: "waiting" });
     expect(state.view()).toEqual({ text: "Translation is interrupted.", error: true });
     state.visibility(false);
     state.visibility(true);

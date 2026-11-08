@@ -56,7 +56,6 @@ export function renderHome(
   const tone = stateTone[presentation.state];
   const busy = presentation.actionIcon === "spinner";
   const locked = isSessionLocked(snapshot);
-  const checkArea = snapshot.running && snapshot.subtitleActivity === "waiting";
 
   return html`
     <main class="screen home-screen" aria-labelledby="home-title">
@@ -90,18 +89,13 @@ export function renderHome(
           )}
         </div>
 
-        <button
-          class="region-row"
-          type="button"
-          @click=${actions.onRegion}
-          ?disabled=${locked && !(checkArea && snapshot.busy === "idle")}
-        >
+        <button class="region-row" type="button" @click=${actions.onRegion} ?disabled=${locked}>
           <span class="region-icon">${icon("area")}</span>
           <span class="region-label">
             ${snapshot.region ? "Subtitle area selected" : "No subtitle area yet"}
           </span>
           <span class="region-action">
-            ${checkArea ? "Check area" : snapshot.region ? "Change" : "Select"}${icon("chevron-right")}
+            ${snapshot.region ? "Change" : "Select"}${icon("chevron-right")}
           </span>
         </button>
       </section>

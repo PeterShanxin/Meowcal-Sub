@@ -32,49 +32,63 @@ function harness() {
 afterEach(() => vi.unstubAllGlobals());
 
 describe("session status reports", () => {
-  it("shows waiting without changing the running state or producing an error", async () => {
+  it("keeps healthy activity private without changing Home", async () => {
     const app = harness();
     await app.controller.listen();
     app.activity(1, 60, "waiting");
     expect(app.current()).toMatchObject({
       running: true,
       busy: "idle",
-      subtitleActivity: "waiting",
       error: null,
     });
     app.activity(1, 61);
-    expect(app.current().subtitleActivity).toBe("active");
+    expect(app.publish).not.toHaveBeenCalled();
   });
 
   it("rejects older sessions, repeated reports and older capture results", async () => {
     const app = harness();
     await app.controller.listen();
     app.activity(3, 5);
-    app.activity(1, 100, "waiting");
+    app.emit("capture-status", { isError: true, message: "Capture unavailable" });
+    app.publish.mockClear();
+    app.activity(1, 100);
+    app.activity(3, 4);
+    app.activity(3, 5);
     app.activity(3, 4, "waiting");
-    app.activity(3, 5, "waiting");
-    expect(app.publish).toHaveBeenCalledTimes(1);
+    expect(app.publish).not.toHaveBeenCalled();
+    expect(app.current().error).toBe("Capture unavailable");
     app.activity(3, 6, "waiting");
-    expect(app.current().subtitleActivity).toBe("waiting");
+    app.activity(3, 6);
+    expect(app.publish).toHaveBeenCalledTimes(1);
+    app.activity(3, 7);
+    expect(app.publish).toHaveBeenCalledTimes(1);
+    expect(app.current().error).toBeNull();
   });
 
   it("retires the old session across stop and a new selection", async () => {
     const app = harness();
     await app.controller.listen();
     app.activity(1, 1);
+    app.publish.mockClear();
     app.controller.reset();
+    expect(app.publish).not.toHaveBeenCalled();
     app.patch({ running: false, busy: "selecting" });
-    app.activity(1, 80, "waiting");
+    app.emit("capture-status", { isError: true, message: "Capture unavailable" });
+    app.activity(1, 80);
     app.activity(3, 0);
-    expect(app.current().subtitleActivity).toBe("active");
+    expect(app.current().error).toBe("Capture unavailable");
     app.patch({ busy: "starting" });
-    app.activity(1, 81, "waiting");
+    app.activity(1, 81);
+    expect(app.current().error).toBe("Capture unavailable");
     app.activity(3, 0);
+    expect(app.current().error).toBeNull();
     app.patch({ running: true, busy: "idle" });
+    app.emit("capture-status", { isError: true, message: "Capture unavailable" });
     app.activity(3, 60, "waiting");
-    expect(app.current().subtitleActivity).toBe("waiting");
     app.activity(1, 100);
-    expect(app.current().subtitleActivity).toBe("waiting");
+    expect(app.current().error).toBeNull();
+    app.activity(3, 61);
+    expect(app.current().error).toBeNull();
   });
 
   it.each([
@@ -92,12 +106,12 @@ describe("session status reports", () => {
     expect(app.publish).not.toHaveBeenCalled();
   });
 
-  it("clears a capture error only when healthy activity resumes", async () => {
+  it("clears only owned capture errors after healthy OCR, including a continuing wait", async () => {
     const app = harness();
     await app.controller.listen();
     app.emit("capture-status", { isError: true, message: "Capture unavailable" });
     app.activity(1, 60, "waiting");
-    expect(app.current().error).toBe("Capture unavailable");
+    expect(app.current().error).toBeNull();
     app.activity(1, 61);
     expect(app.current().error).toBeNull();
     app.emit("capture-status", { isError: true });
@@ -127,7 +141,6 @@ describe("session status reports", () => {
       running: false,
       busy: "idle",
       error: null,
-      subtitleActivity: "active",
       notice: "Translation stopped",
     });
     unlisten.forEach((stop) => stop());
@@ -177,14 +190,15 @@ describe("session status reports", () => {
     app.emit("translation-interrupted", { sessionId: 7 });
     app.controller.reset();
     app.patch({ busy: "starting", error: null });
+    app.emit("capture-status", { isError: true, message: "Capture unavailable" });
     app.publish.mockClear();
     app.activity(7, 0);
     app.emit("translation-interrupted", { sessionId: 7 });
     expect(app.publish).not.toHaveBeenCalled();
+    expect(app.current().error).toBe("Capture unavailable");
     app.activity(9, 0);
     expect(app.current()).toMatchObject({
       busy: "starting",
-      subtitleActivity: "active",
       error: null,
     });
   });

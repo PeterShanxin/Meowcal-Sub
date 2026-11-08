@@ -198,15 +198,15 @@ describe("deriveHomePresentation", () => {
 });
 
 describe("Home capture warnings", () => {
-  it("keeps a healthy quiet session running with a neutral waiting line", () => {
-    const result = deriveHomePresentation(snapshot({ running: true, subtitleActivity: "waiting" }));
+  it("keeps a healthy session running with stable support text", () => {
+    const result = deriveHomePresentation(snapshot({ running: true }));
     expect(result).toMatchObject({
       state: "running",
       statusLabel: "Running",
       action: "stop",
       actionDisabled: false,
-      supportLine: "Waiting for subtitles",
-      supportTone: "neutral",
+      supportLine: "Overlay active · Local processing",
+      supportTone: "success",
     });
   });
 
@@ -214,7 +214,6 @@ describe("Home capture warnings", () => {
     const result = deriveHomePresentation(
       snapshot({
         running: true,
-        subtitleActivity: "waiting",
         captureWarning: "Using GDI fallback - video content may not capture correctly",
       }),
     );

@@ -24,6 +24,7 @@ pub struct SubtitleActivity {
     empty_since: Option<Instant>,
     last_observed: Option<Instant>,
     showing: Option<ActivityState>,
+    waiting: bool,
     max_gap: Duration,
     ocr_failures: u32,
 }
@@ -34,6 +35,7 @@ impl SubtitleActivity {
             empty_since: None,
             last_observed: None,
             showing: None,
+            waiting: false,
             max_gap: Duration::from_secs(2).max(interval.saturating_mul(2)),
             ocr_failures: 0,
         }
@@ -52,10 +54,12 @@ impl SubtitleActivity {
         self.ocr_failures = 0;
         let state = if has_text {
             self.empty_since = None;
+            self.waiting = false;
             ActivityState::Active
         } else {
             let since = self.empty_since.get_or_insert(now);
-            if now.saturating_duration_since(*since) >= WAIT_AFTER {
+            self.waiting |= now.saturating_duration_since(*since) >= WAIT_AFTER;
+            if self.waiting {
                 ActivityState::Waiting
             } else {
                 ActivityState::Active
@@ -69,6 +73,7 @@ impl SubtitleActivity {
     }
 
     pub fn interrupt(&mut self) {
+        // An outage resets an unfinished wait, but only source text ends a shown wait.
         self.empty_since = None;
         self.last_observed = None;
         self.showing = None;
@@ -163,6 +168,38 @@ mod tests {
             assert_eq!(
                 activity.observe(false, start + Duration::from_secs(15)),
                 Some(ActivityState::Active)
+            );
+        }
+    }
+
+    #[test]
+    fn an_existing_wait_survives_outages_until_source_text_returns() {
+        for recognition_failure in [false, true] {
+            let mut activity = tracker();
+            let start = Instant::now();
+            empty_through(&mut activity, start, 16);
+            if recognition_failure {
+                assert!(!activity.recognition_failed());
+            } else {
+                activity.interrupt();
+            }
+            assert_eq!(
+                activity.observe(false, start + Duration::from_secs(30)),
+                Some(ActivityState::Waiting)
+            );
+            // Another unobserved gap must not dismiss the existing wait either.
+            assert_eq!(
+                activity.observe(false, start + Duration::from_secs(60)),
+                Some(ActivityState::Waiting)
+            );
+            assert_eq!(
+                activity.observe(true, start + Duration::from_secs(61)),
+                Some(ActivityState::Active)
+            );
+            empty_through(&mut activity, start + Duration::from_secs(62), 15);
+            assert_eq!(
+                activity.observe(false, start + Duration::from_secs(77)),
+                Some(ActivityState::Waiting)
             );
         }
     }

@@ -117,7 +117,6 @@ export interface UiSnapshot {
   notice: string | null;
   /** The latest non-fatal capture report for this session; capture keeps running. */
   captureWarning: string | null;
-  subtitleActivity?: "active" | "waiting";
   developerMode: boolean;
   update: UpdateStatus;
   /** `null` until the app reports its own version, and always so in browser mode. */
