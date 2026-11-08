@@ -228,7 +228,7 @@ describe("session area confirmation", () => {
       controller.dispose();
     },
   );
-  it("keeps accepting activity from the running session when Check area cannot stop it", async () => {
+  it("keeps capture error recovery active when area selection cannot stop the session", async () => {
     const { controller, confirm, failStop, listeners } = await fixture();
     const starting = controller.start();
     confirm();
@@ -238,13 +238,15 @@ describe("session area confirmation", () => {
     });
     failStop();
     await controller.selectRegion();
+    listeners.get("capture-status")?.({
+      payload: { isError: true, message: "Capture unavailable" },
+    });
     listeners.get("subtitle-activity")?.({
-      payload: { sessionId: 2, captureId: 1, state: "waiting" },
+      payload: { sessionId: 2, captureId: 1, state: "active" },
     });
     expect(controller.current()).toMatchObject({
       running: true,
-      subtitleActivity: "waiting",
-      error: "Could not stop capture",
+      error: null,
     });
     controller.dispose();
   });

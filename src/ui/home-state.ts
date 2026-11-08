@@ -41,7 +41,6 @@ export function deriveHomePresentation(snapshot: UiSnapshot): HomePresentation {
 
   if (snapshot.running) {
     const warning = snapshot.captureWarning;
-    const waiting = snapshot.subtitleActivity === "waiting";
     return {
       state: "running",
       statusLabel: "Running",
@@ -51,12 +50,8 @@ export function deriveHomePresentation(snapshot: UiSnapshot): HomePresentation {
       actionLabel: snapshot.busy === "stopping" ? "Stopping…" : "Stop translation",
       actionIcon: "stop",
       actionDisabled: snapshot.busy !== "idle",
-      supportLine: warning
-        ? describeCaptureWarning(warning)
-        : waiting
-          ? "Waiting for subtitles"
-          : "Overlay active · Local processing",
-      supportTone: warning ? "warning" : waiting ? "neutral" : "success",
+      supportLine: warning ? describeCaptureWarning(warning) : "Overlay active · Local processing",
+      supportTone: warning ? "warning" : "success",
     };
   }
 

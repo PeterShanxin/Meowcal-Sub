@@ -204,11 +204,14 @@ Shared contracts have one owner before parallel decomposition begins:
   The overlay renders the supplied state and cannot relabel OCR as translation.
   `subtitle_activity.rs` owns the 15-second healthy-empty waiting threshold,
   independently of subtitle retirement and repeat reset. Capture or recognition
-  failures interrupt that timer. `pipeline_status.rs` emits activity and terminal
+  failures interrupt an unfinished timer; an existing wait lasts until source
+  text returns. `pipeline_status.rs` emits activity and terminal
   session reports; `ui/session-status-controller.ts` filters stale reports and
-  presents waiting only on Home. `overlay-session-status.js` presents preparation
-  and actionable interruptions outside the subtitle surface. Ordinary gaps and
-  successful retries remain quiet.
+  preserves actionable interruptions on Home. `overlay-session-status.js` shows
+  a neutral waiting indicator after 15 seconds of healthy empty recognition and
+  keeps it visible until source text returns. Each later gap starts a fresh
+  15-second interval. Waiting, preparation and actionable interruptions use a
+  surface outside the subtitle box. Short gaps and successful retries stay quiet.
 - Selection confirmation: `area_selection.rs` correlates each Start with an
   explicit selector confirmation or cancellation. It delegates display validation
   and persistence to the display-session owner. An unchanged rectangle confirms

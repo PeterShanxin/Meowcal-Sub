@@ -8,6 +8,7 @@
   function createSessionStatus() {
     let visible = false;
     let preparing = false;
+    let waiting = false;
     let captureFailed = false;
     let engineFailed = false;
     let sessionInterrupted = false;
@@ -31,12 +32,14 @@
       visibility(next) {
         visible = next;
         preparing = next;
-        captureFailed = engineFailed = sessionInterrupted = false;
+        captureFailed = engineFailed = sessionInterrupted = waiting = false;
       },
       translation(payload) {
         if (!accept("translation", payload)) return;
+        // A late model result does not prove that source subtitles returned.
         if (payload.displayState === "translated") preparing = engineFailed = false;
         else if (payload.displayState === "warming") preparing = true;
+        else if (payload.displayState === "noSubtitleText") preparing = false;
         else if (payload.displayState === "stopped") preparing = engineFailed = false;
         if (payload.warnings?.includes("local_engine: engine_recovery_failed")) engineFailed = true;
       },
@@ -50,9 +53,11 @@
         if (payload.isError) captureFailed = true;
       },
       activity(payload) {
-        if (accept("activity", payload) && payload.state === "active") {
-          captureFailed = false;
-          preparing = false;
+        if (!accept("activity", payload)) return;
+        if (payload.state === "active") captureFailed = preparing = waiting = false;
+        else if (payload.state === "waiting") {
+          captureFailed = preparing = false;
+          waiting = true;
         }
       },
       view() {
@@ -60,6 +65,7 @@
         if (captureFailed || sessionInterrupted)
           return { text: "Translation is interrupted.", error: true };
         if (engineFailed) return { text: "Translation engine stopped.", error: true };
+        if (waiting) return { text: "Waiting for subtitles…", error: false };
         if (preparing) return { text: "Preparing translation…", error: false };
         return null;
       },

@@ -3,7 +3,7 @@ import type { UiSnapshot } from "./contracts";
 type Publish = (patch: Partial<UiSnapshot>) => void;
 type Position = { sessionId: number; captureId: number };
 
-/** Maps session reports to Home without turning ordinary subtitle gaps into errors. */
+/** Keeps Home errors current without publishing ordinary subtitle activity. */
 export class SessionStatusController {
   private latest: Position = { sessionId: 0, captureId: -1 };
   private retiredSession = 0;
@@ -17,7 +17,6 @@ export class SessionStatusController {
   reset(): void {
     this.retiredSession = Math.max(this.retiredSession, this.latest.sessionId);
     this.captureError = null;
-    this.publish({ subtitleActivity: "active" });
   }
 
   async listen(): Promise<Array<() => void>> {
@@ -29,7 +28,7 @@ export class SessionStatusController {
         const status = payload as { isError?: boolean; message?: string } | null;
         if (status?.isError) {
           this.captureError = status.message ?? "Screen capture failed";
-          this.publish({ error: this.captureError, subtitleActivity: "active" });
+          this.publish({ error: this.captureError });
         } else if (status?.message) {
           this.publish({ captureWarning: status.message });
         }
@@ -49,7 +48,6 @@ export class SessionStatusController {
         this.publish({
           running: false,
           busy: "idle",
-          subtitleActivity: "active",
           notice: null,
           error: this.captureError,
         });
@@ -92,11 +90,9 @@ export class SessionStatusController {
       return;
     }
     this.latest = { sessionId: next.sessionId, captureId: next.captureId };
-    const patch: Partial<UiSnapshot> = { subtitleActivity: next.state };
-    if (next.state === "active" && this.captureError !== null) {
-      if (snapshot.error === this.captureError) patch.error = null;
+    if (this.captureError !== null) {
+      if (snapshot.error === this.captureError) this.publish({ error: null });
       this.captureError = null;
     }
-    this.publish(patch);
   }
 }

@@ -131,9 +131,7 @@ test("first use confirms and starts without returning for a second Start", async
   ).toHaveLength(1);
 });
 
-test("waiting stays neutral, preserves Running and offers a single stop-confirm-resume flow", async ({
-  page,
-}) => {
+test("healthy waiting preserves Home's running controls and support text", async ({ page }) => {
   await page.clock.install();
   await openMain(page);
   await startConfirmed(page);
@@ -143,20 +141,17 @@ test("waiting stays neutral, preserves Running and offers a single stop-confirm-
     app.emit("subtitle-activity", { sessionId: app.sessionId, captureId: 60, state: "waiting" });
   });
   await expect(page.locator(".status-pill")).toHaveText("Running");
-  await expect(page.locator(".support-line")).toContainText("Waiting for subtitles");
+  await expect(page.locator(".support-line")).toContainText("Overlay active · Local processing");
   await expect(page.getByRole("alert")).toHaveCount(0);
-  await page.screenshot({ path: test.info().outputPath("home-waiting.png") });
-  await page.getByRole("button", { name: /Subtitle area selected.*Check area/ }).click();
-  await expect.poll(() => page.evaluate(() => Boolean(window.sessionTest.selection))).toBe(true);
-  expect(await page.evaluate(() => window.sessionTest.running)).toBe(false);
-  await page.evaluate(() => window.sessionTest.confirm());
+  await expect(page.locator(".region-row")).toBeDisabled();
+  await expect(page.locator(".region-action")).toHaveText("Change");
   await expect(page.getByRole("button", { name: "Stop translation", exact: true })).toBeEnabled();
-  await expect(page.locator(".support-line")).not.toContainText("Waiting for subtitles");
+  expect(await page.evaluate(() => window.sessionTest.running)).toBe(true);
   expect(
     await page.evaluate(() =>
-      window.sessionTest.calls.filter((c) => c.command === "start_translation"),
+      window.sessionTest.calls.filter((c) => c.command === "request_area_selection"),
     ),
-  ).toHaveLength(2);
+  ).toHaveLength(1);
 });
 
 test("capture failures remain visible until a healthy report proves recovery", async ({ page }) => {
@@ -165,12 +160,16 @@ test("capture failures remain visible until a healthy report proves recovery", a
   await page.evaluate(() => {
     const app = window.sessionTest;
     app.emit("capture-status", { isError: true, message: "Capture is unavailable" });
-    app.emit("subtitle-activity", { sessionId: app.sessionId, captureId: 60, state: "waiting" });
+    app.emit("subtitle-activity", {
+      sessionId: app.sessionId - 1,
+      captureId: 60,
+      state: "waiting",
+    });
   });
   await expect(page.getByRole("alert")).toContainText("Capture is unavailable");
   await page.evaluate(() => {
     const app = window.sessionTest;
-    app.emit("subtitle-activity", { sessionId: app.sessionId, captureId: 61, state: "active" });
+    app.emit("subtitle-activity", { sessionId: app.sessionId, captureId: 61, state: "waiting" });
   });
   await expect(page.getByRole("alert")).toHaveCount(0);
 });

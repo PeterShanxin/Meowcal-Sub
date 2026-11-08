@@ -258,6 +258,94 @@ test("keyboard window activation reveals faded controls and preserves Tab order"
   await expect(page.getByRole("button", { name: "Exit translation", exact: true })).toBeDisabled();
 });
 
+test("waiting persists until source subtitles return and can appear again for a later gap", async ({
+  page,
+}) => {
+  await page.clock.install();
+  await openOverlay(page);
+  await page.evaluate(() => {
+    window.overlayTest.emit("subtitle-activity", { sessionId: 1, captureId: 1, state: "active" });
+    window.overlayTest.emit("translation-update", {
+      sessionId: 1,
+      captureId: 2,
+      displayState: "warming",
+      translated: "",
+      timestamp: Date.now(),
+    });
+  });
+  const status = page.locator("#overlay-session-status");
+  await expect(status).toContainText("Preparing translation…");
+  await page.evaluate(() =>
+    window.overlayTest.emit("translation-update", {
+      sessionId: 1,
+      captureId: 3,
+      displayState: "noSubtitleText",
+      translated: "",
+      timestamp: Date.now(),
+    }),
+  );
+  await expect(status).toBeHidden();
+  await page.evaluate(() =>
+    window.overlayTest.emit("translation-update", {
+      sessionId: 1,
+      captureId: 4,
+      displayState: "warming",
+      translated: "",
+      timestamp: Date.now(),
+    }),
+  );
+  await expect(status).toContainText("Preparing translation…");
+  await page.evaluate(() =>
+    window.overlayTest.emit("subtitle-activity", {
+      sessionId: 1,
+      captureId: 60,
+      state: "waiting",
+    }),
+  );
+  await expect(status).toContainText("Waiting for subtitles…");
+  await expect(status).not.toHaveClass(/has-error/);
+  await page.clock.runFor(20_000);
+  await expect(status).toBeVisible();
+  await page.evaluate(() => window.overlayTest.emit("capture-status", { isError: true }));
+  await expect(status).toHaveClass(/has-error/);
+  await page.evaluate(() =>
+    window.overlayTest.emit("subtitle-activity", {
+      sessionId: 1,
+      captureId: 61,
+      state: "waiting",
+    }),
+  );
+  await expect(status).toContainText("Waiting for subtitles…");
+  await expect(status).not.toHaveClass(/has-error/);
+  await page.evaluate(() =>
+    window.overlayTest.emit("subtitle-activity", {
+      sessionId: 1,
+      captureId: 62,
+      state: "active",
+    }),
+  );
+  await expect(status).toBeHidden();
+  await page.evaluate(() =>
+    window.overlayTest.emit("translation-update", {
+      sessionId: 1,
+      captureId: 63,
+      displayState: "noSubtitleText",
+      translated: "",
+      timestamp: Date.now(),
+    }),
+  );
+  await expect(status).toBeHidden();
+  await page.evaluate(() =>
+    window.overlayTest.emit("subtitle-activity", {
+      sessionId: 1,
+      captureId: 123,
+      state: "waiting",
+    }),
+  );
+  await expect(status).toContainText("Waiting for subtitles…");
+  await expect(page.locator("#subtitle-text")).toHaveText("");
+});
+
 test("normal subtitle gaps and transient diagnostics leave the movie quiet", async ({ page }) => {
   await openOverlay(page);
   await page.evaluate(() =>
@@ -311,20 +399,22 @@ test("normal subtitle gaps and transient diagnostics leave the movie quiet", asy
   await expect(subtitles).toHaveClass(/hidden/);
   await expect(subtitles).toHaveCSS("opacity", "0");
   await expect(page.locator("#subtitle-text")).toHaveText("");
-  await expect(page.locator("#overlay-session-status")).toBeHidden();
-  await page.evaluate(() =>
+  await expect(page.locator("#overlay-session-status")).toContainText("Waiting for subtitles…");
+  await page.evaluate(() => {
+    window.overlayTest.emit("subtitle-activity", { sessionId: 1, captureId: 8, state: "active" });
     window.overlayTest.emit("translation-update", {
       sessionId: 1,
-      captureId: 8,
+      captureId: 9,
       displayState: "translated",
       translated: "A readable subtitle",
       backendUsed: "local_engine",
       warnings: [],
       timestamp: Date.now(),
-    }),
-  );
+    });
+  });
   await expect(page.locator("#subtitle-text")).toHaveText("A readable subtitle");
   await expect(subtitles).toBeVisible();
+  await expect(page.locator("#overlay-session-status")).toBeHidden();
 });
 
 test("preparation and actionable failures do not move subtitle geometry", async ({ page }) => {
