@@ -1,8 +1,11 @@
 # Multi-monitor Windows validation — 2026-11-08
 
-Native application source: `eb617bf4174347a8a9a38af9cfe243ffc66f50da`.
-The subsequent changes affect the offline evaluator, CI archive transport and
-evidence; application behavior is unchanged.
+Native multi-display run source: `eb617bf4174347a8a9a38af9cfe243ffc66f50da`.
+The subsequent changes correct evaluation timing, CI archive transport and
+concurrent configuration saves. Monitor geometry, capture, OCR and overlay
+policies are unchanged. The persistence follow-up has fresh Windows file-based
+overlap/reload and failed-write tests; Store lifecycle verification also saves
+settings and a region concurrently and checks the configuration after stopping.
 Development executable SHA-256:
 `d1ae5d0b94cf514b5204f73bacb44dfeaf3973ea914d2c2ae36ee79446d52f90`.
 
@@ -106,3 +109,9 @@ passed: Core 119 unit + 16 executable/service contracts; application 576 unit,
 16 IPC and 3 command contracts; 555 frontend and 35 browser tests. Production
 Clippy, formatting, TypeScript, documentation, maintainability and dependency
 audit passed. The evaluator regression suite has 20 passing tests.
+
+After the configuration-save follow-up, the full local gate passed again with
+578 application unit tests. The overlapping-write regression covers both save
+orders and reloads the actual Windows file; a failed save leaves live settings
+unchanged. The Store lifecycle gate checks concurrent settings/region saves on
+disk and again after restarting the installed application.

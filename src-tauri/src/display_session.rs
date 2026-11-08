@@ -127,33 +127,31 @@ pub async fn set_region(
             return Err(TargetError::ExpiredSelection.to_string());
         }
     };
-    persist(app, state, &selection).await?;
-    state.set_capture_selection(selection);
-    Ok(())
+    persist(app, &selection).await
 }
 
-async fn persist(
-    app: &AppHandle,
-    state: &AppState,
-    selection: &CaptureSelection,
-) -> Result<(), String> {
-    let config = {
-        let mut config = lock_or_recover(&state.config).clone();
-        config.last_capture_region = Some(selection.region);
-        config.last_capture_scale_factor = Some(selection.monitor.scale_factor);
-        config.last_capture_monitor = Some(selection.monitor.clone());
-        config
-    };
+async fn persist(app: &AppHandle, selection: &CaptureSelection) -> Result<(), String> {
     let app = app.clone();
-    tauri::async_runtime::spawn_blocking(move || crate::config::save_config(&app, &config))
-        .await
-        .map_err(|e| e.to_string())?
-        .map_err(|e| e.to_string())?;
-    let mut config = lock_or_recover(&state.config);
-    config.last_capture_region = Some(selection.region);
-    config.last_capture_scale_factor = Some(selection.monitor.scale_factor);
-    config.last_capture_monitor = Some(selection.monitor.clone());
-    Ok(())
+    let selection = selection.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+        crate::config_save::update_live(
+            &state.config,
+            |config| {
+                config.last_capture_region = Some(selection.region);
+                config.last_capture_scale_factor = Some(selection.monitor.scale_factor);
+                config.last_capture_monitor = Some(selection.monitor.clone());
+            },
+            |config| {
+                crate::config::save_config(&app, config)?;
+                state.set_capture_selection(selection.clone());
+                Ok(())
+            },
+        )
+        .map(|_| ())
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 /// Independent from OCR/inference awaits, so a lost display cannot leave a

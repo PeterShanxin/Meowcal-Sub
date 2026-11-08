@@ -134,6 +134,10 @@ Shared contracts have one owner before parallel decomposition begins:
   guard, not a semantic detector for paraphrases or previously unseen leakage.
 - Configuration: Rust `config` is canonical. Frontend code may present or
   submit settings but cannot invent defaults, migrations, or readiness rules.
+  Live read-modify-write saves hold the `AppState.config` lock through the
+  durable write and publication. Settings and capture updates use
+  `config_save::update_live` on blocking workers; capture state is published
+  before releasing that lock so a settings save reads the committed selection.
 - Commands and events: Rust payload types and `ipc/protocol.rs` are canonical.
   `tauri-bridge.js` is the single frontend transport adapter. A command or event
   change updates Rust, bridge mapping, browser parity or explicit limitation,

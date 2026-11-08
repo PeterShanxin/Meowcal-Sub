@@ -854,7 +854,7 @@ pub async fn wizard_install_engine(
     match hy_mt_installer::install(&app, cache_dir).await {
         Ok(paths) => {
             let runtime = paths.managed_config(&manifest);
-            let updated = {
+            {
                 let mut config = lock_or_recover(&state.config);
                 config.translation.enable_foundry_local = true;
                 config.translation.allow_mock_fallback = false;
@@ -866,9 +866,8 @@ pub async fn wizard_install_engine(
                 // problem cannot hide this install from setup (#65).
                 config.translation.foundry_local.engine_cache_root =
                     crate::engine_recovery::cache_root_of(&paths);
-                config.clone()
-            };
-            save_config(&app, &updated)?;
+                save_config(&app, &config)?;
+            }
             let _ = app.emit_to(
                 "foundry-wizard",
                 "wizard-download-complete",

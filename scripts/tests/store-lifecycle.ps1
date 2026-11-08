@@ -187,7 +187,12 @@ try {
  const updates=[];
  const unlisten=await window.__TAURI__.event.listen('translation-update',e=>updates.push(e.payload));
  try {
-   await invoke('set_capture_region',$regionJson);
+   const settings=await invoke('get_settings');
+   settings.overlay.fontSize=33;
+   await Promise.all([
+     invoke('set_capture_region',$regionJson),
+     invoke('save_settings',{settings})
+   ]);
    await invoke('start_translation');
    for(let i=0;i<30&&!updates.some(x=>x.displayState==='translated'&&/Good morning/i.test(x.original));i++) await new Promise(r=>setTimeout(r,1000));
    return {running:await invoke('is_translation_running'),updates};
@@ -226,6 +231,9 @@ try {
         $script:customCore = Join-Path $env:RUNNER_TEMP ('store-external-core-' + [guid]::NewGuid().ToString('N'))
         Copy-Item -LiteralPath $physicalCore -Destination $script:customCore -Recurse
         $config = Get-Content -LiteralPath $configs[0].FullName -Raw | ConvertFrom-Json
+        if ($config.overlay.fontSize -ne 33 -or $null -eq $config.lastCaptureMonitor) {
+            throw 'Concurrent settings and capture-region updates did not survive on disk.'
+        }
         $engine = $config.translation.localEngine
         foreach ($field in @('executablePath', 'modelPath')) {
             $oldPath = $engine.managedRuntime.$field
@@ -242,6 +250,9 @@ try {
         $deadline = (Get-Date).AddSeconds(40)
         do { try { Connect-AppWebView; break } catch { if ((Get-Date) -gt $deadline) { throw }; Start-Sleep 2 } } while ($true)
         $settings = Invoke-AppScript "window.__TAURI__.core.invoke('get_settings')"
+        if ($settings.overlay.fontSize -ne 33 -or $null -eq $settings.lastCaptureMonitor) {
+            throw 'Restart lost concurrent settings or the capture monitor binding.'
+        }
         if ($settings.translation.localEngine.managedRuntime.modelPath -ne $script:customModel) {
             throw 'Restart did not use custom model storage.'
         }
