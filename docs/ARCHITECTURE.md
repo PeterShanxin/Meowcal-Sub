@@ -202,6 +202,21 @@ Shared contracts have one owner before parallel decomposition begins:
   `package.json` and `src-tauri/Cargo.toml` are synchronized mirrors.
 - Display state: the pipeline owns translated/source-only/failure semantics.
   The overlay renders the supplied state and cannot relabel OCR as translation.
+  `subtitle_activity.rs` owns the 15-second healthy-empty waiting threshold,
+  independently of subtitle retirement and repeat reset. Capture or recognition
+  failures interrupt an unfinished timer; an existing wait lasts until source
+  text returns. `pipeline_status.rs` emits activity and terminal
+  session reports; `ui/session-status-controller.ts` filters stale reports and
+  preserves actionable interruptions on Home. `overlay-session-status.js` shows
+  a neutral waiting indicator after 15 seconds of healthy empty recognition and
+  keeps it visible until source text returns. Each later gap starts a fresh
+  15-second interval. Waiting, preparation and actionable interruptions use a
+  surface outside the subtitle box. Short gaps and successful retries stay quiet.
+- Selection confirmation: `area_selection.rs` correlates each Start with an
+  explicit selector confirmation or cancellation. It delegates display validation
+  and persistence to the display-session owner. An unchanged rectangle confirms
+  normally; cancellation preserves the committed selection. Capture starts only
+  after the selector is hidden and the confirmed selection has been saved.
 - Display targeting: `capture_target.rs` owns monitor identity, local geometry,
   pending selector tokens and restore validation. `display_monitor.rs` combines
   Tauri physical bounds/DPI with the Windows monitor device interface identity.

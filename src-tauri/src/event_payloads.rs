@@ -131,9 +131,64 @@ pub(crate) struct CaptureStatusPayload {
     pub is_error: bool,
 }
 
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct SubtitleActivityPayload {
+    pub session_id: u64,
+    pub capture_id: u64,
+    pub state: &'static str,
+}
+
+impl SubtitleActivityPayload {
+    pub(crate) fn new(
+        token: crate::pipeline_session::PipelineToken,
+        state: crate::subtitle_activity::ActivityState,
+    ) -> Self {
+        Self {
+            session_id: token.session_id,
+            capture_id: token.capture_id,
+            state: state.as_str(),
+        }
+    }
+}
+
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct TranslationInterruptedPayload {
+    pub session_id: u64,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn terminal_interruption_names_the_session_without_replacing_the_failure_reason() {
+        let payload = TranslationInterruptedPayload { session_id: 3 };
+        assert_eq!(
+            serde_json::to_value(payload).expect("interruption payload serializes"),
+            serde_json::json!({"sessionId": 3})
+        );
+    }
+
+    #[test]
+    fn subtitle_activity_carries_its_session_and_observation_without_screen_text() {
+        let token = crate::pipeline_session::PipelineToken {
+            session_id: 3,
+            capture_id: 8,
+        };
+        for (state, name) in [
+            (crate::subtitle_activity::ActivityState::Active, "active"),
+            (crate::subtitle_activity::ActivityState::Waiting, "waiting"),
+        ] {
+            let json = serde_json::to_value(SubtitleActivityPayload::new(token, state))
+                .expect("activity payload serializes");
+            assert_eq!(
+                json,
+                serde_json::json!({"sessionId": 3, "captureId": 8, "state": name})
+            );
+        }
+    }
 
     // The frontend switches on this string. `translation-display.js` lists the
     // states it knows and silently falls back to "translated" for anything else,

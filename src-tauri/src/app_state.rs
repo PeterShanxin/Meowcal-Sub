@@ -23,6 +23,7 @@ pub struct AppState {
     pub topology_watch: Mutex<Option<tauri::async_runtime::JoinHandle<()>>>,
     /// Region, monitor identity, DPI and pending selector share one lock.
     pub capture: Mutex<CaptureState>,
+    pub area_selection: crate::area_selection::SelectionRequests,
     /// Stop signal sender for the translation loop
     /// When we send `true` through this, the loop stops
     pub stop_signal: Mutex<Option<watch::Sender<bool>>>,
@@ -53,6 +54,7 @@ impl Default for AppState {
             session_lifecycle: crate::session_lifecycle::SessionLifecycle::default(),
             topology_watch: Mutex::new(None),
             capture: Mutex::new(CaptureState::default()),
+            area_selection: crate::area_selection::SelectionRequests::default(),
             stop_signal: Mutex::new(None),
             translation_diagnostics: Arc::new(Mutex::new(TranslationDiagnosticsState::default())),
             pipeline_clock: Arc::new(PipelineClock::default()),

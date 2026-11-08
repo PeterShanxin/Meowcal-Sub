@@ -113,6 +113,7 @@ describe("deriveHomePresentation", () => {
     [snapshot({ busy: "loading" }), "none", "Checking"],
     [snapshot({ running: true }), "stop", "Running"],
     [snapshot({ running: true, busy: "stopping" }), "stop", "Running"],
+    [snapshot({ busy: "selecting" }), "none", "Select area"],
     [snapshot({ busy: "warming" }), "none", "Starting"],
     [snapshot({ busy: "starting" }), "none", "Starting"],
     [snapshot({ engine: { phase: "notInstalled" } }), "setup", "Setup needed"],
@@ -129,7 +130,7 @@ describe("deriveHomePresentation", () => {
     [snapshot({ engine: { phase: "backendUnavailable" } }), "none", "Backend offline"],
     [snapshot({ error: "save failed" }), "start", "Ready"],
     [snapshot({ ocrLanguages: new Set() }), "installOcr", "Almost ready"],
-    [snapshot({ region: null }), "selectRegion", "Almost ready"],
+    [snapshot({ region: null }), "start", "Almost ready"],
     [snapshot({ engine: { phase: "notRunning" } }), "start", "Ready"],
     [snapshot({ engine: { phase: "notrunning" } }), "start", "Ready"],
   ])("maps runtime state to one action", (input, action, statusLabel) => {
@@ -197,6 +198,18 @@ describe("deriveHomePresentation", () => {
 });
 
 describe("Home capture warnings", () => {
+  it("keeps a healthy session running with stable support text", () => {
+    const result = deriveHomePresentation(snapshot({ running: true }));
+    expect(result).toMatchObject({
+      state: "running",
+      statusLabel: "Running",
+      action: "stop",
+      actionDisabled: false,
+      supportLine: "Overlay active · Local processing",
+      supportTone: "success",
+    });
+  });
+
   it("shows a non-fatal capture report on a running session", () => {
     const result = deriveHomePresentation(
       snapshot({
@@ -214,7 +227,7 @@ describe("Home capture warnings", () => {
 });
 
 describe("Home session controls", () => {
-  it.each(["warming", "starting", "stopping"] as const)(
+  it.each(["selecting", "warming", "starting", "stopping"] as const)(
     "locks the language pair and area while translation is %s",
     (busy) => {
       expect(isSessionLocked(snapshot({ busy, running: busy === "stopping" }))).toBe(true);

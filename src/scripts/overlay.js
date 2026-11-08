@@ -5,7 +5,8 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 const { getTranslationPresentation } = window.TranslationDisplay;
-const { clearSubtitleHint, setSubtitleHint, updateSubtitleHint } = window.OverlaySubtitleHint;
+const { setupSessionStatus } = window.OverlaySessionStatus;
+let sessionStatus;
 const { appendClipSurface } = window.OverlayWindowClip;
 const { resolveSubtitleSurface } = window.OverlaySubtitleSurface;
 const { setupSettingsMenu } = window.OverlaySettingsMenu;
@@ -176,6 +177,9 @@ function getInteractiveBoundsPhysical(scaleFactor) {
         bounds.push(rectToPhysicalBounds(subtitleContainer.getBoundingClientRect(), origin, scaleFactor));
     }
 
+    const status = document.getElementById('overlay-session-status');
+    if (status && !status.hidden) bounds.push(rectToPhysicalBounds(status.getBoundingClientRect(), origin, scaleFactor));
+
     const settingsMenu = document.getElementById('settings-menu');
     if (settingsMenu && settingsMenu.classList.contains('visible')) {
         bounds.push(rectToPhysicalBounds(settingsMenu.getBoundingClientRect(), origin, scaleFactor));
@@ -289,8 +293,6 @@ async function initOverlay() {
 
     const captureFrame = document.getElementById('capture-frame');
     const subtitleContainer = document.getElementById('subtitle-container');
-    const subtitleHint = document.getElementById('subtitle-hint');
-    const subtitleHintText = document.getElementById('subtitle-hint-text');
     const subtitleText = document.getElementById('subtitle-text');
     const debugRegion = document.getElementById('debug-region');
     const debugStatus = document.getElementById('debug-status');
@@ -312,11 +314,11 @@ async function initOverlay() {
     setupSettingsButton(settingsButton, settingsMenu, subtitleText, subtitleContainer);
     setupOverlayToolbar({ frame: captureFrame, onInteraction: cancelClickThrough, onGeometryChange: scheduleWindowClipUpdate });
 
+    sessionStatus = await setupSessionStatus({ onChange: scheduleWindowClipUpdate, onInteraction: cancelClickThrough, getRegion: () => overlayState.region });
+
     await setupEventListeners({
         captureFrame,
         subtitleContainer,
-        subtitleHint,
-        subtitleHintText,
         subtitleText,
         debugStatus,
     });
@@ -542,8 +544,6 @@ async function setupEventListeners(elements) {
     const {
         captureFrame,
         subtitleContainer,
-        subtitleHint,
-        subtitleHintText,
         subtitleText,
         debugStatus,
     } = elements;
@@ -577,35 +577,18 @@ async function setupEventListeners(elements) {
             const presentation = getTranslationPresentation(displayState, backendUsed, warnings);
             console.log('🌐 Translation state:', presentation.state);
 
-            const surface = resolveSubtitleSurface(presentation, translated);
+            sessionStatus.translation(event.payload);
+            const surface = resolveSubtitleSurface(presentation, translated, overlayState.currentText);
             if (surface.mode === 'text') {
                 updateSubtitleText(subtitleText, translated, subtitleContainer);
-                updateSubtitleHint(
-                    subtitleHint,
-                    subtitleHintText,
-                    backendUsed,
-                    warnings
-                );
             } else if (surface.mode === 'clear') {
                 overlayState.currentText = '';
                 subtitleText.textContent = '';
                 setSubtitleContainerVisible(subtitleContainer, false);
-                clearSubtitleHint(subtitleHint, subtitleHintText);
             } else {
-                // Hint-bearing states keep the box on screen, or a warming/unavailable
-                // pipeline looks identical to a dead one. 'keep' also holds the line
-                // already showing: blanking it for an "engine is behind" banner would
-                // cost the viewer the very thing they were reading.
-                if (surface.mode !== 'keep') {
-                    overlayState.currentText = '';
-                    subtitleText.textContent = '';
-                }
-                setSubtitleHint(subtitleHint, subtitleHintText, presentation.hint,
-                    presentation.severity, presentation.persist);
                 setSubtitleContainerVisible(subtitleContainer, surface.showContainer);
             }
 
-            // Reposition using the real subtitle container height (hint can change size).
             requestAnimationFrame(() => {
                 if (overlayState.region) {
                     updateSubtitlePosition(subtitleContainer, overlayState.region);
@@ -626,6 +609,7 @@ async function setupEventListeners(elements) {
             const visible = event.payload;
             console.log('👁️ Visibility:', visible);
             overlayState.isVisible = visible;
+            sessionStatus.visibility(visible);
 
             if (visible) {
                 // A stop inside the fade window leaves its hide cleanup pending.
@@ -678,9 +662,6 @@ async function setupEventListeners(elements) {
                 }
 
                 scheduleWindowClipUpdate();
-
-                // Hide hint (if any)
-                clearSubtitleHint(subtitleHint, subtitleHintText);
 
                 // Reset cached subtitle text so restarting translation shows the first line even
                 // if it's identical to the previous session.
@@ -749,7 +730,7 @@ function updateCaptureFrame(frame, region) {
 function updateSubtitlePosition(container, region) {
     if (!region || !container) return;
 
-    // Prefer measured height when visible (includes hint row), fallback to a conservative estimate.
+    // Prefer measured height when visible, fallback to a conservative estimate.
     const measured = container.classList.contains('visible')
         ? Math.round(container.getBoundingClientRect().height)
         : 0;
@@ -784,6 +765,7 @@ function applyRegionToOverlay(region) {
 
     updateCaptureFrame(document.getElementById('capture-frame'), region);
     updateSubtitlePosition(document.getElementById('subtitle-container'), region);
+    sessionStatus?.reposition();
     scheduleWindowClipUpdate();
 
     const debugRegion = document.getElementById('debug-region');
@@ -880,6 +862,9 @@ async function updateOverlayWindowClip() {
         if (toolbar && frameVisible && !toolbar.hidden) {
             appendClipSurface(bounds, radii, toolbar);
         }
+
+        const status = document.getElementById('overlay-session-status');
+        if (status && !status.hidden) appendClipSurface(bounds, radii, status);
 
         // Keep the bottom-right diagnostics panel visible when window clipping is enabled.
         if (debugInfo) {

@@ -1,7 +1,8 @@
 import type { DownloadEvent, UpdateStatus } from "./update-state";
 
 export type AppScreen = "home" | "appearance" | "settings";
-export type BusyState = "idle" | "loading" | "warming" | "starting" | "stopping" | "saving";
+export type BusyState =
+  "idle" | "loading" | "selecting" | "warming" | "starting" | "stopping" | "saving";
 export type Tone = "neutral" | "success" | "warning" | "danger";
 
 /** Glyphs drawn by `icons.ts`. */

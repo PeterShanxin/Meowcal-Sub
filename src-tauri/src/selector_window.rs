@@ -110,7 +110,7 @@ pub async fn open(
 }
 
 /// Legacy area selector (kept for fallback if WinUI3 is not available)
-async fn open_legacy(
+pub(crate) async fn open_legacy(
     app: AppHandle,
     snapshot_slot: &SnapshotSlot,
     monitor: &CaptureMonitor,
@@ -168,6 +168,7 @@ async fn open_legacy(
     crate::display_monitor::place(&window, monitor)?;
     window.show().map_err(|e| e.to_string())?;
     window.set_focus().map_err(|e| e.to_string())?;
+    let _ = window.emit("selector-opened", ());
     info!("✅ Area selector opened!");
 
     Ok(())

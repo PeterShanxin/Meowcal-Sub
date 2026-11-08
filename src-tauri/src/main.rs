@@ -90,6 +90,9 @@ fn main() {
             commands::open_area_selector,
             commands::close_area_selector,
             commands::get_selector_snapshot,
+            meowcal_sub::area_selection::request_area_selection,
+            meowcal_sub::area_selection::get_area_selection_request,
+            meowcal_sub::area_selection::complete_area_selection,
             commands::start_translation,
             commands::stop_translation,
             commands::is_translation_running,
@@ -220,9 +223,35 @@ fn main() {
             }
             match event {
                 tauri::WindowEvent::CloseRequested { api, .. } => {
-                    meowcal_sub::window_lifecycle::handle_close_requested(window, api);
+                    if window.label() == "selector"
+                        && window
+                            .state::<AppState>()
+                            .area_selection
+                            .current()
+                            .is_some()
+                    {
+                        api.prevent_close();
+                        let app = window.app_handle().clone();
+                        tauri::async_runtime::spawn(async move {
+                            if let Err(error) =
+                                meowcal_sub::area_selection::cancel_from_window(&app).await
+                            {
+                                tracing::warn!("Failed to cancel area selection: {error}");
+                            }
+                        });
+                    } else {
+                        meowcal_sub::window_lifecycle::handle_close_requested(window, api);
+                    }
                 }
-                tauri::WindowEvent::Destroyed => meowcal_sub::overlay_host_process::stop(window),
+                tauri::WindowEvent::Destroyed => {
+                    if window.label() == "selector" {
+                        let app = window.app_handle().clone();
+                        tauri::async_runtime::spawn(async move {
+                            meowcal_sub::area_selection::cancel_after_destroy(&app).await;
+                        });
+                    }
+                    meowcal_sub::overlay_host_process::stop(window);
+                }
                 _ => {}
             }
         })

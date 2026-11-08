@@ -21,12 +21,6 @@
   color: var(--plate-light-ink);
 }
 
-.subtitle-container.light .subtitle-hint {
-  color: rgba(16, 24, 32, 0.78);
-  background: rgba(16, 24, 32, 0.06);
-  border-color: rgba(16, 24, 32, 0.14);
-}
-
 /* The diagnostics panel reports state, latency and the raw OCR line on
    separate rows, so it has to keep the newlines it is given. */
 .debug-info #debug-status {
