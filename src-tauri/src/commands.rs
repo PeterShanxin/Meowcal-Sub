@@ -384,8 +384,7 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
     let eligibility = translation_config.eligibility();
     debug!(?translation_config.ocr, min_significant_chars = min_chars, "OCR settings");
 
-    // Pace to a deadline: a frame that ran the translator must not also pay a
-    // full interval before the next capture.
+    // Pace capture independently of inference.
     let mut pacer = crate::pipeline_pacing::Pacer::new(interval_ms);
 
     let translation_config_for_summary = translation_config.clone();
@@ -608,6 +607,7 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
                 }
             };
             let ocr_ms = ocr_started.elapsed().as_millis() as u64;
+            let sample_ms = pacer.observed_interval(frame_started).as_millis() as u64;
             let previous_period = pacer.period();
             pacer.observe_work(frame_started.elapsed());
             if pacer.period() != previous_period {
@@ -650,7 +650,7 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
                     started: frame_started,
                     capture_ms,
                     ocr_ms,
-                    sample_ms: pacer.period().as_millis() as u64,
+                    sample_ms,
                 },
                 !ocr_result.is_empty() && rejection.is_none(),
             );

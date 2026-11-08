@@ -109,6 +109,7 @@ impl Translator {
                             cue_id = job.cue_id,
                             capture_id = job.frame.token.capture_id,
                             capture_ms = job.frame.capture_ms,
+                            sample_ms = job.frame.sample_ms,
                             ocr_ms = job.frame.ocr_ms,
                             model_ms = result.model_ms,
                             queue_ms = job.queue_ms,

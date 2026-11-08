@@ -327,8 +327,10 @@ Only a severe stall (32 queued entries or a 15-second queue age) skips old work
 and resumes from the newest cue. Normal backlog is retained and measured.
 
 OCR pacing starts at the configured interval. After 12 successful samples, a
-rolling p90 capture/OCR cost targets at most half-time recognition. Adjustments
-stay within 0.5–4 times the configured interval, with bounded per-frame changes.
+rolling p90 capture/OCR cost can shorten it to half that interval, with bounded
+per-frame changes. Complex frames do not add idle time beyond the configured
+cadence; recognition overruns already slow sampling. Reading budgets and stage
+logs use the measured interval between successful captures, including outages.
 
 Band diagnostics omit screen text. `MEOWCAL_BAND_LOG` enables local JSONL;
 `MEOWCAL_BAND_LOG_TEXT=1` additionally includes OCR text for replay. Keep those

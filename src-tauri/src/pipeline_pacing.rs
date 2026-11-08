@@ -9,6 +9,7 @@ pub struct Pacer {
     period: Duration,
     configured: Duration,
     samples: VecDeque<Duration>,
+    last_observed: Option<Instant>,
 }
 
 impl Pacer {
@@ -17,12 +18,13 @@ impl Pacer {
             period: Duration::from_millis(interval_ms as u64),
             configured: Duration::from_millis(interval_ms.max(1) as u64),
             samples: VecDeque::new(),
+            last_observed: None,
         }
     }
 
-    /// Calibrate from successful capture/OCR work. Aim for at most half-time
-    /// recognition, within 0.5x..4x of the configured interval. A rolling p90
-    /// and bounded changes avoid reacting to each frame's timing noise.
+    /// Speed up inexpensive recognition within the configured capture cadence.
+    /// Complex cues must not add idle time beyond that cadence: recognition
+    /// overruns already slow sampling without an additional pacing penalty.
     pub fn observe_work(&mut self, work: Duration) {
         self.samples.push_back(work);
         if self.samples.len() > 24 {
@@ -35,13 +37,23 @@ impl Pacer {
         samples.sort_unstable();
         let p90 = samples[(samples.len() * 9).div_ceil(10) - 1];
         let minimum = (self.configured / 2).max(Duration::from_millis(60));
-        let maximum = self.configured.saturating_mul(4).max(minimum);
+        let maximum = self.configured.max(minimum);
         let target = p90.saturating_mul(2).clamp(minimum, maximum);
         let step = (self.period / 8).max(Duration::from_millis(1));
         self.period = target.clamp(
             self.period.saturating_sub(step),
             self.period.saturating_add(step),
         );
+    }
+
+    /// Actual distance between successfully observed captures, including work
+    /// overruns and recognition outages rather than only scheduled idle time.
+    pub fn observed_interval(&mut self, started: Instant) -> Duration {
+        self.last_observed
+            .replace(started)
+            .map_or(self.period, |previous| {
+                started.saturating_duration_since(previous)
+            })
     }
 
     /// One whole period, for a pass that has not started timing a frame yet.
@@ -93,7 +105,7 @@ mod calibration_tests {
     use super::*;
     #[test]
     fn fast_and_slow_devices_converge_to_different_bounded_periods() {
-        for (work_ms, expected_ms) in [(40, 125), (100, 200), (400, 800), (900, 1_000)] {
+        for (work_ms, expected_ms) in [(40, 125), (100, 200), (400, 250), (900, 250)] {
             let mut pacer = Pacer::new(250);
             for _ in 0..80 {
                 pacer.observe_work(Duration::from_millis(work_ms));
@@ -115,7 +127,7 @@ mod calibration_tests {
         assert_eq!(pacer.period(), Duration::from_millis(125));
     }
     #[test]
-    fn sustained_load_reduces_ocr_duty_and_recovery_speeds_it_up_again() {
+    fn sustained_load_restores_the_configured_cadence_and_fast_frames_speed_it_up_again() {
         let mut pacer = Pacer::new(250);
         for _ in 0..40 {
             pacer.observe_work(Duration::from_millis(50));
@@ -123,10 +135,43 @@ mod calibration_tests {
         for _ in 0..40 {
             pacer.observe_work(Duration::from_millis(300));
         }
-        assert_eq!(pacer.period(), Duration::from_millis(600));
+        assert_eq!(pacer.period(), Duration::from_millis(250));
         for _ in 0..80 {
             pacer.observe_work(Duration::from_millis(50));
         }
         assert_eq!(pacer.period(), Duration::from_millis(125));
+    }
+}
+
+#[cfg(test)]
+mod overload_tests {
+    use super::*;
+
+    #[test]
+    fn observed_intervals_include_work_and_missing_recognition_results() {
+        let start = Instant::now();
+        let mut pacer = Pacer::new(250);
+        assert_eq!(pacer.observed_interval(start), Duration::from_millis(250));
+        assert_eq!(
+            pacer.observed_interval(start + Duration::from_millis(700)),
+            Duration::from_millis(700)
+        );
+        assert_eq!(
+            pacer.observed_interval(start + Duration::from_secs(4)),
+            Duration::from_millis(3300)
+        );
+    }
+
+    #[test]
+    fn expensive_cues_do_not_add_idle_beyond_the_configured_capture_cadence() {
+        let mut pacer = Pacer::new(250);
+        for _ in 0..60 {
+            pacer.observe_work(Duration::from_millis(500));
+        }
+        assert!(pacer.period() <= Duration::from_millis(250));
+        assert_eq!(
+            remaining(pacer.period(), Duration::from_millis(500)),
+            Duration::ZERO
+        );
     }
 }
