@@ -200,6 +200,13 @@ Shared contracts have one owner before parallel decomposition begins:
   still transitions to `error` on preparation failure.
 - Product version: `src-tauri/tauri.conf.json` is the product version record.
   `package.json` and `src-tauri/Cargo.toml` are synchronized mirrors.
+- Update checks: `ui/update-controller.ts` owns a ten-second metadata deadline.
+  Manual checks join an existing automatic check's remaining deadline. Late
+  results cannot replace a retry, and unused update resources are closed.
+  Download and installation do not use the metadata deadline.
+  `update_diagnostics.rs` records source, timing, result, and error category in
+  the session log without raw errors or request URLs. Browser mode has no updater;
+  Store builds keep Microsoft Store as their update owner.
 - Display state: the pipeline owns translated/source-only/failure semantics.
   The overlay renders the supplied state and cannot relabel OCR as translation.
 - Display targeting: `capture_target.rs` owns monitor identity, local geometry,

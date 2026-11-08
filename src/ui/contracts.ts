@@ -150,12 +150,13 @@ export interface PendingUpdate {
    * inside this call.
    */
   install(onProgress: (event: DownloadEvent) => void): Promise<void>;
+  close(): Promise<void>;
 }
 
 export interface UpdatesApi {
   currentVersion(): Promise<string>;
   /** `null` means the endpoint answered and nothing newer exists. */
-  check(): Promise<PendingUpdate | null>;
+  check(options: { timeout: number }): Promise<PendingUpdate | null>;
   restart(): Promise<void>;
 }
 

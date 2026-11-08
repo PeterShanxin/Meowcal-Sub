@@ -30,7 +30,11 @@ const frontendOrigin = `http://127.0.0.1:${ports[0]}`;
 
 export default defineConfig({
   testDir: "frontend-tests",
-  testMatch: ["browser-linux/*.spec.mjs", "browser/overlay-toolbar.spec.mjs"],
+  testMatch: [
+    "browser-linux/*.spec.mjs",
+    "browser/overlay-toolbar.spec.mjs",
+    "browser/update-bridge.spec.mjs",
+  ],
   outputDir: "test-results/browser-linux",
   forbidOnly: Boolean(process.env.CI),
   workers: 1,

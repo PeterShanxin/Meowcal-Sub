@@ -176,6 +176,20 @@ export function deriveUpdatePresentation(
 }
 
 export const UPDATE_CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000;
+export const UPDATE_CHECK_TIMEOUT_MS = 10_000;
+
+export type UpdateCheckIntent = "manual" | "automatic";
+export type UpdateCheckErrorKind = "timeout" | "network" | "unknown";
+export interface UpdateCheckDiagnostic {
+  requestId: number;
+  source: UpdateCheckIntent;
+  intent: UpdateCheckIntent;
+  phase: "started" | "manualTakeover" | "finished";
+  startedAtMs: number;
+  elapsedMs: number;
+  result?: "upToDate" | "available" | "failed" | "timeout" | "cancelled";
+  errorKind?: UpdateCheckErrorKind;
+}
 
 export interface AutoUpdateCheckSettings {
   autoCheckUpdates?: boolean;

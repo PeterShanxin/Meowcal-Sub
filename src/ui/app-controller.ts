@@ -158,6 +158,7 @@ export class AppController {
     this.disposed = true;
     this.engines.dispose();
     this.displays.dispose();
+    this.updates.dispose();
     this.stopRegionPolling();
     if (this.overlaySaveId !== null) window.clearTimeout(this.overlaySaveId);
     if (this.autoCheckTimer !== null) window.clearTimeout(this.autoCheckTimer);

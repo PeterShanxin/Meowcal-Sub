@@ -120,6 +120,7 @@ fn main() {
             commands::wizard_test_translation,
             // In-app update
             meowcal_sub::update_handoff::prepare_for_update,
+            meowcal_sub::update_diagnostics::record_update_check,
         ])
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
