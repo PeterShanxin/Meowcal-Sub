@@ -95,13 +95,23 @@ export function assertSource(source, release, tag) {
   );
 }
 
+// The Store renders "What's new" as plain text, so Markdown bold markers and the
+// highlight icons are dropped.
+function sectionBullets(notes, heading) {
+  const section = notes.split(heading)[1]?.split(/^## /m)[0];
+  return (section?.split(/(?=^- )/m).slice(1) ?? []).map((item) =>
+    item
+      .replace(/\s+/g, " ")
+      .trim()
+      .replace(/^- (?:\p{Extended_Pictographic}️?\s*)+/u, "- ")
+      .replaceAll("**", ""),
+  );
+}
+
 export function storeReleaseNotes(notes, tag) {
-  const section = notes.split(/^## Fixes and improvements\s*$/m)[1]?.split(/^## /m)[0];
-  const bullets = section
-    ?.split(/(?=^- )/m)
-    .slice(1)
-    .map((item) => item.replace(/\s+/g, " ").trim());
-  requireCondition(bullets?.length > 0, "store_release_notes_missing");
+  const fixes = sectionBullets(notes, /^## Fixes and improvements\s*$/m);
+  requireCondition(fixes.length > 0, "store_release_notes_missing");
+  const bullets = [...sectionBullets(notes, /^## (?:✨ )?Highlights\s*$/mu), ...fixes];
   const footer = `Full release notes: https://github.com/${REPO}/releases/tag/${tag}`;
   let summary = `Meowcal Sub ${tag} highlights:\n`;
   for (const bullet of bullets) {
