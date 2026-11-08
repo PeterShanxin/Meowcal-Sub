@@ -36,7 +36,7 @@ pub(super) fn admit(
         .expect("stable cue admitted")
 }
 
-fn finish(queue: &mut SubtitleQueue<String>, job: &Job, now: Instant) {
+pub(super) fn finish(queue: &mut SubtitleQueue<String>, job: &Job, now: Instant) {
     assert!(queue.complete(
         job,
         Completion {
@@ -49,7 +49,7 @@ fn finish(queue: &mut SubtitleQueue<String>, job: &Job, now: Instant) {
     ));
 }
 
-fn shown(queue: &mut SubtitleQueue<String>, now: Instant) -> (u64, String) {
+pub(super) fn shown(queue: &mut SubtitleQueue<String>, now: Instant) -> (u64, String) {
     match queue.next_display(now).expect("ready cue shown") {
         Display::Show { job, result, .. } => (job.cue_id, result),
         Display::Clear => panic!("cue must not be cleared"),

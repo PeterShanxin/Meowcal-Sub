@@ -57,10 +57,14 @@ impl<R> SubtitleQueue<R> {
             self.candidate = Some((key, frame));
         }
         if let Some(active) = &self.active {
-            if observed_at.saturating_duration_since(active.last_seen)
-                >= self.quiet_for + Duration::from_millis(250)
+            if confirmed
+                && observed_at.saturating_duration_since(active.last_seen) >= self.quiet_for
             {
-                self.end_active(active.last_seen);
+                let changed_at = self
+                    .candidate
+                    .as_ref()
+                    .map_or(observed_at, |(_, first)| first.started);
+                self.end_active(changed_at);
             }
         }
         None

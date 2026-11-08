@@ -272,7 +272,9 @@ impl<R> SubtitleQueue<R> {
         if can_replace
             && (self.entries.is_empty()
                 || self.visible.as_ref().is_some_and(|v| {
-                    now.saturating_duration_since(v.shown_at) >= Duration::from_secs(4)
+                    v.end.is_some_and(|end| {
+                        now.saturating_duration_since(end) >= Duration::from_secs(4)
+                    })
                 }))
             && self
                 .visible

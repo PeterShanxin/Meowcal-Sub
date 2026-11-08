@@ -1,4 +1,4 @@
-use super::tests::{admit, observe};
+use super::tests::{admit, finish, observe, shown};
 use super::*;
 
 #[test]
@@ -78,4 +78,69 @@ fn a_severely_expired_queue_cannot_restore_a_cue_that_is_no_longer_on_screen() {
         (queue.stats(start).depth, queue.stats(start).skipped),
         (0, 1)
     );
+}
+
+#[test]
+fn a_paused_line_stays_visible_while_its_successor_is_translating() {
+    let start = Instant::now();
+    let mut queue = SubtitleQueue::new(Duration::from_millis(125));
+    admit(&mut queue, "Wait here.", start, 1);
+    let old = queue.next_job(start + Duration::from_millis(200)).unwrap();
+    finish(&mut queue, &old, start + Duration::from_millis(500));
+    shown(&mut queue, start + Duration::from_millis(500));
+    observe(
+        &mut queue,
+        "Wait here.",
+        start + Duration::from_secs(29),
+        290,
+    );
+    admit(
+        &mut queue,
+        "Come inside.",
+        start + Duration::from_secs(30),
+        300,
+    );
+    assert!(queue
+        .next_display(start + Duration::from_millis(30200))
+        .is_none());
+    let next = queue
+        .next_job(start + Duration::from_millis(30200))
+        .unwrap();
+    finish(&mut queue, &next, start + Duration::from_millis(30800));
+    assert_eq!(
+        shown(&mut queue, start + Duration::from_millis(30800)).1,
+        "Come inside."
+    );
+}
+
+#[test]
+fn one_late_ocr_glitch_cannot_retranslate_a_paused_line() {
+    let start = Instant::now();
+    let mut queue = SubtitleQueue::<String>::new(Duration::from_millis(125));
+    admit(&mut queue, "Wait here.", start, 1);
+    observe(
+        &mut queue,
+        "Wait here.",
+        start + Duration::from_secs(30),
+        300,
+    );
+    observe(
+        &mut queue,
+        "Wait hert.",
+        start + Duration::from_secs(31),
+        310,
+    );
+    observe(
+        &mut queue,
+        "Wait here.",
+        start + Duration::from_millis(31125),
+        311,
+    );
+    observe(
+        &mut queue,
+        "Wait here.",
+        start + Duration::from_millis(31250),
+        312,
+    );
+    assert_eq!(queue.stats(start).enqueued, 1);
 }
