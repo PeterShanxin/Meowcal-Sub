@@ -84,7 +84,9 @@ pub fn classify(
     eligibility: Eligibility,
 ) -> Option<OcrRejection> {
     let significant_chars = text.chars().filter(|ch| ch.is_alphanumeric()).count();
-    if significant_chars < min_significant_chars {
+    let single_cjk =
+        significant_chars == 1 && text.chars().any(crate::llm::text_utils::is_cjk_char);
+    if significant_chars < min_significant_chars && !single_cjk {
         return Some(OcrRejection::TooShort);
     }
 
@@ -349,6 +351,27 @@ mod tests {
                 ANY_TEXT
             ),
             Some(OcrRejection::Garbled)
+        );
+    }
+}
+
+#[cfg(test)]
+mod short_dialogue_tests {
+    use super::*;
+    #[test]
+    fn single_chinese_dialogue_survives_every_strictness() {
+        for minimum in [1, 2, 3] {
+            for cue in ["好", "不", "嗯！", "走。"] {
+                assert_eq!(
+                    classify(cue, minimum, Eligibility::SubtitleLike),
+                    None,
+                    "{cue}"
+                );
+            }
+        }
+        assert_eq!(
+            classify("a.", 2, Eligibility::SubtitleLike),
+            Some(OcrRejection::TooShort)
         );
     }
 }

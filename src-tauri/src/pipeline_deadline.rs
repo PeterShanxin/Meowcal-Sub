@@ -1,44 +1,14 @@
-// =============================================================================
-// PIPELINE_DEADLINE.RS - how long one line may hold the translation slot
-// =============================================================================
-// The pipeline runs one translation at a time, and while it does, the capture
-// loop stays quiet - see `pipeline_translation::Translator::is_busy`. So a call
-// that runs long does not merely arrive late: it blanks the overlay and
-// swallows every subtitle that appears behind it. Issue #60 recorded a single
-// call holding the slot for 135 seconds on a loaded machine.
-//
-// The race between "the engine answered", "the session stopped" and "we waited
-// long enough" lives here rather than inline, because it is the part with three
-// outcomes and no obvious ordering, and because a `select!` against an
-// `AppHandle` cannot be tested without a running Tauri app.
-// =============================================================================
+//! Bounded inference waiting and cancellation for one queued subtitle.
 
 use std::future::Future;
 use std::time::Duration;
 use tokio::sync::watch;
 
-/// How long a line may hold the translation slot before it is abandoned.
-///
-/// Five seconds is chosen from measurement rather than taste. On a healthy
-/// machine this cancels nothing: p99 across a recorded 34-minute session was
-/// 2291ms. A subtitle cue is on screen for roughly two to four seconds, so a
-/// translation that has not arrived by now has already lost the line it was
-/// for, and showing it late would overwrite the *next* line's translation with
-/// a stale one.
-///
-/// Abandoning is worth doing because it genuinely frees the engine: the runtime
-/// runs with one server slot, and llama.cpp cancels a generation whose client
-/// has disconnected, releasing the slot 9ms later - measured against the shipped
-/// build, see `docs/evidence/2026-08-05-arm64-abandoned-request-frees-slot.json`.
-/// That claim is load-bearing. Were it false, every abandoned line would leave
-/// the engine saturated, the next line would miss its deadline too, and the
-/// overlay's `engineSlow` hint would become permanent rather than occasional.
-///
-/// It must also stay above `manager::UNCONTEXTED_ATTEMPT_TIMEOUT_MS`, or the
-/// manager's own retry and source-passthrough fallback can never run.
-///
-/// No thread count fixes this; see
-/// `docs/evidence/2026-08-05-arm64-engine-thread-sweep.json`.
+/// A healthy recorded session had 2291 ms p99 inference latency. Five seconds
+/// bounds an abnormal request while leaving the manager's shorter attempt and
+/// fallback budgets reachable. Expiration releases this caller; an active Core
+/// request can still drain under Core's transport deadline before its slot is
+/// reusable. Cancellation is not evidence that the model has stopped.
 pub(crate) const TRANSLATION_DEADLINE: Duration = Duration::from_secs(5);
 
 /// Room kept back from the deadline for the fallback after the engine gives up.
@@ -81,8 +51,8 @@ pub(crate) enum SlotOutcome<T> {
 /// Stopping is checked before the deadline on purpose: a session that has ended
 /// wants silence, not a notice about engine speed.
 ///
-/// Returning drops `work`, which is what disconnects the HTTP request and stops
-/// the engine generating. That is the whole point - see `TRANSLATION_DEADLINE`.
+/// Returning drops `work`. Core cancellation can still leave an active request
+/// draining under its transport deadline; it does not prove inference stopped.
 pub(crate) async fn await_within_deadline<F>(
     work: F,
     deadline: Duration,

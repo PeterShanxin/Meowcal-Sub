@@ -18,14 +18,8 @@ const MAX_CENTRE_SCATTER: f32 = 0.15;
 /// how it behaves while it is up, not on how often it is up.
 pub(super) const MIN_CUE_RATE_PER_MINUTE: f32 = 10.0;
 
-/// Most distinct readings per minute on screen that still counts as a subtitle.
-///
-/// A second recorded session ran into end credits: ten evenly spaced bands
-/// spanning the whole frame, holding position well enough to pass the scatter
-/// test - unlike the first session's scene text, which the camera swept around -
-/// and so translated in full. Text that turns over four times faster than
-/// dialogue is not dialogue. Measured subtitles reached 44 and the slowest thing
-/// that was not a subtitle 67, in either session; this sits between them.
+/// Historical turnover threshold for the raw `Churning` diagnostic. Confirmed
+/// cue admission does not use it: short dialogue can exceed this rate.
 pub(super) const MAX_CUE_RATE_PER_MINUTE: f32 = 55.0;
 
 /// Observations a band needs before it is worth translating at all.
@@ -47,6 +41,8 @@ const MIN_OBSERVATIONS: usize = 8;
 /// What a band's recent history says about it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Verdict {
+    /// A confirmed numeric/symbol reading has no words to translate.
+    Untranslatable,
     /// Not enough history to judge. Included anyway: dropping a band because
     /// nothing is known about it yet would silently lose the first cues of a
     /// session, and the top band is exactly the one that takes longest to
@@ -93,6 +89,7 @@ impl Verdict {
     /// impossible to diagnose after the fact without this.
     pub fn reason(self) -> Option<&'static str> {
         match self {
+            Verdict::Untranslatable => Some("no translatable letters"),
             Verdict::Static => Some("unchanging"),
             Verdict::Scattered => Some("position unstable"),
             Verdict::Churning => Some("changing too fast for dialogue"),

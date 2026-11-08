@@ -52,13 +52,13 @@
   ],
   "legacyFileMaxLines": {
     "src-tauri/src/capture/graphics_capture.rs": 469,
-    "src-tauri/src/commands.rs": 920,
+    "src-tauri/src/commands.rs": 880,
     "src-tauri/src/config.rs": 473,
     "src-tauri/src/llm/context.rs": 620,
     "src-tauri/src/llm/foundry_local.rs": 1557,
     "src-tauri/src/llm/manager.rs": 699,
     "src-tauri/src/llm/prompt_router.rs": 471,
-    "src/scripts/overlay.js": 1030,
+    "src/scripts/overlay.js": 1027,
     "src/scripts/selector.js": 619
   }
 }

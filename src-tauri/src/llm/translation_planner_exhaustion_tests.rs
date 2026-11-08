@@ -7,7 +7,7 @@ use super::*;
 use crate::llm::translation_attempt::test_fixtures::{
     budget, default_policy, ScriptedBackend, ScriptedStep,
 };
-use crate::llm::{BackendId, LlmError, TranslationDiagnosticsState};
+use crate::llm::BackendId;
 use crate::sync_utils::lock_or_recover;
 use std::sync::atomic::AtomicUsize;
 use std::sync::{Arc, Mutex};

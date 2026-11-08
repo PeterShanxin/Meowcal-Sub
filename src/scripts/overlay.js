@@ -794,10 +794,7 @@ function updateSubtitleText(textElement, newText, container) {
     if (newText === overlayState.currentText) return;
 
     overlayState.currentText = newText;
-    textElement.classList.remove('fade-in');
-    void textElement.offsetWidth;
     textElement.textContent = newText;
-    textElement.classList.add('fade-in');
 
     setSubtitleContainerVisible(container, true);
 }

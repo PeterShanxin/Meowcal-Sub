@@ -34,7 +34,7 @@ pub mod env_flags;
 /// OCR (Optical Character Recognition) - reads text from images
 pub mod ocr;
 
-/// Scores how badly OCR mangled a line, so a worse re-read cannot replace a better one
+/// Detects OCR corruption before a line is eligible for translation
 pub mod ocr_corruption;
 
 /// Decides which recognised lines are reliable enough to translate
@@ -47,18 +47,11 @@ pub mod ocr_language_packs;
 pub mod pipeline_notices;
 mod pipeline_status;
 pub mod subtitle_activity;
+pub mod subtitle_queue;
+pub mod subtitle_timing;
 
 /// Opens the OCR client a translation session reads frames with
 mod pipeline_ocr;
-
-/// Compares a read against the last few lines, not just the last one
-pub mod ocr_recent_lines;
-
-/// What to do with a read that repeats a line already translated
-pub mod pipeline_repeat_policy;
-
-/// Tells a re-read of the subtitle already on screen from fresh dialogue
-pub mod ocr_stability;
 
 /// LLM (Large Language Model) - translates text using AI
 pub mod llm;

@@ -510,3 +510,42 @@ test("preparation and actionable failures do not move subtitle geometry", async 
     ),
   ).toBe(1);
 });
+
+test("successive cues replace text without a slide or a moving subtitle anchor", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 900, height: 650 });
+  const region = { x: 120, y: 520, width: 400, height: 80 };
+  await openOverlay(page, region);
+  const sample = await page.evaluate(async () => {
+    const emit = (text, id) =>
+      window.overlayTest.emit("translation-update", {
+        sessionId: 1,
+        captureId: id,
+        updateId: id,
+        cueId: id,
+        displayState: "translated",
+        backendUsed: "local_engine",
+        translated: text,
+        timestamp: Date.now(),
+        original: "Authored source",
+      });
+    emit("Wait here.", 1);
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    emit("Please wait by the entrance until the last train arrives at the station.", 2);
+    await new Promise(requestAnimationFrame);
+    await new Promise(requestAnimationFrame);
+    const text = document.querySelector("#subtitle-text");
+    const plate = document.querySelector("#subtitle-container");
+    return {
+      transform: getComputedStyle(text).transform,
+      animation: getComputedStyle(text).animationName,
+      opacity: getComputedStyle(text).opacity,
+      bottom: plate.getBoundingClientRect().bottom,
+    };
+  });
+  expect(sample.transform).toBe("none");
+  expect(sample.animation).toBe("none");
+  expect(sample.opacity).toBe("1");
+  expect(sample.bottom).toBeLessThan(region.y);
+});

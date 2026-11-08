@@ -11,7 +11,7 @@
 })(typeof globalThis !== "undefined" ? globalThis : this, () => {
   function position(payload) {
     const sessionId = Number(payload?.sessionId);
-    const captureId = Number(payload?.captureId);
+    const captureId = Number(payload?.updateId > 0 ? payload.updateId : payload?.captureId);
     if (!Number.isSafeInteger(sessionId) || !Number.isSafeInteger(captureId)) {
       return null;
     }

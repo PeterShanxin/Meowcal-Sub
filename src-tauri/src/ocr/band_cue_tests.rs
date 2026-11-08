@@ -174,21 +174,17 @@ fn a_last_frame_misread_does_not_erase_static_watermark_identity() {
 }
 
 #[test]
-fn credits_and_timers_stay_held_then_stable_dialogue_recovers() {
-    for period in [250, 500, 1_000, 1_500, 2_000] {
-        let mut tracker = BandTracker::new(1832.0, 250);
-        for at in (0..120_000).step_by(250) {
-            let text = format!("Time remaining {} seconds", at / period);
-            let kept = read(&mut tracker, &text, at);
-            if at > 5_000 {
-                assert!(!kept, "timer admitted at {at}, period {period}");
-            }
+fn confirmed_fast_dialogue_and_numbers_are_not_rejected_by_turnover() {
+    for period in [500, 750, 1_000] {
+        let mut tracker = BandTracker::new(1832.0, 125);
+        for cue in 0..60 {
+            let text = format!("Please wait in room {}", cue + 10);
+            assert!(!read(&mut tracker, &text, cue * period));
+            assert!(
+                read(&mut tracker, &text, cue * period + 125),
+                "cue {cue}, period {period}"
+            );
         }
-        let mut recovered = false;
-        for at in (120_000..122_000).step_by(250) {
-            recovered |= read(&mut tracker, DIALOGUE[0], at);
-        }
-        assert!(recovered, "a stable subtitle must recover from churning");
     }
 }
 
@@ -254,7 +250,7 @@ fn consecutive_numeric_dialogue_is_admitted_at_normal_reading_speed() {
 }
 
 #[test]
-fn empty_ocr_frames_do_not_restart_an_established_counter() {
+fn numeric_only_readings_stay_untranslatable_after_dropouts() {
     let mut tracker = BandTracker::new(1832.0, 250);
     for at in (0..5_000).step_by(250) {
         read(&mut tracker, &format!("01:{:02}", at / 1_000), at);
@@ -265,12 +261,9 @@ fn empty_ocr_frames_do_not_restart_an_established_counter() {
     for at in (7_500..8_500).step_by(250) {
         assert!(!read(&mut tracker, "01:07", at));
     }
-    // A genuinely held numeric reading can recover on observed stability.
-    let mut recovered = false;
     for at in (8_500..11_500).step_by(250) {
-        recovered |= read(&mut tracker, "01:08", at);
+        assert!(!read(&mut tracker, "01:08", at));
     }
-    assert!(recovered);
     assert!(!read(&mut tracker, DIALOGUE[0], 11_500));
     assert!(read(&mut tracker, DIALOGUE[0], 11_750));
 }
@@ -288,12 +281,12 @@ fn an_ocr_outage_does_not_age_a_briefly_observed_subtitle_into_static_text() {
 }
 
 #[test]
-fn an_ocr_outage_cannot_confirm_a_candidate_or_hide_fast_turnover() {
+fn an_ocr_outage_cannot_confirm_a_candidate_but_two_fresh_reads_can() {
     let mut tracker = BandTracker::new(1832.0, 250);
     read(&mut tracker, DIALOGUE[0], 0);
     assert!(!read(&mut tracker, DIALOGUE[0], 10_000));
     assert!(read(&mut tracker, DIALOGUE[0], 10_250));
     read(&mut tracker, DIALOGUE[1], 20_000);
-    assert!(!read(&mut tracker, DIALOGUE[1], 20_250));
+    assert!(read(&mut tracker, DIALOGUE[1], 20_250));
     assert!(read(&mut tracker, DIALOGUE[1], 21_250));
 }

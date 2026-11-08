@@ -198,7 +198,6 @@ mod tests {
     use std::path::{Path, PathBuf};
     use std::sync::atomic::{AtomicU64, Ordering};
     use std::sync::OnceLock;
-    use tracing_subscriber::layer::Filter;
 
     const CUSTOM: &str = "meowcal_sub=warn";
     const OTHER: &str = "tauri=info";

@@ -94,7 +94,7 @@ async fn preprocessing_variants_over_a_captured_frame() {
     // read the frame first.
     let truth = std::env::var("MEOWCAL_OCR_AB_TRUTH")
         .ok()
-        .map(|t| crate::ocr_stability::normalize(&t));
+        .map(|t| normalize(&t));
     let mut accuracy = [0f32; VARIANTS.len()];
     let mut scored = 0usize;
     let mut disagreements = 0usize;
@@ -167,8 +167,8 @@ async fn preprocessing_variants_over_a_captured_frame() {
         if let Some(truth) = &truth {
             scored += 1;
             for (index, (_, text)) in reads.iter().enumerate() {
-                let read = crate::ocr_stability::normalize(text);
-                accuracy[index] += crate::ocr_stability::similarity(truth, &read);
+                let read = normalize(text);
+                accuracy[index] += similarity(truth, &read);
             }
         }
 
@@ -211,4 +211,40 @@ async fn preprocessing_variants_over_a_captured_frame() {
             println!("  {:>6.1}%  {label}", mean * 100.0);
         }
     }
+}
+
+fn normalize(text: &str) -> Vec<char> {
+    text.chars()
+        .filter(|ch| ch.is_alphanumeric())
+        .flat_map(|ch| ch.to_lowercase())
+        .collect()
+}
+
+fn similarity(a: &[char], b: &[char]) -> f32 {
+    let longest = a.len().max(b.len());
+    if longest == 0 {
+        return 1.0;
+    }
+    let distance = edit_distance(a, b);
+    1.0 - (distance as f32 / longest as f32)
+}
+
+/// Levenshtein distance over two rows. Subtitle lines are short enough that the
+/// quadratic cost is irrelevant next to a single OCR pass.
+fn edit_distance(a: &[char], b: &[char]) -> usize {
+    let mut previous_row: Vec<usize> = (0..=b.len()).collect();
+    let mut current_row = vec![0usize; b.len() + 1];
+
+    for (i, a_char) in a.iter().enumerate() {
+        current_row[0] = i + 1;
+        for (j, b_char) in b.iter().enumerate() {
+            let substitution = previous_row[j] + usize::from(a_char != b_char);
+            let deletion = previous_row[j + 1] + 1;
+            let insertion = current_row[j] + 1;
+            current_row[j + 1] = substitution.min(deletion).min(insertion);
+        }
+        std::mem::swap(&mut previous_row, &mut current_row);
+    }
+
+    previous_row[b.len()]
 }

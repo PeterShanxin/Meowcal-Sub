@@ -27,3 +27,20 @@ describe("pipeline update ordering", () => {
     });
   });
 });
+
+describe("queued subtitle presentation order", () => {
+  it("accepts a queued cue after a newer capture retired the previous display", () => {
+    const cleared = position({ sessionId: 4, captureId: 100, updateId: 7 });
+    expect(shouldAccept(cleared, { sessionId: 4, captureId: 95, updateId: 8, cueId: 2 })).toBe(
+      true,
+    );
+    expect(shouldAccept(cleared, { sessionId: 4, captureId: 101, updateId: 6 })).toBe(false);
+    expect(shouldAccept(cleared, { sessionId: 3, captureId: 200, updateId: 200 })).toBe(false);
+  });
+  it("retains capture IDs as provenance and orders display updates independently", () => {
+    const payload = { sessionId: 1, captureId: 20, updateId: 3, cueId: 2 };
+    expect(position(payload)).toEqual({ sessionId: 1, captureId: 3 });
+    expect(payload.captureId).toBe(20);
+    expect(shouldAccept(position(payload), { sessionId: 2, captureId: 0, updateId: 0 })).toBe(true);
+  });
+});

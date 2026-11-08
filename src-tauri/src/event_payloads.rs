@@ -21,6 +21,8 @@ fn now_ms() -> u64 {
 pub(crate) struct TranslationPayload {
     pub session_id: u64,
     pub capture_id: u64,
+    pub cue_id: u64,
+    pub update_id: u64,
     pub original: String,
     pub translated: String,
     pub backend_used: String,
@@ -108,6 +110,8 @@ impl TranslationPayload {
         Self {
             session_id,
             capture_id,
+            cue_id: 0,
+            update_id: 0,
             original: String::new(),
             translated: String::new(),
             // No backend ran for a lifecycle notice. Naming one here made the
