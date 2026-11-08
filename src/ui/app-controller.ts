@@ -138,6 +138,7 @@ export class AppController {
     this.disposed = true;
     this.engines.dispose();
     this.displays.dispose();
+    this.updates.dispose();
     if (this.selectionRequest) {
       void window.TauriBridge.invoke("complete_area_selection", {
         requestId: this.selectionRequest,

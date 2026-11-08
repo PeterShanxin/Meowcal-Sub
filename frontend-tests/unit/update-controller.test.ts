@@ -6,7 +6,8 @@ function harness(updates?: TauriBridgeApi["updates"], invoke = vi.fn().mockResol
   const patches: Array<Partial<UiSnapshot>> = [];
   vi.stubGlobal("window", {
     TauriBridge: {
-      invoke,
+      invoke: (command: string, args?: Record<string, unknown>) =>
+        command === "record_update_check" ? Promise.resolve(null) : invoke(command, args),
       isBrowserMode: () => updates === undefined,
       event: { listen: vi.fn(), emit: vi.fn() },
       updates,
@@ -20,11 +21,13 @@ function pending(overrides: Partial<PendingUpdate> = {}): PendingUpdate {
     version: "0.6.7",
     notes: "Fixes",
     install: vi.fn().mockResolvedValue(undefined),
+    close: vi.fn().mockResolvedValue(undefined),
     ...overrides,
   };
 }
 
 afterEach(() => {
+  vi.useRealTimers();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });

@@ -37,6 +37,7 @@
         'start_translation',
         'stop_translation',
         'exit_translation',
+        'record_update_check',
     ];
 
     // =============================================================================
@@ -317,15 +318,17 @@
     const updater = () => window.__TAURI__?.updater;
     const updates = isTauri && updater() ? {
         currentVersion: () => window.__TAURI__.app.getVersion(),
-        check: async () => {
-            const update = await updater().check();
+        check: async (options) => {
+            const update = await updater().check(options);
             if (!update || update.available === false) {
                 return null;
             }
             return {
                 version: update.version,
                 notes: update.body || null,
+                // Download requests have their own lifetime, separate from the check timeout.
                 install: (onProgress) => update.downloadAndInstall(onProgress),
+                close: () => update.close(),
             };
         },
         restart: () => window.__TAURI__.process.relaunch(),

@@ -33,6 +33,7 @@ export default defineConfig({
   testMatch: [
     "browser-linux/*.spec.mjs",
     "browser/overlay-toolbar.spec.mjs",
+    "browser/update-bridge.spec.mjs",
     "browser/selector.spec.mjs",
     "browser/session-flow.spec.mjs",
   ],

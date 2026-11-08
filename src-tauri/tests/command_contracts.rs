@@ -6,6 +6,24 @@
 //! visible behavior change, not an extraction.
 
 use meowcal_sub::commands::get_system_info;
+use meowcal_sub::update_diagnostics::UpdateCheckDiagnostic;
+
+#[test]
+fn update_check_diagnostics_preserve_the_frontend_contract() -> Result<(), serde_json::Error> {
+    let value = serde_json::json!({
+        "requestId": 7,
+        "source": "automatic",
+        "intent": "manual",
+        "phase": "finished",
+        "startedAtMs": 1_700_000_000_000_u64,
+        "elapsedMs": 10_000,
+        "result": "timeout",
+        "errorKind": "timeout"
+    });
+    let event: UpdateCheckDiagnostic = serde_json::from_value(value.clone())?;
+    assert_eq!(serde_json::to_value(event)?, value);
+    Ok(())
+}
 
 #[test]
 fn display_context_uses_camel_case_and_monitor_local_geometry() {
