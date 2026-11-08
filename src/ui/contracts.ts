@@ -108,6 +108,7 @@ export interface UiSnapshot {
   busy: BusyState;
   settings: AppSettings;
   region: CaptureRegion | null;
+  multipleDisplays: boolean;
   engine: EngineStatus | null;
   ocrLanguages: ReadonlySet<string>;
   running: boolean;

@@ -15,6 +15,7 @@ use tauri::{async_runtime, AppHandle, Emitter, Manager};
 use tracing::{info, warn};
 
 use crate::capture::{self, CaptureResult};
+use crate::capture_target::{CaptureMonitor, CaptureState};
 use crate::config::CaptureRegion;
 use crate::env_flags::env_truthy;
 use crate::ipc::{IpcMessage, IpcServer};
@@ -32,6 +33,7 @@ pub type SnapshotSlot = Mutex<Option<SelectorSnapshot>>;
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SelectorSnapshot {
+    pub selection_id: u64,
     /// `data:image/png;base64,...`
     pub data_url: String,
     /// Snapshot width in physical pixels.
@@ -59,12 +61,16 @@ pub struct OpenAreaSelectorResult {
 pub async fn open(
     app: AppHandle,
     snapshot_slot: &SnapshotSlot,
+    capture_state: &Mutex<CaptureState>,
 ) -> Result<OpenAreaSelectorResult, String> {
+    let monitor = crate::display_monitor::current(&app)?;
+    let selection_id = lock_or_recover(capture_state).begin_selection(monitor.clone());
     // We currently prefer the "legacy" webview-based selector because it has a stable
     // desktop-snapshot background and correct DPI mapping.
     //
     // WinUI selector is kept as an opt-in experiment for future work.
-    let prefer_winui = env_truthy("MEOWCAL_USE_WINUI_SELECTOR");
+    let prefer_winui = env_truthy("MEOWCAL_USE_WINUI_SELECTOR")
+        && crate::display_monitor::available(&app)?.len() == 1;
 
     if prefer_winui {
         info!("🎯 Opening area selector via OverlayHost (opt-in)");
@@ -94,46 +100,72 @@ pub async fn open(
         }
     }
 
-    open_legacy(app, snapshot_slot).await?;
+    if let Err(error) = open_legacy(app, snapshot_slot, &monitor, selection_id).await {
+        lock_or_recover(capture_state).cancel_selection();
+        return Err(error);
+    }
     Ok(OpenAreaSelectorResult {
         mode: AreaSelectorMode::Legacy,
     })
 }
 
 /// Legacy area selector (kept for fallback if WinUI3 is not available)
-async fn open_legacy(app: AppHandle, snapshot_slot: &SnapshotSlot) -> Result<(), String> {
+async fn open_legacy(
+    app: AppHandle,
+    snapshot_slot: &SnapshotSlot,
+    monitor: &CaptureMonitor,
+    selection_id: u64,
+) -> Result<(), String> {
     info!("Opening area selector...");
 
     let window = crate::configured_window::get_or_create(&app, "selector")?;
+    window.hide().map_err(|e| e.to_string())?;
+    window.set_fullscreen(false).map_err(|e| e.to_string())?;
+    crate::display_monitor::place(&window, monitor)?;
 
     // Capture a background snapshot BEFORE showing the selector window.
     // If we capture after showing, the screenshot will include the selector UI itself.
     //
     // This is best-effort: if capture fails, we still show the selector (it will just be grey).
-    match async_runtime::spawn_blocking(capture_desktop_snapshot).await {
-        Ok(Ok((snapshot, used_fallback))) => {
-            if used_fallback {
-                warn!("Area selector snapshot: Graphics Capture failed, used GDI fallback");
-            } else {
-                info!("Area selector snapshot: captured via Graphics Capture");
+    let snapshot_monitor = monitor.clone();
+    let snapshot =
+        match async_runtime::spawn_blocking(move || capture_desktop_snapshot(&snapshot_monitor))
+            .await
+        {
+            Ok(Ok((mut snapshot, used_fallback))) => {
+                snapshot.selection_id = selection_id;
+                if used_fallback {
+                    warn!("Area selector snapshot: Graphics Capture failed, used GDI fallback");
+                } else {
+                    info!("Area selector snapshot: captured via Graphics Capture");
+                }
+
+                snapshot
             }
+            Ok(Err(e)) => {
+                warn!("Area selector snapshot capture failed: {}", e);
+                SelectorSnapshot {
+                    selection_id,
+                    data_url: String::new(),
+                    width: monitor.bounds.width,
+                    height: monitor.bounds.height,
+                }
+            }
+            Err(join_err) => {
+                warn!("Area selector snapshot task failed: {}", join_err);
+                SelectorSnapshot {
+                    selection_id,
+                    data_url: String::new(),
+                    width: monitor.bounds.width,
+                    height: monitor.bounds.height,
+                }
+            }
+        };
+    crate::display_monitor::require_present(&app, monitor)?;
+    *lock_or_recover(snapshot_slot) = Some(snapshot.clone());
+    let _ = window.emit("selector-background-snapshot", snapshot);
 
-            // Store for the selector window to pull on load (and for subsequent opens).
-            *lock_or_recover(snapshot_slot) = Some(snapshot.clone());
-
-            // Also push it as an event (helps if the selector window is already loaded).
-            let _ = window.emit("selector-background-snapshot", snapshot);
-        }
-        Ok(Err(e)) => {
-            warn!("Area selector snapshot capture failed: {}", e);
-            *lock_or_recover(snapshot_slot) = None;
-        }
-        Err(join_err) => {
-            warn!("Area selector snapshot task failed: {}", join_err);
-            *lock_or_recover(snapshot_slot) = None;
-        }
-    }
-
+    crate::display_monitor::place(&window, monitor)?;
     window.show().map_err(|e| e.to_string())?;
     window.set_focus().map_err(|e| e.to_string())?;
     info!("✅ Area selector opened!");
@@ -141,18 +173,18 @@ async fn open_legacy(app: AppHandle, snapshot_slot: &SnapshotSlot) -> Result<(),
     Ok(())
 }
 
-/// Screenshot the primary screen for use as the selector background.
+/// Screenshot the selected screen for the selector background.
 ///
 /// Returns the snapshot and whether the GDI fallback produced it.
-fn capture_desktop_snapshot() -> Result<(SelectorSnapshot, bool), String> {
-    // Capture the primary screen in physical pixels.
-    let (width, height) = capture::get_screen_dimensions();
+fn capture_desktop_snapshot(monitor: &CaptureMonitor) -> Result<(SelectorSnapshot, bool), String> {
+    let (width, height) = (monitor.bounds.width, monitor.bounds.height);
     if width <= 0 || height <= 0 {
         return Err(format!("Invalid screen dimensions: {}x{}", width, height));
     }
 
     let region = CaptureRegion::new(0, 0, width, height);
-    let (capture, used_fallback) = capture::smart_capture(&region).map_err(|e| format!("{}", e))?;
+    let (capture, used_fallback) =
+        capture::smart_capture(monitor, &region).map_err(|e| format!("{}", e))?;
 
     Ok((encode_snapshot(capture, width, height)?, used_fallback))
 }
@@ -196,6 +228,7 @@ fn encode_snapshot(
     let b64 = base64::engine::general_purpose::STANDARD.encode(&png_bytes);
 
     Ok(SelectorSnapshot {
+        selection_id: 0,
         data_url: format!("data:image/png;base64,{}", b64),
         width,
         height,

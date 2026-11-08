@@ -14,12 +14,18 @@
 // =============================================================================
 
 use super::d3d;
+use super::frame::{crop_region, read_texture_pixels};
 use super::{CaptureError, CaptureResult};
+use crate::capture_target::CaptureMonitor;
 use crate::config::CaptureRegion;
 use crate::sync_utils::lock_or_recover;
 use std::sync::mpsc::{channel, Receiver};
 use std::sync::Mutex;
-use tracing::{debug, info, warn};
+use std::sync::{
+    atomic::{AtomicBool, Ordering},
+    Arc,
+};
+use tracing::{info, warn};
 
 use windows::core::{IInspectable, Interface};
 use windows::Foundation::TypedEventHandler;
@@ -29,11 +35,10 @@ use windows::Graphics::Capture::{
 use windows::Graphics::DirectX::DirectXPixelFormat;
 use windows::Win32::Graphics::Direct3D11::{
     ID3D11Device, ID3D11DeviceContext, ID3D11Texture2D, D3D11_CPU_ACCESS_READ,
-    D3D11_MAPPED_SUBRESOURCE, D3D11_MAP_READ, D3D11_TEXTURE2D_DESC, D3D11_USAGE_STAGING,
+    D3D11_TEXTURE2D_DESC, D3D11_USAGE_STAGING,
 };
-use windows::Win32::Graphics::Gdi::{MonitorFromWindow, HMONITOR, MONITOR_DEFAULTTOPRIMARY};
+use windows::Win32::Graphics::Gdi::HMONITOR;
 use windows::Win32::System::WinRT::Graphics::Capture::IGraphicsCaptureItemInterop;
-use windows::Win32::UI::WindowsAndMessaging::GetDesktopWindow;
 
 // =============================================================================
 // PERSISTENT CAPTURE SESSION
@@ -45,6 +50,10 @@ use windows::Win32::UI::WindowsAndMessaging::GetDesktopWindow;
 /// across multiple frame grabs, avoiding the overhead of creating a new session
 /// for each capture and eliminating the flashing border.
 pub struct ScreenCaptureSession {
+    monitor: CaptureMonitor,
+    item: GraphicsCaptureItem,
+    closed_token: i64,
+    closed: Arc<AtomicBool>,
     d3d_device: ID3D11Device,
     d3d_context: ID3D11DeviceContext,
     frame_pool: Direct3D11CaptureFramePool,
@@ -57,11 +66,11 @@ pub struct ScreenCaptureSession {
 }
 
 impl ScreenCaptureSession {
-    /// Create a new persistent capture session for the primary monitor.
+    /// Create a new persistent capture session for the selected monitor.
     ///
     /// This sets up all the D3D11 resources and starts the capture session.
     /// The border is disabled if supported (Windows 10 2004+).
-    pub fn new() -> Result<Self, CaptureError> {
+    pub fn new(monitor: &CaptureMonitor) -> Result<Self, CaptureError> {
         info!("Creating persistent screen capture session...");
 
         // Check if Graphics Capture is supported
@@ -81,18 +90,30 @@ impl ScreenCaptureSession {
                 .map_err(|e| CaptureError::D3DError(format!("Failed to get D3D context: {}", e)))?
         };
 
-        // Get the primary monitor
-        let monitor = get_primary_monitor();
-        debug!("Primary monitor: {:?}", monitor);
+        let monitor_handle =
+            crate::display_monitor::handle(monitor).map_err(|_| CaptureError::DisplayChanged)?;
 
         // Create capture item for the monitor
-        let item = create_capture_item_for_monitor(monitor)?;
+        let item = create_capture_item_for_monitor(monitor_handle)?;
+        let closed = Arc::new(AtomicBool::new(false));
+        let was_closed = closed.clone();
+        let closed_token = item
+            .Closed(
+                &TypedEventHandler::<GraphicsCaptureItem, IInspectable>::new(move |_, _| {
+                    was_closed.store(true, Ordering::Release);
+                    Ok(())
+                }),
+            )
+            .map_err(|e| CaptureError::GraphicsCaptureError(e.to_string()))?;
 
         // Get screen size
         let item_size = item.Size().map_err(|e| {
             CaptureError::GraphicsCaptureError(format!("Failed to get item size: {}", e))
         })?;
 
+        if item_size.Width != monitor.bounds.width || item_size.Height != monitor.bounds.height {
+            return Err(CaptureError::DisplayChanged);
+        }
         let full_width = item_size.Width as u32;
         let full_height = item_size.Height as u32;
         info!("Capture size: {}x{}", full_width, full_height);
@@ -162,6 +183,10 @@ impl ScreenCaptureSession {
         info!("✅ Persistent capture session started");
 
         Ok(Self {
+            monitor: monitor.clone(),
+            item,
+            closed_token,
+            closed,
             d3d_device,
             d3d_context,
             frame_pool,
@@ -180,6 +205,9 @@ impl ScreenCaptureSession {
     /// treating "no changes on screen" as an error, and keeps region cropping
     /// responsive when the user moves/resizes the capture box.
     fn ensure_full_frame(&mut self) -> Result<(), CaptureError> {
+        if self.closed.load(Ordering::Acquire) {
+            return Err(CaptureError::DisplayChanged);
+        }
         // Drain all available frames to get the latest one
         let mut frame = None;
         while let Ok(f) = self.frame_receiver.try_recv() {
@@ -205,6 +233,17 @@ impl ScreenCaptureSession {
             }
         };
 
+        let size = frame
+            .ContentSize()
+            .map_err(|e| CaptureError::GraphicsCaptureError(e.to_string()))?;
+        if size.Width != self.full_width as i32 || size.Height != self.full_height as i32 {
+            self.last_full_buffer = None;
+            return Err(CaptureError::DisplayChanged);
+        }
+
+        if self.closed.load(Ordering::Acquire) {
+            return Err(CaptureError::DisplayChanged);
+        }
         // Get the surface from the frame
         let surface = frame.Surface().map_err(|e| {
             CaptureError::GraphicsCaptureError(format!("Failed to get frame surface: {}", e))
@@ -222,8 +261,16 @@ impl ScreenCaptureSession {
         // Copy from GPU texture to staging texture
         unsafe {
             self.d3d_context.CopyResource(
-                Some(&staging_texture.cast().unwrap()),
-                Some(&source_texture.cast().unwrap()),
+                Some(
+                    &staging_texture
+                        .cast()
+                        .map_err(|e| CaptureError::D3DError(e.to_string()))?,
+                ),
+                Some(
+                    &source_texture
+                        .cast()
+                        .map_err(|e| CaptureError::D3DError(e.to_string()))?,
+                ),
             );
         }
 
@@ -264,7 +311,9 @@ impl ScreenCaptureSession {
                 .map_err(|e| {
                     CaptureError::D3DError(format!("Failed to create staging texture: {}", e))
                 })?;
-            texture.unwrap()
+            texture.ok_or_else(|| {
+                CaptureError::D3DError("CreateTexture2D returned no texture".into())
+            })?
         };
 
         self.staging_texture = Some(texture.clone());
@@ -286,6 +335,7 @@ impl ScreenCaptureSession {
             )));
         }
 
+        crate::display_monitor::handle(&self.monitor).map_err(|_| CaptureError::DisplayChanged)?;
         self.ensure_full_frame()?;
         let full_buffer = self.last_full_buffer.as_deref().ok_or_else(|| {
             CaptureError::GraphicsCaptureError("No captured frame available".to_string())
@@ -293,6 +343,9 @@ impl ScreenCaptureSession {
 
         // Crop to region
         let cropped = crop_region(full_buffer, self.full_width, self.full_height, region)?;
+        if self.closed.load(Ordering::Acquire) {
+            return Err(CaptureError::DisplayChanged);
+        }
 
         Ok(CaptureResult::new(
             cropped,
@@ -306,6 +359,7 @@ impl ScreenCaptureSession {
         info!("Closing capture session...");
         let _ = self.session.Close();
         let _ = self.frame_pool.Close();
+        let _ = self.item.RemoveClosed(self.closed_token);
     }
 }
 
@@ -325,10 +379,13 @@ lazy_static::lazy_static! {
 
 /// Initialize the global capture session.
 /// Call this once when starting translation.
-pub fn init_capture_session() -> Result<(), CaptureError> {
+pub fn init_capture_session(monitor: &CaptureMonitor) -> Result<(), CaptureError> {
     let mut session = lock_or_recover(&CAPTURE_SESSION);
-    if session.is_none() {
-        *session = Some(ScreenCaptureSession::new()?);
+    if session
+        .as_ref()
+        .is_none_or(|session| &session.monitor != monitor)
+    {
+        *session = Some(ScreenCaptureSession::new(monitor)?);
     }
     Ok(())
 }
@@ -341,10 +398,16 @@ pub fn close_capture_session() {
 }
 
 /// Capture a region using the persistent session.
-pub fn capture_with_session(region: &CaptureRegion) -> Result<CaptureResult, CaptureError> {
+pub fn capture_with_session(
+    monitor: &CaptureMonitor,
+    region: &CaptureRegion,
+) -> Result<CaptureResult, CaptureError> {
     let mut session = lock_or_recover(&CAPTURE_SESSION);
     match session.as_mut() {
-        Some(s) => s.capture_region(region),
+        Some(s) if &s.monitor == monitor => s.capture_region(region),
+        Some(_) => Err(CaptureError::GraphicsCaptureError(
+            "Capture session belongs to another display".into(),
+        )),
         None => Err(CaptureError::GraphicsCaptureError(
             "Capture session not initialized. Call init_capture_session() first.".to_string(),
         )),
@@ -360,7 +423,7 @@ pub fn is_graphics_capture_supported() -> bool {
     GraphicsCaptureSession::IsSupported().unwrap_or(false)
 }
 
-/// Create a GraphicsCaptureItem for the primary monitor
+/// Create a GraphicsCaptureItem for the selected monitor
 fn create_capture_item_for_monitor(
     monitor_handle: HMONITOR,
 ) -> Result<GraphicsCaptureItem, CaptureError> {
@@ -379,144 +442,28 @@ fn create_capture_item_for_monitor(
     }
 }
 
-/// Get the primary monitor handle
-fn get_primary_monitor() -> HMONITOR {
-    unsafe { MonitorFromWindow(GetDesktopWindow(), MONITOR_DEFAULTTOPRIMARY) }
-}
-
-/// Read pixel data from a D3D11 texture
-fn read_texture_pixels(
-    d3d_context: &ID3D11DeviceContext,
-    texture: &ID3D11Texture2D,
-    width: u32,
-    height: u32,
-) -> Result<Vec<u8>, CaptureError> {
-    unsafe {
-        let mut desc = D3D11_TEXTURE2D_DESC::default();
-        texture.GetDesc(&mut desc);
-
-        let resource = texture
-            .cast()
-            .map_err(|e| CaptureError::D3DError(format!("Failed to cast texture: {}", e)))?;
-
-        let mut mapped = D3D11_MAPPED_SUBRESOURCE::default();
-        d3d_context
-            .Map(Some(&resource), 0, D3D11_MAP_READ, 0, Some(&mut mapped))
-            .map_err(|e| CaptureError::D3DError(format!("Failed to map texture: {}", e)))?;
-
-        let bytes_per_pixel = 4u32;
-        let buffer_size = (width * height * bytes_per_pixel) as usize;
-        let mut buffer = vec![0u8; buffer_size];
-
-        let src_slice = std::slice::from_raw_parts(
-            mapped.pData as *const u8,
-            (height * mapped.RowPitch) as usize,
-        );
-
-        for row in 0..height {
-            let dst_start = (row * width * bytes_per_pixel) as usize;
-            let dst_end = dst_start + (width * bytes_per_pixel) as usize;
-            let src_start = (row * mapped.RowPitch) as usize;
-            let src_end = src_start + (width * bytes_per_pixel) as usize;
-            buffer[dst_start..dst_end].copy_from_slice(&src_slice[src_start..src_end]);
-        }
-
-        d3d_context.Unmap(Some(&resource), 0);
-
-        Ok(buffer)
-    }
-}
-
-/// Crop a region from the full screen capture
-fn crop_region(
-    full_buffer: &[u8],
-    full_width: u32,
-    full_height: u32,
-    region: &CaptureRegion,
-) -> Result<Vec<u8>, CaptureError> {
-    let bytes_per_pixel = 4u32;
-
-    let region_right = region.x + region.width;
-    let region_bottom = region.y + region.height;
-
-    if region.x < 0
-        || region.y < 0
-        || region_right > full_width as i32
-        || region_bottom > full_height as i32
-    {
-        return Err(CaptureError::InvalidRegion(format!(
-            "Region {:?} is outside screen bounds ({}x{})",
-            region, full_width, full_height
-        )));
-    }
-
-    let cropped_size = (region.width * region.height * bytes_per_pixel as i32) as usize;
-    let mut cropped = vec![0u8; cropped_size];
-
-    for row in 0..region.height {
-        let src_y = (region.y + row) as u32;
-        let src_x = region.x as u32;
-
-        let dst_start = (row * region.width * bytes_per_pixel as i32) as usize;
-        let dst_end = dst_start + (region.width * bytes_per_pixel as i32) as usize;
-
-        let src_start = ((src_y * full_width + src_x) * bytes_per_pixel) as usize;
-        let src_end = src_start + (region.width * bytes_per_pixel as i32) as usize;
-
-        cropped[dst_start..dst_end].copy_from_slice(&full_buffer[src_start..src_end]);
-    }
-
-    Ok(cropped)
-}
-
 /// Capture a region using a one-shot session (original API, creates new session each time)
 /// This is kept for compatibility but the persistent session is preferred.
-pub fn capture_region_graphics(region: &CaptureRegion) -> Result<CaptureResult, CaptureError> {
+pub fn capture_region_graphics(
+    monitor: &CaptureMonitor,
+    region: &CaptureRegion,
+) -> Result<CaptureResult, CaptureError> {
     // Use the persistent session if available
     let session = lock_or_recover(&CAPTURE_SESSION);
-    if session.is_some() {
+    if session
+        .as_ref()
+        .is_some_and(|session| &session.monitor == monitor)
+    {
         drop(session); // Release lock
-        return capture_with_session(region);
+        return capture_with_session(monitor, region);
     }
     drop(session);
 
     // Otherwise create a one-shot session
-    let mut session = ScreenCaptureSession::new()?;
+    let mut session = ScreenCaptureSession::new(monitor)?;
     session.capture_region(region)
 }
 
 // =============================================================================
 // TESTS
 // =============================================================================
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_graphics_capture_supported() {
-        let supported = is_graphics_capture_supported();
-        println!("Graphics Capture supported: {}", supported);
-    }
-
-    #[test]
-    fn test_crop_region() {
-        let mut full_buffer = vec![0u8; 64]; // 4x4x4
-
-        for row in 0..4 {
-            for col in 0..4 {
-                let idx = (row * 4 + col) * 4;
-                full_buffer[idx] = (row * 4 + col) as u8;
-            }
-        }
-
-        let region = CaptureRegion::new(1, 1, 2, 2);
-        let cropped = crop_region(&full_buffer, 4, 4, &region).unwrap();
-
-        assert_eq!(cropped.len(), 16);
-        assert_eq!(cropped[0], 5);
-        assert_eq!(cropped[4], 6);
-        assert_eq!(cropped[8], 9);
-        assert_eq!(cropped[12], 10);
-    }
-}

@@ -92,6 +92,7 @@ fn the_selector_mode_serializes_as_the_ui_expects() {
 #[test]
 fn the_snapshot_payload_is_camel_case() {
     let value = serde_json::to_value(SelectorSnapshot {
+        selection_id: 17,
         data_url: "data:image/png;base64,AA==".to_string(),
         width: 3,
         height: 4,
@@ -100,6 +101,6 @@ fn the_snapshot_payload_is_camel_case() {
 
     assert_eq!(
         value,
-        serde_json::json!({ "dataUrl": "data:image/png;base64,AA==", "width": 3, "height": 4 })
+        serde_json::json!({ "selectionId": 17, "dataUrl": "data:image/png;base64,AA==", "width": 3, "height": 4 })
     );
 }

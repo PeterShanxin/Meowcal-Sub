@@ -51,6 +51,7 @@ const overlayState = {
     resizeHandle: null,     // Which handle is being dragged
     dragStart: { x: 0, y: 0, regionX: 0, regionY: 0, regionW: 0, regionH: 0 },
     scaleFactor: 1,
+    physicalOrigin: { x: 0, y: 0 },
     scaleFactorUpdatedAt: 0,
     isClickThrough: null,
     isHoveringInteractive: false,
@@ -102,6 +103,7 @@ async function refreshScaleFactor() {
     try {
         const currentWindow = window.__TAURI__.window.getCurrentWindow();
         const scaleFactor = await currentWindow.scaleFactor();
+        overlayState.physicalOrigin = await currentWindow.innerPosition();
         overlayState.scaleFactor = scaleFactor;
         overlayState.scaleFactorUpdatedAt = Date.now();
         syncFrameScaleTokens(scaleFactor);
@@ -154,7 +156,7 @@ function setHoveringState(isHovering) {
 }
 
 function getWindowOrigin() {
-    return { x: window.screenX || 0, y: window.screenY || 0 };
+    return overlayState.physicalOrigin;
 }
 
 function getInteractiveBoundsPhysical(scaleFactor) {
@@ -299,21 +301,17 @@ async function initOverlay() {
 
     await refreshScaleFactor();
 
-    // Load initial font size
     await loadOverlaySettings();
 
     setupResizeHandles(captureFrame);
 
-    // Set up drag to reposition
     setupDragToReposition(captureFrame);
 
-    // Set up hover detection for the entire interactive area
     setupHoverDetection(captureFrame, subtitleContainer);
 
     setupSettingsButton(settingsButton, settingsMenu, subtitleText, subtitleContainer);
     setupOverlayToolbar({ frame: captureFrame, onInteraction: cancelClickThrough, onGeometryChange: scheduleWindowClipUpdate });
 
-    // Set up event listeners
     await setupEventListeners({
         captureFrame,
         subtitleContainer,
@@ -323,7 +321,6 @@ async function initOverlay() {
         debugStatus,
     });
 
-    // Fetch initial state
     try {
         const region = await window.__TAURI__.core.invoke('get_capture_region');
         if (region) {
@@ -415,7 +412,6 @@ function setupResizeHandles(captureFrame) {
         });
     });
 
-    // Document-level mouse move and up for resizing
     document.addEventListener('mousemove', handleResize);
     document.addEventListener('mouseup', handleResizeEnd);
 }
@@ -453,7 +449,6 @@ async function handleResizeEnd() {
     document.body.style.cursor = 'default';
     updateInteractionClasses();
 
-    // Save the new region to backend
     await saveRegionToBackend();
 
     scheduleFadeOut();
@@ -466,7 +461,6 @@ async function handleResizeEnd() {
 function setupDragToReposition(captureFrame) {
     if (!captureFrame) return;
 
-    // The frame itself (not handles) is draggable
     captureFrame.addEventListener('mousedown', (e) => {
         // Ignore if clicking on a resize handle or if already resizing
         if (e.target.classList.contains('resize-handle') || overlayState.isResizing) return;
@@ -514,7 +508,6 @@ async function handleDragEnd() {
     document.body.style.cursor = 'default';
     updateInteractionClasses();
 
-    // Save the new region to backend
     await saveRegionToBackend();
 
     scheduleFadeOut();
@@ -536,6 +529,8 @@ async function saveRegionToBackend() {
         console.log('💾 Region saved:', overlayState.region);
     } catch (e) {
         console.error('Failed to save region:', e);
+        const saved = await window.__TAURI__.core.invoke('get_capture_region').catch(error => console.warn('Failed to restore capture frame:', error));
+        if (saved) applyRegionToOverlay(saved);
     }
 }
 
@@ -782,6 +777,10 @@ function updateSubtitlePosition(container, region) {
 // stale-clip state #113 exists to detect.
 function applyRegionToOverlay(region) {
     if (!region) return;
+    region = window.SelectorGeometry.containRegion(region, {
+        x: 0, y: 0, width: window.innerWidth, height: window.innerHeight,
+    });
+    overlayState.region = region;
 
     updateCaptureFrame(document.getElementById('capture-frame'), region);
     updateSubtitlePosition(document.getElementById('subtitle-container'), region);

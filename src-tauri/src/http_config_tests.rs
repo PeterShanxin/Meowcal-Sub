@@ -179,6 +179,11 @@ fn a_dev_mode_settings_save_keeps_the_capture_region_and_window_geometry() {
         height: 220,
     });
     established.last_capture_scale_factor = Some(2.0);
+    established.last_capture_monitor = Some(crate::capture_target::CaptureMonitor {
+        device_id: "internal".into(),
+        bounds: CaptureRegion::new(-3120, 0, 3120, 2080),
+        scale_factor: 2.0,
+    });
     established.window_preferences = WindowPreferences {
         width: Some(1100),
         height: Some(760),
@@ -204,6 +209,10 @@ fn a_dev_mode_settings_save_keeps_the_capture_region_and_window_geometry() {
         "the capture region should survive a settings save that never carried it"
     );
     assert_eq!(on_disk.last_capture_scale_factor, Some(2.0));
+    assert_eq!(
+        on_disk.last_capture_monitor,
+        established.last_capture_monitor
+    );
     assert_eq!(on_disk.window_preferences.width, Some(1100));
 
     // And the backup must not be refreshed from the blanked version either.

@@ -4,6 +4,7 @@ use std::sync::{Arc, Mutex};
 
 use tokio::sync::watch;
 
+use crate::capture_target::{CaptureSelection, CaptureState};
 use crate::config::{AppConfig, CaptureRegion};
 use crate::llm::TranslationDiagnosticsState;
 use crate::pipeline_session::PipelineClock;
@@ -19,10 +20,9 @@ pub struct AppState {
     /// Whether translation is currently active
     pub is_running: Mutex<bool>,
     pub session_lifecycle: crate::session_lifecycle::SessionLifecycle,
-    /// The current capture region (if set)
-    pub capture_region: Mutex<Option<CaptureRegion>>,
-    /// DPI scale factor for the capture region (logical -> physical)
-    pub capture_scale_factor: Mutex<f64>,
+    pub topology_watch: Mutex<Option<tauri::async_runtime::JoinHandle<()>>>,
+    /// Region, monitor identity, DPI and pending selector share one lock.
+    pub capture: Mutex<CaptureState>,
     /// Stop signal sender for the translation loop
     /// When we send `true` through this, the loop stops
     pub stop_signal: Mutex<Option<watch::Sender<bool>>>,
@@ -51,8 +51,8 @@ impl Default for AppState {
             config: Mutex::new(AppConfig::default()),
             is_running: Mutex::new(false),
             session_lifecycle: crate::session_lifecycle::SessionLifecycle::default(),
-            capture_region: Mutex::new(None),
-            capture_scale_factor: Mutex::new(1.0),
+            topology_watch: Mutex::new(None),
+            capture: Mutex::new(CaptureState::default()),
             stop_signal: Mutex::new(None),
             translation_diagnostics: Arc::new(Mutex::new(TranslationDiagnosticsState::default())),
             pipeline_clock: Arc::new(PipelineClock::default()),
@@ -71,31 +71,42 @@ impl AppState {
         Ok(lock_or_recover(&self.config).clone())
     }
 
-    /// Record the region to capture and the DPI scale it was measured at.
-    ///
-    /// Work already in flight was framed against the old region, so it is
-    /// invalidated here rather than being allowed to land on the overlay.
-    ///
-    /// Both guards are held to the end deliberately. A reader that acquired
-    /// the region lock between the two writes would pair the new region with
-    /// the old scale factor and capture the wrong physical pixels.
-    pub fn set_capture_region(&self, region: CaptureRegion, scale_factor: f64) {
-        let mut capture_region = lock_or_recover(&self.capture_region);
-        *capture_region = Some(region);
-
-        let mut capture_scale_factor = lock_or_recover(&self.capture_scale_factor);
-        *capture_scale_factor = scale_factor;
+    pub fn set_capture_selection(&self, selection: CaptureSelection) {
+        let mut capture = lock_or_recover(&self.capture);
+        capture.selected = Some(selection);
         self.pipeline_clock.invalidate_capture();
+    }
+
+    pub fn current_capture_selection(&self) -> Option<CaptureSelection> {
+        lock_or_recover(&self.capture).selected.clone()
+    }
+
+    /// Caller holds the session transition lock. A delayed display probe must
+    /// never invalidate a replacement session.
+    pub fn lose_capture_display(&self, session_id: u64) -> bool {
+        if !self.pipeline_clock.is_session_current(session_id) {
+            return false;
+        }
+        self.pipeline_clock.invalidate_session();
+        let mut capture = lock_or_recover(&self.capture);
+        capture.selected = None;
+        capture.cancel_selection();
+        if let Some(stop) = lock_or_recover(&self.stop_signal).as_ref() {
+            let _ = stop.send(true);
+        }
+        true
     }
 
     /// The region currently being captured, if the user has chosen one.
     pub fn current_capture_region(&self) -> Option<CaptureRegion> {
-        *lock_or_recover(&self.capture_region)
+        self.current_capture_selection()
+            .map(|selection| selection.region)
     }
 
     /// The DPI scale factor the current region was measured at.
     pub fn capture_scale_factor(&self) -> f64 {
-        *lock_or_recover(&self.capture_scale_factor)
+        self.current_capture_selection()
+            .map_or(1.0, |selection| selection.monitor.scale_factor)
     }
 
     /// Whether the translation loop is running.
@@ -112,7 +123,7 @@ pub fn validate_capture_region(width: i32, height: i32, scale_factor: f64) -> Re
     if width <= 0 || height <= 0 {
         return Err("Width and height must be positive".to_string());
     }
-    if scale_factor <= 0.0 {
+    if !scale_factor.is_finite() || scale_factor <= 0.0 {
         return Err("Scale factor must be positive".to_string());
     }
     Ok(())

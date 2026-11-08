@@ -162,20 +162,6 @@ pub fn capture_region(region: &CaptureRegion) -> Result<CaptureResult, CaptureEr
     }
 }
 
-/// Get the dimensions of the primary screen
-///
-/// # Returns
-/// A tuple of (width, height) in pixels
-pub fn get_screen_dimensions() -> (i32, i32) {
-    use windows::Win32::UI::WindowsAndMessaging::{GetSystemMetrics, SM_CXSCREEN, SM_CYSCREEN};
-
-    unsafe {
-        let width = GetSystemMetrics(SM_CXSCREEN);
-        let height = GetSystemMetrics(SM_CYSCREEN);
-        (width, height)
-    }
-}
-
 // =============================================================================
 // TESTS
 // =============================================================================
@@ -183,15 +169,6 @@ pub fn get_screen_dimensions() -> (i32, i32) {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn test_get_screen_dimensions() {
-        let (width, height) = get_screen_dimensions();
-        // Screen should have positive dimensions
-        assert!(width > 0, "Screen width should be positive");
-        assert!(height > 0, "Screen height should be positive");
-        println!("Screen size: {}x{}", width, height);
-    }
 
     #[test]
     fn test_capture_small_region() {

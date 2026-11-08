@@ -33,12 +33,27 @@ pub fn handle_ipc_message(app: &AppHandle, message: IpcMessage) {
 
                     // Update backend state with new region
                     let state = app.state::<AppState>();
-                    let new_region = apply_selector_region(&state, &result);
+                    if state.is_translation_running() {
+                        return;
+                    }
+                    let monitors = match crate::display_monitor::available(app) {
+                        Ok(monitors) if monitors.len() == 1 => monitors,
+                        _ => return,
+                    };
+                    let selection = match apply_selector_region(&state, &result, &monitors) {
+                        Ok(selection) => selection,
+                        Err(error) => {
+                            warn!(%error, "Rejected native selector result");
+                            return;
+                        }
+                    };
 
                     // Save to config
                     {
                         let mut config = lock_or_recover(&state.config);
-                        config.last_capture_region = Some(new_region);
+                        config.last_capture_region = Some(selection.region);
+                        config.last_capture_scale_factor = Some(selection.monitor.scale_factor);
+                        config.last_capture_monitor = Some(selection.monitor);
                         crate::config_save::save_or_warn(app, &config, "the capture region");
                     }
                 }
@@ -46,6 +61,7 @@ pub fn handle_ipc_message(app: &AppHandle, message: IpcMessage) {
         }
 
         "Selector.Cancelled" => {
+            lock_or_recover(&app.state::<AppState>().capture).cancel_selection();
             info!("❌ Area selection cancelled");
         }
 
@@ -70,16 +86,22 @@ pub fn handle_ipc_message(app: &AppHandle, message: IpcMessage) {
 /// The persisted copy (`config.last_capture_region`) and the disk write stay
 /// with the caller: this function only commits the in-memory region, so it can
 /// be exercised without a running Tauri app.
-fn apply_selector_region(state: &AppState, result: &SelectorResultPayload) -> CaptureRegion {
-    let new_region = CaptureRegion {
-        x: result.region_physical.x,
-        y: result.region_physical.y,
-        width: result.region_physical.width,
-        height: result.region_physical.height,
-    };
-
-    *lock_or_recover(&state.capture_region) = Some(new_region);
-    new_region
+fn apply_selector_region(
+    state: &AppState,
+    result: &SelectorResultPayload,
+    monitors: &[crate::capture_target::CaptureMonitor],
+) -> Result<crate::capture_target::CaptureSelection, crate::capture_target::TargetError> {
+    let physical = CaptureRegion::new(
+        result.region_physical.x,
+        result.region_physical.y,
+        result.region_physical.width,
+        result.region_physical.height,
+    );
+    let mut capture = lock_or_recover(&state.capture);
+    let selection = capture.confirm_native(physical, monitors)?;
+    capture.cancel_selection();
+    state.pipeline_clock.invalidate_capture();
+    Ok(selection)
 }
 
 #[cfg(test)]
@@ -129,13 +151,19 @@ mod tests {
             dpi: 144.0,
         };
 
-        let region = apply_selector_region(&state, &result);
+        let monitor = crate::capture_target::CaptureMonitor {
+            device_id: "screen".into(),
+            bounds: CaptureRegion::new(0, 0, 1920, 1080),
+            scale_factor: 1.0,
+        };
+        lock_or_recover(&state.capture).begin_selection(monitor.clone());
+        let selection = apply_selector_region(&state, &result, &[monitor]).unwrap();
+        let region = selection.region;
 
         assert_eq!(region.x, 10);
         assert_eq!(region.y, 20);
         assert_eq!(region.width, 640);
         assert_eq!(region.height, 120);
-        let committed = lock_or_recover(&state.capture_region);
-        assert_eq!(committed.as_ref(), Some(&region));
+        assert_eq!(state.current_capture_region(), Some(region));
     }
 }

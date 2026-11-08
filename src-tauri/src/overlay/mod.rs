@@ -12,6 +12,7 @@ use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager, WebviewWindow};
 use tracing::{debug, info, warn};
 
+use crate::capture_target::CaptureMonitor;
 use crate::config::CaptureRegion;
 
 pub mod commands;
@@ -59,7 +60,10 @@ fn get_overlay_window(app: &AppHandle) -> Option<WebviewWindow> {
 
 /// Cover the capture monitor without window chrome or hiding the taskbar.
 #[cfg(windows)]
-fn configure_overlay_as_chromeless_popup(window: &WebviewWindow) -> Result<(), String> {
+fn configure_overlay_as_chromeless_popup(
+    window: &WebviewWindow,
+    monitor: &CaptureMonitor,
+) -> Result<(), String> {
     use raw_window_handle::HasWindowHandle;
     use windows::core::w;
     use windows::Win32::Foundation::HANDLE;
@@ -87,13 +91,13 @@ fn configure_overlay_as_chromeless_popup(window: &WebviewWindow) -> Result<(), S
             let new_style = WS_POPUP.0 | WS_VISIBLE.0;
             SetWindowLongPtrW(hwnd, GWL_STYLE, new_style as isize);
 
-            // Capture and selector coordinates are relative to the primary monitor.
+            // Capture and overlay share this monitor; region coordinates stay local.
             let CaptureRegion {
                 x,
                 y,
                 width,
                 height,
-            } = overlay_screen_bounds();
+            } = monitor.bounds;
 
             info!(
                 "Overlay capture screen: ({}, {}) {}x{}",
@@ -131,12 +135,6 @@ fn configure_overlay_as_chromeless_popup(window: &WebviewWindow) -> Result<(), S
     }
 }
 
-#[cfg(windows)]
-fn overlay_screen_bounds() -> CaptureRegion {
-    let (width, height) = crate::capture::get_screen_dimensions();
-    CaptureRegion::new(0, 0, width, height)
-}
-
 /// Show the overlay window
 ///
 /// Note: Click-through is NOT enabled by default so the settings button can be clicked.
@@ -146,7 +144,8 @@ fn overlay_screen_bounds() -> CaptureRegion {
 /// a stale subtitle clip from an earlier session cannot survive into this one,
 /// and a stale/wedged overlay renderer is recovered exactly once (bounded
 /// WebView reload). See `liveness`.
-pub async fn show_overlay(app: &AppHandle) -> Result<(), String> {
+pub async fn show_overlay(app: &AppHandle, monitor: &CaptureMonitor) -> Result<(), String> {
+    crate::display_monitor::require_present(app, monitor)?;
     info!("🔍 Looking for overlay window...");
 
     let window = match get_overlay_window(app) {
@@ -183,10 +182,7 @@ pub async fn show_overlay(app: &AppHandle) -> Result<(), String> {
     // Configure as chromeless popup BEFORE showing
     // This sets WS_POPUP style, covers full screen, and applies NonRudeHWND
     #[cfg(windows)]
-    if let Err(e) = configure_overlay_as_chromeless_popup(&window) {
-        tracing::warn!("Failed to configure overlay as chromeless popup: {}", e);
-        // Continue anyway - overlay will work but may have visual issues
-    }
+    configure_overlay_as_chromeless_popup(&window, monitor)?;
 
     // Show the window
     window
@@ -196,9 +192,8 @@ pub async fn show_overlay(app: &AppHandle) -> Result<(), String> {
     // Re-apply WS_POPUP style AFTER showing to ensure it persists
     // This prevents any window Chrome from appearing when the window gains focus
     #[cfg(windows)]
-    if let Err(e) = configure_overlay_as_chromeless_popup(&window) {
-        tracing::warn!("Failed to re-apply overlay popup style after show: {}", e);
-    }
+    configure_overlay_as_chromeless_popup(&window, monitor)?;
+    crate::display_monitor::require_present(app, monitor)?;
 
     // The webview cannot make itself translucent here, so the window does it.
     // Applied after show: the style is only reliable once the frame exists.
@@ -344,30 +339,6 @@ impl Default for OverlayManager {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[cfg(windows)]
-    #[test]
-    fn overlay_bounds_share_the_capture_coordinate_space() {
-        use windows::Win32::Graphics::Gdi::{
-            GetMonitorInfoW, MonitorFromWindow, MONITORINFO, MONITOR_DEFAULTTOPRIMARY,
-        };
-        let monitor = unsafe { MonitorFromWindow(Default::default(), MONITOR_DEFAULTTOPRIMARY) };
-        let mut info = MONITORINFO {
-            cbSize: std::mem::size_of::<MONITORINFO>() as u32,
-            ..Default::default()
-        };
-        assert!(unsafe { GetMonitorInfoW(monitor, &mut info) }.as_bool());
-        let bounds = info.rcMonitor;
-        assert_eq!(
-            overlay_screen_bounds(),
-            CaptureRegion::new(
-                bounds.left,
-                bounds.top,
-                bounds.right - bounds.left,
-                bounds.bottom - bounds.top
-            )
-        );
-    }
 
     #[test]
     fn test_overlay_position_from_capture() {

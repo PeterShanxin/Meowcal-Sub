@@ -20,6 +20,14 @@ pub(crate) async fn send_overlay_message(app: &AppHandle, message: IpcMessage) {
         return;
     }
 
+    // The experimental host has no monitor-local geometry contract. Keep the
+    // Tauri overlay as the sole renderer on multi-display desktops.
+    if message.message_type != "Overlay.Hide"
+        && crate::display_monitor::available(app).map_or(true, |monitors| monitors.len() != 1)
+    {
+        return;
+    }
+
     if let Some(ipc_server) = app.try_state::<Arc<IpcServer>>() {
         ipc_server.send(message).await;
     } else {

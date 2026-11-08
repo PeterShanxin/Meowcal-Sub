@@ -88,19 +88,15 @@
     let x2 = rawX + Math.max(1, rawWidth);
     let y2 = rawY + Math.max(1, rawHeight);
 
-    // Keep the existing selector-window clamp and the non-negative capture
-    // clamp in this order. The backend expects this logical screen payload.
+    // Persist coordinates local to this monitor, independent of desktop origin.
     x1 = Math.max(windowBounds.left, x1);
     y1 = Math.max(windowBounds.top, y1);
     x2 = Math.min(windowBounds.right, x2);
     y2 = Math.min(windowBounds.bottom, y2);
 
-    x1 = Math.max(0, x1);
-    y1 = Math.max(0, y1);
-
     return {
-      x: x1,
-      y: y1,
+      x: x1 - windowBounds.left,
+      y: y1 - windowBounds.top,
       width: Math.max(1, x2 - x1),
       height: Math.max(1, y2 - y1),
       scaleFactor,

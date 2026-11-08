@@ -66,9 +66,9 @@ SHA-256 with the release checksums; do not disable Windows security globally.
 1. **Set up translation.** Open the app and complete the guided setup. Choose
    the original subtitle language and the language you want to read; let setup
    install and test the engine and check the Windows recognition language.
-2. **Select subtitle area.** Play the video on your **primary monitor** and
-   draw a box around the original subtitles, not the whole video. Keep that area
-   visible and reselect it when the video moves or changes size on that monitor.
+2. **Select subtitle area.** Move the app window onto the screen playing the
+   video, then draw a box around the original subtitles, not the whole video.
+   Keep that area visible; reselect it when the video moves or changes size.
 3. **Start translation.** Watch with the floating translation overlay. Use
    **Subtitle style** for text size and a Dark or Light plate; use
    **Stop translation** when you are done.
@@ -91,8 +91,11 @@ SHA-256 with the release checksums; do not disable Windows security globally.
 | Translate readable text beyond subtitles | **Translate any text** in Settings relaxes the subtitle-only filter. It is off by default. |
 | Keep the local engine working | Guided setup, integrity checks, engine repair, and signature-verified in-app updates. |
 
-**Know the limits.** The normal capture/selection workflow targets the **primary
-monitor**, not secondary displays. Recognition depends on the source language,
+**Know the limits.** Each session translates one screen: the screen containing
+the app when you select the subtitle area. Moving the app during translation
+keeps that screen selected. Stop and select again to switch screens. A changed
+or disconnected capture screen stops translation and requires a new selection.
+Recognition depends on the source language,
 text clarity, and what screen capture can actually see. Stylized fonts,
 fast-changing text, and protected video can cause missing or incorrect results.
 Translation is not instant or error-free; speed depends on your PC and the text.

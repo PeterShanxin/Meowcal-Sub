@@ -154,6 +154,11 @@ fn preserve_app_owned(on_disk: &AppConfig, config: &mut AppConfig) {
     if config.last_capture_scale_factor.is_none() {
         config.last_capture_scale_factor = on_disk.last_capture_scale_factor;
     }
+    if config.last_capture_monitor.is_none()
+        && config.last_capture_region == on_disk.last_capture_region
+    {
+        config.last_capture_monitor = on_disk.last_capture_monitor.clone();
+    }
     // Geometry is a struct rather than an `Option`, so "not supplied" has to be
     // read off the fields. A window with no position and no size was never
     // measured; a maximised flag alone cannot restore a window.
