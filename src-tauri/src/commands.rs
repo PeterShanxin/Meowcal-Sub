@@ -463,6 +463,7 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
             let state = app_for_guard.state::<AppState>();
             capture::close_capture_session();
             *lock_or_recover(&state.is_running) = false;
+            let _ = app_for_guard.emit("display-context-changed", ());
             info!("Translation loop cleanup complete");
         }
 
@@ -760,7 +761,6 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
     });
 
     state.session_lifecycle.monitor(translation_handle);
-
     Ok(())
 }
 

@@ -210,7 +210,9 @@ fn main() {
             if window.label() == "main"
                 && matches!(
                     event,
-                    tauri::WindowEvent::Moved(_) | tauri::WindowEvent::ScaleFactorChanged { .. }
+                    tauri::WindowEvent::Moved(_)
+                        | tauri::WindowEvent::Resized(_)
+                        | tauri::WindowEvent::ScaleFactorChanged { .. }
                 )
             {
                 use tauri::Emitter;
