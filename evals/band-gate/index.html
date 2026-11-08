@@ -186,10 +186,10 @@
 
       function updateNegative(time) {
         const timerSegment = scenario.negativeSegments.find(segment => segment.kind === 'timer');
-        timer.textContent = formatTime(time);
-        timer.dataset.segmentId = timerSegment.id;
-        timer.dataset.onset = timerSegment.onset;
-        timer.dataset.duration = timerSegment.duration;
+        timer.textContent = timerSegment ? formatTime(time) : '';
+        timer.dataset.segmentId = timerSegment?.id || 'none';
+        timer.dataset.onset = timerSegment?.onset ?? 0;
+        timer.dataset.duration = timerSegment?.duration ?? 0;
         const scene = segmentAt(scenario.negativeSegments.filter(segment => segment.kind === 'scene-text'), time);
         sceneCopy.textContent = scene ? scene.text : '';
         sceneCopy.classList.toggle('is-active', Boolean(scene));
