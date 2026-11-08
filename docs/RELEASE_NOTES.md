@@ -9,9 +9,11 @@ whether to update, so the notes say what changed for them, not how it was built.
 
 - The first line is exactly `# Meowcal Sub v<version>`.
 - The file has a `## Fixes and improvements` section of `- ` bullets, with no
-  icon in that heading. `scripts/store-release-assets.mjs` builds the Store text
-  from those bullets, in order, until 1500 characters; put the most important
-  first.
+  icon in that heading, and may have a `## ✨ Highlights` section.
+  `scripts/store-release-assets.mjs` builds the Store text from the Highlights
+  bullets and then the Fixes bullets, in order, stopping at the first bullet
+  that would pass 1500 characters; put the most important first. The Store text
+  is plain, so the tooling drops each highlight's leading icon and every `**`.
 - The published release body must equal the file at the tagged commit, or the
   Store sync refuses the release. Finish the notes before `release.yml` runs.
   Editing a published body afterwards leaves that tag unable to pass Store

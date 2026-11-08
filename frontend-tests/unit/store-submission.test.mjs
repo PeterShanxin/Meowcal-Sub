@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createHash } from "node:crypto";
+import { readFileSync } from "node:fs";
 import {
   assertApp,
   createStoreClient,
@@ -19,6 +20,8 @@ import {
 } from "../../scripts/store-release-assets.mjs";
 
 const release = { storeVersion: "1.0.1.0", notes: "Changes in 0.8.7" };
+const releaseNotes = (tag) =>
+  readFileSync(new URL(`../../docs/releases/${tag}.md`, import.meta.url), "utf8");
 function published() {
   return {
     id: "1",
@@ -450,6 +453,33 @@ describe("release and transport boundaries", () => {
     expect(summary).not.toContain("Test evidence");
     expect(summary.length).toBeLessThanOrEqual(1500);
     expect(summary).toContain(`/releases/tag/${tag}`);
+  });
+  it("leads the Store text with plain-text highlights, then fixes", () => {
+    const summary = storeReleaseNotes(releaseNotes("v0.9.0"), "v0.9.0");
+    const lines = summary.split("\n");
+    expect(lines[1]).toBe(
+      "- PP-OCRv6 text recognition. Runs on your PC inside Meowcal Core and reads Chinese, Japanese, English, Spanish, French and German without a Windows language pack (#59).",
+    );
+    expect(lines).toContain(
+      "- One-choice profiles. Settings → Profile offers Automatic (PP-OCRv6, translation on the graphics card when it can) and Compatibility (Windows OCR, translation on the CPU). The individual choices are under Advanced. Korean subtitles always use Windows OCR.",
+    );
+    expect(summary.indexOf("- Exit from the overlay.")).toBeLessThan(
+      summary.indexOf("- When translation only falls behind"),
+    );
+    expect(summary).not.toMatch(/\*\*|\p{Extended_Pictographic}/u);
+    expect(summary).not.toContain("Known limitations");
+    expect(summary.length).toBeLessThanOrEqual(1500);
+    expect(lines.at(-1)).toBe(
+      "Full release notes: https://github.com/PeterShanxin/Meowcal-Sub/releases/tag/v0.9.0",
+    );
+  });
+  it("builds the Store text from fixes alone when the notes have no highlights", () => {
+    const summary = storeReleaseNotes(releaseNotes("v0.8.8"), "v0.8.8");
+    expect(summary.split("\n")[1]).toMatch(/^- Stop finishes the previous capture session/);
+    expect(summary).not.toContain("## ");
+    expect(() =>
+      storeReleaseNotes("# Meowcal Sub v0.9.0\n## ✨ Highlights\n- 🎯 **A.** B.", "v0.9.0"),
+    ).toThrow("store_release_notes_missing");
   });
   it("requires exactly the canonical published assets, names and digests", () => {
     expect(validateRelease(fixture, tag, sha).storeVersion).toBe("1.0.1.0");
