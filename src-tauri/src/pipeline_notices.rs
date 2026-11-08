@@ -1,22 +1,9 @@
-// =============================================================================
-// PIPELINE_NOTICES.RS - deciding when to tell the viewer why nothing is showing
-// =============================================================================
-// A frame that produces no translation still owes the viewer an explanation:
-// the region is empty, the text was unreadable, the band was held. What it must
-// not do is repeat itself. The capture loop runs four times a second, and an
-// unchanged notice re-emitted on every frame overwrites whatever is on screen
-// and makes the overlay flicker.
-//
-// So each notice is emitted once, when it changes. That is two pieces of state -
-// which notice is showing, and how many empty frames have passed - and they were
-// two bare locals in a two-thousand-line loop, read and written in three places.
-// Keeping them together makes the rule "only when it changes" checkable in one
-// place instead of three.
-// =============================================================================
+//! Subtitle retirement and deduplicated pipeline diagnostics. User-facing
+//! waiting time belongs to `subtitle_activity`, independently of this threshold.
 
 use crate::event_payloads::{TranslationPayload, EMPTY_OCR_CLEAR_FRAMES};
 
-/// What the viewer was last told about a frame that produced no translation.
+/// The most recent diagnostic for a frame that produced no translation.
 #[derive(Debug, Default)]
 pub struct Notices {
     showing: Option<&'static str>,
@@ -30,10 +17,8 @@ impl Notices {
 
     /// A frame whose region held no text worth translating.
     ///
-    /// `Some` only when the viewer needs telling: the region has been quiet long
-    /// enough to mean it, nothing else is in flight, and this is not the notice
-    /// already on screen. Waiting a few frames keeps a single-frame OCR miss
-    /// from flickering the line away between cues.
+    /// Waiting a few frames keeps a single-frame OCR miss from clearing the
+    /// line between cues. This event also resets the pipeline's repeat filter.
     pub(crate) fn quiet_region(
         &mut self,
         session_id: u64,
@@ -63,11 +48,7 @@ impl Notices {
         ))
     }
 
-    /// A frame that held text the gate refused.
-    ///
-    /// Text *is* in the region, so a notice claiming otherwise has to be
-    /// replaced - staying silent leaves whatever is on screen contradicting what
-    /// the viewer can see.
+    /// A rejected OCR read, deduplicated by rejection code.
     pub(crate) fn unreadable_source(
         &mut self,
         session_id: u64,
@@ -84,7 +65,7 @@ impl Notices {
         ))
     }
 
-    /// A frame that produced a translation clears the count and the notice.
+    /// A frame admitted to translation clears the count and diagnostic.
     pub fn translated(&mut self) {
         self.empty_frames = 0;
         self.showing = None;
@@ -124,6 +105,32 @@ mod tests {
     fn one_empty_frame_is_not_enough_to_clear_the_overlay() {
         let mut notices = Notices::new();
         assert!(quiet(&mut notices).is_none());
+    }
+
+    #[test]
+    fn retirement_and_repeat_reset_stay_at_three_frames_not_the_waiting_deadline() {
+        let mut notices = Notices::new();
+        assert!(quiet(&mut notices).is_none());
+        assert!(quiet(&mut notices).is_none());
+        let clear = quiet(&mut notices).expect("third empty frame retires the subtitle");
+        let json = serde_json::to_value(clear).expect("payload serializes");
+        assert_eq!(json["displayState"], "noSubtitleText");
+        assert!(quiet(&mut notices).is_none());
+        notices.translated();
+        assert!(quiet(&mut notices).is_none());
+        assert!(quiet(&mut notices).is_none());
+        assert!(quiet(&mut notices).is_some());
+    }
+
+    #[test]
+    fn a_successful_text_read_restarts_the_empty_frame_threshold_before_deduplication() {
+        let mut notices = Notices::new();
+        quiet(&mut notices);
+        quiet(&mut notices);
+        notices.saw_text();
+        assert!(quiet(&mut notices).is_none());
+        assert!(quiet(&mut notices).is_none());
+        assert!(quiet(&mut notices).is_some());
     }
 
     // Text is in the region, so a notice saying it is empty has to be replaced.

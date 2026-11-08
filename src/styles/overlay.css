@@ -293,64 +293,6 @@ body {
     pointer-events: none;
 }
 
-.subtitle-hint {
-    display: none;
-    align-items: center;
-    justify-content: center;
-    gap: 8px;
-
-    width: fit-content;
-    max-width: 100%;
-    margin: 0 auto 8px;
-    padding: 3px 10px;
-
-    border-radius: 999px;
-    border: 1px solid rgba(255, 255, 255, 0.12);
-    background: rgba(255, 255, 255, 0.06);
-
-    color: var(--text-1);
-    font-size: 12px;
-    font-weight: 600;
-}
-
-.subtitle-hint.visible {
-    display: flex;
-}
-
-/* Hint severity uses the app's semantic colours, never a brand colour. */
-.subtitle-hint.hint-warn {
-    --tone: var(--warning);
-}
-
-.subtitle-hint.hint-error {
-    --tone: var(--danger);
-}
-
-.subtitle-hint.hint-ok {
-    --tone: var(--success);
-}
-
-.subtitle-hint.hint-warn,
-.subtitle-hint.hint-error,
-.subtitle-hint.hint-ok {
-    border-color: color-mix(in srgb, var(--tone) 36%, transparent);
-    background: color-mix(in srgb, var(--tone) 12%, transparent);
-}
-
-.subtitle-hint .hint-dot {
-    width: 7px;
-    height: 7px;
-    border-radius: 999px;
-    background: var(--tone, var(--text-2));
-    flex: 0 0 auto;
-}
-
-.subtitle-hint #subtitle-hint-text {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
 /* The opaque plate carries the contrast, so the text needs no shadow. */
 .subtitle-text {
     color: #ffffff;

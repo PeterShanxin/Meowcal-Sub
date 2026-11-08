@@ -19,7 +19,13 @@ function createController(
   const listeners = new Map<string, (event: { payload: unknown }) => void>();
   const storage = { getItem: vi.fn(() => null), setItem: vi.fn() };
   const bridge: TauriBridgeApi = {
-    invoke,
+    invoke: (async (command, args) => {
+      const result = await (args === undefined ? invoke(command) : invoke(command, args));
+      if (command === "request_area_selection" && result === undefined) {
+        return { requestId: args?.requestId, region: { x: 10, y: 800, width: 1200, height: 120 } };
+      }
+      return result;
+    }) as TauriBridgeApi["invoke"],
     isBrowserMode: () => browserMode,
     event: {
       listen: vi.fn((eventName, callback) => {
@@ -204,8 +210,11 @@ describe("AppController settings persistence", () => {
   });
 
   it("keeps a required start save failure visible and explicit", async () => {
-    const invoke = vi.fn().mockRejectedValue(new Error("settings unavailable"));
-    const { controller, snapshots } = createController(invoke);
+    const invoke = vi.fn(async (command: string) => {
+      if (command === "save_settings") throw new Error("settings unavailable");
+      return undefined;
+    });
+    const { controller, snapshots } = createController(invoke as TauriBridgeApi["invoke"]);
 
     await expect(controller.start()).resolves.toBeUndefined();
 
@@ -214,39 +223,34 @@ describe("AppController settings persistence", () => {
       error: "settings unavailable",
       running: false,
     });
-    expect(invoke).toHaveBeenCalledTimes(1);
+    expect(invoke).toHaveBeenCalledWith("save_settings", expect.anything());
+    expect(invoke).not.toHaveBeenCalledWith("start_translation");
   });
 
-  it.each(["event", "poll"])("prewarms only after area confirmation via %s", async (via) => {
-    vi.useFakeTimers();
-    let region = { x: 10, y: 800, width: 1200, height: 120 };
-    let finish!: (value: unknown) => void;
-    const pending = new Promise((resolve) => (finish = resolve));
+  it("prewarms only after explicit area confirmation", async () => {
+    const region = { x: 10, y: 800, width: 1200, height: 120 };
+    let confirm!: (value: unknown) => void;
+    const selection = new Promise((resolve) => (confirm = resolve));
     const invoke = vi.fn(async (command: string) => {
       if (command === "get_engine_status") return { phase: "notRunning" };
       if (command === "get_capture_region") return region;
       if (command === "is_translation_running") return false;
-      if (command === "make_engine_ready") return pending;
+      if (command === "request_area_selection") return selection;
+      if (command === "make_engine_ready") return { phase: "ready" };
       return undefined;
     });
-    const { controller, listeners } = createController(
-      invoke as TauriBridgeApi["invoke"],
-      undefined,
-      false,
-    );
+    const { controller } = createController(invoke as TauriBridgeApi["invoke"], undefined, false);
     await controller.initialize();
-    await controller.selectRegion();
-    await vi.advanceTimersByTimeAsync(500);
+    const selecting = controller.selectRegion();
     expect(invoke).not.toHaveBeenCalledWith("make_engine_ready");
-    region = { ...region, y: 760 };
-    if (via === "event") listeners.get("region-selected")?.({ payload: region });
-    else await vi.advanceTimersByTimeAsync(250);
-    expect(invoke.mock.calls.filter(([name]) => name === "make_engine_ready")).toHaveLength(1);
+    const args = (invoke.mock.calls as Array<[string, { requestId: string }?]>).find(
+      ([command]) => command === "request_area_selection",
+    )?.[1] as { requestId: string };
+    confirm({ requestId: args.requestId, region });
+    await selecting;
+    expect(invoke).toHaveBeenCalledWith("make_engine_ready");
     expect(controller.current()).toMatchObject({ busy: "idle", running: false, region });
     expect(invoke).not.toHaveBeenCalledWith("start_translation");
-    finish({ phase: "ready" });
-    await vi.advanceTimersByTimeAsync(0);
-    expect(controller.current().engine?.phase).toBe("ready");
     controller.dispose();
   });
 
@@ -255,16 +259,17 @@ describe("AppController settings persistence", () => {
       if (command === "get_engine_status") return { phase: "notRunning" };
       if (command === "is_translation_running") return state === "running";
       if (command === "save_settings") return new Promise(() => {});
+      if (command === "stop_translation") throw new Error("Stop failed");
       return undefined;
     });
-    const { controller, listeners } = createController(
+    const { controller } = createController(
       invoke as TauriBridgeApi["invoke"],
       undefined,
       state === "browser",
     );
     await controller.initialize();
     if (state === "saving") void controller.setCpuOnly(true);
-    listeners.get("region-selected")?.({ payload: { x: 0, y: 0, width: 800, height: 100 } });
+    await controller.selectRegion();
     expect(invoke).not.toHaveBeenCalledWith("make_engine_ready");
     controller.dispose();
   });
@@ -300,15 +305,11 @@ describe("AppController settings persistence", () => {
         }
         return undefined;
       });
-      const { controller, listeners } = createController(
-        invoke as TauriBridgeApi["invoke"],
-        undefined,
-        false,
-      );
+      const { controller } = createController(invoke as TauriBridgeApi["invoke"], undefined, false);
       Object.assign(window, { OcrLanguageTags: { isOcrLanguageAvailable: () => true } });
       try {
         await controller.initialize();
-        listeners.get("region-selected")?.({ payload: region });
+        await controller.selectRegion();
         await controller.refresh(); // The main window regains focus when the selector closes.
         expect(deriveHomePresentation(controller.current())).toMatchObject({
           action: "start",
@@ -351,6 +352,7 @@ describe("AppController settings persistence", () => {
     await controller.start();
 
     expect(invoke.mock.calls.map(([command]) => command)).toEqual([
+      "request_area_selection",
       "save_settings",
       "refresh_engine_status",
       "make_engine_ready",
@@ -712,7 +714,12 @@ describe("AppController settings persistence", () => {
     await controller.initialize();
     listeners.get("setup-select-area")?.({ payload: null });
 
-    await vi.waitFor(() => expect(invoke).toHaveBeenCalledWith("open_area_selector"));
+    await vi.waitFor(() =>
+      expect(invoke).toHaveBeenCalledWith(
+        "request_area_selection",
+        expect.objectContaining({ startTranslation: false }),
+      ),
+    );
     controller.dispose();
   });
 
@@ -1158,64 +1165,6 @@ describe("AppController automatic update checks", () => {
   });
 });
 
-describe("AppController area selection", () => {
-  const saved = { x: 10, y: 800, width: 1200, height: 120 };
-
-  beforeEach(() => {
-    vi.useFakeTimers();
-  });
-
-  afterEach(() => {
-    vi.useRealTimers();
-    vi.restoreAllMocks();
-    vi.unstubAllGlobals();
-  });
-
-  // The selector leaves the saved area in place while it is open, so polling
-  // must wait for a different area rather than report the saved one as new.
-  it("does not confirm a selection while the saved area is unchanged", async () => {
-    let region: typeof saved | null = saved;
-    const invoke = vi.fn(async (command: string) =>
-      command === "get_capture_region" ? region : undefined,
-    );
-    const { controller } = createController(invoke as TauriBridgeApi["invoke"]);
-    await controller.initialize();
-
-    await controller.selectRegion();
-    await vi.advanceTimersByTimeAsync(2000);
-
-    expect(controller.current().notice).toBeNull();
-
-    region = { ...saved, y: 760 };
-    await vi.advanceTimersByTimeAsync(250);
-
-    expect(controller.current()).toMatchObject({
-      region: { y: 760 },
-      notice: "Subtitle area selected",
-    });
-    controller.dispose();
-  });
-
-  it("confirms the first area found when none was saved", async () => {
-    let region: typeof saved | null = null;
-    const invoke = vi.fn(async (command: string) =>
-      command === "get_capture_region" ? region : undefined,
-    );
-    const { controller } = createController(invoke as TauriBridgeApi["invoke"]);
-    await controller.initialize();
-
-    await controller.selectRegion();
-    region = saved;
-    await vi.advanceTimersByTimeAsync(250);
-
-    expect(controller.current()).toMatchObject({
-      region: saved,
-      notice: "Subtitle area selected",
-    });
-    controller.dispose();
-  });
-});
-
 describe("AppController progress messages", () => {
   beforeEach(() => {
     vi.useFakeTimers();
@@ -1314,5 +1263,61 @@ describe("settings write recovery", () => {
     });
     expect(controller.current().settingsSave).toEqual({ kind: "idle" });
     controller.dispose();
+  });
+});
+
+describe("AppController display-aware area confirmation", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  it("does not restore a persisted crop rejected by the current display context", async () => {
+    const saved = { x: 10, y: 800, width: 1200, height: 120 };
+    const invoke = vi.fn(async (command: string) => {
+      if (command === "get_settings") return { lastCaptureRegion: saved };
+      if (command === "get_capture_region") return null;
+      if (command === "get_display_context") return { multipleDisplays: true, region: null };
+      if (command === "get_engine_status") return { phase: "ready" };
+      if (command === "is_translation_running") return false;
+      return undefined;
+    });
+    const { controller } = createController(invoke as TauriBridgeApi["invoke"], undefined, false);
+    await controller.initialize();
+    expect(controller.current()).toMatchObject({ region: null, multipleDisplays: true });
+    controller.dispose();
+  });
+
+  it("keeps display context events and disposal active alongside selection events", async () => {
+    vi.useFakeTimers();
+    const saved = { x: 10, y: 800, width: 1200, height: 120 };
+    let displayRegion: typeof saved | null = saved;
+    const invoke = vi.fn(async (command: string) => {
+      if (command === "get_capture_region") return saved;
+      if (command === "get_display_context")
+        return { multipleDisplays: true, region: displayRegion };
+      if (command === "get_engine_status") return { phase: "ready" };
+      if (command === "is_translation_running") return false;
+      return undefined;
+    });
+    const { controller, listeners } = createController(
+      invoke as TauriBridgeApi["invoke"],
+      undefined,
+      false,
+    );
+    await controller.initialize();
+    displayRegion = null;
+    listeners.get("display-context-changed")?.({ payload: null });
+    await vi.advanceTimersByTimeAsync(150);
+    expect(controller.current()).toMatchObject({ region: null, multipleDisplays: true });
+    listeners.get("display-context-changed")?.({ payload: null });
+    const reads = invoke.mock.calls.filter(([command]) => command === "get_display_context").length;
+    controller.dispose();
+    await vi.advanceTimersByTimeAsync(150);
+    expect(invoke.mock.calls.filter(([command]) => command === "get_display_context")).toHaveLength(
+      reads,
+    );
+    expect(listeners.size).toBe(0);
   });
 });

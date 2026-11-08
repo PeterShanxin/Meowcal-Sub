@@ -30,6 +30,9 @@
     const TAURI_ONLY_COMMANDS = [
         'get_display_context',
         'open_area_selector',
+        'request_area_selection',
+        'get_area_selection_request',
+        'complete_area_selection',
         'close_area_selector',
         'start_translation',
         'stop_translation',

@@ -6,13 +6,11 @@ ratchets. Machine-readable values live in
 
 ## Enforced baseline
 
-Measured on 2026-08-16, after #35 closed the decomposition programme by widening
-the measured coverage scope (#31 lifecycle, #32 engine/pipeline, #33 main/setup,
-#34 selector/overlay):
+The baseline enforces:
 
 - production files under `src/`, `src-tauri/src/`, and `core/src/`;
 - 400 lines maximum for a new `.rs`, `.js`, `.ts`, `.html`, or `.css` production file;
-- 10 explicit legacy files above that ceiling;
+- 9 explicit legacy files above that ceiling;
 - 1 existing ESLint warning, with zero allowed errors;
 - frontend coverage floors of 88% statements, 81% branches, 90% functions, and
   90% lines, over the named scope in the machine-readable baseline.
@@ -42,13 +40,14 @@ Deliberately outside the scope, and why:
 
 | Not measured                                                              | Reason                                                  |
 | ------------------------------------------------------------------------- | ------------------------------------------------------- |
-| `src/scripts/overlay.js`, `selector.js`, `tauri-bridge.js`                | DOM and Tauri adapters; the unit environment is `node`  |
+| `src/scripts/overlay.js`, `selector.js`, `tauri-bridge.js`                | DOM and Tauri adapters; selector VM tests run outside module coverage  |
 | `src/ui/*-view.ts`, `meowcal-app.ts`, `meowcal-setup.ts`, `src/entries/*` | Lit components and entries; need a DOM                  |
 | `src/ui/contracts.ts`                                                     | types only — nothing survives compilation to measure    |
 | all Rust                                                                  | no coverage instrumentation on the toolchain; see below |
 
-Those adapters are covered by the browser smoke and the manual Windows gate
-instead. Counting them here would need a jsdom shim that proves less than either.
+The browser smoke and manual Windows gate cover the full adapter behavior.
+Selector command contracts also run in an isolated VM; those executions are
+not instrumented in the measured module graph.
 
 `frontend-tests/unit/coverage-scope.test.mjs` keeps the list honest from the
 other side: a module that a unit test exercises but the scope omits fails the
@@ -59,8 +58,8 @@ The historical result over the 33-module scope, from the Windows `Frontend & Bro
 job on 2026-09-17, is **88.41% statements, 81.36% branches, 90.69% functions, and
 90.01% lines**, and the floors are those numbers rounded down to whole percent.
 
-**This is not a repository-wide coverage claim.** It is a claim about 33 named
-modules, and the number is not comparable to the 90.17% recorded before #35, which
+**This is not a repository-wide coverage claim.** The current claim covers the named
+manifest modules, and the number is not comparable to the 90.17% recorded before #35, which
 measured nine files. Widening the scope lowered the percentage, the trade #35 chose
 deliberately - a lower number that describes the risky code beats a higher one
 that leaves it out.
@@ -84,13 +83,13 @@ decomposition-owned hotspots are:
 
 | File                                 | Ceiling | Reduction owner   |
 | ------------------------------------ | ------: | ----------------- |
-| `src-tauri/src/llm/foundry_local.rs` |   1,561 | #32               |
-| `src-tauri/src/commands.rs`          |   1,090 | #31 / #32 surface |
-| `src/scripts/overlay.js`             |   1,046 | #34               |
-| `src-tauri/src/llm/context.rs`       |     732 | #32               |
-| `src-tauri/src/llm/manager.rs`       |     726 | #32               |
-| `src/scripts/selector.js`            |     636 | #34               |
-| `src-tauri/src/config.rs`            |     595 | #31               |
+| `src-tauri/src/llm/foundry_local.rs` | 1,557 | #32               |
+| `src-tauri/src/commands.rs`          | 920 | #31 / #32 surface |
+| `src/scripts/overlay.js`             | 1,030 | #34               |
+| `src-tauri/src/llm/context.rs`       | 620 | #32               |
+| `src-tauri/src/llm/manager.rs`       | 699 | #32               |
+| `src/scripts/selector.js`            | 619 | #34               |
+| `src-tauri/src/config.rs`            | 473 | #31               |
 
 `main.rs` left the legacy list in the #31 lifecycle wave. `http_server.rs`
 left it in the #32 engine-status wave (now under the 400-line new-file

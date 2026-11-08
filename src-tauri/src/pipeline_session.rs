@@ -67,11 +67,122 @@ impl PipelineClock {
     pub fn is_session_current(&self, session_id: u64) -> bool {
         self.session_id.load(Ordering::SeqCst) == session_id
     }
+
+    pub fn interrupt_unexpected_exit(&self, session_id: u64, stop_requested: bool) -> bool {
+        // Session validity rejects old results. Resetting the other counters
+        // here could mutate a replacement session that starts after this CAS.
+        !stop_requested
+            && self
+                .session_id
+                .compare_exchange(
+                    session_id,
+                    session_id.wrapping_add(1),
+                    Ordering::SeqCst,
+                    Ordering::SeqCst,
+                )
+                .is_ok()
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn an_unrequested_current_session_exit_invalidates_outstanding_results() {
+        let clock = PipelineClock::default();
+        let session = clock.begin_session();
+        let capture = clock.next_capture(session);
+        let translation = clock.begin_translation();
+        assert!(clock.interrupt_unexpected_exit(session, false));
+
+        assert!(!clock.interrupt_unexpected_exit(session, false));
+        assert!(!clock.is_current(capture));
+        assert!(!(clock.is_session_current(session) && clock.is_translation_current(translation)));
+    }
+
+    #[test]
+    fn requested_stop_is_silent_before_and_after_session_invalidation() {
+        let clock = PipelineClock::default();
+        let session = clock.begin_session();
+        assert!(!clock.interrupt_unexpected_exit(session, true));
+        assert!(clock.is_session_current(session));
+        clock.invalidate_session();
+        assert!(!clock.interrupt_unexpected_exit(session, true));
+        assert!(!clock.interrupt_unexpected_exit(session, false));
+    }
+
+    #[test]
+    fn an_old_task_exit_cannot_interrupt_a_replacement_session() {
+        let clock = PipelineClock::default();
+        let old = clock.begin_session();
+        let replacement = clock.begin_session();
+        assert!(!clock.interrupt_unexpected_exit(old, false));
+        assert!(clock.is_session_current(replacement));
+        assert!(clock.interrupt_unexpected_exit(replacement, false));
+    }
+
+    #[test]
+    fn a_racing_task_exit_cannot_invalidate_replacement_session_results() {
+        use std::sync::{Arc, Barrier};
+
+        const ROUNDS: usize = 4_096;
+        let clock = Arc::new(PipelineClock::default());
+        let ready = Arc::new(Barrier::new(3));
+        let done = Arc::new(Barrier::new(3));
+        let old = Arc::new(AtomicU64::new(0));
+        let replacement = Arc::new(AtomicU64::new(0));
+        let capture = Arc::new(AtomicU64::new(0));
+        let translation = Arc::new(AtomicU64::new(0));
+        let exiting = {
+            let (clock, ready, done, old) =
+                (clock.clone(), ready.clone(), done.clone(), old.clone());
+            std::thread::spawn(move || {
+                for _ in 0..ROUNDS {
+                    ready.wait();
+                    clock.interrupt_unexpected_exit(old.load(Ordering::SeqCst), false);
+                    done.wait();
+                }
+            })
+        };
+        let restarting = {
+            let (clock, ready, done, replacement, capture, translation) = (
+                clock.clone(),
+                ready.clone(),
+                done.clone(),
+                replacement.clone(),
+                capture.clone(),
+                translation.clone(),
+            );
+            std::thread::spawn(move || {
+                for _ in 0..ROUNDS {
+                    ready.wait();
+                    let session = clock.begin_session();
+                    capture.store(clock.next_capture(session).capture_id, Ordering::SeqCst);
+                    translation.store(clock.begin_translation(), Ordering::SeqCst);
+                    replacement.store(session, Ordering::SeqCst);
+                    done.wait();
+                }
+            })
+        };
+        let mut invalidated = false;
+        for _ in 0..ROUNDS {
+            old.store(clock.begin_session(), Ordering::SeqCst);
+            ready.wait();
+            done.wait();
+            let session_id = replacement.load(Ordering::SeqCst);
+            invalidated |= !clock.is_current(PipelineToken {
+                session_id,
+                capture_id: capture.load(Ordering::SeqCst),
+            }) || !clock.is_translation_current(translation.load(Ordering::SeqCst));
+        }
+        exiting.join().expect("exit worker completed");
+        restarting.join().expect("restart worker completed");
+        assert!(
+            !invalidated,
+            "the old exit mutated replacement-session state"
+        );
+    }
 
     #[test]
     fn newer_session_invalidates_every_older_capture() {

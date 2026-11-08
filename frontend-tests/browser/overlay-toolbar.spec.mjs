@@ -213,6 +213,9 @@ test("wide top-edge capture keeps the toolbar entirely outside source pixels", a
   const toolbar = page.locator("#overlay-toolbar");
   await expect(toolbar).toBeInViewport();
   expect((await toolbar.boundingBox()).y).toBeGreaterThan(100);
+  const status = page.locator("#overlay-session-status");
+  await expect(status).toBeInViewport();
+  expect((await status.boundingBox()).y).toBeGreaterThan(100);
 });
 
 test("capture covering the viewport hides controls and recovers when space is available", async ({
@@ -221,6 +224,7 @@ test("capture covering the viewport hides controls and recovers when space is av
   const { width, height } = page.viewportSize();
   await openOverlay(page, { x: 0, y: 0, width, height });
   await expect(page.locator("#overlay-toolbar")).toBeHidden();
+  await expect(page.locator("#overlay-session-status")).toBeHidden();
   await page.evaluate(() =>
     window.overlayTest.emit("overlay-update-region", {
       x: 100,
@@ -230,6 +234,7 @@ test("capture covering the viewport hides controls and recovers when space is av
     }),
   );
   await expect(page.locator("#overlay-toolbar")).toBeVisible();
+  await expect(page.locator("#overlay-session-status")).toBeVisible();
 });
 
 test("keyboard window activation reveals faded controls and preserves Tab order", async ({
@@ -251,4 +256,167 @@ test("keyboard window activation reveals faded controls and preserves Tab order"
   await expect(page.locator("#overlay-toolbar")).toBeVisible();
   await page.keyboard.press("Enter");
   await expect(page.getByRole("button", { name: "Exit translation", exact: true })).toBeDisabled();
+});
+
+test("normal subtitle gaps and transient diagnostics leave the movie quiet", async ({ page }) => {
+  await openOverlay(page);
+  await page.evaluate(() =>
+    window.overlayTest.emit("translation-update", {
+      sessionId: 1,
+      captureId: 1,
+      displayState: "translated",
+      translated: "A readable subtitle",
+      backendUsed: "local_engine",
+      warnings: [],
+      timestamp: Date.now(),
+    }),
+  );
+  const subtitles = page.locator("#subtitle-container");
+  await expect(subtitles).toBeVisible();
+  await expect(page.locator("#overlay-session-status")).toBeHidden();
+  const before = await subtitles.boundingBox();
+  for (const [captureId, displayState, warnings] of [
+    [2, "sourceUnreadable", ["garbled"]],
+    [3, "engineSlow", []],
+    [4, "temporarilyUnavailable", ["local_engine: timeout"]],
+    [5, "translated", ["local_engine: context_leakage", "local_engine: recovered_after_retry"]],
+  ]) {
+    await page.evaluate(
+      ({ captureId, displayState, warnings }) =>
+        window.overlayTest.emit("translation-update", {
+          sessionId: 1,
+          captureId,
+          displayState,
+          translated: "A readable subtitle",
+          backendUsed: "local_engine",
+          warnings,
+          timestamp: Date.now(),
+        }),
+      { captureId, displayState, warnings },
+    );
+    await expect(page.locator("#subtitle-text")).toHaveText("A readable subtitle");
+    await expect(page.locator("#overlay-session-status")).toBeHidden();
+    expect(await subtitles.boundingBox()).toEqual(before);
+  }
+  await page.evaluate(() => {
+    window.overlayTest.emit("translation-update", {
+      sessionId: 1,
+      captureId: 6,
+      displayState: "noSubtitleText",
+      translated: "",
+      timestamp: Date.now(),
+    });
+    window.overlayTest.emit("subtitle-activity", { sessionId: 1, captureId: 7, state: "waiting" });
+  });
+  await expect(subtitles).toHaveClass(/hidden/);
+  await expect(subtitles).toHaveCSS("opacity", "0");
+  await expect(page.locator("#subtitle-text")).toHaveText("");
+  await expect(page.locator("#overlay-session-status")).toBeHidden();
+  await page.evaluate(() =>
+    window.overlayTest.emit("translation-update", {
+      sessionId: 1,
+      captureId: 8,
+      displayState: "translated",
+      translated: "A readable subtitle",
+      backendUsed: "local_engine",
+      warnings: [],
+      timestamp: Date.now(),
+    }),
+  );
+  await expect(page.locator("#subtitle-text")).toHaveText("A readable subtitle");
+  await expect(subtitles).toBeVisible();
+});
+
+test("preparation and actionable failures do not move subtitle geometry", async ({ page }) => {
+  await page.clock.install();
+  await openOverlay(page);
+  const status = page.locator("#overlay-session-status");
+  await expect(status).toContainText("Preparing translation…");
+  await expect(status.getByRole("button")).toBeHidden();
+  await page.evaluate(() =>
+    window.overlayTest.emit("translation-update", {
+      sessionId: 1,
+      captureId: 1,
+      displayState: "translated",
+      translated: "A readable subtitle",
+      timestamp: Date.now(),
+    }),
+  );
+  const subtitles = page.locator("#subtitle-container");
+  await expect(subtitles).toBeVisible();
+  const before = await subtitles.boundingBox();
+  await page.evaluate(() =>
+    window.overlayTest.emit("capture-status", {
+      isError: true,
+      message: "Screen capture failed: private endpoint details",
+    }),
+  );
+  await expect(status).toContainText("Translation is interrupted.");
+  await expect(status).not.toContainText("private");
+  expect(await subtitles.boundingBox()).toEqual(before);
+  const box = await status.boundingBox();
+  await expect
+    .poll(() =>
+      page.evaluate(
+        ({ x, y, width, height }) =>
+          window.overlayTest.calls
+            .filter((call) => call.command === "set_overlay_window_clip")
+            .at(-1)
+            ?.args.handleBounds?.some(
+              (bound) =>
+                bound.x === Math.round(x) &&
+                bound.y === Math.round(y) &&
+                bound.width === Math.round(width) &&
+                bound.height === Math.round(height),
+            ),
+        box,
+      ),
+    )
+    .toBe(true);
+  await page.clock.runFor(500);
+  await page.evaluate(() =>
+    window.overlayTest.emit("subtitle-activity", { sessionId: 1, captureId: 2, state: "active" }),
+  );
+  await expect(status).toBeHidden();
+  await page.clock.runFor(400);
+  expect(
+    await page.evaluate(
+      ({ x, y, width, height }) =>
+        window.overlayTest.calls
+          .filter((call) => call.command === "set_overlay_window_clip")
+          .at(-1)
+          ?.args.handleBounds?.some(
+            (bound) =>
+              bound.x === Math.round(x) &&
+              bound.y === Math.round(y) &&
+              bound.width === Math.round(width) &&
+              bound.height === Math.round(height),
+          ),
+      box,
+    ),
+  ).toBe(false);
+  await page.evaluate(() => {
+    window.overlayTest.emit("translation-update", {
+      sessionId: 1,
+      captureId: 3,
+      displayState: "temporarilyUnavailable",
+      warnings: ["local_engine: engine_recovery_failed"],
+      timestamp: Date.now(),
+    });
+    window.overlayTest.emit("translation-update", {
+      sessionId: 1,
+      captureId: 4,
+      displayState: "noSubtitleText",
+      timestamp: Date.now(),
+    });
+  });
+  await expect(status).toContainText("Translation engine stopped.");
+  await expect(status.getByRole("button", { name: "Exit to Home" })).toBeVisible();
+  await status.getByRole("button", { name: "Exit to Home" }).click();
+  await expect(page.getByRole("button", { name: "Exit translation", exact: true })).toBeDisabled();
+  expect(
+    await page.evaluate(
+      () => window.overlayTest.calls.filter((call) => call.command === "exit_translation").length,
+    ),
+  ).toBe(1);
 });

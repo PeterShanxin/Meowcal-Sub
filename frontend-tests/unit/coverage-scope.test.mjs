@@ -28,7 +28,7 @@ const coverageScope = baseline.frontendCoverageScope;
 const MODULE_REFERENCE = /["'`](?:\.\.\/)+((?:src|scripts)\/[\w./-]+?)(?:\.(?:m?js|ts))?["'`]/g;
 const EXTENSIONS = [".ts", ".js", ".mjs"];
 
-// Named by a test but not executed by one, with the reason. Every entry is a
+// Named by a test but not measurable in this module graph, with the reason. Every entry is a
 // claim a reviewer can check, which is the point: the way to defeat this check
 // is to add a line here, and that line is visible in the diff.
 const NOT_MEASURABLE = new Map([
@@ -42,6 +42,10 @@ const NOT_MEASURABLE = new Map([
   ["src/entries/main.ts", "asserted as text; needs a DOM to run"],
   ["src/entries/wizard.ts", "asserted as text; needs a DOM to run"],
   ["src/ui/meowcal-titlebar.ts", "asserted as text; needs a DOM to run"],
+  [
+    "src/scripts/selector.js",
+    "native adapter exercised as source in an isolated VM, outside V8 module instrumentation",
+  ],
 ]);
 
 /**
