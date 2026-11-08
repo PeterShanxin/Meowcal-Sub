@@ -41,6 +41,7 @@ jobs:
           npm run version:check
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
           ./scripts/tests/store-package.Tests.ps1
+      - uses: ./.github/actions/prepare-reviewed-core
       - name: Build native x64 Store Release
         run: |
           ./scripts/build-store.ps1 -Architecture x64 `
@@ -103,6 +104,7 @@ jobs:
           npm run version:check
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
           ./scripts/tests/store-package.Tests.ps1
+      - uses: ./.github/actions/prepare-reviewed-core
       - name: Check hosted desktop preparation guards
         run: |
           ./scripts/tests/store-desktop.Tests.ps1

@@ -277,7 +277,11 @@ DPI/window behavior.
   `HEAVY_RESULTS`, or it reports green for an architecture nothing verified.
 - Every Windows gate job shares `.github/actions/windows-rust-gate`: Node, the
   Rust toolchain for that job's one target, `Swatinem/rust-cache`, and the
-  build parallelism. The cache includes both `src-tauri` and `core` targets.
+  build parallelism. It also uses `.github/actions/prepare-reviewed-core` to
+  download the locked archive once through the GitHub CLI. Store validation
+  shares that preparation. Consumers use `MEOWCAL_CORE_ARCHIVE` and retain the
+  existing hash, package and executable checks. The cache includes both
+  `src-tauri` and `core` targets.
   Only `main` writes cache entries, keeping branch builds from filling the
   repository cache budget. What keeps fork code out of the entry `main` restores is
   separate: GitHub scopes a written entry to the ref that wrote it. The

@@ -60,3 +60,5 @@ runs:
         # honours an explicit value over its own default.
         Write-Host "CARGO_BUILD_JOBS=$env:NUMBER_OF_PROCESSORS"
         "CARGO_BUILD_JOBS=$env:NUMBER_OF_PROCESSORS" >> $env:GITHUB_ENV
+
+    - uses: ./.github/actions/prepare-reviewed-core

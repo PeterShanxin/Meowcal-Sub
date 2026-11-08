@@ -1,7 +1,8 @@
 # Multi-monitor Windows validation — 2026-11-08
 
 Native application source: `eb617bf4174347a8a9a38af9cfe243ffc66f50da`.
-The subsequent changes affect the offline evaluator and evidence only.
+The subsequent changes affect the offline evaluator, CI archive transport and
+evidence; application behavior is unchanged.
 Development executable SHA-256:
 `d1ae5d0b94cf514b5204f73bacb44dfeaf3973ea914d2c2ae36ee79446d52f90`.
 
