@@ -1,7 +1,8 @@
 import type { DownloadEvent, UpdateStatus } from "./update-state";
 
 export type AppScreen = "home" | "appearance" | "settings";
-export type BusyState = "idle" | "loading" | "warming" | "starting" | "stopping" | "saving";
+export type BusyState =
+  "idle" | "loading" | "selecting" | "warming" | "starting" | "stopping" | "saving";
 export type Tone = "neutral" | "success" | "warning" | "danger";
 
 /** Glyphs drawn by `icons.ts`. */
@@ -116,6 +117,7 @@ export interface UiSnapshot {
   notice: string | null;
   /** The latest non-fatal capture report for this session; capture keeps running. */
   captureWarning: string | null;
+  subtitleActivity?: "active" | "waiting";
   developerMode: boolean;
   update: UpdateStatus;
   /** `null` until the app reports its own version, and always so in browser mode. */

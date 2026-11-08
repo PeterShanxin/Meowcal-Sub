@@ -7,9 +7,8 @@ import { defaultSettings, mergeSettings, recognitionPresets } from "./settings-d
 import { UpdateController } from "./update-controller";
 import { SettingsWriter } from "./settings-writer";
 import { EngineStatusController } from "./engine-status-controller";
+import { SessionStatusController } from "./session-status-controller";
 import { DisplayController } from "./display-controller";
-
-type Subscriber = (snapshot: UiSnapshot) => void;
 
 const ONBOARDING_SEEN_KEY = "meowcal.onboardingComplete";
 const NOTICE_DURATION_MS = 4000;
@@ -22,7 +21,7 @@ type WizardTestResult = { translatedText?: string; latencyMs?: number };
 
 export class AppController {
   private unlisten: Array<() => void> = [];
-  private pollingId: number | null = null;
+  private selectionRequest: string | null = null;
   private overlaySaveId: number | null = null;
   private autoCheckTimer: number | null = null;
   private noticeTimer: number | null = null;
@@ -46,12 +45,16 @@ export class AppController {
     appVersion: null,
   };
   private engines = new EngineStatusController((patch) => this.publish(patch));
+  private sessionStatus = new SessionStatusController(
+    (patch) => this.publish(patch),
+    () => this.snapshot,
+  );
   private displays = new DisplayController((patch) => this.publish(patch));
   private updates = new UpdateController((patch) => this.publish(patch));
   private settingsWriter = new SettingsWriter((settingsSave) => this.publish({ settingsSave }));
 
   constructor(
-    private readonly subscriber: Subscriber,
+    private readonly subscriber: (snapshot: UiSnapshot) => void,
     private readonly clock: () => number = () => Date.now(),
   ) {}
 
@@ -120,14 +123,7 @@ export class AppController {
   }
 
   private async setupEvents(): Promise<void> {
-    const regionUnlisten = await window.TauriBridge.event.listen("region-selected", (event) => {
-      this.confirmRegion(event.payload as CaptureRegion);
-    });
-    const captureUnlisten = await window.TauriBridge.event.listen("capture-status", (event) => {
-      const payload = event.payload as { isError?: boolean; message?: string };
-      if (payload.isError) this.publish({ error: payload.message ?? "Screen capture failed" });
-      else if (payload.message) this.publish({ captureWarning: payload.message });
-    });
+    const sessionUnlisten = await this.sessionStatus.listen();
     const wizardUnlisten = await window.TauriBridge.event.listen("engine-wizard-closed", () => {
       localStorage.setItem(ONBOARDING_SEEN_KEY, "true");
     });
@@ -135,30 +131,20 @@ export class AppController {
       "setup-select-area",
       () => void this.selectRegion(),
     );
-    const exitUnlisten = await window.TauriBridge.event.listen("translation-exited", () => {
-      this.publish({
-        screen: "home",
-        running: false,
-        busy: "idle",
-        error: null,
-        captureWarning: null,
-        notice: "Translation stopped",
-      });
-    });
-    this.unlisten.push(
-      regionUnlisten,
-      captureUnlisten,
-      wizardUnlisten,
-      selectAreaUnlisten,
-      exitUnlisten,
-    );
+    this.unlisten.push(...sessionUnlisten, wizardUnlisten, selectAreaUnlisten);
   }
 
   dispose(): void {
     this.disposed = true;
     this.engines.dispose();
     this.displays.dispose();
-    this.stopRegionPolling();
+    if (this.selectionRequest) {
+      void window.TauriBridge.invoke("complete_area_selection", {
+        requestId: this.selectionRequest,
+        region: null,
+      }).catch(() => {});
+      this.selectionRequest = null;
+    }
     if (this.overlaySaveId !== null) window.clearTimeout(this.overlaySaveId);
     if (this.autoCheckTimer !== null) window.clearTimeout(this.autoCheckTimer);
     if (this.noticeTimer !== null) window.clearTimeout(this.noticeTimer);
@@ -174,39 +160,45 @@ export class AppController {
     await this.persistSettingsInBackground();
   }
   async selectRegion(): Promise<void> {
+    if (this.snapshot.running) {
+      if (this.snapshot.busy !== "idle") return;
+      await this.stop();
+      if (!this.snapshot.running) await this.start();
+      return;
+    }
+    if (
+      (await this.chooseRegion(false)) &&
+      !window.TauriBridge.isBrowserMode() &&
+      this.snapshot.settingsSave.kind === "idle"
+    )
+      void this.engines.prewarm();
+  }
+
+  private async chooseRegion(startTranslation: boolean): Promise<boolean> {
+    if (this.disposed || this.selectionRequest || this.snapshot.running) return false;
+    const requestId = crypto.randomUUID();
+    this.selectionRequest = requestId;
+    this.publish({ busy: "selecting", error: null, notice: null });
     try {
-      await window.TauriBridge.invoke("open_area_selector");
-      this.startRegionPolling(this.snapshot.region);
+      const result = await window.TauriBridge.invoke<{
+        requestId: string;
+        region: CaptureRegion | null;
+      }>("request_area_selection", { requestId, startTranslation });
+      if (this.disposed) return false;
+      if (result.requestId !== requestId)
+        throw new Error("Area selection result did not match the request.");
+      this.publish({
+        busy: "idle",
+        ...(result.region ? { region: result.region, error: null, captureWarning: null } : {}),
+      });
+      return result.region !== null;
     } catch (error) {
-      this.publish({ error: errorMessage(error) });
+      this.publish({ busy: "idle", error: errorMessage(error) });
+      return false;
+    } finally {
+      this.selectionRequest = null;
     }
   }
-
-  private startRegionPolling(saved: CaptureRegion | null): void {
-    this.stopRegionPolling();
-    let attempts = 0;
-    this.pollingId = window.setInterval(async () => {
-      const region = await this.safeInvoke<CaptureRegion | null>("get_capture_region", null);
-      const same = (key: keyof CaptureRegion) => region?.[key] === saved?.[key];
-      if (region && !(saved && same("x") && same("y") && same("width") && same("height"))) {
-        this.confirmRegion(region);
-      } else if (++attempts >= 40) this.stopRegionPolling();
-    }, 250);
-  }
-
-  private stopRegionPolling(): void {
-    if (this.pollingId !== null) window.clearInterval(this.pollingId);
-    this.pollingId = null;
-  }
-
-  private confirmRegion(region: CaptureRegion): void {
-    this.stopRegionPolling();
-    this.publish({ region, notice: "Subtitle area selected", error: null, captureWarning: null });
-    if (this.disposed || window.TauriBridge.isBrowserMode()) return;
-    const { running, busy, settingsSave } = this.snapshot;
-    if (!running && busy === "idle" && settingsSave.kind === "idle") void this.engines.prewarm();
-  }
-
   async installOcr(): Promise<void> {
     this.publish({ busy: "saving", error: null, notice: "Opening Windows language setup…" });
     try {
@@ -223,7 +215,6 @@ export class AppController {
       this.publish({ busy: "idle", notice: null, error: errorMessage(error) });
     }
   }
-
   async openSetup(): Promise<void> {
     try {
       await window.TauriBridge.invoke("open_engine_wizard");
@@ -231,7 +222,6 @@ export class AppController {
       this.publish({ error: errorMessage(error) });
     }
   }
-
   async refresh(): Promise<void> {
     const engineFallback = window.TauriBridge.isBrowserMode()
       ? { phase: backendUnavailablePhase }
@@ -248,30 +238,38 @@ export class AppController {
     this.publish(patch);
     await this.engines.finishPreparation(engine);
   }
-
   async start(): Promise<void> {
+    if (
+      this.snapshot.busy === "warming" ||
+      this.snapshot.busy === "starting" ||
+      this.snapshot.busy === "stopping" ||
+      !(await this.chooseRegion(true))
+    )
+      return;
+    this.sessionStatus.reset();
     this.publish({ busy: "warming", error: null, notice: null, captureWarning: null });
     try {
       await this.saveSettings(true);
       await this.engines.ready();
+      if (this.disposed) return;
       this.publish({ busy: "starting" });
       await window.TauriBridge.invoke("start_translation");
+      if (this.current().busy !== "starting") return;
       this.publish({ running: true, busy: "idle", notice: "Translation started" });
     } catch (error) {
       this.publish({ running: false, busy: "idle", error: errorMessage(error) });
     }
   }
-
   async stop(): Promise<void> {
     this.publish({ busy: "stopping", error: null });
     try {
       await window.TauriBridge.invoke("stop_translation");
+      this.sessionStatus.reset();
       this.publish({ running: false, busy: "idle", notice: "Translation stopped" });
     } catch (error) {
       this.publish({ busy: "idle", error: errorMessage(error) });
     }
   }
-
   async saveSettings(silent = false): Promise<void> {
     try {
       await this.settingsWriter.save(this.snapshot.settings);
@@ -292,31 +290,25 @@ export class AppController {
     this.publish({ settings });
     await this.persistSettingsInBackground();
   }
-
   async setRecognitionPreset(value: keyof typeof recognitionPresets): Promise<void> {
     const preset = recognitionPresets[value];
     await this.editSettings((settings) => Object.assign(settings.translation.ocr, preset));
   }
-
   async setRecognition(choice: Partial<RecognitionChoice>): Promise<void> {
     await this.editSettings((settings) => applyRecognition(settings, choice));
   }
-
   async setTranslateAllOcrText(enabled: boolean): Promise<void> {
     await this.editSettings((settings) => (settings.translation.translateAllOcrText = enabled));
   }
-
   async setCpuOnly(enabled: boolean): Promise<void> {
     await this.editSettings((settings) => (settings.translation.localEngine.cpuOnly = enabled));
   }
-
   async setContinuity(enabled: boolean): Promise<void> {
     await this.editSettings((settings) => {
       settings.translation.enableContextAware = enabled;
       settings.translation.contextLevel = enabled ? "memoryAndRecent" : "off";
     });
   }
-
   async updateOverlay(patch: Partial<AppSettings["overlay"]>): Promise<void> {
     const settings = structuredClone(this.snapshot.settings);
     settings.overlay = { ...settings.overlay, ...patch };
@@ -333,14 +325,12 @@ export class AppController {
       void this.persistSettingsInBackground();
     }, 250);
   }
-
   async updatePreference(
     kind: "minimizeToTray" | "autoCheckUpdates",
     enabled: boolean,
   ): Promise<void> {
     await this.editSettings((settings) => (settings[kind] = enabled));
   }
-
   async testTranslation(): Promise<void> {
     this.publish({ busy: "saving", notice: "Running a private sample translation…", error: null });
     try {
@@ -365,7 +355,6 @@ export class AppController {
       void this.checkForUpdatesAutomatically();
     }, 2000);
   }
-
   async checkForUpdatesAutomatically(): Promise<void> {
     const completedAt = await this.updates.checkAutomatic(this.snapshot.settings, this.clock);
     if (completedAt === null) return;
@@ -375,11 +364,9 @@ export class AppController {
     if (!this.settingsLoaded) return;
     await this.persistSettingsInBackground();
   }
-
   async checkForUpdates(): Promise<void> {
     await this.updates.check("manual");
   }
-
   async installUpdate(): Promise<void> {
     await this.updates.install();
   }

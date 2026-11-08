@@ -9,6 +9,7 @@
     <link rel="stylesheet" href="styles/overlay.css">
     <link rel="stylesheet" href="styles/overlay-settings.css">
     <link rel="stylesheet" href="styles/overlay-theme.css">
+    <link rel="stylesheet" href="styles/overlay-session-status.css">
 </head>
 <body>
     <!--
@@ -56,12 +57,12 @@
 
     <!-- Subtitle display area -->
     <div id="subtitle-container" class="subtitle-container hidden">
-        <!-- Lightweight status / fallback hint (shown only when useful) -->
-        <div id="subtitle-hint" class="subtitle-hint" aria-live="polite">
-            <span class="hint-dot" aria-hidden="true"></span>
-            <span id="subtitle-hint-text"></span>
-        </div>
         <div id="subtitle-text" class="subtitle-text"></div>
+    </div>
+
+    <div id="overlay-session-status" class="overlay-session-status" role="status" aria-live="polite" hidden>
+        <span id="overlay-session-status-text"></span>
+        <button id="overlay-session-status-action" type="button" hidden>Exit to Home</button>
     </div>
 
     <!-- Quick subtitle style popup -->

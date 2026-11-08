@@ -15,6 +15,10 @@ pub mod ocr_stability;
 pub mod pipeline_pacing;
 #[path = "../src-tauri/src/pipeline_repeat_policy.rs"]
 pub mod pipeline_repeat_policy;
+#[path = "../src-tauri/src/pipeline_session.rs"]
+pub mod pipeline_session;
+#[path = "../src-tauri/src/subtitle_activity.rs"]
+pub mod subtitle_activity;
 #[path = "../src-tauri/src/llm/text_utils.rs"]
 pub mod text_utils;
 #[path = "../src-tauri/src/translation_eligibility.rs"]

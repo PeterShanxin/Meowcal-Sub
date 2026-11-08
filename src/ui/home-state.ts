@@ -16,6 +16,7 @@ export const backendUnavailablePhase = "backendUnavailable";
 export function isSessionLocked(snapshot: UiSnapshot): boolean {
   return (
     snapshot.running ||
+    snapshot.busy === "selecting" ||
     snapshot.busy === "warming" ||
     snapshot.busy === "starting" ||
     snapshot.busy === "stopping"
@@ -40,6 +41,7 @@ export function deriveHomePresentation(snapshot: UiSnapshot): HomePresentation {
 
   if (snapshot.running) {
     const warning = snapshot.captureWarning;
+    const waiting = snapshot.subtitleActivity === "waiting";
     return {
       state: "running",
       statusLabel: "Running",
@@ -49,8 +51,27 @@ export function deriveHomePresentation(snapshot: UiSnapshot): HomePresentation {
       actionLabel: snapshot.busy === "stopping" ? "Stopping…" : "Stop translation",
       actionIcon: "stop",
       actionDisabled: snapshot.busy !== "idle",
-      supportLine: warning ? describeCaptureWarning(warning) : "Overlay active · Local processing",
-      supportTone: warning ? "warning" : "success",
+      supportLine: warning
+        ? describeCaptureWarning(warning)
+        : waiting
+          ? "Waiting for subtitles"
+          : "Overlay active · Local processing",
+      supportTone: warning ? "warning" : waiting ? "neutral" : "success",
+    };
+  }
+
+  if (snapshot.busy === "selecting") {
+    return {
+      state: "checking",
+      statusLabel: "Select area",
+      title: "Confirm the subtitle area",
+      description: "Confirm the saved box or adjust it to fit the original subtitles.",
+      action: "none",
+      actionLabel: "Confirm in the selector…",
+      actionIcon: "area",
+      actionDisabled: true,
+      supportLine: "Cancel to return without starting",
+      supportTone: "neutral",
     };
   }
 
@@ -156,9 +177,9 @@ export function deriveHomePresentation(snapshot: UiSnapshot): HomePresentation {
       state: "notReady",
       statusLabel: "Almost ready",
       title: "Choose the subtitle area",
-      description: "Draw a box around the original subtitles once, then start watching.",
-      action: "selectRegion",
-      actionLabel: "Select subtitle area",
+      description: "Start translation, then confirm a box around the original subtitles.",
+      action: "start",
+      actionLabel: "Start translation",
       actionIcon: "area",
       actionDisabled: false,
       supportLine: "Engine ready · Area not selected",
@@ -170,7 +191,7 @@ export function deriveHomePresentation(snapshot: UiSnapshot): HomePresentation {
     state: "ready",
     statusLabel: "Ready",
     title: "Ready for subtitles",
-    description: "Start when your episode is playing. Everything stays on this PC.",
+    description: "Start, then confirm the subtitle area. Everything stays on this PC.",
     action: "start",
     actionLabel: "Start translation",
     actionIcon: "play",

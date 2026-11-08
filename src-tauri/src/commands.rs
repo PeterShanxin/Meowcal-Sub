@@ -15,13 +15,13 @@ use crate::overlay;
 use crate::overlay_ipc::send_overlay_message;
 use crate::pipeline_capture::{try_capture, CaptureAttemptResult, CaptureSessionState};
 use crate::pipeline_repeat_policy as repeat_policy;
+use crate::pipeline_status::SessionStatus;
 use crate::selector_window::{self, OpenAreaSelectorResult, SelectorSnapshot};
 use crate::session_lifecycle::sleep_until_stopped;
 use crate::sync_utils::lock_or_recover;
 use crate::system_info::SystemInfo;
 use crate::wizard_contracts::WizardTranslationTest;
 use crate::{hy_mt_installer, hy_mt_runtime};
-use scopeguard::defer;
 use serde::Serialize;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
@@ -458,14 +458,8 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
     ));
 
     let translation_handle = tokio::spawn(async move {
-        let app_for_guard = app.clone();
-        defer! {
-            let state = app_for_guard.state::<AppState>();
-            capture::close_capture_session();
-            *lock_or_recover(&state.is_running) = false;
-            let _ = app_for_guard.emit("display-context-changed", ());
-            info!("Translation loop cleanup complete");
-        }
+        let mut activity =
+            SessionStatus::new(app.clone(), session_id, stop_rx.clone(), pacer.period());
 
         info!("Translation loop started");
         info!("Initializing OCR engine (language={})", source_language);
@@ -550,6 +544,7 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
             {
                 debug!("Capture region changed, resetting subtitle context");
                 translation_manager.reset_context();
+                activity.interrupt();
                 recent_lines.clear();
                 translator.set_last_backend_was_mock(true);
                 last_attempt_at = Instant::now()
@@ -574,6 +569,7 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
             ) {
                 CaptureAttemptResult::Success(result) => result,
                 CaptureAttemptResult::RetryAfterDelay => {
+                    activity.interrupt();
                     sleep_until_stopped(pacer.remaining_for(frame_started), &mut stop_rx).await;
                     continue;
                 }
@@ -615,6 +611,7 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
                 Ok(result) => result,
                 Err((error, what)) => {
                     warn!("⚠️ {}: {}", what, error);
+                    activity.recognition_failed();
                     sleep_until_stopped(pacer.remaining_for(frame_started), &mut stop_rx).await;
                     continue;
                 }
@@ -633,6 +630,7 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
                 continue;
             }
 
+            activity.observe(token, !ocr_result.is_empty());
             let ocr_result = band_filter.apply_captured(ocr_result, eligibility, captured_at);
 
             if ocr_result.is_empty() {

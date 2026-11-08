@@ -12,6 +12,7 @@
 
 /// Shared application state that persists across Tauri commands
 pub mod app_state;
+pub mod area_selection;
 
 /// The identity and visible name for the current build profile
 pub mod app_profile;
@@ -42,8 +43,10 @@ pub mod ocr_gate;
 /// Enumerating and installing the Windows OCR language packs
 pub mod ocr_language_packs;
 
-/// Decides when to tell the viewer why nothing is showing
+/// Subtitle retirement and deduplicated frame diagnostics
 pub mod pipeline_notices;
+mod pipeline_status;
+pub mod subtitle_activity;
 
 /// Opens the OCR client a translation session reads frames with
 mod pipeline_ocr;

@@ -7,131 +7,38 @@ const {
   normalizeTranslationDisplayState,
 } = require("../../src/scripts/translation-display.js");
 
-describe("translation display states", () => {
-  it("keeps failed replay recovery unavailable rather than claiming success", () => {
-    expect(
-      getTranslationPresentation("temporarilyUnavailable", "mock", [
-        "local_engine: context_leakage",
-        "local_engine: timeout",
-      ]),
-    ).toMatchObject({
-      replaceText: false,
-      hint: "Translation temporarily unavailable",
-      severity: "error",
-    });
-  });
-
+describe("quiet subtitle presentation", () => {
   it.each([
-    ["translated", true, false],
-    ["warming", false, false],
-    ["temporarilyUnavailable", false, false],
-    ["sourceOnly", false, false],
-    ["noSubtitleText", false, false],
-    ["sourceUnreadable", false, false],
-    ["engineSlow", false, false],
-    ["stopped", false, true],
-  ])("presents %s without mislabeling source text", (state, replaceText, clearText) => {
-    expect(getTranslationPresentation(state)).toMatchObject({
-      state,
-      replaceText,
-      clearText,
-    });
+    ["translated", true, false, false],
+    ["warming", false, false, true],
+    ["temporarilyUnavailable", false, false, true],
+    ["sourceOnly", false, true, false],
+    ["noSubtitleText", false, true, false],
+    ["sourceUnreadable", false, false, true],
+    ["engineSlow", false, false, true],
+    ["stopped", false, true, false],
+  ])("presents %s without an inline notice", (state, replaceText, clearText, keepText) => {
+    expect(getTranslationPresentation(state)).toEqual({ state, replaceText, clearText, keepText });
   });
 
-  // The pipeline is still healthy here, so the box has to stay up with an
-  // explanation instead of leaving the previous translation on screen.
-  it("retires the previous line when the region has no text", () => {
-    expect(getTranslationPresentation("noSubtitleText")).toMatchObject({
-      hint: "No text in the selected area",
-      persist: true,
-    });
-  });
-
-  // OCR read the region, so this state must never claim the area is empty -
-  // that sends the viewer to move a region that was never the problem.
-  it.each([
-    ["tooShort", "Only stray marks found in the selected area"],
-    ["untranslatable", "Nothing translatable in the selected area"],
-    ["tooLong", "Too much text in the selected area — narrow it to the subtitle line"],
-    // These two keys are produced by `OcrRejection::as_str` on the Rust side.
-    // Nothing else pins them together: an unknown key silently falls back to the
-    // generic hint below, so renaming one would downgrade the overlay without
-    // failing anything.
-    ["garbled", "The text in this area came back too garbled to translate"],
-    ["bandHeld", "Waiting — the text here does not look like dialogue yet"],
-  ])("explains %s without claiming the area is empty", (reason, hint) => {
-    expect(getTranslationPresentation("sourceUnreadable", "", [reason])).toMatchObject({
-      hint,
-      persist: true,
-    });
-  });
-
-  // The rejection states exist so a refused read does not cost the viewer the
-  // line they were reading. `clearText: false` does not achieve that on its own:
-  // the overlay's hint path blanks the text on its way to showing the banner, so
-  // a garbled frame arriving 250ms after a good translation replaced a readable
-  // line with a warning. `keepText` is the flag the surface resolver acts on.
-  it("keeps the last good translation while explaining a refused read", () => {
-    for (const reason of ["tooShort", "untranslatable", "tooLong", "garbled", "bandHeld"]) {
+  it.each(["tooShort", "untranslatable", "tooLong", "garbled", "bandHeld", "somethingNew"])(
+    "keeps the readable line during %s without warning text",
+    (reason) => {
       expect(getTranslationPresentation("sourceUnreadable", "", [reason])).toMatchObject({
-        clearText: false,
-        replaceText: false,
         keepText: true,
+        clearText: false,
       });
-    }
-  });
+      expect(getTranslationPresentation("sourceUnreadable", "", [reason]).hint).toBeUndefined();
+    },
+  );
 
-  // The counterpart, and the reason this is not simply "never clear": an empty
-  // region is the state where the previous translation *must* go, or a stale
-  // line sits over the video after the subtitles stop.
-  it("still retires the line when the region is genuinely empty", () => {
-    expect(getTranslationPresentation("noSubtitleText").keepText).toBeFalsy();
-  });
-
-  it("falls back to a generic reason when the backend sends an unknown one", () => {
-    const presentation = getTranslationPresentation("sourceUnreadable", "", ["somethingNew"]);
-    expect(presentation.hint).toBe("Text in this area could not be read");
-  });
-
-  // Issue #60: a busy machine used to look like a broken app, because a slow
-  // call blanked the overlay and said nothing. The engine is answering here, so
-  // this must not read as an outage, and it must not clear the line either -
-  // the previous translation is the best thing still on screen.
-  it("says the engine is behind rather than unavailable", () => {
-    const presentation = getTranslationPresentation("engineSlow");
-    expect(presentation).toMatchObject({
-      hint: "Translation engine is falling behind — close other heavy apps",
-      severity: "warn",
-      persist: true,
-      clearText: false,
-      replaceText: false,
-      // `clearText: false` alone did not achieve this: the overlay's hint path
-      // blanked the text on its way to showing the banner, so the line was lost
-      // anyway. `keepText` is the flag the surface resolver actually acts on.
-      keepText: true,
-    });
-    expect(presentation.hint).not.toMatch(/unavailable|failed|error/i);
-  });
-
-  it("labels passthrough payloads from older backends as source only", () => {
+  it("never labels a passthrough result as translated", () => {
     expect(normalizeTranslationDisplayState(undefined, "mock")).toBe("sourceOnly");
+    expect(getTranslationPresentation(undefined, "mock").replaceText).toBe(false);
   });
 
-  it("keeps translated as the compatibility default for real backends", () => {
+  it("preserves the existing real-backend compatibility default", () => {
     expect(normalizeTranslationDisplayState(undefined, "local_engine")).toBe("translated");
-  });
-});
-
-it("shows recovery and terminal failure without presenting source as translation", () => {
-  expect(
-    getTranslationPresentation("warming", "mock", ["local_engine: engine_recovering"]),
-  ).toMatchObject({ hint: "Translation engine is recovering", replaceText: false });
-  expect(
-    getTranslationPresentation("temporarilyUnavailable", "mock", [
-      "local_engine: engine_recovery_failed",
-    ]),
-  ).toMatchObject({
-    hint: "Translation engine stopped — restarting it shortly",
-    replaceText: false,
+    expect(normalizeTranslationDisplayState(undefined)).toBe("translated");
   });
 });

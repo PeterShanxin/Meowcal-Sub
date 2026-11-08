@@ -17,7 +17,6 @@
     "src/scripts/overlay-hit-bounds.js",
     "src/scripts/overlay-liveness.js",
     "src/scripts/overlay-settings-menu.js",
-    "src/scripts/overlay-subtitle-hint.js",
     "src/scripts/overlay-subtitle-surface.js",
     "src/scripts/overlay-timers.js",
     "src/scripts/overlay-window-clip.js",
@@ -47,18 +46,19 @@
     "scripts/store-submission.mjs",
     "scripts/workflow-runner-policy.mjs",
     "src/ui/settings-writer.ts",
-    "src/ui/display-controller.ts"
+    "src/ui/display-controller.ts",
+    "src/scripts/overlay-session-status.js",
+    "src/ui/session-status-controller.ts"
   ],
   "legacyFileMaxLines": {
     "src-tauri/src/capture/graphics_capture.rs": 469,
-    "src-tauri/src/commands.rs": 922,
+    "src-tauri/src/commands.rs": 920,
     "src-tauri/src/config.rs": 473,
     "src-tauri/src/llm/context.rs": 620,
     "src-tauri/src/llm/foundry_local.rs": 1557,
     "src-tauri/src/llm/manager.rs": 699,
     "src-tauri/src/llm/prompt_router.rs": 471,
-    "src/scripts/overlay.js": 1045,
-    "src/scripts/selector.js": 634,
-    "src/styles/overlay.css": 438
+    "src/scripts/overlay.js": 1030,
+    "src/scripts/selector.js": 619
   }
 }
