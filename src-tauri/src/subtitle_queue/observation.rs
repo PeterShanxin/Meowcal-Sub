@@ -111,5 +111,8 @@ fn identity(text: &str) -> String {
         .join(" ")
         .trim_end_matches(['.', ',', '!', '?', ';', ':', '。', '，', '！', '？', '…'])
         .replace(['’', '‘'], "'")
+        // PP-OCR alternates these equivalent forms on an unchanged Chinese
+        // glyph. Keep other CJK character changes significant.
+        .replace(['凈', '淨'], "净")
         .to_lowercase()
 }

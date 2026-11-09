@@ -305,7 +305,8 @@ Advanced option for menus and pages; it bypasses subtitle-shape rules while
 retaining stable cue confirmation and FIFO ordering.
 
 The subtitle queue confirms consecutive normalized readings. Normalization
-keeps word boundaries, digits and apostrophes. A transient changed read cannot
+keeps word boundaries, digits and apostrophes, while treating 净/凈/淨 as one
+character. Other CJK character changes remain significant. A transient changed read cannot
 replace the active identity. A confirmed new cue or sustained empty source ends
 the previous cue. OCR processing time does not count as observed empty time.
 A paused cue remains active after its completed work leaves the queue.

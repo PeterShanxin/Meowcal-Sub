@@ -86,6 +86,38 @@ fn stable_negations_numbers_and_single_chinese_characters_are_separate_cues() {
 }
 
 #[test]
+fn equivalent_clean_glyphs_keep_the_active_cue_but_other_cjk_changes_do_not() {
+    let start = Instant::now();
+    let mut queue = SubtitleQueue::<String>::new(Duration::from_millis(125));
+    let first = admit(&mut queue, "最后一片净土", start, 1);
+    for (i, text) in ["最后一片凈土", "最后一片淨土", "最后一片净土"]
+        .into_iter()
+        .enumerate()
+    {
+        let at = start + Duration::from_millis(300 + i as u64 * 250);
+        assert!(observe(&mut queue, text, at, 10 + i as u64).is_none());
+    }
+    assert_eq!(queue.stats(start).enqueued, 1);
+    assert_eq!(
+        admit(
+            &mut queue,
+            "最后一片净士",
+            start + Duration::from_secs(1),
+            20
+        ),
+        first + 1
+    );
+    assert_eq!(
+        admit(&mut queue, "發", start + Duration::from_secs(2), 30),
+        first + 2
+    );
+    assert_eq!(
+        admit(&mut queue, "髮", start + Duration::from_secs(3), 40),
+        first + 3
+    );
+}
+
+#[test]
 fn busy_translation_preserves_every_stable_cue_in_fifo_order() {
     let start = Instant::now();
     let mut queue = SubtitleQueue::new(Duration::from_millis(125));
