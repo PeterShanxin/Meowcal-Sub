@@ -8,6 +8,12 @@ The subtitle card keeps a 720px logical width for one-line and two-line cues. Th
 
 `scenarios.json` is the reviewable source of truth for the authored timeline. Every segment has an ID, onset, duration, and expected role. Subtitle cues use `expected: "subtitle"`; blank intervals use `expected: "blank"`; watermark, timer, scene text, and credits use `expected: "negative"` and identify their `kind`.
 
+The credit segments retain their exclusion oracle for comparison. The current
+subtitle policy also translates rapid fixed-position names to preserve fast
+dialogue. Such admissions therefore fail the original aggregate negative gate;
+report them separately from watermark/timer exclusions and dialogue recovery.
+Do not change the recorded oracle to turn that result into a pass.
+
 The **30-second rapid dialogue** adds one-second English cues with negations,
 changed numbers and returning text. The **12-second single-character Chinese
 dialogue** covers meaningful one-glyph replies. Run both at 1x with Repeat off
