@@ -62,11 +62,15 @@ application's update changes the other's pin.
 The current session path is:
 
 ```text
-capture -> OCR in Core (PP-OCRv6, or preprocess -> Windows OCR) -> normalize/dedupe
-        -> translate -> validate -> display event -> overlay
+capture -> OCR in Core -> band/text eligibility -> stable cue FIFO
+        -> serial translation/validation -> readable FIFO presentation -> overlay
 ```
 
-`commands.rs` currently coordinates much of this path. `TranslationManager`
+`commands.rs` coordinates capture and recognition. `subtitle_queue.rs` and its
+observation module own stable cue identity, pending work, the active source and
+display lifetime. `pipeline_translation.rs` runs one inference worker while
+`pipeline_translation/presentation.rs` presents completed cues in FIFO order.
+`TranslationManager`
 owns backend selection, fallback, context storage, and diagnostics;
 `llm/translation_planner.rs` owns the context-tier progression state machine
 (degradation on timeout/slow success, persisted effective tier) above one
@@ -92,6 +96,7 @@ Source OCR is never represented as successful translation.
 | App/window lifecycle       | `src-tauri/src/main.rs` (composition root), `window_lifecycle.rs`, `tray.rs`, `app_logging.rs`, `selector_window.rs`, `wizard_window.rs`                                                                              | One lifecycle service owns restore/show ordering, tray, and shutdown                                                                                                                         |
 | Persisted configuration    | `src-tauri/src/config.rs`, `capture_region.rs`, `settings_service.rs`                                                                                                                                                 | One versioned config service owns defaults, validation, migration, and writes                                                                                                                |
 | Capture and OCR            | `capture/`, `ocr/` (product policy), `core/src/ocr/` (native recognition), `ocr_language_packs.rs` (Windows pack setup)                                                                                                                                            | Separate capture/OCR services; pipeline orchestrator owns sequencing                                                                                                                         |
+| Subtitle lifecycle | `subtitle_queue.rs`, `subtitle_queue/observation.rs`, `subtitle_timing.rs` | One owner for cue identity, FIFO work and readable presentation |
 | Translation eligibility    | `translation_eligibility.rs`                                                                                                                                                                                          | One owner for whether the pipeline judges subtitle shape; `ocr::BandFilter` and `ocr_gate` read it, neither decides it                                                                       |
 | Translation                | `llm/manager.rs` (selection/fallback/context storage), `llm/translation_planner.rs` (context-tier progression), `llm/translation_attempt.rs` (attempt/retry state machine)                                            | Pipeline service owns attempts and typed outcomes; validators do not own transport                                                                                                           |
 | Translation transport      | `core_client` and `llm/core_translation.rs` (managed HY-MT); `llm/transport_http.rs` (compatibility endpoints)                                                                                                                                                                             | Namespace discovery, endpoint URL assembly, and GET/POST dispatch with 404 fallback; no retry/context/validation policy                                                                      |
@@ -128,7 +133,9 @@ Shared contracts have one owner before parallel decomposition begins:
   repopulate history. Even output rejected by the generic validator is
   checked for replay before choosing fallback. Managed contextual length
   rejections retain their raw output and recovery receipt until replay is
-  classified; unrelated rejection still reports to Core, and stronger corruption
+  classified. A wrong-language answer gets one immediate retry with an explicit
+  target-language instruction and no context, within the original attempt and
+  time budgets. Exhausted rejection reports to Core, and stronger corruption
   signals retain immediate recovery. The retry can confirm that two
   different cues legitimately share a translation. This is a replay
   guard, not a semantic detector for paraphrases or previously unseen leakage.
@@ -287,35 +294,59 @@ Shared contracts have one owner before parallel decomposition begins:
   owners listed above, and deliberately left `overlay.js` and `selector.js` as
   adapters rather than migrating them to Lit.
 
-## Subtitle band admission
+## Subtitle admission and presentation
 
-Subtitle bands use geometry only to track a screen position. `ocr/band_cue.rs`
-confirms text changes across separate observations against a fixed content
-anchor. Spacing and punctuation are normalized; a single transient wrong glyph
-in a long reading does not advance that anchor. Two nearby readings can confirm
-a new candidate when both differ from the old anchor. Short text, numbers and
-negations remain distinct when confirmed.
-`band_window.rs` owns admission: a newly confirmed cue can recover from old
-`Static` evidence; rapid confirmed changes must hold long enough to recover
-from `Churning`. Both use observed time, excluding capture outages, with no
-periodic reset of rejected bands. Repeated numeric-only updates at roughly two seconds or faster are held
-as counters after the second change. Slower numeric dialogue and a single
-changed number remain admissible. Rapid numeric-only dialogue lists remain
-indistinguishable from counters at this boundary.
-Counter evidence survives empty OCR observations; a held numeric reading
-recovers after roughly 2.2 seconds of observed stability, or a different text
-pattern establishes a new cue.
-Empty observations end cue presence, so a repeated cue can reappear. Sampling
-gaps longer than two seconds or twice the capture interval do not confirm
-candidates or count toward observed cue duration.
-Spatial scatter still rejects wandering scene text. `Translate any text`
-bypasses and resets this history. Neither policy belongs to Core.
+`ocr/band_cue.rs` confirms text changes against a fixed content anchor.
+Band stability uses monotonic capture times, so uneven OCR completion cannot
+expire an otherwise consecutive pair of source images.
+Spatial scatter rejects wandering scene text; unchanging bands retain static
+watermark history. Confirmed dialogue is not rejected for changing rapidly or
+for changing a number. Two identical changed readings also release a static
+anchor after a pause; a single changed reading retains it.
+Pure numeric readings remain untranslatable.
+Rapid names in credit sequences are translated too. The raw turnover
+categories remain diagnostics only.
+Single Chinese characters pass the text gate. `Translate any text` remains an
+Advanced option for menus and pages; it bypasses subtitle-shape rules while
+retaining stable cue confirmation and FIFO ordering.
 
-Band diagnostics report time, band/cue IDs, raw and settled verdicts, reasons,
-and recovery without screen text. `MEOWCAL_BAND_LOG` enables local JSONL
-diagnostics; adding `MEOWCAL_BAND_LOG_TEXT=1` explicitly includes OCR text for
-replay. Keep such files private and outside version control. Historical logs
-containing only character counts cannot validate content-aware admission.
+The subtitle queue confirms consecutive normalized readings. Normalization
+keeps word boundaries, digits and apostrophes, while treating 净/凈/淨 as one
+character. Other CJK character changes remain significant. A transient changed read cannot
+replace the active identity. A confirmed new cue or sustained empty source ends
+the previous cue. OCR processing time does not count as observed empty time.
+A paused cue remains active after its completed work leaves the queue.
+
+Inference proceeds before source disappearance. Busy inference retains pending
+cues. Presentation starts as soon as the FIFO head completes and the previous
+line has had a reading interval. Source duration, translated length and delay
+set that interval. The source duration caps the reading budget, bounded to
+350–4000 ms, so longer translations cannot create a persistent display backlog.
+A length-based minimum up to 1200 ms is limited by the same budget. One sampling
+interval is reserved for source-duration uncertainty. A pending successor can
+retain the previous line briefly, up to four seconds, instead of inserting a
+blank flash. Text replacement
+has no per-cue slide animation.
+
+Each cue keeps its ID through translation and display. `captureId` identifies the
+source observation; `updateId` orders display events within a session, including
+clears. Region changes and session stop invalidate queued and active work.
+The queue logs input/output rates, depth, oldest age and skip counts every five
+seconds. Depth above three or age above three seconds reports falling throughput.
+Only a severe stall (32 queued entries or a 15-second queue age) skips old work
+and resumes from the newest cue. Normal backlog is retained and measured.
+
+OCR pacing starts at the configured interval. After 12 successful samples, a
+rolling p90 capture/OCR cost can shorten it to half that interval, with bounded
+per-frame changes. Complex frames do not add idle time beyond the configured
+cadence; recognition overruns already slow sampling. Reading budgets and stage
+logs use the measured interval between successful captures, including outages.
+
+Band diagnostics omit screen text. `MEOWCAL_BAND_LOG` enables local JSONL;
+`MEOWCAL_BAND_LOG_TEXT=1` additionally includes OCR text for replay. Keep those
+files private. Stage logs and character counts cannot establish real-media
+ground truth. `evals/realtime-subtitles/run.ps1` compares the queue with the
+pre-FIFO policies under deterministic timing; native gates verify the full path.
 
 ## Dependency direction
 

@@ -1,7 +1,5 @@
 //! Content identity for one spatial band. Geometry never identifies a cue.
 
-/// The existing 55 cues/minute ceiling, expressed as a minimum cue duration.
-const MIN_CUE_MS: u64 = (60_000.0 / super::band_verdict::MAX_CUE_RATE_PER_MINUTE) as u64;
 /// A held reading may stop being admitted, without banning its screen position.
 const STATIC_MS: u64 = (60_000.0 / super::band_verdict::MIN_CUE_RATE_PER_MINUTE) as u64;
 /// Preserve a long-established static identity across OCR dropouts without
@@ -20,8 +18,6 @@ pub(super) struct Cue {
     last_text: String,
     absent: bool,
     static_anchor: bool,
-    fast_change: bool,
-    numeric_changes: usize,
     pub(super) id: u64,
     pub(super) confirmed: bool,
     pub(super) changed: bool,
@@ -46,14 +42,13 @@ impl Cue {
             return;
         }
         if (!self.absent && text == self.anchor)
-            || (self.static_anchor && (text == self.anchor || similar(&self.anchor, &text)))
+            || (self.static_anchor
+                && (text == self.anchor
+                    || (similar(&self.anchor, &text) && text != self.last_text)))
         {
             self.pending.clear();
             self.absent = false;
             self.confirmed = true;
-            if self.observed_ms.saturating_sub(self.started_observed_ms) >= 2 * MIN_CUE_MS {
-                self.numeric_changes = 0;
-            }
         } else if (text == self.pending
             || text == self.last_text
             || (similar(&self.pending, &text)
@@ -70,25 +65,6 @@ impl Cue {
                     .observed_ms
                     .saturating_sub(at_ms.saturating_sub(self.pending_since));
             }
-            self.fast_change = self.id > 0
-                && !self.absent
-                && self
-                    .pending_observed_ms
-                    .saturating_sub(self.started_observed_ms)
-                    < MIN_CUE_MS;
-            self.numeric_changes = if numeric_template(&self.anchor)
-                == numeric_template(&self.pending)
-                && (self.numeric_changes >= 2
-                    || (!self.absent
-                        && self
-                            .pending_observed_ms
-                            .saturating_sub(self.started_observed_ms)
-                            <= 2 * MIN_CUE_MS))
-            {
-                self.numeric_changes + 1
-            } else {
-                0
-            };
             self.anchor = std::mem::take(&mut self.pending);
             self.started_observed_ms = self.pending_observed_ms;
             self.id += 1;
@@ -126,34 +102,16 @@ impl Cue {
         if !self.confirmed || self.id == 0 {
             return Verdict::Glimpsed;
         }
+        if !self.anchor.chars().any(char::is_alphabetic) {
+            return Verdict::Untranslatable;
+        }
         let age = self.observed_ms.saturating_sub(self.started_observed_ms);
         if age >= STATIC_MS {
             Verdict::Static
-        } else if self.numeric_changes >= 2 || (self.fast_change && age < MIN_CUE_MS) {
-            Verdict::Churning
         } else {
             Verdict::Subtitle
         }
     }
-}
-
-// Repeated numeric-only updates at up to twice the rapid-cue duration describe
-// counters. Slower numeric dialogue and a single changed number remain eligible.
-fn numeric_template(text: &str) -> String {
-    let mut result = String::new();
-    let mut number = false;
-    for ch in text.chars() {
-        if ch.is_numeric() {
-            if !number {
-                result.push('#');
-            }
-            number = true;
-        } else {
-            result.push(ch);
-            number = false;
-        }
-    }
-    result
 }
 
 fn normalize(text: &str) -> String {
@@ -163,6 +121,7 @@ fn normalize(text: &str) -> String {
         .enumerate()
         .filter(|(i, c)| {
             c.is_alphanumeric()
+                || **c == '\''
                 || ((**c == '.' || **c == ',')
                     && *i > 0
                     && chars[*i - 1].is_numeric()
@@ -190,6 +149,34 @@ fn similar(anchor: &str, text: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_confirmed_change_can_release_a_static_anchor_with_or_without_a_blank() {
+        for (before, after) in [
+            ("The sailor is waiting here.", "The tailor is waiting here."),
+            (
+                "我们现在应该在门口等待明天早上的班车",
+                "我们现在不该在门口等待明天早上的班车",
+            ),
+        ] {
+            for blank in [false, true] {
+                let mut cue = Cue::default();
+                for at in (0..20_000).step_by(250) {
+                    cue.observe(before, at, 2_000);
+                }
+                assert_eq!(cue.verdict(), super::super::band_verdict::Verdict::Static);
+                if blank {
+                    cue.missing();
+                }
+                cue.observe(after, 20_250, 2_000);
+                assert!(!cue.changed);
+                cue.observe(after, 20_500, 2_000);
+                assert!(cue.changed, "blank={blank}");
+                assert_eq!(cue.id, 2);
+                assert_eq!(cue.verdict(), super::super::band_verdict::Verdict::Subtitle);
+            }
+        }
+    }
 
     #[test]
     fn a_candidate_cannot_drift_through_pairwise_similar_readings() {

@@ -219,31 +219,6 @@ pub fn corruption_share(text: &str) -> f32 {
     garbled as f32 / tokens.len() as f32
 }
 
-// There was an `is_worse_read` here, comparing two reads of one cue and keeping
-// the cleaner. It is gone, and the note is worth more than the code was.
-//
-// A noisier re-read of the line on screen is classified `Repeat` and never
-// reaches the translator - except the growth case, where a read that *contains*
-// the previous line and adds to it is `Extended` and does reach the translator.
-// A suffix is a second row arriving and must be translated (the only read that
-// will ever carry it), but a garbled prefix is the same cue read worse. The
-// caller that survived asked `is_worse_read` about `Extended` reads - which, by
-// the definition in `ocr_stability`, *contain* the previous read. Scoring the
-// whole candidate against its own prefix charged the newly arrived row's OCR
-// noise to a baseline that never held that row, so any noise in the new text
-// made the share strictly greater and the read was dropped. Dropped reads are
-// never remembered, so the second row of a two-line cue would never appear at
-// all.
-//
-// The garbled-prefix half of that gap is closed in `ocr_stability`:
-// `wears_a_garbled_prefix` refuses an `Extended` read whose growth is a prefix
-// carrying a corruption marker, so `bf//dzz:: However, isn't he a hero from an
-// era` - the clearest instance in issue #59 - is a `Repeat` rather than a
-// rival rendering. The suffix half remains deliberately open, because a suffix
-// is how a second row arrives.
-//
-// See issue #59.
-
 #[cfg(test)]
 #[path = "ocr_corruption_tests.rs"]
 mod tests;

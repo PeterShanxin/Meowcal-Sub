@@ -84,8 +84,8 @@ decomposition-owned hotspots are:
 | File                                 | Ceiling | Reduction owner   |
 | ------------------------------------ | ------: | ----------------- |
 | `src-tauri/src/llm/foundry_local.rs` | 1,557 | #32               |
-| `src-tauri/src/commands.rs`          | 920 | #31 / #32 surface |
-| `src/scripts/overlay.js`             | 1,030 | #34               |
+| `src-tauri/src/commands.rs`          | 880 | #31 / #32 surface |
+| `src/scripts/overlay.js`             | 1,027 | #34               |
 | `src-tauri/src/llm/context.rs`       | 620 | #32               |
 | `src-tauri/src/llm/manager.rs`       | 699 | #32               |
 | `src/scripts/selector.js`            | 619 | #34               |

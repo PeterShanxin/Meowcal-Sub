@@ -14,7 +14,6 @@ use crate::llm::{
 use crate::overlay;
 use crate::overlay_ipc::send_overlay_message;
 use crate::pipeline_capture::{try_capture, CaptureAttemptResult, CaptureSessionState};
-use crate::pipeline_repeat_policy as repeat_policy;
 use crate::pipeline_status::SessionStatus;
 use crate::selector_window::{self, OpenAreaSelectorResult, SelectorSnapshot};
 use crate::session_lifecycle::sleep_until_stopped;
@@ -385,11 +384,9 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
     let eligibility = translation_config.eligibility();
     debug!(?translation_config.ocr, min_significant_chars = min_chars, "OCR settings");
 
-    // Pace to a deadline: a frame that ran the translator must not also pay a
-    // full interval before the next capture.
-    let pacer = crate::pipeline_pacing::Pacer::new(interval_ms);
+    // Pace capture independently of inference.
+    let mut pacer = crate::pipeline_pacing::Pacer::new(interval_ms);
 
-    let context_enabled = translation_config.enable_context_aware;
     let translation_config_for_summary = translation_config.clone();
 
     let (stop_tx, mut stop_rx) = watch::channel(false);
@@ -484,13 +481,9 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
             session_id,
             source_language.clone(),
             target_language.clone(),
+            pacer.period(),
         );
-
-        // Several lines rather than one: see `ocr_recent_lines` and issue #59.
-        let mut recent_lines = crate::ocr_recent_lines::RecentLines::new();
-        let mut last_attempt_at = Instant::now()
-            .checked_sub(crate::pipeline_repeat_policy::MOCK_RETRY_COOLDOWN)
-            .unwrap_or_else(Instant::now);
+        let translation_workers = translator.start(stop_rx.clone());
         let mut last_capture_region: Option<CaptureRegion> = None;
         let mut notices = crate::pipeline_notices::Notices::new();
 
@@ -545,11 +538,7 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
                 debug!("Capture region changed, resetting subtitle context");
                 translation_manager.reset_context();
                 activity.interrupt();
-                recent_lines.clear();
-                translator.set_last_backend_was_mock(true);
-                last_attempt_at = Instant::now()
-                    .checked_sub(crate::pipeline_repeat_policy::MOCK_RETRY_COOLDOWN)
-                    .unwrap_or_else(Instant::now);
+                translator.reset();
                 // Keep this monotonic: resetting to 0 can allow old summarization tasks to
                 // accidentally validate again once the counter reaches the same value.
                 context_generation.fetch_add(1, Ordering::SeqCst);
@@ -559,6 +548,7 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
             debug!("📸 Capturing region: {:?}", current_capture_region);
             let frame_started = Instant::now();
             let token = pipeline_clock.next_capture(session_id);
+            let region_generation = pipeline_clock.translation_generation();
             let capture_started = Instant::now();
             let captured_at = std::time::SystemTime::now();
             let capture_result = match try_capture(
@@ -617,6 +607,18 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
                 }
             };
             let ocr_ms = ocr_started.elapsed().as_millis() as u64;
+            let sample_ms = pacer.observed_interval(frame_started).as_millis() as u64;
+            let previous_period = pacer.period();
+            pacer.observe_work(frame_started.elapsed());
+            if pacer.period() != previous_period {
+                debug!(
+                    session_id,
+                    period_ms = pacer.period().as_millis() as u64,
+                    capture_ms,
+                    ocr_ms,
+                    "pipeline_sampling_calibrated"
+                );
+            }
 
             if *stop_rx.borrow() || !pipeline_clock.is_current(token) {
                 info!(
@@ -629,9 +631,29 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
                 }
                 continue;
             }
-
             activity.observe(token, !ocr_result.is_empty());
-            let ocr_result = band_filter.apply_captured(ocr_result, eligibility, captured_at);
+            let observed_text = ocr_result.text.trim().to_string();
+            let ocr_result =
+                band_filter.apply_captured(ocr_result, eligibility, frame_started, captured_at);
+            let current_text = if ocr_result.is_empty() {
+                observed_text
+            } else {
+                ocr_result.text.trim().to_string()
+            };
+            let rejection = crate::ocr_gate::classify(&current_text, min_chars, eligibility);
+            let admitted = translator.observe(
+                crate::pipeline_translation::Frame {
+                    token,
+                    region_generation,
+                    text: current_text.clone(),
+                    context_prompt: translation_manager.get_context_prompt(),
+                    started: frame_started,
+                    capture_ms,
+                    ocr_ms,
+                    sample_ms,
+                },
+                !ocr_result.is_empty() && rejection.is_none(),
+            );
 
             if ocr_result.is_empty() {
                 debug!("[FILTER: {}] skipping", band_filter.skip_reason());
@@ -639,11 +661,7 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
                 let busy = translator.is_busy();
                 if let Some(quiet) = notices.quiet_region(session_id, token.capture_id, held, busy)
                 {
-                    // The cleared line has to be translatable again: without this
-                    // the duplicate filter would suppress the identical subtitle
-                    // when it returns, leaving the overlay permanently blank.
-                    recent_lines.clear();
-                    let _ = app.emit("translation-update", quiet);
+                    translator.emit_if_idle(quiet);
                 }
 
                 sleep_until_stopped(pacer.remaining_for(frame_started), &mut stop_rx).await;
@@ -652,11 +670,7 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
 
             notices.saw_text();
 
-            let current_text = ocr_result.text.trim().to_string();
-
-            if let Some(rejection) =
-                crate::ocr_gate::classify(&current_text, min_chars, eligibility)
-            {
+            if let Some(rejection) = rejection {
                 debug!(
                     "[FILTER: {}] OCR text ({} chars, minimum {})",
                     rejection.as_str(),
@@ -667,74 +681,20 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
                 if let Some(notice) =
                     notices.unreadable_source(session_id, token.capture_id, rejection, busy)
                 {
-                    let _ = app.emit("translation-update", notice);
+                    translator.emit_if_idle(notice);
                 }
                 sleep_until_stopped(pacer.remaining_for(frame_started), &mut stop_rx).await;
                 continue;
             }
 
-            let now = Instant::now();
-            let line_change = recent_lines.classify(&current_text, now);
-            let mut force_retry_duplicate = false;
-            if line_change == crate::ocr_stability::LineChange::Repeat {
-                match repeat_policy::decide(
-                    translator.last_backend_was_mock(),
-                    now.duration_since(last_attempt_at),
-                ) {
-                    repeat_policy::RepeatAction::Skip(reason) => {
-                        debug!("[FILTER: {reason}] OCR text");
-                        translation_manager.record_ocr_line(&current_text);
-                        sleep_until_stopped(pacer.remaining_for(frame_started), &mut stop_rx).await;
-                        continue;
-                    }
-                    repeat_policy::RepeatAction::RetryPassthrough => force_retry_duplicate = true,
-                }
-            }
-
-            if !force_retry_duplicate
-                && context_enabled
-                && translation_manager.is_duplicate(&current_text)
-            {
-                debug!("[FILTER: duplicate_context] OCR text");
-                translation_manager.record_ocr_line(&current_text);
+            translation_manager.record_ocr_line(&current_text);
+            if !admitted {
                 sleep_until_stopped(pacer.remaining_for(frame_started), &mut stop_rx).await;
                 continue;
             }
-            // Deliberately no "is this read worse than the last?" check here: a
-            // noisier re-read is `Repeat` and was skipped above, so only `New`
-            // and `Extended` remain. `Extended` *contains* the last read - a
-            // garbled prefix is refused in `ocr_stability`. See `ocr_corruption`.
-
-            // Claiming the single translation slot is the point of no return:
-            // everything below records the line as handled, so it runs only if
-            // the claim succeeded. See `Translator` for why it is one at a time
-            // and why declining is safe.
-            let context_prompt = translation_manager.get_context_prompt();
-            let taken = translator.try_spawn(
-                crate::pipeline_translation::Frame {
-                    token,
-                    text: current_text.clone(),
-                    context_prompt,
-                    started: frame_started,
-                    capture_ms,
-                    ocr_ms,
-                },
-                stop_rx.clone(),
-            );
-            if !taken {
-                debug!("[DEFER: translating] OCR text");
-                sleep_until_stopped(pacer.remaining_for(frame_started), &mut stop_rx).await;
-                continue;
-            }
-
-            recent_lines.remember(&current_text, now);
             notices.translated();
-            last_attempt_at = now;
-            // Bumped here, not in the task: see `Translator`.
             context_generation.fetch_add(1, Ordering::SeqCst);
             info!("📝 OCR detected ({} chars)", current_text.chars().count());
-            translation_manager.record_ocr_line(&current_text);
-
             // Check if context needs compression (async, don't block).
             // Scheduling, cooldown, stability delay, retries, and
             // restore/cap semantics live in `ContextCompressionScheduler`.
@@ -747,12 +707,12 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
             sleep_until_stopped(pacer.remaining_for(frame_started), &mut stop_rx).await;
         }
 
+        translation_workers.stop().await;
         if pipeline_clock.is_session_current(session_id) {
             let stopped_token = pipeline_clock.next_capture(session_id);
-            let _ = app.emit(
-                "translation-update",
-                TranslationPayload::stopped(session_id, stopped_token.capture_id),
-            );
+            let mut stopped = TranslationPayload::stopped(session_id, stopped_token.capture_id);
+            stopped.update_id = pipeline_clock.next_update();
+            let _ = app.emit("translation-update", stopped);
         }
 
         info!("Translation loop ended");

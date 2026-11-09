@@ -8,8 +8,8 @@
 /// Three rules in the pipeline ask whether text *looks like a subtitle* rather
 /// than whether it can be translated at all:
 ///
-/// - `ocr::BandFilter`, which judges a band of text by how it moves and how
-///   often it turns over - page text holds still and reads as `Static`;
+/// - `ocr::BandFilter`, which confirms stable cues and rejects scattered or
+///   long-static bands - page text eventually reads as `Static`;
 /// - the cue length limit in `ocr_gate`, sized for one or two lines of dialogue;
 /// - the cue length cap in `llm::output_validation`, sized for what a cue's
 ///   translation can come to.

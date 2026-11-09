@@ -72,12 +72,13 @@ impl BandFilter {
         &mut self,
         result: OcrResult,
         eligibility: Eligibility,
+        captured: Instant,
         captured_at: SystemTime,
     ) -> OcrResult {
         self.apply_frame(
             result,
             eligibility,
-            self.started.elapsed().as_millis() as u64,
+            captured.saturating_duration_since(self.started).as_millis() as u64,
             captured_at,
         )
     }
@@ -156,9 +157,38 @@ mod tests {
     const SUBTITLE: Eligibility = Eligibility::SubtitleLike;
     const ANY_TEXT: Eligibility = Eligibility::AnyText;
 
+    #[test]
+    fn capture_clock_confirms_frames_delivered_without_a_processing_interval() {
+        let origin = Instant::now() + std::time::Duration::from_secs(60);
+        let mut filter = BandFilter::new(250);
+        filter.started = origin;
+        for at in (0..2_000).step_by(250) {
+            filter.apply_captured(
+                frame(300.0, 600.0, 1),
+                SUBTITLE,
+                origin + std::time::Duration::from_millis(at),
+                SystemTime::UNIX_EPOCH,
+            );
+        }
+        let first = filter.apply_captured(
+            frame(300.0, 600.0, 0),
+            SUBTITLE,
+            origin + std::time::Duration::from_millis(2_000),
+            SystemTime::UNIX_EPOCH,
+        );
+        assert!(first.is_empty());
+        let second = filter.apply_captured(
+            frame(300.0, 600.0, 0),
+            SUBTITLE,
+            origin + std::time::Duration::from_millis(2_900),
+            SystemTime::UNIX_EPOCH + std::time::Duration::from_millis(2_900),
+        );
+        assert!(!second.is_empty());
+    }
+
     impl BandFilter {
         fn apply(&mut self, result: OcrResult, eligibility: Eligibility) -> OcrResult {
-            self.apply_captured(result, eligibility, SystemTime::UNIX_EPOCH)
+            self.apply_captured(result, eligibility, Instant::now(), SystemTime::UNIX_EPOCH)
         }
 
         fn apply_at(

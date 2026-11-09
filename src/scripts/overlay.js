@@ -732,7 +732,7 @@ function updateSubtitlePosition(container, region) {
 
     // Prefer measured height when visible, fallback to a conservative estimate.
     const measured = container.classList.contains('visible')
-        ? Math.round(container.getBoundingClientRect().height)
+        ? container.getBoundingClientRect().height
         : 0;
 
     const placement = resolveSubtitlePlacement(
@@ -794,10 +794,7 @@ function updateSubtitleText(textElement, newText, container) {
     if (newText === overlayState.currentText) return;
 
     overlayState.currentText = newText;
-    textElement.classList.remove('fade-in');
-    void textElement.offsetWidth;
     textElement.textContent = newText;
-    textElement.classList.add('fade-in');
 
     setSubtitleContainerVisible(container, true);
 }

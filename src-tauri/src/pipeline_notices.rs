@@ -18,7 +18,7 @@ impl Notices {
     /// A frame whose region held no text worth translating.
     ///
     /// Waiting a few frames keeps a single-frame OCR miss from clearing the
-    /// line between cues. This event also resets the pipeline's repeat filter.
+    /// line between cues. The queue owns active-cue retirement.
     pub(crate) fn quiet_region(
         &mut self,
         session_id: u64,

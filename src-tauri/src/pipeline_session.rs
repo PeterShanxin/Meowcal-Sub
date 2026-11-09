@@ -11,13 +11,23 @@ pub struct PipelineClock {
     session_id: AtomicU64,
     capture_id: AtomicU64,
     translation_id: AtomicU64,
+    update_id: AtomicU64,
 }
 
 impl PipelineClock {
     pub fn begin_session(&self) -> u64 {
         self.capture_id.store(0, Ordering::SeqCst);
+        self.update_id.store(0, Ordering::SeqCst);
         self.translation_id.store(0, Ordering::SeqCst);
         self.session_id.fetch_add(1, Ordering::SeqCst) + 1
+    }
+
+    pub fn translation_generation(&self) -> u64 {
+        self.translation_id.load(Ordering::SeqCst)
+    }
+
+    pub fn next_update(&self) -> u64 {
+        self.update_id.fetch_add(1, Ordering::SeqCst) + 1
     }
 
     pub fn next_capture(&self, session_id: u64) -> PipelineToken {
@@ -27,15 +37,8 @@ impl PipelineClock {
         }
     }
 
-    /// Claim the next translation slot.
-    ///
-    /// Kept apart from `capture_id` because the two answer different questions.
-    /// A capture is superseded the moment a newer frame is taken, which is what
-    /// `is_current` reports and what lets the loop drop a frame it no longer
-    /// needs to OCR. A translation is not: once the capture loop stopped
-    /// awaiting the model, frames keep being taken while a translation is in
-    /// flight, and measuring that translation against `capture_id` would
-    /// discard every result the moment it arrived.
+    /// Advance the translation epoch. FIFO workers retain the current epoch;
+    /// region and session changes invalidate all jobs recorded under it.
     pub fn begin_translation(&self) -> u64 {
         self.translation_id.fetch_add(1, Ordering::SeqCst) + 1
     }
