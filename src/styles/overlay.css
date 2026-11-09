@@ -321,9 +321,6 @@ body {
         transition-duration: 0.01ms;
     }
 
-    .subtitle-text.fade-in {
-        animation: none;
-    }
 }
 
 /* =============================================================================

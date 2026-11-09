@@ -732,7 +732,7 @@ function updateSubtitlePosition(container, region) {
 
     // Prefer measured height when visible, fallback to a conservative estimate.
     const measured = container.classList.contains('visible')
-        ? Math.round(container.getBoundingClientRect().height)
+        ? container.getBoundingClientRect().height
         : 0;
 
     const placement = resolveSubtitlePlacement(

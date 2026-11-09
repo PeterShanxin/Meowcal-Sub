@@ -530,14 +530,21 @@ test("successive cues replace text without a slide or a moving subtitle anchor",
         timestamp: Date.now(),
         original: "Authored source",
       });
+    const plate = document.querySelector("#subtitle-container");
+    const anchor = () => {
+      const rect = plate.getBoundingClientRect();
+      return { bottom: rect.bottom, centerX: rect.x + rect.width / 2 };
+    };
     emit("Wait here.", 1);
     await new Promise((resolve) => setTimeout(resolve, 400));
+    const before = anchor();
     emit("Please wait by the entrance until the last train arrives at the station.", 2);
     await new Promise(requestAnimationFrame);
     await new Promise(requestAnimationFrame);
     const text = document.querySelector("#subtitle-text");
-    const plate = document.querySelector("#subtitle-container");
     return {
+      before,
+      after: anchor(),
       transform: getComputedStyle(text).transform,
       animation: getComputedStyle(text).animationName,
       opacity: getComputedStyle(text).opacity,
@@ -548,4 +555,6 @@ test("successive cues replace text without a slide or a moving subtitle anchor",
   expect(sample.animation).toBe("none");
   expect(sample.opacity).toBe("1");
   expect(sample.bottom).toBeLessThan(region.y);
+  expect(sample.after.bottom).toBeCloseTo(sample.before.bottom, 1);
+  expect(sample.after.centerX).toBeCloseTo(sample.before.centerX, 1);
 });
