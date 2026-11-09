@@ -631,10 +631,10 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
                 }
                 continue;
             }
-
             activity.observe(token, !ocr_result.is_empty());
             let observed_text = ocr_result.text.trim().to_string();
-            let ocr_result = band_filter.apply_captured(ocr_result, eligibility, captured_at);
+            let ocr_result =
+                band_filter.apply_captured(ocr_result, eligibility, frame_started, captured_at);
             let current_text = if ocr_result.is_empty() {
                 observed_text
             } else {

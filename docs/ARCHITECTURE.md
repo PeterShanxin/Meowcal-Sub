@@ -297,6 +297,8 @@ Shared contracts have one owner before parallel decomposition begins:
 ## Subtitle admission and presentation
 
 `ocr/band_cue.rs` confirms text changes against a fixed content anchor.
+Band stability uses monotonic capture times, so uneven OCR completion cannot
+expire an otherwise consecutive pair of source images.
 Spatial scatter rejects wandering scene text; unchanging bands retain static
 watermark history. Confirmed dialogue is not rejected for changing rapidly or
 for changing a number. Two identical changed readings also release a static
