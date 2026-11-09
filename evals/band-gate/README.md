@@ -63,6 +63,9 @@ is an operator aid; it does not prove Windows capture, OCR, native overlay, or
 application-level translation.
 
 
+The 30-second paused subtitle change holds one cue for twenty seconds, then
+changes `sailor` to `tailor` at the same position. Both cues must translate once.
+
 ## Offline gate report
 
 After a native run, save the content-aware application band log as JSONL with a `capture_utc_ms` field recorded before capture/OCR on every gate frame, and save `window.fixture.readState()` as `fixture-state.json`. The state must come from a completed 1x run with Repeat disabled. The report rejects older logs that only timestamp processing completion. It uses `timeOriginMs + runStartedAtMs` to align authored onset windows with the UTC gate frames:

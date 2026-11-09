@@ -1076,6 +1076,35 @@
         }
       ],
       "negativeSegments": []
+    },
+    {
+      "id": "paused-near-match-30s",
+      "label": "30-second paused subtitle change",
+      "durationSeconds": 30,
+      "repeatable": true,
+      "similarSubtitleCardWidthPx": 720,
+      "notes": "A twenty-second held cue is followed by a one-letter change at the same position. Both cues must translate once.",
+      "segments": [
+        {
+          "id": "paused-01",
+          "onset": 0,
+          "duration": 20,
+          "expected": "subtitle",
+          "lines": [
+            "The sailor is waiting here."
+          ]
+        },
+        {
+          "id": "paused-02",
+          "onset": 20,
+          "duration": 10,
+          "expected": "subtitle",
+          "lines": [
+            "The tailor is waiting here."
+          ]
+        }
+      ],
+      "negativeSegments": []
     }
   ]
 }
