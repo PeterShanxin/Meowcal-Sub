@@ -42,7 +42,9 @@ impl Cue {
             return;
         }
         if (!self.absent && text == self.anchor)
-            || (self.static_anchor && (text == self.anchor || similar(&self.anchor, &text)))
+            || (self.static_anchor
+                && (text == self.anchor
+                    || (similar(&self.anchor, &text) && text != self.last_text)))
         {
             self.pending.clear();
             self.absent = false;
@@ -147,6 +149,34 @@ fn similar(anchor: &str, text: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_confirmed_change_can_release_a_static_anchor_with_or_without_a_blank() {
+        for (before, after) in [
+            ("The sailor is waiting here.", "The tailor is waiting here."),
+            (
+                "我们现在应该在门口等待明天早上的班车",
+                "我们现在不该在门口等待明天早上的班车",
+            ),
+        ] {
+            for blank in [false, true] {
+                let mut cue = Cue::default();
+                for at in (0..20_000).step_by(250) {
+                    cue.observe(before, at, 2_000);
+                }
+                assert_eq!(cue.verdict(), super::super::band_verdict::Verdict::Static);
+                if blank {
+                    cue.missing();
+                }
+                cue.observe(after, 20_250, 2_000);
+                assert!(!cue.changed);
+                cue.observe(after, 20_500, 2_000);
+                assert!(cue.changed, "blank={blank}");
+                assert_eq!(cue.id, 2);
+                assert_eq!(cue.verdict(), super::super::band_verdict::Verdict::Subtitle);
+            }
+        }
+    }
 
     #[test]
     fn a_candidate_cannot_drift_through_pairwise_similar_readings() {

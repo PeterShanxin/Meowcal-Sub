@@ -1,11 +1,4 @@
-// =============================================================================
-// PROMPT_ROUTER.RS - Deterministic subtitle prompt building
-// =============================================================================
-// Implements the "Prompt Router + Subtitle Context Cache" guide:
-// - Choose CN vs EN instruction template deterministically.
-// - Apply strict, character-based caps for source/context to stabilize latency.
-// - Build a single instruction prompt suitable for MT-style models (e.g. HY-MT1.5).
-// =============================================================================
+//! Bounded source/context prompts for HY-MT translation.
 
 use super::text_utils::is_cjk_compactable_char;
 
@@ -18,6 +11,7 @@ pub enum PromptTemplateLanguage {
 #[derive(Debug, Clone, Copy)]
 pub struct PromptRouterOptions {
     pub enable_context: bool,
+    pub retry_wrong_language: bool,
     pub max_context_chars: usize,
     pub max_source_chars: usize,
 }
@@ -54,6 +48,17 @@ pub fn build_subtitle_translation_prompt(
     let target_label = target_language_label(&tgt_primary, template_language);
 
     let clipped_source = truncate_chars(&cleaned_source, options.max_source_chars);
+    if options.retry_wrong_language {
+        let target = target_language_label(&tgt_primary, PromptTemplateLanguage::English);
+        return Some(BuiltPrompt {
+            prompt: format!(
+                "Translate into {target}. Output only the {target} translation, \
+                 without copying the source or adding explanations:\n\n{clipped_source}"
+            ),
+            template_language: PromptTemplateLanguage::English,
+            used_context: false,
+        });
+    }
 
     let context = if options.enable_context {
         context_text
@@ -104,12 +109,7 @@ pub fn build_subtitle_translation_prompt(
     })
 }
 
-/// Returns true when the cleaned OCR text is almost certainly garbage that
-/// should not be sent to the LLM for translation.
-///
-/// Conservative filter: only rejects text with fewer than 2 meaningful
-/// characters (alphabetic or CJK) after OCR noise cleanup.
-/// Short but real subtitles like "OK", "No", "好的" still pass through.
+/// Rejects cleaned noise while allowing a single CJK character.
 pub fn is_untranslatable_text(text: &str) -> bool {
     let cleaned = clean_source_text(text);
 
@@ -122,15 +122,7 @@ pub fn is_untranslatable_text(text: &str) -> bool {
         .filter(|c| is_cjk_compactable_char(*c))
         .count();
     let alpha_count = cleaned.chars().filter(|c| c.is_alphabetic()).count();
-    let meaningful_count = cjk_count + alpha_count;
-
-    // Fewer than 2 meaningful characters → definitely garbage.
-    // We allow 2+ so short subtitles like "OK", "No", or single CJK words still translate.
-    if meaningful_count < 2 {
-        return true;
-    }
-
-    false
+    cjk_count + alpha_count < 2
 }
 
 pub fn clean_source_text(text: &str) -> String {
@@ -236,7 +228,6 @@ fn clip_context_keep_recent_lines(text: &str, max_chars: usize) -> String {
         return String::new();
     }
 
-    // Keep most recent lines (tail), but preserve original order.
     let mut kept_rev: Vec<String> = Vec::new();
     let mut chars_used = 0usize;
     for line in lines.iter().rev() {
@@ -318,6 +309,7 @@ mod tests {
             None,
             PromptRouterOptions {
                 enable_context: false,
+                retry_wrong_language: false,
                 max_context_chars: 600,
                 max_source_chars: 200,
             },
@@ -337,6 +329,7 @@ mod tests {
             None,
             PromptRouterOptions {
                 enable_context: false,
+                retry_wrong_language: false,
                 max_context_chars: 600,
                 max_source_chars: 200,
             },
@@ -356,6 +349,7 @@ mod tests {
             None,
             PromptRouterOptions {
                 enable_context: false,
+                retry_wrong_language: false,
                 max_context_chars: 600,
                 max_source_chars: 200,
             },
@@ -377,6 +371,7 @@ mod tests {
             Some("Alice is here.\nBob left."),
             PromptRouterOptions {
                 enable_context: true,
+                retry_wrong_language: false,
                 max_context_chars: 100,
                 max_source_chars: 200,
             },
@@ -418,7 +413,7 @@ mod tests {
         assert!(is_untranslatable_text("  "));
         assert!(is_untranslatable_text(".."));
         assert!(is_untranslatable_text("）"));
-        assert!(is_untranslatable_text("x")); // single meaningful char
+        assert!(is_untranslatable_text("x"));
     }
 
     #[test]
@@ -426,9 +421,8 @@ mod tests {
         assert!(!is_untranslatable_text("看来很喜欢你啊"));
         assert!(!is_untranslatable_text("Hello, world"));
         assert!(!is_untranslatable_text("通往沙漠的所有交通被封鎖"));
-        // Short but legitimate subtitles should pass
         assert!(!is_untranslatable_text("No"));
-        assert!(!is_untranslatable_text("OK")); // caught by uppercase filter, but "Ok" wouldn't be
+        assert!(!is_untranslatable_text("OK"));
         assert!(!is_untranslatable_text("好的"));
     }
 
@@ -441,6 +435,7 @@ mod tests {
             None,
             PromptRouterOptions {
                 enable_context: false,
+                retry_wrong_language: false,
                 max_context_chars: 600,
                 max_source_chars: 200,
             },
@@ -458,6 +453,7 @@ mod tests {
             None,
             PromptRouterOptions {
                 enable_context: false,
+                retry_wrong_language: false,
                 max_context_chars: 600,
                 max_source_chars: 200,
             },
@@ -469,3 +465,7 @@ mod tests {
         );
     }
 }
+
+#[cfg(test)]
+#[path = "prompt_router_recovery_tests.rs"]
+mod recovery_tests;

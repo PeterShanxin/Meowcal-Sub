@@ -5,6 +5,86 @@ use std::sync::atomic::Ordering;
 use std::sync::{Arc, Mutex};
 
 #[tokio::test]
+async fn a_wrong_language_answer_gets_one_retry_for_the_same_subtitle() {
+    for managed in [false, true] {
+        let wrong = "下一班列车将在五分钟后到站".to_string();
+        let first = if managed {
+            ScriptedStep::ManagedOk(wrong)
+        } else {
+            ScriptedStep::Ok(wrong)
+        };
+        let (runner, backend, _) = harness(vec![
+            first,
+            ScriptedStep::Ok("The next train arrives in five minutes.".into()),
+        ]);
+        let outcome = runner
+            .run(
+                backend.as_ref(),
+                &zh_request("下一班列车将在五分钟后到站", Some("scene context"), true),
+                &budget(10_000),
+                ReadyState::Ready,
+                &mut Vec::new(),
+            )
+            .await;
+        let (translated, recovered) = expect_succeeded(outcome);
+        assert_eq!(translated, "The next train arrives in five minutes.");
+        assert!(recovered);
+        assert_eq!(backend.calls.load(Ordering::SeqCst), 2);
+        let seen = lock_or_recover(&backend.options_seen);
+        assert!(!seen[0].unwrap().retry_wrong_language);
+        assert!(seen[1].unwrap().retry_wrong_language);
+        assert!(!seen[1].unwrap().enable_context);
+    }
+}
+
+#[tokio::test]
+async fn repeated_wrong_language_answers_stop_after_one_quality_retry() {
+    for managed in [false, true] {
+        let wrong = "下一班列车将在五分钟后到站".to_string();
+        let step = if managed {
+            ScriptedStep::ManagedOk(wrong)
+        } else {
+            ScriptedStep::Ok(wrong)
+        };
+        let (runner, backend, _) = harness(vec![step]);
+        let outcome = runner
+            .run(
+                backend.as_ref(),
+                &zh_request("下一班列车将在五分钟后到站", None, false),
+                &budget(10_000),
+                ReadyState::Ready,
+                &mut Vec::new(),
+            )
+            .await;
+        assert!(matches!(outcome, AttemptOutcome::Rejected { .. }));
+        assert_eq!(backend.calls.load(Ordering::SeqCst), 2);
+    }
+}
+
+#[tokio::test]
+async fn language_recovery_cannot_exceed_the_attempt_limit() {
+    let backend = ScriptedBackend::new(
+        BackendId::FoundryLocal,
+        vec![ScriptedStep::ManagedOk("下一班列车将在五分钟后到站".into())],
+    );
+    let runner = TranslationAttemptRunner::new(
+        default_policy(1),
+        Arc::new(Mutex::new(TranslationDiagnosticsState::default())),
+    );
+    let outcome = runner
+        .run(
+            &backend,
+            &zh_request("下一班列车将在五分钟后到站", None, false),
+            &budget(10_000),
+            ReadyState::Ready,
+            &mut Vec::new(),
+        )
+        .await;
+    assert!(matches!(outcome, AttemptOutcome::Rejected { .. }));
+    assert_eq!(backend.calls.load(Ordering::SeqCst), 1);
+}
+
+#[tokio::test]
 async fn a_first_attempt_success_is_returned_with_success_diagnostics() {
     let (runner, backend, diagnostics) = harness(vec![ScriptedStep::Ok("hello world".to_string())]);
     let mut warnings = Vec::new();

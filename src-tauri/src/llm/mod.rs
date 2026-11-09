@@ -18,7 +18,7 @@ mod manager;
 mod mock;
 pub(crate) mod output_validation;
 mod prompt_router;
-mod rejected_context_output;
+mod rejected_output;
 mod subtitle_output;
 pub(crate) mod text_utils;
 mod translation_attempt;
@@ -32,7 +32,7 @@ pub use foundry_local::*;
 pub use manager::*;
 pub use mock::*;
 pub use prompt_router::*;
-pub use rejected_context_output::RejectedContextOutput;
+pub use rejected_output::RejectedOutput;
 pub use translation_planner::ContextTier;
 
 use async_trait::async_trait;
@@ -48,7 +48,7 @@ pub enum LlmError {
     TranslationError(String),
 
     #[error("Translation failed: {0}")]
-    RejectedContextOutput(#[from] RejectedContextOutput),
+    RejectedOutput(#[from] RejectedOutput),
 
     #[error("Model not available: {0}")]
     ModelNotAvailable(String),
@@ -61,9 +61,7 @@ impl LlmError {
     /// Short, non-PII error code for diagnostics/logging.
     pub fn code(&self) -> &'static str {
         match self {
-            LlmError::TranslationError(_) | LlmError::RejectedContextOutput(_) => {
-                "translation_error"
-            }
+            LlmError::TranslationError(_) | LlmError::RejectedOutput(_) => "translation_error",
             LlmError::ModelNotAvailable(_) => "model_not_available",
             LlmError::ApiError(_) => "api_error",
         }

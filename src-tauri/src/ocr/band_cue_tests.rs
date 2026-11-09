@@ -137,7 +137,7 @@ fn a_static_watermark_stays_suppressed_after_a_brief_ocr_dropout() {
 }
 
 #[test]
-fn a_static_watermark_variant_stays_suppressed_after_a_brief_ocr_dropout() {
+fn a_transient_static_watermark_variant_stays_suppressed_after_an_ocr_dropout() {
     let mut tracker = BandTracker::new(1832.0, 250);
     let watermark = "MEOWCAL LABORATORY DEMO";
     for at in (0..45_000).step_by(250) {
@@ -146,9 +146,10 @@ fn a_static_watermark_variant_stays_suppressed_after_a_brief_ocr_dropout() {
     for at in [45_000, 45_250, 45_500] {
         tracker.observe(&[], &[], at);
     }
-    for at in (45_750..47_750).step_by(250) {
+    assert!(!read(&mut tracker, "MEOWCAL LABORATORX DEMO", 45_750));
+    for at in (46_000..47_750).step_by(250) {
         assert!(
-            !read(&mut tracker, "MEOWCAL LABORATORX DEMO", at),
+            !read(&mut tracker, watermark, at),
             "static watermark variant admitted at {at}"
         );
     }

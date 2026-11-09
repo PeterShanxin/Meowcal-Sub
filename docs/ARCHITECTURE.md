@@ -133,7 +133,9 @@ Shared contracts have one owner before parallel decomposition begins:
   repopulate history. Even output rejected by the generic validator is
   checked for replay before choosing fallback. Managed contextual length
   rejections retain their raw output and recovery receipt until replay is
-  classified; unrelated rejection still reports to Core, and stronger corruption
+  classified. A wrong-language answer gets one immediate retry with an explicit
+  target-language instruction and no context, within the original attempt and
+  time budgets. Exhausted rejection reports to Core, and stronger corruption
   signals retain immediate recovery. The retry can confirm that two
   different cues legitimately share a translation. This is a replay
   guard, not a semantic detector for paraphrases or previously unseen leakage.
@@ -297,7 +299,9 @@ Shared contracts have one owner before parallel decomposition begins:
 `ocr/band_cue.rs` confirms text changes against a fixed content anchor.
 Spatial scatter rejects wandering scene text; unchanging bands retain static
 watermark history. Confirmed dialogue is not rejected for changing rapidly or
-for changing a number. Pure numeric readings remain untranslatable.
+for changing a number. Two identical changed readings also release a static
+anchor after a pause; a single changed reading retains it.
+Pure numeric readings remain untranslatable.
 Rapid names in credit sequences are translated too. The raw turnover
 categories remain diagnostics only.
 Single Chinese characters pass the text gate. `Translate any text` remains an

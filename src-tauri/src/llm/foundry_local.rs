@@ -1448,10 +1448,10 @@ impl TranslatorBackend for FoundryLocalBackend {
 
         let prompt_options = options.unwrap_or(PromptRouterOptions {
             enable_context: context.is_some(),
+            retry_wrong_language: false,
             max_context_chars: 600,
             max_source_chars: 300,
         });
-
         let built = build_subtitle_translation_prompt(
             text,
             Some(source_language).filter(|value| !value.trim().is_empty()),

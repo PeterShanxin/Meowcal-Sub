@@ -54,9 +54,11 @@ subtitle behavior.
   `capture -> preprocess -> OCR -> normalize -> dedupe -> translate -> validate -> overlay`.
 - Make cancellation, stale results, retries, and fallback states observable and
   testable.
-- Retry only failures classified as transient and remain within a bounded
-  latency/attempt budget.
-- Deterministic output rejection is not retried unchanged.
+- Retry transport/runtime failures only when classified as transient, within a
+  bounded latency/attempt budget.
+- Deterministic output rejection is not retried unchanged. A wrong-language
+  answer may receive one corrective prompt without context under the original
+  budget; exhausted rejection retains engine recovery.
 - Validation must account for source and target writing systems.
 - Raw OCR may be shown only as an explicit `sourceOnly` state, never as a
   successful translation.

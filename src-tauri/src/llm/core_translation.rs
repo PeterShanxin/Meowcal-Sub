@@ -121,12 +121,16 @@ pub(super) fn validate_completion(
             quality_issue = reason.code(),
             "Managed inference rejected"
         );
-        if used_context && reason == super::output_validation::TranslationOutputRejection::TooLong {
-            // Replay recovery must run before a corruption report makes the
-            // engine unavailable to the no-context retry.
-            return Err(super::RejectedContextOutput::new(
+        use super::output_validation::TranslationOutputRejection;
+        if (used_context && reason == TranslationOutputRejection::TooLong)
+            || reason == TranslationOutputRejection::WrongLanguage
+        {
+            // Retry or replay classification precedes a runtime probe, which
+            // would make the producing engine unavailable to this cue.
+            return Err(super::RejectedOutput::new(
                 output.to_owned(),
                 response.inference_receipt,
+                reason,
             )
             .into());
         }
@@ -180,11 +184,13 @@ mod tests {
     use super::*;
 
     #[test]
-    fn only_contextual_length_rejection_defers_corruption_reporting() {
+    fn contextual_length_and_wrong_language_rejections_defer_corruption_reporting() {
         let long = "我们只有十分钟，必须立刻离开这里。".repeat(3);
         for (output, used_context, deferred) in [
             (long.as_str(), true, true),
             (long.as_str(), false, false),
+            ("The train will arrive soon.", true, true),
+            ("The train will arrive soon.", false, true),
             ("房间是空的。\n\n---+", true, false),
             (
                 "你好你好你好你好你好你好你好你好你好你好你好你好",
@@ -198,10 +204,7 @@ mod tests {
             .unwrap();
             let error = validate_completion(response, 120, "Not yet.", "en", "zh", used_context)
                 .unwrap_err();
-            assert_eq!(
-                matches!(error, LlmError::RejectedContextOutput(_)),
-                deferred
-            );
+            assert_eq!(matches!(error, LlmError::RejectedOutput(_)), deferred);
         }
     }
 

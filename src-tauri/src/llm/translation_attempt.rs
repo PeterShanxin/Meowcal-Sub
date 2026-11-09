@@ -8,7 +8,9 @@
 // planner, backend fallback) in `manager.rs` pass every policy decision in.
 // =============================================================================
 
-use super::output_validation::{quality_issue_message, validate_translation_output};
+use super::output_validation::{
+    quality_issue_message, validate_translation_output, TranslationOutputRejection,
+};
 use crate::llm::{
     LlmError, PromptRouterOptions, ReadyState, TranslationDiagnosticsState, TranslatorBackend,
 };
@@ -103,13 +105,14 @@ impl TranslationAttemptRunner {
         let text = request.text;
         let source_language = request.source_language;
         let target_language = request.target_language;
-        let context_prompt = request.context_prompt;
-        let context_used = request.context_used;
         let started = budget.started;
         let total_timeout = budget.total_timeout;
         let max_attempts = self.policy.max_attempts;
+        let mut retried_language = false;
 
         for attempt in 1..=max_attempts {
+            let context_used = request.context_used && !retried_language;
+            let context_prompt = request.context_prompt.filter(|_| context_used);
             let remaining_total = total_timeout.saturating_sub(started.elapsed());
             if remaining_total.is_zero() {
                 let latency_ms = started.elapsed().as_millis();
@@ -149,6 +152,7 @@ impl TranslationAttemptRunner {
                     context_prompt,
                     Some(PromptRouterOptions {
                         enable_context: context_used,
+                        retry_wrong_language: retried_language,
                         max_context_chars: self.policy.prompt_max_context_chars,
                         max_source_chars: self.policy.prompt_max_source_chars,
                     }),
@@ -188,6 +192,14 @@ impl TranslationAttemptRunner {
                             "Translation output rejected"
                         );
 
+                        if reason == TranslationOutputRejection::WrongLanguage
+                            && !retried_language
+                            && attempt < max_attempts
+                        {
+                            retried_language = true;
+                            continue;
+                        }
+
                         return AttemptOutcome::Rejected {
                             translated,
                             latency_ms,
@@ -202,16 +214,23 @@ impl TranslationAttemptRunner {
                         recovered_after_retry: attempt > 1,
                     };
                 }
-                Ok(Err(LlmError::RejectedContextOutput(rejected))) => {
+                Ok(Err(LlmError::RejectedOutput(rejected))) => {
                     lock_or_recover(&self.diagnostics).record_error(
                         id,
                         "low_quality_output",
                         Some(latency_ms),
                     );
+                    if rejected.reason == TranslationOutputRejection::WrongLanguage
+                        && !retried_language
+                        && attempt < max_attempts
+                    {
+                        retried_language = true;
+                        continue;
+                    }
                     return AttemptOutcome::Rejected {
                         translated: rejected.output.clone(),
                         latency_ms,
-                        error: LlmError::RejectedContextOutput(rejected),
+                        error: LlmError::RejectedOutput(rejected),
                     };
                 }
                 Ok(Err(err)) => {
