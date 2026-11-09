@@ -9,13 +9,17 @@ pub fn reading_time(source_ms: u64, translated: &str, delay_ms: u64) -> Duration
         .filter(|c| crate::llm::text_utils::is_cjk_char(*c))
         .count() as u64;
     let reading_ms = (400 + (chars - cjk) * 35 + cjk * 70).clamp(600, 3_500);
-    // Brief replies need less time than a sentence. A fixed display floor
-    // would cap throughput even when inference keeps up with fast dialogue.
-    let floor_ms = (250 + (chars - cjk) * 25 + cjk * 50).clamp(350, 1_200);
+    // Reading time cannot exceed source cadence: long translations would
+    // otherwise accumulate even when inference keeps up. Late cues retain
+    // at least 350 ms of visible time.
+    let source_budget_ms = source_ms.clamp(350, 4_000);
+    let floor_ms = (250 + (chars - cjk) * 25 + cjk * 50)
+        .clamp(350, 1_200)
+        .min(source_budget_ms);
     let hold_ms = source_ms
         .max(reading_ms)
         .saturating_sub(delay_ms)
-        .clamp(floor_ms, 4_000);
+        .clamp(floor_ms, source_budget_ms);
     Duration::from_millis(hold_ms)
 }
 
@@ -28,6 +32,23 @@ mod tests {
         assert_eq!(reading_time(800, "Go!", 2_000), Duration::from_millis(350));
         assert!(
             reading_time(800, "Please wait for me outside.", 2_000) >= Duration::from_millis(800)
+        );
+    }
+
+    #[test]
+    fn long_translations_do_not_slow_the_source_cadence() {
+        let translation = "Close the entrance and wait for me outside.";
+        assert_eq!(
+            reading_time(1_000, translation, 200),
+            Duration::from_secs(1)
+        );
+        assert_eq!(
+            reading_time(500, translation, 0),
+            Duration::from_millis(500)
+        );
+        assert_eq!(
+            reading_time(100, translation, 2_000),
+            Duration::from_millis(350)
         );
     }
 

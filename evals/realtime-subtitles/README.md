@@ -13,12 +13,13 @@ report records both commits and whether the candidate tree contains tracked edit
 
 The authored inputs cover 500/600/800/1000 ms dialogue, negations, changed numbers,
 single Chinese characters, returning dialogue, one-frame OCR noise, a paused
-source, busy inference, late completion and severe-stall recovery. Inference
-times are deterministic (350–650 ms normally, an initial 1800 ms busy request,
+source, busy inference, late completion, long translations of short dialogue
+and severe-stall recovery. Inference times are deterministic (350–650 ms normally, an initial 1800 ms busy request,
 and 4000 ms requests during the overload interval). Capture/OCR work is simulated
 as 50 ms. Short replies use a three-character target; the OCR-noise and number
-cases exercise longer targets. This measures policy behavior, not model quality
-or device performance.
+cases exercise longer targets. A two-minute case uses a long English target
+for one-second Chinese dialogue to detect display-induced backlog. This measures
+policy behavior, not model quality or device performance.
 
 Normal cases require every cue to display exactly once, in order, with no skips,
 an empty final queue, depth at most four and at least 350 ms of visible time for brief replies.

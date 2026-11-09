@@ -298,7 +298,8 @@ Shared contracts have one owner before parallel decomposition begins:
 Spatial scatter rejects wandering scene text; unchanging bands retain static
 watermark history. Confirmed dialogue is not rejected for changing rapidly or
 for changing a number. Pure numeric readings remain untranslatable.
-The raw turnover categories remain diagnostics only.
+Rapid names in credit sequences are translated too. The raw turnover
+categories remain diagnostics only.
 Single Chinese characters pass the text gate. `Translate any text` remains an
 Advanced option for menus and pages; it bypasses subtitle-shape rules while
 retaining stable cue confirmation and FIFO ordering.
@@ -312,10 +313,12 @@ A paused cue remains active after its completed work leaves the queue.
 Inference proceeds before source disappearance. Busy inference retains pending
 cues. Presentation starts as soon as the FIFO head completes and the previous
 line has had a reading interval. Source duration, translated length and delay
-set that interval, with a length-based minimum of 350–1200 ms; one sampling
-interval is reserved for
-source-duration uncertainty. A pending successor can retain the previous line
-briefly, up to four seconds, instead of inserting a blank flash. Text replacement
+set that interval. The source duration caps the reading budget, bounded to
+350–4000 ms, so longer translations cannot create a persistent display backlog.
+A length-based minimum up to 1200 ms is limited by the same budget. One sampling
+interval is reserved for source-duration uncertainty. A pending successor can
+retain the previous line briefly, up to four seconds, instead of inserting a
+blank flash. Text replacement
 has no per-cue slide animation.
 
 Each cue keeps its ID through translation and display. `captureId` identifies the

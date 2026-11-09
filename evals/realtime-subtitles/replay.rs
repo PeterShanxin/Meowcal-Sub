@@ -334,6 +334,14 @@ pub fn run() {
     cases[8].busy = true;
     cases[9].busy = true;
     cases[10].overload = true;
+    let mut long_target = case(
+        "long-target-1000ms",
+        &["关上门", "站在这里", "等一等"],
+        1000,
+        120,
+    );
+    long_target.target = "Close the entrance and wait for me outside.";
+    cases.push(long_target);
     let start = Instant::now();
     let mut rows = vec![];
     let mut passed = true;
