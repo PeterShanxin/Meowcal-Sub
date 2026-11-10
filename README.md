@@ -37,12 +37,12 @@ https://github.com/user-attachments/assets/58fbac67-9032-42e2-8d4d-8e4df6c01e59
 
 ## Download
 
-**Windows 11 public beta · v0.9.0** — [release notes and all files](https://github.com/PeterShanxin/Meowcal-Sub/releases/tag/v0.9.0).
+**Windows 11 public beta · v0.9.1** — [release notes and all files](https://github.com/PeterShanxin/Meowcal-Sub/releases/tag/v0.9.1).
 
 | Your PC | Installer |
 | --- | --- |
-| Intel or AMD Windows PC | **[Download x64 (.exe)](https://github.com/PeterShanxin/Meowcal-Sub/releases/download/v0.9.0/Meowcal.Sub_0.9.0_x64-setup.exe)** |
-| Snapdragon or other Windows on ARM PC | **[Download ARM64 (.exe)](https://github.com/PeterShanxin/Meowcal-Sub/releases/download/v0.9.0/Meowcal.Sub_0.9.0_arm64-setup.exe)** |
+| Intel or AMD Windows PC | **[Download x64 (.exe)](https://github.com/PeterShanxin/Meowcal-Sub/releases/download/v0.9.1/Meowcal.Sub_0.9.1_x64-setup.exe)** |
+| Snapdragon or other Windows on ARM PC | **[Download ARM64 (.exe)](https://github.com/PeterShanxin/Meowcal-Sub/releases/download/v0.9.1/Meowcal.Sub_0.9.1_arm64-setup.exe)** |
 
 MSI installers and `SHA256SUMS.txt` are on the release page. For newer versions,
 use [the latest application release](https://github.com/PeterShanxin/Meowcal-Sub/releases/latest).

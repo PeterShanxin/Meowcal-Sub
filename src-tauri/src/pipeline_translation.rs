@@ -242,8 +242,7 @@ impl Translator {
                 | TranslationDisplayState::NoSubtitleText => Presentation::Clear,
                 _ => Presentation::Preserve,
             };
-            let retryable = payload.display_state == TranslationDisplayState::Warming
-                || payload.display_state == TranslationDisplayState::EngineSlow;
+            let retryable = crate::llm::retryable_cue(payload.display_state, &payload.warnings);
             let text = payload.translated.clone();
             lock_or_recover(&self.queue).complete(
                 &job,

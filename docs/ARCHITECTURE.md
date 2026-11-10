@@ -85,6 +85,8 @@ execution and API-namespace discovery remain in `llm/transport_http.rs`
 The target path keeps the stages explicit. Every result carries a typed state:
 translated, source-only, rejected, transient failure, cancelled, or stale.
 Source OCR is never represented as successful translation.
+An active cue retries after a cooldown when transport or engine recovery can
+resolve its failure. Deterministic output rejection does not retry the same cue.
 
 ## Ownership boundaries
 

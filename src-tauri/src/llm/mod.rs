@@ -28,6 +28,7 @@ mod transport_http;
 
 pub use context::*;
 pub(crate) use context_summarization::{ContextCompressionScheduler, FoundryContextSummarizer};
+pub(crate) use display_state::retryable_cue;
 pub use foundry_local::*;
 pub use manager::*;
 pub use mock::*;
