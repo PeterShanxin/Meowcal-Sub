@@ -1,7 +1,11 @@
 use super::*;
 
 fn directory() -> PathBuf {
-    let root = std::env::temp_dir().join(format!("meowcal-diagnostics-test-{}-{}", std::process::id(), NEXT.fetch_add(1, Ordering::Relaxed)));
+    let root = std::env::temp_dir().join(format!(
+        "meowcal-diagnostics-test-{}-{}",
+        std::process::id(),
+        NEXT.fetch_add(1, Ordering::Relaxed)
+    ));
     std::fs::create_dir(&root).unwrap();
     root
 }
@@ -16,7 +20,10 @@ fn storage_is_bounded_during_a_running_session() -> io::Result<()> {
     std::thread::sleep(std::time::Duration::from_millis(1));
     write_record(&root, b"12345", Some(b"abcde"), 20)?;
     assert!(!first.exists());
-    assert_eq!(records(&root)?.iter().map(|(_, size)| size).sum::<u64>(), 20);
+    assert_eq!(
+        records(&root)?.iter().map(|(_, size)| size).sum::<u64>(),
+        20
+    );
     std::fs::remove_dir_all(root)
 }
 
@@ -43,21 +50,30 @@ fn unrelated_files_and_modified_records_are_preserved() -> io::Result<()> {
 }
 
 #[test]
-fn simultaneous_writer_is_rejected_without_deleting() -> io::Result<()> {
+fn simultaneous_writers_keep_both_records() -> io::Result<()> {
     let root = directory();
-    write_record(&root, b"kept", None, 10)?;
-    let lock = std::fs::OpenOptions::new().write(true).open(root.join(".writer.lock"))?;
+    write_record(&root, b"kept", None, 20)?;
+    let lock = std::fs::OpenOptions::new()
+        .write(true)
+        .open(root.join(".writer.lock"))?;
     lock.lock()?;
-    assert!(write_record(&root, b"new record", None, 10).is_err());
-    assert_eq!(records(&root)?.len(), 1);
+    let other_root = root.clone();
+    let writer = std::thread::spawn(move || write_record(&other_root, b"new record", None, 20));
     drop(lock);
+    writer.join().unwrap()?;
+    assert_eq!(records(&root)?.len(), 2);
     std::fs::remove_dir_all(root)
 }
 
 #[test]
 fn ownership_names_are_narrow() {
     assert!(owned_name("record-000123-42-1"));
-    for name in ["notes", "record-notes", "record-1-2-", "record-1-2-3-backup"] {
+    for name in [
+        "notes",
+        "record-notes",
+        "record-1-2-",
+        "record-1-2-3-backup",
+    ] {
         assert!(!owned_name(name));
     }
 }

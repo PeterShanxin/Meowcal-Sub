@@ -7,7 +7,6 @@ pub use crate::engine_config::ManagedLocalRuntimeConfig;
 use crate::translation_eligibility::Eligibility;
 use serde::{Deserialize, Serialize};
 
-
 /// The main configuration for the app
 ///
 /// This is what gets saved/loaded from settings, and what the UI reads/writes.

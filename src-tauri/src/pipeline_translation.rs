@@ -309,11 +309,16 @@ impl Translator {
             display_state,
         } = outcome;
         if crate::logging_settings::verbose() {
-            crate::diagnostic_artifacts::record("translation", serde_json::json!({
-                "sessionId": self.session_id, "captureId": job.frame.token.capture_id,
-                "cueId": job.cue_id, "source": job.frame.text, "translated": translated,
-                "backend": backend_used.as_str(),
-            }), None).await;
+            crate::diagnostic_artifacts::record(
+                "translation",
+                serde_json::json!({
+                    "sessionId": self.session_id, "captureId": job.frame.token.capture_id,
+                    "cueId": job.cue_id, "source": job.frame.text, "translated": translated,
+                    "backend": backend_used.as_str(),
+                }),
+                None,
+            )
+            .await;
         }
         if engine_needs_restart(self.engine_is_managed(), &warnings) {
             crate::core_client::recover_transport();

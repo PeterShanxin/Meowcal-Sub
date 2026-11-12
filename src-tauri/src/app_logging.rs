@@ -9,7 +9,7 @@
 use crate::app_profile::AppProfile;
 use std::path::PathBuf;
 use std::time::{Duration, SystemTime};
-use tracing_subscriber::{layer::SubscriberExt, Layer, EnvFilter};
+use tracing_subscriber::{layer::SubscriberExt, EnvFilter, Layer};
 
 /// How long a session log file is kept before cleanup.
 const LOG_RETENTION_DAYS: u64 = 7;
@@ -30,9 +30,13 @@ pub fn init(http_only_mode: bool, identifier: &str) {
         // Log to console in HTTP-only mode for easier debugging
         let filter = resolve_log_filter();
         let subscriber = tracing_subscriber::registry().with(filter).with(
-            tracing_subscriber::fmt::layer().with_ansi(true).pretty()
+            tracing_subscriber::fmt::layer()
+                .with_ansi(true)
+                .pretty()
                 .with_timer(ProfileTimer)
-                .with_filter(tracing_subscriber::filter::dynamic_filter_fn(|meta, _| crate::logging_settings::enabled(meta.level())))
+                .with_filter(tracing_subscriber::filter::dynamic_filter_fn(|meta, _| {
+                    crate::logging_settings::enabled(meta.level())
+                })),
         );
         tracing::subscriber::set_global_default(subscriber)
             .expect("setting default subscriber failed");
@@ -49,7 +53,12 @@ pub fn init(http_only_mode: bool, identifier: &str) {
 
     // Generate session-unique log filename with full timestamp
     let now = chrono::Local::now();
-    let log_filename = format!("meowcal-sub_{}_{}_{}.log", profile_label(), now.format("%Y-%m-%d_%H-%M-%S"), std::process::id());
+    let log_filename = format!(
+        "meowcal-sub_{}_{}_{}.log",
+        profile_label(),
+        now.format("%Y-%m-%d_%H-%M-%S"),
+        std::process::id()
+    );
     let log_path = logs_dir.join(&log_filename);
 
     // Create a file appender for this specific session
@@ -63,9 +72,14 @@ pub fn init(http_only_mode: bool, identifier: &str) {
 
     let filter = resolve_log_filter();
     let subscriber = tracing_subscriber::registry().with(filter).with(
-        tracing_subscriber::fmt::layer().with_writer(non_blocking).with_ansi(false).pretty()
+        tracing_subscriber::fmt::layer()
+            .with_writer(non_blocking)
+            .with_ansi(false)
+            .pretty()
             .with_timer(ProfileTimer)
-            .with_filter(tracing_subscriber::filter::dynamic_filter_fn(|meta, _| crate::logging_settings::enabled(meta.level())))
+            .with_filter(tracing_subscriber::filter::dynamic_filter_fn(|meta, _| {
+                crate::logging_settings::enabled(meta.level())
+            })),
     );
 
     tracing::subscriber::set_global_default(subscriber).expect("setting default subscriber failed");
@@ -193,15 +207,29 @@ fn cleanup_old_logs(logs_dir: &std::path::Path, max_age_days: u64) {
 }
 
 static PROFILE_LABEL: std::sync::OnceLock<&'static str> = std::sync::OnceLock::new();
-pub(crate) fn profile_label() -> &'static str { PROFILE_LABEL.get().copied().unwrap_or("unknown") }
+pub(crate) fn profile_label() -> &'static str {
+    PROFILE_LABEL.get().copied().unwrap_or("unknown")
+}
 fn label_for_identifier(identifier: &str) -> &'static str {
-    if identifier.ends_with(".dev") { "dev" } else { "prod" }
+    if identifier.ends_with(".dev") {
+        "dev"
+    } else {
+        "prod"
+    }
 }
 
 struct ProfileTimer;
 impl tracing_subscriber::fmt::time::FormatTime for ProfileTimer {
-    fn format_time(&self, writer: &mut tracing_subscriber::fmt::format::Writer<'_>) -> std::fmt::Result {
-        write!(writer, "[{}] {}", profile_label(), chrono::Local::now().format("%Y-%m-%dT%H:%M:%S%.3f%:z"))
+    fn format_time(
+        &self,
+        writer: &mut tracing_subscriber::fmt::format::Writer<'_>,
+    ) -> std::fmt::Result {
+        write!(
+            writer,
+            "[{}] {}",
+            profile_label(),
+            chrono::Local::now().format("%Y-%m-%dT%H:%M:%S%.3f%:z")
+        )
     }
 }
 #[cfg(test)]

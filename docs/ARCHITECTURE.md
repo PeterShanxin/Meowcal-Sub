@@ -162,7 +162,7 @@ PNGs with raw OCR output, and final translation text. It never serializes engine
 request headers, credentials, or prompts. Artifacts can contain private screen
 content and are not uploaded. `logs/verbose` has a 256 MiB total payload budget,
 pruned oldest-first before every write, not only startup. An OS file lock
-serializes writers in the same directory; contention skips evidence. Only owned
+serializes writers in the same directory on blocking worker threads. Only owned
 record directories containing known regular files are pruned. Unexpected files
 are preserved and stop the write. Oversized records are skipped. Disabling
 Verbose does not delete existing evidence. This feature is not yet released.

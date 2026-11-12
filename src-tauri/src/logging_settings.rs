@@ -7,10 +7,10 @@ use std::sync::atomic::{AtomicU8, Ordering};
 #[repr(u8)]
 pub enum LogLevel {
     Off,
+    Verbose,
     #[default]
     #[serde(other)]
     Basic,
-    Verbose,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]

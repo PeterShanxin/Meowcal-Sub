@@ -29,13 +29,11 @@ use tauri::{async_runtime, AppHandle, Emitter, Manager, State};
 use tokio::sync::watch;
 use tracing::{debug, info, warn};
 
-
 #[tauri::command]
 pub fn get_system_info() -> SystemInfo {
     crate::system_info::describe()
 }
 
-// =============================================================================
 
 #[tauri::command]
 pub async fn get_ocr_languages(state: State<'_, AppState>) -> Result<Vec<String>, String> {
@@ -583,7 +581,9 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
             let (frame_width, frame_height) = (capture_result.width, capture_result.height);
             let Some(ocr_result) = crate::session_lifecycle::until_stopped(
                 crate::diagnostic_artifacts::capture(
-                    session_id, token.capture_id, &capture_result,
+                    session_id,
+                    token.capture_id,
+                    &capture_result,
                     recognition_mode.recognize(&ocr, frame_data, frame_width, frame_height),
                 ),
                 &mut stop_rx,
