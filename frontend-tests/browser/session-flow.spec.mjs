@@ -81,6 +81,11 @@ async function openMain(page, region = { x: 100, y: 180, width: 350, height: 100
   }, region);
   await page.goto("/");
   await expect(page.getByRole("button", { name: "Start translation", exact: true })).toBeEnabled();
+  await expect(page.locator(".status-pill, .home-screen .dot, .support-line")).toHaveCount(0);
+  if (region) {
+    await expect(page.getByRole("heading", { name: "Let’s watch", exact: true })).toBeVisible();
+    await expect(page.locator(".home-description")).toHaveCount(0);
+  }
 }
 
 async function startConfirmed(page) {
@@ -140,7 +145,7 @@ test("healthy waiting preserves Home's running controls and support text", async
     const app = window.sessionTest;
     app.emit("subtitle-activity", { sessionId: app.sessionId, captureId: 60, state: "waiting" });
   });
-  await expect(page.locator(".status-pill")).toHaveText("Running");
+  await expect(page.getByRole("heading", { name: "Subtitles are live" })).toBeVisible();
   await expect(page.locator(".support-line")).toContainText("Overlay active · Local processing");
   await expect(page.getByRole("alert")).toHaveCount(0);
   await expect(page.locator(".region-row")).toBeDisabled();

@@ -69,6 +69,12 @@ they have faded, point at the overlay or switch to it with
 Light plate, and **Exit translation** stops and returns to Home. **Stop translation** on Home
 also ends the session.
 
+In the unreleased development build, Home shows readiness through the primary
+button: preparation disables it and shows a spinner; **Start translation** is
+available when ready. Home has no separate status badge or engine-ready line.
+The ready screen shows **Let’s watch** without a subtitle beneath the heading.
+Repair instructions and other actionable messages remain visible when needed.
+
 To choose or adjust the area without starting, use the subtitle-area row on
 Home (**Select** or **Change**) and choose **Use this area**. After that, the
 app can load the engine in the background so the next start is faster. The

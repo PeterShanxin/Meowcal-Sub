@@ -139,7 +139,11 @@ describe("deriveHomePresentation", () => {
     expect(result.action).toBe(action);
     expect(result.statusLabel).toBe(statusLabel);
     expect(result.actionLabel).toBeTruthy();
-    expect(result.supportLine).toBeTruthy();
+    if (action === "start") {
+      expect(result.supportLine).toBe("");
+    } else {
+      expect(result.supportLine).toBeTruthy();
+    }
   });
 
   it("keeps preparing disabled and never offers start", () => {
@@ -193,7 +197,13 @@ describe("deriveHomePresentation", () => {
     (phase) => {
       const result = deriveHomePresentation(snapshot({ engine: { phase } }));
 
-      expect(result).toMatchObject({ state: "ready", action: "start", statusLabel: "Ready" });
+      expect(result).toMatchObject({
+        state: "ready",
+        action: "start",
+        statusLabel: "Ready",
+        title: "Let’s watch",
+        description: "",
+      });
     },
   );
 });
