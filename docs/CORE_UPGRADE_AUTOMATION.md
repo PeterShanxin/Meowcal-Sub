@@ -14,6 +14,11 @@ already covers the newest release. It never merges a pull request. A generated
 pull request is the review and CI boundary for the consumer integration tests,
 including the native ARM64 gate.
 
+The generated PR includes an unchecked Documentation checklist. The reviewer
+checks the Core release for documentation impact, updates any affected documents,
+and records the changed documents or a no-change reason in the PR description.
+The workflow does not determine documentation impact or mark this review complete.
+
 To activate PR creation, configure a repository secret named
 `CORE_UPGRADE_TOKEN`. It must be a maintainer-owned fine-grained token or GitHub
 App token with Contents read/write and Pull requests read/write on this

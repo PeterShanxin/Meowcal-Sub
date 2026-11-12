@@ -194,7 +194,9 @@ try {
         'ref: ${{ github.event.repository.default_branch }}',
         'base: ${{ github.event.repository.default_branch }}',
         '## Intent', '## Changes', '## Non-goals', '## Validation',
-        '## Manual Windows validation', '## Risk and rollback', '## Issues',
+        '## Manual Windows validation', '## Documentation', '## Risk and rollback', '## Issues',
+        '- [ ] Review the Core release for documentation impact.',
+        '- [ ] Update this section with the documents changed, or explain why no document is affected.',
         'Routine Core dependency update.', 'Contributor License Agreement'
     )) {
         if ($workflow -notmatch [regex]::Escape($requirement)) {
