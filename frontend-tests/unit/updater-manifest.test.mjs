@@ -130,6 +130,22 @@ describe("manifest assembly", () => {
       }),
     ).toThrow(/empty/);
   });
+
+  it("publishes compact highlights instead of the full GitHub release body", () => {
+    const manifest = buildUpdaterManifest({
+      artifacts: selectUpdaterArtifacts(releaseAssets()),
+      signatures: { [`${X64}.sig`]: "a", [`${ARM64}.sig`]: "b" },
+      version: "0.9.1",
+      notes: readFileSync(new URL("../../docs/releases/v0.9.1.md", import.meta.url), "utf8"),
+      pubDate: "2026-11-12T00:00:00Z",
+      baseUrl: "https://example.invalid/download",
+    });
+    expect(manifest.notes.split("\n")).toHaveLength(3);
+    expect(manifest.notes).toContain(
+      "- **Keep short replies and small changes.** Single Chinese characters",
+    );
+    expect(manifest.notes).not.toMatch(/##|<details>|SHA256|#59|Fast dialogue is/);
+  });
 });
 
 describe("canonical update channel", () => {

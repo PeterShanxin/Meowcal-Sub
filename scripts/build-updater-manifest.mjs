@@ -18,6 +18,7 @@
 import { readFile, readdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
+import { summarizeUpdateNotes } from "../src/ui/update-notes.ts";
 
 /** Tauri's architecture token in an artifact name, to the updater's platform key. */
 export const UPDATER_PLATFORMS = Object.freeze({
@@ -103,7 +104,10 @@ export function buildUpdaterManifest({ artifacts, signatures, version, notes, pu
       url: `${baseUrl}/${githubAssetName(installer)}`,
     };
   }
-  return { version, notes, pub_date: pubDate, platforms };
+  const summary = summarizeUpdateNotes(notes)
+    .map(({ title, detail }) => `- ${title ? `**${title}** ` : ""}${detail}`.trimEnd())
+    .join("\n");
+  return { version, notes: summary, pub_date: pubDate, platforms };
 }
 
 function parseArguments(argv) {

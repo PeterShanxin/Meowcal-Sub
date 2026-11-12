@@ -184,6 +184,8 @@ treats a missing or unexplained answer like a missing validation result.
   built artifacts, never written by hand. It names `windows-x86_64` and
   `windows-aarch64` explicitly, and the release job fails when either
   architecture's installer or signature is missing.
+  Its notes contain up to three short highlights from the release file;
+  Settings links to the full version-specific GitHub release.
 - This public repository is the canonical release and updater location. New
   builds fetch `releases/latest/download/latest.json` here, and that manifest's
   installer URLs point to assets on the same canonical release.

@@ -190,6 +190,11 @@ For update checks, open **Settings → Engine and updates → Check for updates*
 Automatic checks occur at startup at most once per day. Checking does not
 itself download an application update; **Download and install** does.
 
+**Not yet released:** Available updates show up to three formatted highlights
+under **What's new**, without a separate scroll box. **Full release notes ↗**
+opens that version's complete GitHub release in your browser. The link remains
+available when the update has no summary.
+
 ## Logs and diagnostics
 
 The latest release writes one session log per launch and removes `.log` files

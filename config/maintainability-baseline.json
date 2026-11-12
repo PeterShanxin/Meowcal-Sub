@@ -35,6 +35,7 @@
     "src/ui/setup-progress.ts",
     "src/ui/update-controller.ts",
     "src/ui/update-state.ts",
+    "src/ui/update-notes.ts",
     "scripts/allocate-port.mjs",
     "scripts/build-updater-manifest.mjs",
     "scripts/commit-contract.mjs",
