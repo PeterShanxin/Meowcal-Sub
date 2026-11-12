@@ -6,6 +6,9 @@ Meowcal Sub translates **visible text in a selected screen region**, not audio.
 Start with a video that already displays subtitles in Chinese, Japanese,
 Korean, English, Spanish, French, or German.
 
+This guide describes the latest published application release. To see what a
+specific release changed, read its notes under [`releases/`](releases/).
+
 ## Installation
 
 Use the installers on the [latest application release](https://github.com/PeterShanxin/Meowcal-Sub/releases/latest).
@@ -24,25 +27,13 @@ First-time setup downloads approximately **1.1 GB** of local translation assets.
 That is a download estimate, **not a total installed-disk requirement**: allow
 additional space for extraction, caches, and retained runtime versions.
 
-Meowcal reads subtitles with its built-in PP-OCRv6 recognizer, which needs no
-Windows language pack. Korean subtitles, the **Compatibility** profile, and
-**Settings → Advanced → Text recognition → Windows OCR** use Windows OCR instead;
-that needs the Windows OCR language for the original subtitles.
-
-**Settings → Profile** sets recognition and translation together. **Automatic**
-reads with PP-OCRv6 and lets translation use the graphics card when the engine
-can; while translation runs on the CPU, PP-OCRv6 uses fewer CPU threads.
-**Compatibility** reads with Windows OCR and translates on the CPU, avoiding the
-graphics driver and PP-OCRv6's CPU load. Changing a choice under **Advanced**
-shows the profile as **Custom**.
-
 ### Check a download
 
 Download the installer and `SHA256SUMS.txt` from the **same application release**.
 In PowerShell, compute the hash of the file you downloaded, for example:
 
 ```powershell
-Get-FileHash -Algorithm SHA256 -LiteralPath ".\Meowcal.Sub_0.8.0_x64-setup.exe"
+Get-FileHash -Algorithm SHA256 -LiteralPath ".\Meowcal.Sub_0.9.1_x64-setup.exe"
 ```
 
 Use your actual filename for another version or architecture. Compare the full
@@ -58,53 +49,189 @@ not constitute Windows publisher signing.
 
 ## First translation
 
-Complete the setup wizard, or choose **Set up translation** on Home. Pick the
-original subtitle language and your target language. Let setup download and
-test the local engine. Follow **Install recognition language** if Windows lacks
-the OCR language for the original subtitles.
+1. Complete the setup wizard, or choose **Set up translation** on Home. Let
+   setup download and test the local engine.
+2. On Home, choose **Original subtitles** and **Translate into**.
+3. Move the Home window onto the screen that plays the video.
+4. Choose **Start translation**. The subtitle-area selector opens.
+5. Drag across the original subtitles, or press <kbd>Enter</kbd> to place a
+   suggested box in the lower part of the screen. When the video shows two-line
+   subtitles, include both lines. Avoid player controls, unrelated text, and
+   the place where the translation will appear.
+6. Choose **Confirm and start**, or press <kbd>Enter</kbd>. Arrow keys move the
+   box; <kbd>Shift</kbd> + arrow keys resize it. **Redraw** starts the box
+   again, and **Cancel** (<kbd>Esc</kbd>) returns to Home without starting.
 
-Move the app window onto the screen playing the subtitled video, choose
-**Select subtitle area**, and draw a box around the original lines. Include space
-for all subtitle lines, while avoiding player controls, unrelated text, and the
-translated overlay itself. The box is a screen region, not an object tracker:
-reselect it when the video moves or changes size.
+The first start takes longer while the model warms up. Translations appear in a
+floating overlay near the selected area. The overlay has two controls; when
+they have faded, point at the overlay or switch to it with
+<kbd>Alt</kbd>+<kbd>Tab</kbd>. **Subtitle style** sets text size and a Dark or
+Light plate, and **Exit translation** stops and returns to Home. **Stop translation** on Home
+also ends the session.
 
-With multiple displays, Home shows a quiet hint. The selector, OCR and overlay
-use the screen containing the largest part of the app window when you open the
-selector. A running session stays on that screen even if you move Home. To switch
-screens, stop translation, move Home, and select the new subtitle area. No screen
-picker or simultaneous multi-screen translation is needed.
+To choose or adjust the area without starting, use the subtitle-area row on
+Home (**Select** or **Change**) and choose **Use this area**. After that, the
+app can load the engine in the background so the next start is faster. The
+next **Start translation** still asks you to confirm the area.
 
-If the capture screen disconnects, or its position, resolution or DPI changes,
-translation stops and the overlay hides. Reconnecting does not resume capture;
-select the subtitle area again in the current session. Restart can restore the
-saved area only when its screen identity, bounds and DPI still match the screen
-containing Home. Older
-configs without a screen identity restore an area only on a single-display
-desktop. The experimental WinUI windows are limited to one display; multi-display
-desktops use the standard Tauri selector and overlay.
+The area is a fixed screen region, not an object tracker. When the video moves,
+changes size, or switches between window and full screen, select the area again.
 
-Choose **Start translation**. The first start takes longer while the model warms
-up. **Subtitle style** controls text size and a Dark or Light plate; use
-**Stop translation** to end the session.
+### Multiple displays
+
+With multiple displays, Home shows a short notice. The selector, recognition,
+and overlay use the screen that contains the largest part of the Home window
+when the selector opens. A running session stays on that screen even if you
+move Home. To switch screens, stop translation, move Home, and select the area
+again.
+
+If the capture screen disconnects, or its position, resolution, or scaling
+changes, translation stops and the overlay hides. Reconnecting does not resume
+capture; select the subtitle area again. After a restart, the app restores a
+saved area only when the same screen, bounds, and scaling are still present and
+Home is on that screen.
+
+## Settings
+
+| Setting | What it does | When to change it |
+| --- | --- | --- |
+| **Translate any text** | Translates readable text such as pages, menus, and games, not only subtitle-shaped lines. Off by default. | Turn it on for slides or apps. Keep it off for video: it also admits watermarks, timers, and scene text. |
+| **Keep names consistent** | Sends recent lines as context so names and terms stay consistent. Off by default. | Leave it off unless names change between lines; context can make the model repeat an earlier line. |
+| **Profile → Automatic** | Reads with PP-OCRv6 and lets translation use the graphics card when the engine can. | The default for most PCs. |
+| **Profile → Compatibility** | Reads with Windows OCR and translates on the CPU. | Use it when translations are garbled, the graphics driver misbehaves, or the PC stalls. |
+| **Profile → Custom** | Shown when a choice under **Advanced** differs from both profiles. | Not selectable; choose a profile to return to it. |
+| **Advanced → Text recognition** | **PP-OCRv6** (built in, no Windows language needed) or **Windows OCR**. Korean subtitles always use Windows OCR. | Try **Windows OCR** for a subtitle style PP-OCRv6 misreads. |
+| **Advanced → Run the engine on CPU only** | Starts translation without GPU offload. Changing it restarts the engine. | Use it for garbled output or stalls while keeping PP-OCRv6. Translation can be slower. |
+| **Advanced → Recognition quality** | Shown for Windows OCR only: **Fast**, **Balanced**, or **Accurate**. | Use **Accurate** for hard-to-read text if your PC has spare capacity. |
+| **Engine and updates → Translation engine** | Shows the engine state. **Test** runs a private sample translation; **Repair** checks and restores the engine. | Use **Repair** when Home asks for it or a test fails. |
+| **Automatically check for updates** | Checks at most once a day, after startup. | Turn it off to check only by hand. |
+| **Developer options → Developer mode** | Shows **Show subtitle diagnostics**, the engine phase, and the support code. | For troubleshooting only. |
+
+Windows OCR needs the Windows recognition language for the original subtitles.
+When it is missing, Home shows **Install recognition language**.
+
+While translation runs on the CPU, PP-OCRv6 uses two CPU threads to leave room
+for translation; with GPU translation it uses up to four.
+
+## What the app is doing
+
+### Home
+
+| Status | Meaning | What to do |
+| --- | --- | --- |
+| **Checking** | The app checks the engine, recognition, and saved area. | Wait. |
+| **Setup needed** | The engine is not installed. | Choose **Set up translation**. |
+| **Preparing** | The engine is loading or checking its model. | Wait; you can start when it is ready. |
+| **Busy** | The engine is finishing another operation, such as an install or repair. | Wait, then try again. |
+| **Needs repair** | The engine check failed. Your settings are kept. | Choose **Repair engine**. Keep the support code if repair fails. |
+| **Almost ready** | Windows OCR needs the recognition language, or no subtitle area exists yet. | Choose **Install recognition language** or **Start translation**. |
+| **Select area** | The selector is open. | Confirm or cancel in the selector. |
+| **Starting** | The engine warms up for the session. | Wait. |
+| **Running** | Subtitles are live. | Choose **Stop translation** to end. |
+
+If a session ends on its own, Home shows **Translation stopped unexpectedly.
+Start translation again.** If recognition fails three times in a row, Home shows
+**Text recognition is not responding. Return to Home and restart translation.**
+
+### Overlay
+
+| Overlay shows | Meaning | What to do |
+| --- | --- | --- |
+| A translated line | The latest subtitle that finished translating. | Nothing. |
+| **Preparing translation…** | The engine is still warming up or recovering. | Wait. |
+| **Waiting for subtitles…** | Recognition works, but the area has shown no text for 15 seconds. | Check that subtitles are visible inside the area. The notice clears when text returns. |
+| **Translation engine stopped.** | Engine recovery failed. The app tries again after 30, 60, 120, and then every 300 seconds while subtitles need translation. | Wait, or choose **Exit to Home** and use **Repair engine**. |
+| **Translation is interrupted.** | Capture or recognition stopped working, or the session ended. | Choose **Exit to Home**, then start again. |
+
+When one translation takes too long or the engine briefly fails, the current
+line stays on screen and the app retries that subtitle while it is still
+visible. Short gaps and successful retries do not show a notice.
+
+## How subtitles are handled
+
+- **Order.** Each subtitle is translated once and shown in the order it
+  appeared. A new subtitle needs two matching readings before it is accepted,
+  so one misread frame does not create a line.
+- **Fast dialogue.** New subtitles start translating while the previous one is
+  still displayed. Each translation stays visible long enough to read, but no
+  longer than its original subtitle was on screen (at most four seconds), so
+  the overlay does not fall further and further behind. If translation still
+  falls 15 seconds or 32 lines behind, the app skips the waiting lines and
+  continues from the current subtitle.
+- **Pause and resume.** While the video is paused, the same subtitle is not
+  translated again and its translation stays on screen. After you resume, the
+  next subtitle is translated normally.
+- **Repeated subtitles.** If the same text disappears and then returns, it is
+  translated and shown again. Two identical lines with no blank between them
+  count as one subtitle. Changes in case, spacing, or final punctuation do not
+  create a new subtitle; a changed word, number, or character does.
+- **Screen changes.** Moving or resizing the video does not move the area.
+  Select the area again. Changing the selected area during a session restarts
+  the session and discards translations still in progress.
+- **Credits and signs.** Normal mode filters out watermarks, timers, and moving
+  scene text. Fast lists of names, such as credits, may still be translated.
 
 ## When something does not look right
 
 | Symptom | Check first |
 | --- | --- |
-| Home says the recognition language is missing | Windows OCR is reading the subtitles (Korean, or selected in Settings). Install the Windows OCR language matching the original subtitles, not just the target translation language. |
+| Home says the recognition language is missing | Windows OCR is reading the subtitles (Korean, **Compatibility**, or **Text recognition → Windows OCR**). Install the Windows OCR language for the original subtitles, not the target language. |
 | Home offers **Repair engine** | Use that action to check and restore the managed engine. Keep the displayed support code if repair fails. |
 | Setup reports `ENGINE_INCOMPATIBLE` or `ENGINE_DISK_SPACE` | Check the Windows 11, 8 GiB system-RAM, and 3 GiB free-installation-space requirements above. A missing architecture/runtime or unsupported installation path can also produce an incompatibility error; include the exact support message in a report. |
-| Text is missing or misread | Check that the selected region is still aligned and visible, contains every subtitle line, and does not include player controls or the translation overlay. Try clearer, larger source subtitles. |
-| Readable non-subtitle text is ignored | Normal mode filters for subtitle-like text. Enable **Translate any text** in Settings only when that is your intended use. It does not improve the OCR model itself. |
-| Translations come out garbled, or the PC stalls while the engine runs | Choose **Settings → Profile → Compatibility**, or turn on only **Settings → Advanced → Run the engine on CPU only**. The engine restarts on CPU. Include the support code and your GPU and driver version in a report. |
-| Translation feels slow | Allow for the initial model warm-up. Check local CPU and memory pressure and the size of the selected region. Different hardware, source text, and model load produce different latency. |
-| Video capture is blank or incomplete | Protected content or a player's display mode may not be capturable. Test with a non-protected local clip in a normal window; this app is not a capture-protection bypass. |
+| Text is missing or misread | Check that the area is aligned, visible, contains every subtitle line, and excludes player controls and the overlay. Try clearer, larger source subtitles, or the other **Text recognition** engine. |
+| Readable non-subtitle text is ignored | Normal mode filters for subtitle-like text. Turn on **Translate any text** only when that is your intended use. It does not improve recognition itself. |
+| The same line is translated twice | The subtitle disappeared briefly, or recognition returned an empty frame, between two readings. Keep the area tight around the subtitles. |
+| Translations come out garbled, or the PC stalls while the engine runs | Choose **Profile → Compatibility**, or turn on **Advanced → Run the engine on CPU only**. The engine restarts on CPU. Include the support code and your GPU and driver version in a report. |
+| Translation feels slow or lags behind | Allow for the initial warm-up. Close CPU- or memory-heavy apps; on a busy PC CPU translation can slow down sharply. Keep the area small. |
+| Video capture is blank or incomplete | Protected content or a player's display mode may not be capturable. Home can show **Compatibility capture · Protected video may not be read**. Test with a non-protected local clip in a normal window; this app is not a capture-protection bypass. |
 | The app says it is up to date | Check the installed version against the application release, not a `core-v...` runtime tag. A merged code change is not necessarily a released update. |
 
 For update checks, open **Settings → Engine and updates → Check for updates**.
 Automatic checks occur at startup at most once per day. Checking does not
-itself download an application update.
+itself download an application update; **Download and install** does.
+
+## Logs and diagnostics
+
+The installed app writes one log file per launch to
+`%APPDATA%\com.meowcal.sub\logs\meowcal-sub_<date>_<time>.log`. To open the
+folder, paste `%APPDATA%\com.meowcal.sub\logs` into the File Explorer address
+bar. At startup the app deletes log files older than seven days. There is no
+in-app log-level control.
+
+Default logs record timings, character counts, queue depth, engine state,
+support codes, and error codes. They are designed to omit subtitle text and
+translations. Still read a log before you share it.
+
+Two diagnostics can expose screen content, so use them only for local
+investigation:
+
+- **Settings → Developer options → Developer mode → Show subtitle diagnostics**
+  adds recognition details beside the live subtitles. Screenshots taken while
+  it is on show that detail.
+- The environment variable `MEOWCAL_BAND_LOG` writes a local JSONL file of
+  subtitle-area decisions without text. Adding `MEOWCAL_BAND_LOG_TEXT=1`
+  records the **verbatim recognized text** as well. Never publish those files.
+
+## Report a problem safely
+
+1. Note the app version (**Settings → Engine and updates**), Windows build
+   (`winver`), and whether the PC is x64 or ARM64.
+2. Note the source and target languages, the **Profile**, and the
+   **Text recognition** engine.
+3. Copy the support code if Home or Settings shows one.
+4. Write the steps that reproduce the problem with a video you can describe
+   without sharing it.
+5. If a log helps, copy only the relevant lines and remove any text you do not
+   want to share.
+
+Use the [issue chooser](https://github.com/PeterShanxin/Meowcal-Sub/issues/new/choose).
+Do not post captured subtitle text, screenshots of what you were watching, API
+keys, or raw logs containing them. A screenshot of the overlay's own controls is
+fine. Report vulnerabilities privately using [SECURITY.md](../SECURITY.md).
+
+To recover from a stuck state, try these in order: **Stop translation** or
+**Exit translation**; **Repair engine**; restart the app; choose
+**Profile → Compatibility**.
 
 ## Frequently asked questions
 
@@ -116,10 +243,11 @@ For subtitle-file search and playback-aligned sessions, see
 
 ### Does it work offline?
 
-OCR and translation can run offline after the local engine and recognition
-language are installed. Setup, repair downloads, missing Windows language
-components, and update checks/downloads use the network. Your video service has
-its own connectivity requirements.
+OCR and translation can run offline after the local engine is installed, and
+after the Windows recognition language is installed when Windows OCR is used.
+Setup, repair downloads, missing Windows language components, and update
+checks/downloads use the network. Your video service has its own connectivity
+requirements.
 
 ### How does GPU support differ by architecture?
 
@@ -153,13 +281,3 @@ depends on text clarity, language support, and screen-capture availability.
 No. Meowcal Sub uses its packaged, pinned [Meowcal Core](../core/README.md)
 runtime. MeowWatch is for watching together; Sub 2 has a separate subtitle
 workflow. Neither is required to run Sub 1.
-
-## Get help safely
-
-Use the [issue chooser](https://github.com/PeterShanxin/Meowcal-Sub/issues/new/choose).
-Include the app version, Windows build, x64/ARM64 architecture, source and target
-languages, the displayed support code, and a minimal non-private reproduction.
-Do not post captured subtitle text, private screenshots, API keys, or raw logs
-containing them. Production logs are designed to omit subtitle text; inspect
-anything you share anyway. Report vulnerabilities privately using
-[SECURITY.md](../SECURITY.md).

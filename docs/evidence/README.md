@@ -6,6 +6,33 @@ identity, output shape, validator decisions, and latency. They intentionally
 exclude OCR source text, model output text, configuration paths, and machine
 identifiers.
 
+## Publishing evidence
+
+Every published evidence file or PR evidence section states:
+
+- **Commit:** the exact tested commit, and the build mode (debug or release,
+  installed package or checkout build).
+- **Environment:** device or CPU, architecture, RAM, GPU and driver, Windows
+  build, display scaling, and the **Profile** and **Text recognition** setting.
+- **Method:** the validation layer from
+  [Evaluation and validation](../../evals/README.md#choose-a-validation-layer),
+  the fixture or case set, warmup, timing boundaries, and sample count.
+- **Results:** counts per authored cue or case, and p50, p95, and maximum for
+  timings.
+- **Limitations:** what the run does not cover, such as the other
+  architecture, untested media, or a skipped manual gate.
+
+Keep private material out of this repository and out of PR text: original
+films and episodes, their subtitle text and translations, screenshots of them,
+band logs recorded with `MEOWCAL_BAND_LOG_TEXT=1`, and hand annotations of real
+media. Publish aggregate counts and timings instead. Screenshots are public
+only when they show authored fixtures, such as the
+[band gate](../../evals/band-gate/README.md), or the app's own UI. Prefer
+authored fixtures and the policy replay so others can reproduce a result
+without the private material.
+
+## Recorded evidence
+
 `2026-07-31-arm64-subtitle-eval.json` was generated with:
 
 ```powershell
@@ -161,3 +188,13 @@ focus. Browser tests also cover 100% and 125% scale, exit retries, clip payloads
 and small-region placement. This is browser presentation evidence; Windows
 session teardown, window restoration, WebView2 rendering and native DPI
 validation remain outstanding.
+
+The [subtitle FIFO screenshot](2026-11-09-subtitle-fifo-native.png) and the
+[v0.9.1 screenshot](2026-11-10-v0.9.1-native.png) show the authored band-gate
+fixture during native Windows capture, recognition, managed translation, and
+overlay display. In the v0.9.1 frame, the overlay still shows the previous
+cue's translation while the next source line is visible: the previous line is
+still within its reading time. The cue counts and latency
+results behind them are recorded in
+[pull request #315](https://github.com/PeterShanxin/Meowcal-Sub/pull/315);
+these images are not throughput or accuracy evidence by themselves.

@@ -35,6 +35,13 @@ result — or say the gate is outstanding. Attach a screenshot or recording for 
 visible change. Write "Not applicable — no visible behavior change" if so.
 -->
 
+## Documentation
+
+<!--
+Name each updated document, or state why no document is affected. The update map
+is in docs/AGENT_GUIDE.md, "Documentation maintenance".
+-->
+
 ## Risk and rollback
 
 <!-- What breaks if this is wrong, and how to undo it. -->

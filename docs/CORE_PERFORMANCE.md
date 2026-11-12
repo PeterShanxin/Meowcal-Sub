@@ -4,7 +4,14 @@ Core's process boundary is accepted only with comparable latency and recognition
 evidence. [ADR-0004](adr/0004-versioned-meowcal-core.md) defines the budgets.
 The benchmark excludes screen acquisition, translation and native presentation;
 it includes each product's preprocessing, recognition passes, transport and
-result selection. It cannot establish full-episode UX by itself.
+result selection. It cannot establish full-episode UX by itself. For where this
+benchmark fits among the other validation layers, see
+[Evaluation and validation](../evals/README.md#choose-a-validation-layer).
+
+The Sub 1 driver measures the **Windows OCR** path: `ocr_benchmark.rs` opens
+Core OCR with a language tag. PP-OCRv6 recognition was measured separately in
+[the OCR stability experiment](plans/2026-11-05-ocr-stability-experiment.md);
+those numbers are not comparable with this benchmark's.
 
 ## Repeatable comparison
 
@@ -14,8 +21,9 @@ Record the baseline commit, candidate commit and executable SHA-256 values.
 Run release builds in baseline/candidate/candidate/baseline order. Warmup is
 explicit and first-call/initialization timings remain separate from steady state.
 
-Sub 2's `scripts/benchmark_core_ocr.py` generates Latin, Chinese, colored, blank
-and large-region fixtures, including packed BGRA files and their checksums. Its
+Sub 2's own `scripts/benchmark_core_ocr.py`, in the Meowcal Sub 2 repository,
+generates Latin, Chinese, colored, blank and large-region fixtures, including
+packed BGRA files and their checksums. Its
 `--baseline`, `--candidate`, `--core` and `--output` arguments select independent
 checkouts and the built Core. The baseline needs its original `winocr` dependency.
 Each worker verifies the imported package path, so an editable Python install
@@ -35,7 +43,11 @@ measurement code identical, and use the same release profile. Validation-only
 Tauri resources can be prepared with `scripts/prepare-validation-resources.ps1`;
 these placeholders are not an application package.
 
-Set `MEOWCAL_CORE_EXECUTABLE` to the candidate Core's absolute path and invoke:
+This repository's `scripts/benchmark_core_ocr.py` drives the two Sub 1
+examples. It reads a `fixtures.json` with exactly the `latin`, `large`,
+`color`, `chinese` and `blank` fixtures and their `.bgra` files beside it, such
+as the Sub 2 fixture output. Set `MEOWCAL_CORE_EXECUTABLE` to the candidate
+Core's absolute path and invoke:
 
 ```powershell
 python scripts/benchmark_core_ocr.py `

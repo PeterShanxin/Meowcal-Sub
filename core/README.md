@@ -62,8 +62,8 @@ Consumers verify version, API, required capabilities, IDs, and reply shape.
 | `complete`         | `request`: bounded chat-completion payload; `timeoutMs`: 1–90000                                      | Chat-completion response from the owned HY-MT runtime                                      |
 | `recoverInference` | `receipt`: returned inference receipt; `reason`: output rejection code                                | Validated readiness after a bounded check or CPU recovery                                  |
 | `ocrLanguages`     | `{}`                                                                                                  | Installed Windows OCR language tags                                                        |
-| `ocrInitialize`    | Optional `engine`; optional `language` tag for Windows OCR, where null selects user-profile languages | Resolved OCR language; null for PP-OCRv6                                                   |
-| `ocrRecognizeBgra` | Optional `engine`, language, width, height, stride, timeout; raw BGRA body                            | Raw text, lines, line boxes, frame width                                                   |
+| `ocrInitialize`    | Optional `engine`, `language`, and `maxThreads`; see the engine table below                           | Resolved OCR language; null for PP-OCRv6                                                   |
+| `ocrRecognizeBgra` | `width`, `height`, `stride`, `timeoutMs`; optional `engine`, `language`, `maxThreads`; raw BGRA body  | Raw text, lines, line boxes, frame width                                                   |
 | `shutdown`         | `{}`                                                                                                  | Acknowledgement, then process exit                                                         |
 
 OCR pixels are packed BGRA8, `stride = width * 4`; alpha is ignored. Dimensions
@@ -73,23 +73,38 @@ PP-OCRv6 resizes internally and reports boxes in the frame's own pixels. All
 JSON headers and responses are limited to 256 KiB. OCR timeouts are 1–30000 ms.
 
 `engine` is `windows` (the default when absent) or `ppOcrV6`. A Core that can
-run PP-OCRv6 advertises the `ocrPpOcrV6` capability. PP-OCRv6 reads Chinese,
-Japanese and Latin-script text with one model, so its requests carry no
-`language`; one that does is `INVALID_PARAMS`. It has no Korean. It runs on the
-CPU with at most four threads, leaving cores to the translation engine. Its
-`ocrInitialize` and `ocrRecognizeBgra` requests may carry `maxThreads` (1–4) to
-use fewer, for example while the translation engine runs on the CPU; a request
-without it uses a third of the cores, up to four. `maxThreads` on a Windows OCR
-request is `INVALID_PARAMS`. PP-OCRv6 cannot be cancelled: its timeout is enforced by ending the session, as for an
-unresponsive native call. The first PP-OCRv6 request loads the models; send
-`ocrInitialize` first so that load is not counted against a frame's timeout.
+run PP-OCRv6 advertises the `ocrPpOcrV6` capability. Unknown parameters are
+rejected.
+
+| Parameter | Windows OCR | PP-OCRv6 |
+| --- | --- | --- |
+| `language` | Optional BCP-47 tag, 1–128 bytes. Absent or `null` uses the Windows user-profile languages. | Absent or `null` only. A tag is rejected: one model reads Chinese, Japanese and Latin-script text. It cannot read Korean. |
+| `maxThreads` | Rejected | Optional, 1–4. Absent uses a third of the logical processors, from 1 to 4. |
+
+PP-OCRv6 runs on the CPU with at most four threads, leaving cores to the
+translation engine. Use a lower `maxThreads` when the translation engine also
+runs on the CPU. PP-OCRv6 cannot be cancelled: its timeout is enforced by
+ending the session, as for an unresponsive native call. The first PP-OCRv6
+request loads the models; send `ocrInitialize` first so that load is not
+counted against a frame's timeout. Core bounds `ocrInitialize` and
+`ocrLanguages` to five seconds each.
 
 `ocrRecognizeBgra` requires top-level `payloadBytes = width * height * 4` and
-parameters `language`, `width`, `height`, `stride`, and `timeoutMs`. Exactly that
-many raw BGRA bytes follow the header's newline, with no trailing delimiter.
-The next JSON header begins immediately after the body. Other methods permit
-only an absent or zero `payloadBytes`. Consumers require the `ocrRecognizeBgra`
-capability; there is no Base64 transport.
+parameters `width`, `height`, `stride`, and `timeoutMs`, plus the optional
+`engine`, `language`, and `maxThreads` above. Exactly that many raw BGRA bytes
+follow the header's newline, with no trailing delimiter. The next JSON header
+begins immediately after the body. Other methods permit only an absent or zero
+`payloadBytes`. Consumers require the `ocrRecognizeBgra` capability; there is no
+Base64 transport. A PP-OCRv6 frame header looks like this:
+
+```json
+{"id":7,"api":1,"method":"ocrRecognizeBgra","payloadBytes":3686400,"params":{"engine":"ppOcrV6","maxThreads":2,"width":1280,"height":720,"stride":5120,"timeoutMs":3000}}
+```
+
+Core validates `ocrRecognizeBgra` parameters before it reads the body. Because
+an invalid header leaves the body boundary unknown, Core does not reply with
+`INVALID_PARAMS`: it closes the session. `ocrInitialize` with invalid options
+replies `INVALID_PARAMS` and keeps the session.
 
 Native recognition waits for WinRT's completion notification instead of polling.
 An expired native deadline returns `OCR_TIMEOUT`; loss of the completion channel
@@ -110,6 +125,16 @@ result while the consumer drains the response within the original deadline,
 preserving the loaded model. Queued cancellations send no request. Closing stdin,
 a transport timeout, or a broken protocol ends the owned session. Consumers must
 bound writes as well as reads and reap the exact process they launched.
+
+Handle errors by their effect on the process:
+
+- `OCR_TIMEOUT`, `OCR_PROCESS_UNUSABLE`, `INSTALL_TIMEOUT`, `READY_TIMEOUT`, a
+  closed session, or a transport failure: stop and reap that process. Start a
+  new Core, repeat `hello`, and repeat `ocrInitialize` before the next frame.
+  Sub 1 discards the process and starts a new Core on its next request.
+- Other error codes, such as `INVALID_PARAMS` or `NOT_READY`: the process stays
+  usable. Correct the request or wait for readiness; do not restart Core only
+  because of them.
 
 ## Inference recovery
 

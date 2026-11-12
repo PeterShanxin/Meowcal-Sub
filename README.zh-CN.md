@@ -53,7 +53,8 @@ MSI 安装包和 `SHA256SUMS.txt` 校验文件也在该发布页。
 
 首次设置需要下载本地翻译运行环境与模型，约 **1.1 GB**。
 缓存和保留的旧版本还需要额外磁盘空间。
-Windows 也可能需要为原字幕语言安装对应的 OCR 识别组件。
+内置的 PP-OCRv6 不需要 Windows 语言组件。识别韩语字幕或你选择 Windows OCR 时，
+需要为原字幕语言安装对应的 Windows 识别语言。
 
 **Windows 可能提示“未知发布者”。** 安装包尚未使用 Authenticode 签名。
 请只从本仓库下载，并将文件的 SHA-256 与发布页校验文件比对；不要全局关闭 Windows 安全防护。
@@ -62,11 +63,12 @@ Windows 也可能需要为原字幕语言安装对应的 OCR 识别组件。
 ## 开始使用
 
 1. **设置翻译。** 打开应用并完成设置向导。选择原字幕语言和目标语言，
-   让向导安装、测试翻译引擎，并检查 Windows 识别语言。
-2. **圈选字幕。** 将应用主窗口移到播放视频的屏幕，点击 **Select subtitle area**，
-   圈住原字幕，而不是整个视频。保持该区域可见；移动视频或改变画面大小后，重新圈选。
-3. **开始翻译。** 点击 **Start translation**，通过悬浮字幕阅读译文。
-   在 **Subtitle style** 调整字号和深色／浅色底板；结束后点击 **Stop translation**。
+   让向导安装并测试翻译引擎。
+2. **开始翻译。** 将应用主窗口移到播放视频的屏幕，点击 **Start translation**。
+   圈住原字幕，而不是整个视频，再点击 **Confirm and start**。
+   移动视频或改变画面大小后，重新圈选。
+3. **观看。** 通过悬浮字幕阅读译文。在 **Subtitle style** 调整字号和深色／浅色底板；
+   结束后点击 **Exit translation** 或 **Stop translation**。
 
 ![流程示意图：圈选已有字幕，在本机识别文字，在本机通过 HY-MT 翻译，再显示悬浮字幕。](docs/assets/architecture.svg)
 
@@ -137,6 +139,21 @@ Core 是底层运行环境，不是用户需要额外手动安装的应用。
 [Core 设计决策](docs/adr/0004-versioned-meowcal-core.md)和
 [Core 性能证据](docs/CORE_PERFORMANCE.md)。测量结果对应特定测试条件，
 不是对所有电脑的端到端字幕延迟承诺。
+
+## 文档
+
+| 文档 | 用途 |
+| --- | --- |
+| [使用指南（英文）](docs/USAGE.md) | 设置项、应用当前状态、故障排查、日志，以及如何安全地反馈问题 |
+| [版本说明](docs/releases/) | 每个已发布版本的改动 |
+| [架构说明](docs/ARCHITECTURE.md) | 数据流、字幕队列与时序、恢复机制和存储位置 |
+| [贡献指南](CONTRIBUTING.md) | 构建、测试和提交改动 |
+| [开发约定](docs/AGENT_GUIDE.md) | 工作约定、质量标准和文档维护规则 |
+| [评估说明](evals/README.md) | 各层验证方法与测量方法 |
+| [Meowcal Core](core/README.md) | Core 的 API 与存储约定 |
+
+本页和使用指南对应最新发布版本 v0.9.1。架构、贡献和评估文档跟随 `main` 分支，
+其中可能包含尚未发布的改动。
 
 ## 反馈与参与
 

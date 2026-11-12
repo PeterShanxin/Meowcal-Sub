@@ -82,11 +82,78 @@ and the compatibility façade. Managed HY-MT requests use
 execution and API-namespace discovery remain in `llm/transport_http.rs`
 (`HttpTransport`).
 
+### Session sequence and event ordering
+
+1. **Start.** Home's **Start translation** opens the selector with
+   **Confirm and start**. `area_selection.rs` correlates that confirmation, the
+   controller saves settings and waits for engine readiness, and
+   `start_translation` begins the session.
+2. **Capture loop.** `commands.rs` shows the overlay, opens the session's OCR
+   engine in Core's OCR process, starts the translation workers, then repeats:
+   capture, OCR, band filter, eligibility gate, and `Translator::observe`.
+3. **Translation.** One inference worker takes the oldest queued cue that has
+   no result. The worker never runs two cues at once.
+4. **Presentation.** A display loop checks the FIFO head every 25 ms and emits
+   a line or a clear when the reading rules below allow it.
+5. **Stop.** Stop, a region change, or display loss invalidates the session or
+   translation generation; see `session_lifecycle.rs` and `display_session.rs`.
+
+Every subtitle display event is a `translation-update` carrying `sessionId`,
+`captureId`, `cueId`, and `updateId`. `pipeline_session.rs` issues session,
+capture and update IDs; the subtitle queue issues cue IDs.
+`updateId` increases for every displayed line, clear, and notice in a session.
+The overlay accepts an event only from a newer session, or from the same session
+with a higher `updateId` (`pipeline-update.js`). Notices are emitted only while
+the queue is idle, so they cannot overtake or displace a queued subtitle.
+
 The target path keeps the stages explicit. Every result carries a typed state:
 translated, source-only, rejected, transient failure, cancelled, or stale.
 Source OCR is never represented as successful translation.
 An active cue retries after a cooldown when transport or engine recovery can
 resolve its failure. Deterministic output rejection does not retry the same cue.
+
+### Timeouts, cancellation, and recovery budgets
+
+| Operation | Budget | On expiry or failure |
+| --- | --- | --- |
+| One subtitle translation (`pipeline_deadline.rs`) | 5 s; backends get 4.6 s so the fallback can return | The cue reports engine slow, the line on screen stays, and the cue may retry while its source is visible. The abandoned Core request drains under Core's own deadline. |
+| OCR frame (`ocrRecognizeBgra`) | 30 s in Core; the app waits 2 s longer | `OCR_TIMEOUT` ends that OCR process; the next frame starts a new one. The third consecutive recognition failure emits an error `capture-status`, and the overlay shows **Translation is interrupted.** |
+| `ocrInitialize`, `ocrLanguages` | 5 s | Error to the caller; the session does not start OCR. |
+| Inference recovery (`recoverInference`, `ready` retry) | 120 s, serialized | New and queued translations are skipped while it runs; failure starts the 30/60/120/300 s retry schedule. |
+| Core `ready` | 110 s in Core | `READY_TIMEOUT`; the app discards that Core process. |
+| Core `complete` | `timeoutMs` 1–90000 | Error reply; the app's own deadline is shorter. |
+| Update metadata check | 10 s | The check fails; download and installation have no such deadline. |
+| Healthy empty recognition | 15 s | The overlay shows **Waiting for subtitles…** until text returns. |
+| Display probe | every 250 ms | A changed or lost capture screen stops the session and hides the overlay. |
+
+Stop waits for the capture task to exit before reporting success. Region
+changes and Stop advance generations instead of waiting for in-flight work;
+late results from an old generation are discarded in Rust and in the overlay.
+
+## Configuration, storage, and build isolation
+
+| Data | Location |
+| --- | --- |
+| Settings | `%APPDATA%\<identifier>\config.json`, with `config.bak.json` as the last known-good copy (`config_store.rs`, `config_save.rs`) |
+| Session logs | `%APPDATA%\<log identifier>\logs\meowcal-sub_<date>_<time>.log`, one file per launch; `MEOWCAL_LOG_DIR` overrides the folder |
+| Core engines and models | `%LOCALAPPDATA%\Meowcal\Core\sub1\<profile>\<version>\<architecture>`; Store builds use the package `LocalCache` instead |
+| Band diagnostics | Only where `MEOWCAL_BAND_LOG` points |
+
+The identifier is `com.meowcal.sub` for direct releases, `com.meowcal.sub.dev`
+for development runs that load `src-tauri/tauri.dev.conf.json`,
+`com.meowcal.sub.store` for Store builds, and `com.meowcal.sub.store.dev` for
+debug Store builds. An identifier ending in `.dev` selects Core's `development`
+profile; any other selects `production`. The log identifier comes from
+`app_profile.rs` and follows the Rust build profile instead: a release-profile
+build writes logs under `com.meowcal.sub` even with the development config.
+At startup the app deletes `.log` files in that folder older than seven days.
+There is no size-based rotation.
+
+The browser backend reads `%APPDATA%\<log identifier>\config.json` through
+`http_config.rs`. `src-tauri/src/bin/subtitle-eval.rs` reads
+`%APPDATA%\com.meowcal.sub\config.json` unless `--config` is given.
+[`CONTRIBUTING.md`](../CONTRIBUTING.md#build-modes-and-user-data) maps each
+development and packaging command to the data it uses.
 
 ## Ownership boundaries
 
@@ -191,8 +258,11 @@ Shared contracts have one owner before parallel decomposition begins:
   CPU fallback. Sub 1 validates raw output before sanitization can hide debris,
   then reports rejection through `core_client_recovery`. That adapter serializes
   recovery, skips stale requests, and retains CPU policy across internal Core
-  restarts. CPU recovery failure requires explicit retry. HTTP health alone does
-  not prove translation correctness. See [Core's API contract](../core/README.md#inference-recovery).
+  restarts. Core does not restart a failed engine on its own. While a session
+  runs, a subtitle that needs the engine triggers a new `ready` request after
+  30, 60, 120, and then every 300 seconds of consecutive failure; a ready
+  result resets that schedule. HTTP health alone does not prove translation
+  correctness. See [Core's API contract](../core/README.md#inference-recovery).
 - Readiness refresh never prepares a busy Core. It retains a previously confirmed
   ready snapshot during translation. Queued and active installation invalidates
   readiness and rejects older status writes. Without confirmed readiness the app
@@ -312,37 +382,104 @@ Single Chinese characters pass the text gate. `Translate any text` remains an
 Advanced option for menus and pages; it bypasses subtitle-shape rules while
 retaining stable cue confirmation and FIFO ordering.
 
-The subtitle queue confirms consecutive normalized readings. Normalization
-keeps word boundaries, digits and apostrophes, while treating 净/凈/淨 as one
-character. Other CJK character changes remain significant. A transient changed read cannot
-replace the active identity. A confirmed new cue or sustained empty source ends
-the previous cue. OCR processing time does not count as observed empty time.
-A paused cue remains active after its completed work leaves the queue.
+### Cue identity and FIFO lifecycle
 
-Inference proceeds before source disappearance. Busy inference retains pending
-cues. Presentation starts as soon as the FIFO head completes and the previous
-line has had a reading interval. Source duration, translated length and delay
-set that interval. The source duration caps the reading budget, bounded to
-350–4000 ms, so longer translations cannot create a persistent display backlog.
-A length-based minimum up to 1200 ms is limited by the same budget. One sampling
-interval is reserved for source-duration uncertainty. A pending successor can
-retain the previous line briefly, up to four seconds, instead of inserting a
-blank flash. Text replacement
-has no per-cue slide animation.
+`subtitle_queue.rs` and `subtitle_queue/observation.rs` own one identity per
+subtitle from stable OCR through translation and display.
 
-Each cue keeps its ID through translation and display. `captureId` identifies the
-source observation; `updateId` orders display events within a session, including
-clears. Region changes and session stop invalidate queued and active work.
-The queue logs input/output rates, depth, oldest age and skip counts every five
-seconds. Depth above three or age above three seconds reports falling throughput.
-Only a severe stall (32 queued entries or a 15-second queue age) skips old work
-and resumes from the newest cue. Normal backlog is retained and measured.
+- **Identity key.** Whitespace is collapsed, case is ignored, trailing sentence
+  punctuation is removed, curly apostrophes become `'`, and 净/凈/淨 count as one
+  character. Digits, word boundaries and every other CJK character change
+  remain significant. There is no fuzzy matching.
+- **Enqueue.** A new key becomes a cue only after two readings with that key,
+  the second captured later and at most two seconds after the first, both
+  eligible. The cue is enqueued with its first reading's capture time and text
+  of the confirming reading. A single changed reading cannot replace the
+  active cue.
+- **Pause deduplication.** Readings that match the active cue only refresh it.
+  A paused video therefore keeps one cue and creates no new work, even after
+  that cue's translation has left the queue. Ineligible readings can keep the
+  active cue alive but cannot create a cue.
+- **Cue end.** A confirmed new cue ends the previous cue at the new cue's first
+  reading. Empty readings end it after a quiet period of twice the starting
+  sampling period, bounded to 250–900 ms, measured on capture times. OCR
+  processing time does not count as empty time. When the same text returns
+  after its cue ended, it is a new cue and is translated again; identical lines
+  with no empty gap between them stay one cue.
+- **Dequeue.** One worker takes the oldest cue without a result. Each attempt
+  is bounded by the five-second translation deadline (`pipeline_deadline.rs`).
+  A translated result is shown; a source-only, stopped, or no-text result
+  clears the display; other states keep the current line.
+- **Held-cue retry.** When the active cue's result was engine warming, engine
+  slow, or a recoverable engine or transport failure, the cue is enqueued again
+  once 2.5 seconds have passed, provided its source is still on screen and the
+  cue is not already queued. Deterministic output rejection is not retried.
+- **Invalidation.** A region change resets the queue and advances its
+  generation, so late results from older work are dropped. Stop and display
+  loss end the session and discard all queued work.
+- **Exceptional skipping.** Ordinary backlog is kept and measured. Only a
+  severe stall, 32 queued cues or a 15-second-old queue head, drops every
+  queued cue except the cue still on screen, counts them as skipped, logs
+  `Subtitle queue recovered from a severe stall`, and clears the display.
+- **Metrics.** Every five seconds the display loop logs depth, oldest age,
+  enqueued, completed, displayed and skipped counts, and input and output
+  rates. Depth above three or an oldest age above three seconds is logged as
+  falling throughput.
 
-OCR pacing starts at the configured interval. After 12 successful samples, a
-rolling p90 capture/OCR cost can shorten it to half that interval, with bounded
-per-frame changes. Complex frames do not add idle time beyond the configured
-cadence; recognition overruns already slow sampling. Reading budgets and stage
-logs use the measured interval between successful captures, including outages.
+### Display duration
+
+`subtitle_timing.rs` decides how long a translated line stays before the next
+completed cue may replace it. Reading time starts when the translation becomes
+visible, so a late result still gets time on screen.
+
+- The source budget is the cue's on-screen duration minus one measured sampling
+  interval, bounded to 350–4000 ms. The subtracted interval absorbs the
+  uncertainty of a sampled end time.
+- The reading estimate is 400 ms plus 35 ms per non-CJK character and 70 ms per
+  CJK character, bounded to 600–3500 ms.
+- The minimum is 250 ms plus 25 ms per non-CJK and 50 ms per CJK character,
+  bounded to 350–1200 ms and never above the source budget.
+- The hold is the larger of the source duration and the reading estimate, minus
+  the display delay, bounded by that minimum and the source budget.
+
+Because the source budget caps every hold, long translations cannot build a
+growing display backlog when inference keeps up. While the source is still on
+screen its duration keeps growing, so a paused line stays visible. After the
+source ends, the line clears once it has been readable and nothing is queued.
+A queued successor that is still translating keeps the previous line for up
+to four seconds after that line's source ended, instead of inserting a blank.
+Text replacement has no per-cue slide animation.
+
+### Adaptive sampling
+
+`pipeline_pacing.rs` calibrates the capture period for each session. The
+starting period is the configured `captureIntervalMs` (250 ms by default; no UI
+control exposes it). A new
+`Pacer` starts with every translation session; region changes do not reset it.
+
+- **Observation window.** Each successful capture and OCR pass records its
+  capture-plus-OCR time. The window keeps the latest 24 samples and makes no
+  adjustment before 12 samples exist, so start-up and one slow frame do not
+  change the period.
+- **Target.** Twice the window's 90th-percentile cost, bounded below by half
+  the configured interval (never under 60 ms) and above by the configured
+  interval. The calibrated period never exceeds the configured interval; only
+  work that overruns the period makes sampling slower.
+- **Step.** Each sample moves the period toward the target by at most one
+  eighth of the current period.
+- **Over budget.** When a frame's work exceeds the period, the next capture
+  starts immediately. Recognition overruns already slow sampling, so no extra
+  pacing penalty is added. Failed captures and OCR errors wait out the current
+  period and add no sample.
+- **Measured interval.** Each cue carries the actual time since the previous
+  successful capture, including overruns and outages. The display duration
+  uses that interval for the sampled-end reserve, and stage logs report it.
+
+The queue's quiet period is fixed from the starting period when the session
+begins. Sampling never pauses for the queue: capture and OCR continue while a
+cue waits for translation or display, which is how a paused cue stays active
+and a new cue can be confirmed during inference. A period change is logged as
+`pipeline_sampling_calibrated` at debug level.
 
 Band diagnostics omit screen text. `MEOWCAL_BAND_LOG` enables local JSONL;
 `MEOWCAL_BAND_LOG_TEXT=1` additionally includes OCR text for replay. Keep those

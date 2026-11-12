@@ -83,7 +83,8 @@ Do not silently choose the more convenient interpretation.
 - Give shared config, event, and state-machine contracts one owner.
 - Keep Tauri commands and DOM event handlers thin.
 - Do not extend known monoliths when a reviewed boundary exists.
-- Update normative docs when their contract changes.
+- Update affected documentation in the same change; see
+  [Documentation maintenance](#documentation-maintenance).
 
 External writes require explicit authority. This includes pushes, pull requests,
 issue changes, comments, releases, merges, branch deletion, and repository
@@ -100,6 +101,53 @@ remote automatically. Do not treat a remote branch as durable storage for
 evidence: cite the merge commit, the pull request, or a file on `main`. Your
 local branch and worktree survive; remove a finished worktree deliberately with
 `git worktree remove`.
+
+## Quality bar
+
+Treat every artifact as maintainer-owned, not as a trace of an AI session. Apply
+this quality bar to code, comments, documentation, PR and issue text, UI copy,
+architecture, configuration, and handoff notes.
+
+- Do not narrate the prompt, agent, implementation journey, discarded approaches,
+  or direction changes unless future maintainers need that rationale.
+- Do not add boilerplate prose, obvious comments, duplicate summaries or rules,
+  ceremonial files or checklists, or placeholder documentation merely to make a
+  change look complete.
+- Do not introduce wrappers, abstractions, fallbacks, compatibility paths, feature
+  flags, or configuration "just in case". Each extra mechanism must satisfy a
+  current requirement or documented risk.
+- Prefer direct code and concise human-quality prose. Comments should explain
+  non-obvious reasons, invariants, or trade-offs rather than restating the code.
+- Current docs, UI copy, PRs, and issues should state current behavior directly.
+  Put history in issues, ADRs, changelogs, or dated plans unless it is required to
+  apply a live safety, compatibility, or unsupported-behavior boundary.
+- Before handoff, inspect the diff specifically for AI slop and remove words,
+  files, layers, and indirection that add neither required behavior nor durable
+  information.
+
+## Documentation maintenance
+
+Update every affected document in the same pull request as the change that
+makes it inaccurate. A later documentation pull request is not a substitute.
+
+| When a change affects | Update |
+| --- | --- |
+| User-visible behavior, settings, UI labels, or user workflows | [`docs/USAGE.md`](USAGE.md); [`README.md`](../README.md) and [`README.zh-CN.md`](../README.zh-CN.md) when their summary, quick start, limits, or privacy statement changes |
+| Defaults, configuration, storage locations, interfaces, events, states, timeouts, cancellation, retries, or recovery | [`docs/ARCHITECTURE.md`](ARCHITECTURE.md); [`core/README.md`](../core/README.md) for the Core API or Core storage |
+| Evaluation methods, datasets, metrics, budgets, or acceptance criteria | [`evals/README.md`](../evals/README.md), the affected benchmark README, [`docs/CORE_PERFORMANCE.md`](CORE_PERFORMANCE.md), or [`docs/evidence/README.md`](evidence/README.md) |
+| Release, update, Store, migration, or rollback procedures | the release and update contract in this guide, [`docs/RELEASE_PACKAGING.md`](RELEASE_PACKAGING.md), [`docs/STORE_DISTRIBUTION.md`](STORE_DISTRIBUTION.md), and the release notes under `docs/releases/` when a release ships |
+| Contributor commands, gates, build profiles, or workflow | [`CONTRIBUTING.md`](../CONTRIBUTING.md) and this guide |
+
+Every pull request answers the **Documentation** section of the template: it
+names each updated document, or it states why no document is affected. Review
+treats a missing or unexplained answer like a missing validation result.
+
+- Keep `README.md` and `README.zh-CN.md` equivalent in meaning.
+- User documents describe the latest published release. When `main` contains
+  behavior that no release has shipped, say so where the behavior is described,
+  and do not present it as generally available.
+- Use exact UI labels from the source. Do not invent defaults, paths, commands,
+  or measurements; verify each one against source, tests, or a recorded run.
 
 ## Release and update contract
 
@@ -248,6 +296,23 @@ window, installer, or runtime-process behavior.
 The supported development launchers use the isolated development namespace
 (`com.meowcal.sub.dev`), keeping config, engine/cache, logs, and persisted
 settings separate from the installed production profile (`com.meowcal.sub`).
+Two inputs choose the data a checkout build touches: the Tauri identifier
+(config, WebView data and the Core profile) and the Rust build profile (the
+session log folder). [`CONTRIBUTING.md`](../CONTRIBUTING.md#build-modes-and-user-data)
+lists the result for each command.
+
+- Never run a release-profile build from a checkout with the production
+  identifier against the installed application's data. `tauri build`,
+  `build-package.ps1`, and executables they produce use `com.meowcal.sub`.
+  On startup, Core can migrate that config's engine paths to the checkout's Core
+  version.
+- For an optimized local run, keep the development identifier and set
+  `MEOWCAL_LOG_DIR`, because a release-profile build writes session logs to the
+  production log folder.
+- If a test genuinely needs the production namespace, close the installed app,
+  back up `%APPDATA%\com.meowcal.sub\config*.json` from a process that sees
+  the real `%APPDATA%` (agent sandboxes can virtualize it), and restore and
+  hash-check the files afterwards.
 
 `build-package.ps1` applies the verified ARM64 compiler safeguards. Browser mode
 does not prove Windows OCR, capture, selector, overlay, tray, installer, or
@@ -365,12 +430,20 @@ required manual gate remains outstanding.
 
 ## Document classes
 
-- `README.md`: current user/developer entry point.
+- `README.md` and `README.zh-CN.md`: current user/developer entry points with
+  equivalent meaning.
+- `docs/USAGE.md`: user guide and troubleshooting for the latest release.
 - `LICENSE`, `CLA.md`, `SECURITY.md`, and `TRADEMARKS.md`: community license
   (AGPL-3.0-only), contributor grant, vulnerability reporting, and branding.
 - `CONTRIBUTING.md`, this guide, and `docs/CODING_STANDARDS.md`: normative.
 - `docs/CHANGE_CONTRACT.md`: commit, version, and pull request contract.
-- `docs/ARCHITECTURE.md`: current and target module ownership.
+- `docs/ARCHITECTURE.md`: current and target module ownership, runtime
+  contracts, and storage isolation.
+- `core/README.md`: Core API and storage contract.
+- `evals/`, `docs/CORE_PERFORMANCE.md`, and `docs/evidence/`: validation
+  methods, budgets, and privacy-safe recorded evidence.
+- `docs/releases/`: per-release notes; `docs/STORE_DISTRIBUTION.md`: the Store
+  channel.
 - `docs/MAINTAINABILITY_BASELINE.md`: enforced ceilings and ratchet procedure.
 - `docs/RELEASE_PACKAGING.md`: the hosted runner policy, native per-architecture
   packaging, the release and preflight asset contract, and who may run a
@@ -383,7 +456,8 @@ required manual gate remains outstanding.
   plan into an ADR; supersede it and leave it where it is.
 
 `CLAUDE.md`, `AGENTS.md`, and `agent.md` are pointers to this guide. Keep them
-as pointers; put the actual contract here so every agent reads one source.
+as pointers; put the actual contract, including the quality bar, here so every
+agent reads one source.
 
 ## Maintaining this guide
 

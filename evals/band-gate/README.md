@@ -4,7 +4,7 @@ Open [`index.html`](index.html) directly in a browser. It is self-contained: the
 
 The page shows a moving synthetic scene with a fixed subtitle band near the bottom. Use the **120-second equal-width check** for a focused 30-event pass (30 authored English cues at four seconds each), the **120-second negative-band recovery** for same-band exclusions, and the **300-second sustained check** for a repeatable 5-minute pass. `1x live` preserves the authored timings; `2x review` and `10x smoke` are for checking the page mechanics. Keep **Repeat** enabled when sampling a short section. For the negative-band recovery scenario, use the first cycle to observe the labeled warmup and a later cycle to check that negative text does not periodically reappear as a subtitle. Disable it to let a run stop at its authored duration.
 
-The subtitle card keeps a 720px logical width for one-line and two-line cues. The equal-width scenario keeps rendered English text at similar lengths while avoiding padded spaces or a claim that OCR sees a fixed text width. The focused equal-width and negative-band runs use English source text so native OCR comparison is unambiguous. The sustained run includes Chinese cues; select the matching Windows OCR language/tag before using those segments as evidence. The timelines also cover slow cues, short negations, numeric text, blank intervals, and reappearance after a blank. The scene also contains authored negative segments: a static watermark, a running timer, static scene text, and credits. The negative-band recovery scenario places watermark, timer, and credits inside the same subtitle card during its labeled initial warmup, then presents blank time and stable dialogue recovery; later repeats must not leak those negative readings as periodic subtitles.
+The subtitle card keeps a 720px logical width for one-line and two-line cues. The equal-width scenario keeps rendered English text at similar lengths while avoiding padded spaces or a claim that OCR sees a fixed text width. The focused equal-width and negative-band runs use English source text so native OCR comparison is unambiguous. The sustained run includes Chinese cues; select Chinese as the original subtitle language before using those segments as evidence. PP-OCRv6 needs no Windows language; with **Windows OCR**, install the matching Windows OCR language first. The timelines also cover slow cues, short negations, numeric text, blank intervals, and reappearance after a blank. The scene also contains authored negative segments: a static watermark, a running timer, static scene text, and credits. The negative-band recovery scenario places watermark, timer, and credits inside the same subtitle card during its labeled initial warmup, then presents blank time and stable dialogue recovery; later repeats must not leak those negative readings as periodic subtitles.
 
 `scenarios.json` is the reviewable source of truth for the authored timeline. Every segment has an ID, onset, duration, and expected role. Subtitle cues use `expected: "subtitle"`; blank intervals use `expected: "blank"`; watermark, timer, scene text, and credits use `expected: "negative"` and identify their `kind`.
 
@@ -24,8 +24,8 @@ measure the full native path; the deterministic policy replay lives in
 For a native pass:
 
 1. Open `index.html` and select a scenario.
-2. Select the application capture region over the marked subtitle band. Keep the full subtitle card in the region and avoid relying on the page event log as OCR input.
-3. Wait for the application engine to be ready, start capture, then start the fixture at `1x live`. Record the tested architecture, Windows build, scenario, capture dimensions, and the application band log.
+2. Wait until Home offers **Start translation**, choose it, and confirm a subtitle area over the marked subtitle band with **Confirm and start**. Keep the full subtitle card in the area and avoid relying on the page event log as OCR input.
+3. Start the fixture at `1x live`. Record the tested commit and build mode, architecture, Windows build, **Profile** and **Text recognition** engine, scenario, capture dimensions, and the application band log.
 4. Compare application decisions with `scenarios.json`: subtitle IDs should remain readable through slow cues, line-count transitions, Chinese cues, blanks, and reappearance; negative IDs should not be admitted as subtitles.
 
 Enable local gate evidence before launching the development application:
@@ -38,8 +38,8 @@ $env:MEOWCAL_BAND_LOG_TEXT = '1'
 ```
 
 Use a new log filename for each application launch. Select the matching source
-language, keep **Translate any text** off, and wait for **Engine ready** before
-starting each translation session. In the fixture's browser console, save
+language, keep **Translate any text** off, and wait until Home offers
+**Start translation** before starting each translation session. In the fixture's browser console, save
 `JSON.stringify(window.fixture.readState(), null, 2)` after completion.
 Check `scenarioId` against the selected scenario before comparing results.
 
