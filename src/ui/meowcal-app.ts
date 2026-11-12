@@ -82,6 +82,7 @@ export class MeowcalApp extends LitElement {
     }
     if (snapshot.screen === "settings") {
       return renderSettings(snapshot, {
+        onLogLevel: (level) => void this.controller.setLogLevel(level),
         onRecognition: (value) => void this.controller.setRecognitionPreset(value),
         onOcrEngine: (engine) => void this.controller.setRecognition({ engine }),
         onProfile: (profile) => void this.controller.setRecognition(profiles[profile]),

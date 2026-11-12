@@ -62,6 +62,7 @@ pub async fn save(app: AppHandle, state: &AppState, settings: AppConfig) -> Resu
         message
     })?;
 
+    crate::logging_settings::apply(updated.logging.level);
     crate::core_client::select_cpu_only(updated.translation.foundry_local.cpu_only)
 }
 

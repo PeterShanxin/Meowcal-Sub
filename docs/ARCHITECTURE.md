@@ -135,7 +135,7 @@ late results from an old generation are discarded in Rust and in the overlay.
 | Data | Location |
 | --- | --- |
 | Settings | `%APPDATA%\<identifier>\config.json`, with `config.bak.json` as the last known-good copy (`config_store.rs`, `config_save.rs`) |
-| Session logs | `%APPDATA%\<log identifier>\logs\meowcal-sub_<date>_<time>.log`, one file per launch; `MEOWCAL_LOG_DIR` overrides the folder |
+| Session logs | `%APPDATA%\<log identifier>\logs\meowcal-sub_<dev|prod>_<date>_<time>_<pid>.log`, one file per launch; `MEOWCAL_LOG_DIR` overrides the folder |
 | Core engines and models | `%LOCALAPPDATA%\Meowcal\Core\sub1\<profile>\<version>\<architecture>`; Store builds use the package `LocalCache` instead |
 | Band diagnostics | Only where `MEOWCAL_BAND_LOG` points |
 
@@ -147,6 +147,26 @@ profile; any other selects `production`. The log identifier comes from
 `app_profile.rs` and follows the Rust build profile instead: a release-profile
 build writes logs under `com.meowcal.sub` even with the development config.
 At startup the app deletes `.log` files in that folder older than seven days.
+
+`logging_settings.rs` owns the persisted `logging.level` (`off`, `basic`,
+`verbose`, default `basic`) and live event filtering. Tauri and HTTP settings
+apply it only after a successful save; startup applies it after config load.
+Early startup diagnostics use Basic. Environment filters cannot opt into captured
+content or override Off. Each event and filename carries the runtime Tauri
+identifier's dev/prod label, independent of the build-profile directory choice.
+
+`diagnostic_artifacts.rs` writes opt-in evidence off the async executor. Capture
+and OCR records share session/capture identifiers; translation records include
+those identifiers plus cue ID. It saves original capture PNGs, actual OCR input
+PNGs with raw OCR output, and final translation text. It never serializes engine
+request headers, credentials, or prompts. Artifacts can contain private screen
+content and are not uploaded. `logs/verbose` has a 256 MiB total payload budget,
+pruned oldest-first before every write, not only startup. An OS file lock
+serializes writers in the same directory; contention skips evidence. Only owned
+record directories containing known regular files are pruned. Unexpected files
+are preserved and stop the write. Oversized records are skipped. Disabling
+Verbose does not delete existing evidence. This feature is not yet released.
+
 There is no size-based rotation.
 
 The browser backend reads `%APPDATA%\<log identifier>\config.json` through

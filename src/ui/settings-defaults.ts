@@ -29,6 +29,7 @@ export const recognitionPresets = {
 } satisfies Record<string, RecognitionPreset>;
 
 export const defaultSettings: AppSettings = {
+  logging: { level: "basic" },
   sourceLanguage: "zh-CN",
   targetLanguage: "en-US",
   // Must track `default_config()` in src-tauri/src/config.rs so frontend defaults don't override backend.
@@ -74,6 +75,11 @@ export function mergeSettings(value: Partial<AppSettings> | null): AppSettings {
     autoCheckUpdates: value.autoCheckUpdates !== false,
     lastUpdateCheckTimeMs:
       typeof lastCheck === "number" && Number.isFinite(lastCheck) ? lastCheck : null,
+    logging: {
+      level: ["off", "basic", "verbose"].includes(value.logging?.level ?? "")
+        ? value.logging!.level
+        : "basic",
+    },
     overlay: { ...defaultSettings.overlay, ...(value.overlay ?? {}) },
     translation: {
       ...base,

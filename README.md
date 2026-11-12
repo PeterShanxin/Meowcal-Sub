@@ -117,7 +117,9 @@ architecture, choose **Settings → Profile → Compatibility**.
 | Capture of the selected region, OCR, translation inference, and the overlay | Engine/model setup or repair downloads, Windows recognition-language installation when needed, and application update checks/downloads |
 
 In normal mode, **captured and translated subtitle text is not uploaded**.
-Production logs record support codes, timings, and counts, not subtitle text.
+Production logs record support codes, timings, and counts, not subtitle text by default.
+The unreleased Local logs setting can opt into Verbose capture images, OCR text,
+and translations stored only on this PC, capped at 256 MiB. Treat those files as private.
 Once the engine and recognition language are installed, OCR and translation
 can run offline; online video playback may still need its own connection.
 

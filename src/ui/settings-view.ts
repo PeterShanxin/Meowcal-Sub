@@ -1,5 +1,5 @@
 import { html, nothing, type TemplateResult } from "lit";
-import type { OcrEngine, Tone, UiSnapshot } from "./contracts";
+import type { LogLevel, OcrEngine, Tone, UiSnapshot } from "./contracts";
 import { icon } from "./icons";
 import { backendUnavailablePhase } from "./home-state";
 import { deriveUpdatePresentation } from "./update-state";
@@ -9,6 +9,7 @@ import { profileOf, type Profile } from "./recognition";
 type Recognition = "fast" | "balanced" | "accurate";
 
 interface SettingsActions {
+  onLogLevel(level: LogLevel): void;
   onRecognition(value: Recognition): void;
   onOcrEngine(engine: OcrEngine): void;
   onProfile(profile: Profile): void;
@@ -328,6 +329,32 @@ export function renderSettings(snapshot: UiSnapshot, actions: SettingsActions): 
           ${renderProfile(snapshot, actions)}
         </div>
         ${renderAdvanced(snapshot, actions)} ${renderEngineAndUpdates(snapshot, actions)}
+        <h2 class="section-label">Local logs</h2>
+        <div class="list">
+          <label class="list-row">
+            <span
+              ><strong>Log level</strong
+              ><small>Basic keeps operational details without captured content</small></span
+            >
+            <select
+              aria-label="Log level"
+              aria-describedby="logging-privacy"
+              .value=${snapshot.settings.logging.level}
+              @change=${(event: Event) => actions.onLogLevel((event.target as HTMLSelectElement).value as LogLevel)}
+            >
+              <option value="off">Off</option>
+              <option value="basic">Basic</option>
+              <option value="verbose">Verbose</option>
+            </select>
+          </label>
+        </div>
+        <p id="logging-privacy">
+          ${
+            snapshot.settings.logging.level === "verbose"
+              ? "Verbose is on: original captures, OCR input images, raw OCR text and translations are saved locally. They may contain private screen content. Diagnostic files use up to 256 MiB; the oldest are removed when full. Nothing is uploaded automatically."
+              : "Verbose saves original captures, OCR input images, raw OCR text and translations locally. Enable it only when you want to keep this potentially private content."
+          }
+        </p>
         ${renderModelLicense()} ${renderDeveloper(snapshot, actions)}
       </div>
     </main>

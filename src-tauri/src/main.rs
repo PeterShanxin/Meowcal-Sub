@@ -55,8 +55,14 @@ fn main() {
     // Check for --http-only flag (browser dev mode)
     let args: Vec<String> = std::env::args().collect();
     let http_only_mode = args.iter().any(|arg| arg == "--http-only");
+    let mut context = tauri::generate_context!();
+    if cfg!(feature = "store") {
+        context.config_mut().identifier = meowcal_sub::app_profile::AppProfile::current()
+            .identifier()
+            .into();
+    }
     // --- Step 1: Set up logging ---
-    meowcal_sub::app_logging::init(http_only_mode);
+    meowcal_sub::app_logging::init(http_only_mode, &context.config().identifier);
 
     info!("🐱 Meowcal Sub starting up...");
 
@@ -68,12 +74,6 @@ fn main() {
     }
 
     // --- Step 2: Build and run the Tauri app ---
-    let mut context = tauri::generate_context!();
-    if cfg!(feature = "store") {
-        context.config_mut().identifier = meowcal_sub::app_profile::AppProfile::current()
-            .identifier()
-            .into();
-    }
     let builder = tauri::Builder::default();
     #[cfg(not(feature = "store"))]
     let builder = builder

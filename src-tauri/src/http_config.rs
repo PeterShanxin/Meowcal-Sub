@@ -63,7 +63,9 @@ fn standalone_config_path_for(profile: AppProfile, appdata: Option<&str>) -> Pat
 /// `%APPDATA%` would rewrite it.
 pub fn load_standalone_config(path: &Path) -> AppConfig {
     info!("Browser dev mode is using config at {}", path.display());
-    crate::config_store::load_and_report(path)
+    let config = crate::config_store::load_and_report(path);
+    crate::logging_settings::apply(config.logging.level);
+    config
 }
 
 /// Save config without Tauri's AppHandle, atomically.
@@ -113,6 +115,7 @@ pub async fn save_settings(
 ) -> impl IntoResponse {
     match save_standalone_config_offloaded(state.config_path.clone(), settings.clone()).await {
         Ok(()) => {
+            crate::logging_settings::apply(settings.logging.level);
             *lock_or_recover(&state.config) = settings;
             (StatusCode::OK, Json(serde_json::json!({ "success": true }))).into_response()
         }

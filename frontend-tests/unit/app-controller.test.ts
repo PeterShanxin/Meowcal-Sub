@@ -67,6 +67,19 @@ describe("AppController settings persistence", () => {
     vi.unstubAllGlobals();
   });
 
+  it("persists logging choices without changing other settings", async () => {
+    const invoke = vi.fn().mockResolvedValue(undefined);
+    const { controller } = createController(invoke);
+    const original = structuredClone(controller.current().settings);
+    for (const level of ["verbose", "off", "basic"] as const) {
+      await controller.setLogLevel(level);
+      expect(controller.current().settings).toEqual({ ...original, logging: { level } });
+      expect(invoke).toHaveBeenLastCalledWith("save_settings", {
+        settings: { ...original, logging: { level } },
+      });
+    }
+  });
+
   it("returns to Home with a stopped session when translation is exited from the overlay", async () => {
     const invoke = vi.fn(async (command: string) =>
       ["get_engine_status", "refresh_engine_status", "make_engine_ready"].includes(command)

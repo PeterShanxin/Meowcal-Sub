@@ -126,6 +126,7 @@ pub fn load_with_engine(app: &tauri::AppHandle) -> crate::config::AppConfig {
     use tauri::Manager;
 
     let mut config = crate::config_store::load_config(app);
+    crate::logging_settings::apply(config.logging.level);
     let default_root = match app.path().app_cache_dir() {
         Ok(root) => root,
         Err(error) => {

@@ -19,6 +19,8 @@ pub mod app_profile;
 
 /// Where session logs go, and how old ones are retired
 pub mod app_logging;
+pub mod logging_settings;
+pub mod diagnostic_artifacts;
 
 /// Screen capture functionality - takes screenshots of selected areas
 pub mod capture;

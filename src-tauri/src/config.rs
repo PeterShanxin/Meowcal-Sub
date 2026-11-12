@@ -7,9 +7,6 @@ pub use crate::engine_config::ManagedLocalRuntimeConfig;
 use crate::translation_eligibility::Eligibility;
 use serde::{Deserialize, Serialize};
 
-// =============================================================================
-// APP CONFIG
-// =============================================================================
 
 /// The main configuration for the app
 ///
@@ -35,6 +32,8 @@ pub struct AppConfig {
 
     /// Overlay settings
     pub overlay: OverlayConfig,
+
+    pub logging: crate::logging_settings::LoggingSettings,
 
     /// Translation backend settings
     pub translation: TranslationConfig,
@@ -384,6 +383,7 @@ impl Default for AppConfig {
             target_language: "zh-CN".to_string(), // Chinese as default target
             capture_interval_ms: 250,             // Capture every 250ms
             overlay: OverlayConfig::default(),
+            logging: Default::default(),
             translation: TranslationConfig::default(),
             last_capture_region: None,
             last_capture_scale_factor: None,

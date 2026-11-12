@@ -291,6 +291,9 @@ export class AppController {
     this.publish({ settings });
     await this.persistSettingsInBackground();
   }
+  async setLogLevel(level: AppSettings["logging"]["level"]): Promise<void> {
+    await this.editSettings((settings) => (settings.logging = { level }));
+  }
   async setRecognitionPreset(value: keyof typeof recognitionPresets): Promise<void> {
     const preset = recognitionPresets[value];
     await this.editSettings((settings) => Object.assign(settings.translation.ocr, preset));

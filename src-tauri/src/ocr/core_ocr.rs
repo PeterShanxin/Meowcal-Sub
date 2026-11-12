@@ -135,6 +135,7 @@ impl CoreOcr {
         width: u32,
         height: u32,
     ) -> Result<OcrResult, OcrError> {
+        let evidence = crate::logging_settings::verbose().then(|| image_data.clone());
         let result = core_client::ocr_recognize(
             OcrRecognizeParams {
                 engine: self.engine,
@@ -147,8 +148,17 @@ impl CoreOcr {
             },
             image_data,
         )
-        .await
-        .map_err(OcrError::RecognitionError)?;
+        .await;
+        if let Some(frame) = evidence {
+            let detail = match &result {
+                Ok(raw) => serde_json::json!({"text": raw.text, "lines": raw.lines,
+                    "boxes": raw.boxes.iter().map(|b| [b.x, b.y, b.width, b.height]).collect::<Vec<_>>(),
+                    "frameWidth": raw.frame_width}),
+                Err(_) => serde_json::json!({"status": "recognitionFailed"}),
+            };
+            crate::diagnostic_artifacts::record("ocr", detail, Some((frame, width, height))).await;
+        }
+        let result = result.map_err(OcrError::RecognitionError)?;
         let (lines, boxes) = super::line_geometry::clean_lines(result.lines, result.boxes);
         Ok(OcrResult::with_boxes(lines, boxes, result.frame_width))
     }
