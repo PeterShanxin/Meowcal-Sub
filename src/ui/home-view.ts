@@ -1,5 +1,5 @@
 import { html, nothing, type TemplateResult } from "lit";
-import type { HomePresentation, Tone, UiSnapshot } from "./contracts";
+import type { HomePresentation, UiSnapshot } from "./contracts";
 import { icon } from "./icons";
 import { isSessionLocked } from "./home-state";
 import { languages } from "./languages";
@@ -10,14 +10,6 @@ interface HomeActions {
   onRegion(): void;
   onPrimary(): void;
 }
-
-const stateTone: Record<HomePresentation["state"], Tone> = {
-  checking: "neutral",
-  notReady: "warning",
-  ready: "success",
-  running: "success",
-  attention: "danger",
-};
 
 function languageSelect(
   label: string,
@@ -53,22 +45,17 @@ export function renderHome(
   presentation: HomePresentation,
   actions: HomeActions,
 ): TemplateResult {
-  const tone = stateTone[presentation.state];
   const busy = presentation.actionIcon === "spinner";
   const locked = isSessionLocked(snapshot);
 
   return html`
     <main class="screen home-screen" aria-labelledby="home-title">
-      <div
-        class=${`status-pill tone-${tone}${presentation.state === "running" ? " live" : ""}`}
-        role="status"
-        aria-live="polite"
-      >
-        ${presentation.state === "checking" ? icon("spinner", "spin") : html`<span class="dot"></span>`}
-        ${presentation.statusLabel}
-      </div>
-      <h1 id="home-title" tabindex="-1">${presentation.title}</h1>
-      <p class="home-description">${presentation.description}</p>
+      <h1 id="home-title" tabindex="-1" aria-live="polite">${presentation.title}</h1>
+      ${
+        presentation.description
+          ? html`<p class="home-description">${presentation.description}</p>`
+          : nothing
+      }
 
       <section class="session-panel" aria-label="Subtitle session">
         <div class="language-pair">
@@ -110,15 +97,18 @@ export function renderHome(
         ${icon(presentation.actionIcon, busy ? "spin" : "")}
         <span>${presentation.actionLabel}</span>
       </button>
-      <p class=${`support-line tone-${presentation.supportTone}`}>
-        ${presentation.supportTone === "neutral" ? nothing : html`<span class="dot"></span>`}
-        ${presentation.supportLine}
-        ${
-          presentation.supportCode
-            ? html`<span class="support-code">${presentation.supportCode}</span>`
-            : nothing
-        }
-      </p>
+      ${
+        presentation.supportLine || presentation.supportCode
+          ? html`<p class=${`support-line tone-${presentation.supportTone}`}>
+              ${presentation.supportLine}
+              ${
+                presentation.supportCode
+                  ? html`<span class="support-code">${presentation.supportCode}</span>`
+                  : nothing
+              }
+            </p>`
+          : nothing
+      }
     </main>
   `;
 }

@@ -13,8 +13,9 @@ test("main navigation remains usable with an offline backend", async ({ page }) 
   await page.goto("/");
   await expect(page).toHaveTitle("Meowcal Sub");
   await expect(page.locator("#browser-mode-indicator")).toBeVisible();
-  await expect(page.getByRole("status")).toHaveText("Backend offline");
-  await expect(page.getByRole("status")).toHaveAttribute("aria-live", "polite");
+  const heading = page.getByRole("heading", { name: "Start the browser backend", exact: true });
+  await expect(heading).toBeVisible();
+  await expect(heading).toHaveAttribute("aria-live", "polite");
   await expect(page.getByRole("button", { name: "Backend unavailable" })).toBeDisabled();
   await expect(page.getByRole("combobox", { name: "Original subtitle language" })).toBeVisible();
   await expect(page.getByRole("combobox", { name: "Translation language" })).toBeVisible();
@@ -41,13 +42,13 @@ test("main navigation remains usable with an offline backend", async ({ page }) 
   await expect(page.getByRole("region", { name: "Subtitle preview" })).toBeVisible();
   await expect(page.getByRole("slider", { name: /Text size/ })).toBeVisible();
   await navigation.getByRole("button", { name: "Home", exact: true }).click();
-  await expect(page.getByRole("status")).toHaveText("Backend offline");
+  await expect(page.getByRole("heading", { name: "Start the browser backend" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Start translation", exact: true })).toHaveCount(0);
 });
 
 test("a native capture request cannot report success without the backend", async ({ page }) => {
   await page.goto("/");
-  await expect(page.getByRole("status")).toHaveText("Backend offline");
+  await expect(page.getByRole("heading", { name: "Start the browser backend" })).toBeVisible();
   await page.getByRole("button", { name: "No subtitle area yet Select" }).click();
   await expect(page.getByRole("alert")).toBeVisible();
   await expect(page.getByRole("alert")).not.toBeEmpty();

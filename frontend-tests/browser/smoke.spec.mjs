@@ -112,7 +112,9 @@ test("browser bridge reads backend health, settings, and readiness", async ({ pa
 test("offline browser backend does not offer engine repair", async ({ page }) => {
   await page.route("**/api/engine/status", (route) => route.abort());
   await page.goto("/");
-  await expect(page.locator(".status-pill")).toContainText("Backend offline");
+  await expect(
+    page.getByRole("button", { name: "Backend unavailable", exact: true }),
+  ).toBeDisabled();
 
   await page.getByRole("button", { name: "Settings" }).click();
   const engine = page.locator(".list-row", { hasText: "Translation engine" });

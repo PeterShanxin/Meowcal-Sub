@@ -177,7 +177,7 @@ export function deriveHomePresentation(snapshot: UiSnapshot): HomePresentation {
       actionLabel: "Start translation",
       actionIcon: "area",
       actionDisabled: false,
-      supportLine: "Engine ready · Area not selected",
+      supportLine: "",
       supportTone: "warning",
     };
   }
@@ -185,13 +185,13 @@ export function deriveHomePresentation(snapshot: UiSnapshot): HomePresentation {
   return {
     state: "ready",
     statusLabel: "Ready",
-    title: "Ready for subtitles",
-    description: "Start, then confirm the subtitle area. Everything stays on this PC.",
+    title: "Let’s watch",
+    description: "",
     action: "start",
     actionLabel: "Start translation",
     actionIcon: "play",
     actionDisabled: snapshot.busy !== "idle",
-    supportLine: "Engine ready · Local processing",
+    supportLine: "",
     supportTone: "success",
   };
 }

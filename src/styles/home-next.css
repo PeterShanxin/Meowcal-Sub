@@ -23,10 +23,6 @@
   font-size: 13.5px;
 }
 
-.status-pill.live .dot {
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--success) 22%, transparent);
-}
-
 .session-panel {
   display: grid;
   gap: 10px;
