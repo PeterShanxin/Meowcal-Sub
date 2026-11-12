@@ -210,9 +210,7 @@ fn write_record(
     }
     plain_directory(root)?;
     let lock_path = root.join(".writer.lock");
-    if std::fs::symlink_metadata(&lock_path)
-        .is_ok_and(|meta| !meta.is_file() || is_link(&meta))
-    {
+    if std::fs::symlink_metadata(&lock_path).is_ok_and(|meta| !meta.is_file() || is_link(&meta)) {
         return Err(io::Error::other("Invalid diagnostics lock"));
     }
     let lock = std::fs::OpenOptions::new()

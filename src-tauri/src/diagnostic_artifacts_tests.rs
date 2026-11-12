@@ -58,9 +58,8 @@ fn simultaneous_writers_keep_both_records() -> io::Result<()> {
         .open(root.join(".writer.lock"))?;
     lock.lock()?;
     let other_root = root.clone();
-    let writer = std::thread::spawn(move || {
-        write_record(&other_root, b"new record", None, 20, || true)
-    });
+    let writer =
+        std::thread::spawn(move || write_record(&other_root, b"new record", None, 20, || true));
     drop(lock);
     writer.join().unwrap()?;
     assert_eq!(records(&root)?.len(), 2);
