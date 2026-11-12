@@ -88,6 +88,11 @@ jobs:
 
             Outstanding: this runtime upgrade requires fresh native Windows validation after CI passes.
 
+            ## Documentation
+
+            - [ ] Review the Core release for documentation impact.
+            - [ ] Update this section with the documents changed, or explain why no document is affected.
+
             ## Risk and rollback
 
             An incorrect pin prevents Core startup. Revert this lock update to restore the prior reviewed release.
