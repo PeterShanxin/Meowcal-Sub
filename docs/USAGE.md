@@ -212,7 +212,7 @@ The existing seven-day startup cleanup still applies to ordinary `.log` files.
 Verbose evidence lives in `logs\verbose`, separately capped at **256 MiB**.
 Before each new evidence record, the app removes its oldest complete or partial
 records as needed. It does not delete unrelated files. A record larger than the
-cap, an unexpected file, or a write failure skips evidence without
+cap, a writer lock held for more than two seconds, an unexpected file, or a write failure skips evidence without
 stopping translation. Verbose has no separate age expiry. Turning it off stops
 new evidence but does not erase existing records; remove the `verbose` folder
 when you no longer need its private contents. Review files before sharing them.

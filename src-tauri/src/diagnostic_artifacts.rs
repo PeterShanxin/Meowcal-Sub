@@ -3,6 +3,8 @@ use crate::logging_settings;
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Arc, OnceLock};
+use tokio::sync::Semaphore;
 
 const MAX_BYTES: u64 = 256 * 1024 * 1024;
 const MAX_FRAME_BYTES: usize = 64 * 1024 * 1024;
@@ -39,7 +41,7 @@ pub async fn record(
         return;
     }
     let identity = FRAME.try_with(|identity| *identity).ok();
-    let task = tokio::task::spawn_blocking(move || {
+    let success = offload(write_slots(), move || {
         if !logging_settings::verbose() {
             return Ok(());
         }
@@ -59,18 +61,42 @@ pub async fn record(
             &json,
             png.as_deref(),
             MAX_BYTES,
+            logging_settings::verbose,
         )
     })
     .await;
-    if !matches!(task, Ok(Ok(()))) {
+    if !success {
         // Do not echo data or backend errors: they can contain captured text.
         tracing::warn!("Local verbose evidence could not be saved");
     }
 }
 
+fn write_slots() -> Arc<Semaphore> {
+    static SLOTS: OnceLock<Arc<Semaphore>> = OnceLock::new();
+    Arc::clone(SLOTS.get_or_init(|| Arc::new(Semaphore::new(2))))
+}
+
+async fn offload(
+    slots: Arc<Semaphore>,
+    write: impl FnOnce() -> io::Result<()> + Send + 'static,
+) -> bool {
+    let Ok(permit) = slots.acquire_owned().await else {
+        return false;
+    };
+    matches!(
+        tokio::task::spawn_blocking(move || {
+            // A cancelled waiter must not release capacity while disk I/O continues.
+            let _permit = permit;
+            write()
+        })
+        .await,
+        Ok(Ok(()))
+    )
+}
+
 fn encode_frame(mut bgra: Vec<u8>, width: u32, height: u32) -> io::Result<Vec<u8>> {
-    let expected = u64::from(width) * u64::from(height) * 4;
-    if expected != bgra.len() as u64
+    let expected = (u64::from(width) * u64::from(height)).checked_mul(4);
+    if expected != Some(bgra.len() as u64)
         || bgra.len() > MAX_FRAME_BYTES
         || width == 0
         || height == 0
@@ -94,9 +120,21 @@ fn encode_frame(mut bgra: Vec<u8>, width: u32, height: u32) -> io::Result<Vec<u8
     Ok(bytes)
 }
 
+fn is_link(metadata: &std::fs::Metadata) -> bool {
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::MetadataExt;
+        metadata.file_attributes() & 0x400 != 0
+    }
+    #[cfg(not(windows))]
+    {
+        metadata.file_type().is_symlink()
+    }
+}
+
 fn plain_directory(path: &Path) -> io::Result<()> {
     match std::fs::symlink_metadata(path) {
-        Ok(meta) if meta.is_dir() && !meta.file_type().is_symlink() => Ok(()),
+        Ok(meta) if meta.is_dir() && !is_link(&meta) => Ok(()),
         Ok(_) => Err(io::Error::other(
             "Diagnostics directory is not a plain directory",
         )),
@@ -122,16 +160,16 @@ fn records(root: &Path) -> io::Result<Vec<(PathBuf, u64)>> {
         if !owned_name(&entry.file_name().to_string_lossy()) {
             continue;
         }
-        let meta = entry.file_type()?;
-        if !meta.is_dir() || meta.is_symlink() {
+        let meta = std::fs::symlink_metadata(entry.path())?;
+        if !meta.is_dir() || is_link(&meta) {
             continue;
         }
         let mut size = 0;
         for file in std::fs::read_dir(entry.path())? {
             let file = file?;
-            let kind = file.file_type()?;
+            let kind = std::fs::symlink_metadata(file.path())?;
             if !kind.is_file()
-                || kind.is_symlink()
+                || is_link(&kind)
                 || !matches!(file.file_name().to_str(), Some("record.json" | "input.png"))
             {
                 return Err(io::Error::other(
@@ -146,7 +184,26 @@ fn records(root: &Path) -> io::Result<Vec<(PathBuf, u64)>> {
     Ok(records)
 }
 
-fn write_record(root: &Path, json: &[u8], png: Option<&[u8]>, limit: u64) -> io::Result<()> {
+fn lock_writer(file: &std::fs::File, wait: std::time::Duration) -> io::Result<()> {
+    let start = std::time::Instant::now();
+    loop {
+        match file.try_lock() {
+            Ok(()) => return Ok(()),
+            Err(std::fs::TryLockError::WouldBlock) if start.elapsed() < wait => {
+                std::thread::sleep(std::time::Duration::from_millis(10));
+            }
+            Err(error) => return Err(io::Error::other(error)),
+        }
+    }
+}
+
+fn write_record(
+    root: &Path,
+    json: &[u8],
+    png: Option<&[u8]>,
+    limit: u64,
+    allowed: impl FnOnce() -> bool,
+) -> io::Result<()> {
     let incoming = json.len() as u64 + png.map_or(0, |bytes| bytes.len() as u64);
     if incoming > limit {
         return Err(io::Error::other("Diagnostics record exceeds storage limit"));
@@ -154,7 +211,7 @@ fn write_record(root: &Path, json: &[u8], png: Option<&[u8]>, limit: u64) -> io:
     plain_directory(root)?;
     let lock_path = root.join(".writer.lock");
     if std::fs::symlink_metadata(&lock_path)
-        .is_ok_and(|meta| !meta.is_file() || meta.file_type().is_symlink())
+        .is_ok_and(|meta| !meta.is_file() || is_link(&meta))
     {
         return Err(io::Error::other("Invalid diagnostics lock"));
     }
@@ -163,13 +220,17 @@ fn write_record(root: &Path, json: &[u8], png: Option<&[u8]>, limit: u64) -> io:
         .truncate(false)
         .write(true)
         .open(lock_path)?;
-    lock.lock()?;
+    lock_writer(&lock, std::time::Duration::from_secs(2))?;
+    if !allowed() {
+        return Ok(());
+    }
     let previous = records(root)?;
     let mut total: u64 = previous.iter().map(|(_, size)| size).sum();
     for (directory, size) in previous {
         if total.saturating_add(incoming) <= limit {
             break;
         }
+        plain_directory(&directory)?;
         for name in ["record.json", "input.png"] {
             match std::fs::remove_file(directory.join(name)) {
                 Ok(()) => (),
