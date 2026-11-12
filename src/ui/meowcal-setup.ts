@@ -1,37 +1,26 @@
 import { LitElement, html } from "lit";
 import { customElement, state } from "lit/decorators.js";
 import type { AppSettings, EngineStatus } from "./contracts";
-import { applyLanguageSelection, ensureDistinctLanguagePair } from "./languages";
+import { ensureDistinctLanguagePair } from "./languages";
 import { pickSampleTranslation } from "./sample-translations";
-import { recognitionReady, sessionEngine } from "./recognition";
-import {
-  activateStage,
-  classifyWizardOutput,
-  failCurrentStage,
-  initialStages,
-  type SetupStage,
-} from "./setup-progress";
+import { setupProgress } from "./setup-progress";
 import { renderFooter, renderStep, type CopyState, type SampleResult } from "./setup-steps";
 import "./meowcal-titlebar";
-
-/** Asks the main window, which owns area selection, to open the selector. */
-const SELECT_AREA_EVENT = "setup-select-area";
 
 @customElement("meowcal-setup")
 export class MeowcalSetup extends LitElement {
   @state() private step = 1;
   @state() private settings: AppSettings | null = null;
   @state() private loading = true;
-  @state() private ocrLanguages = new Set<string>();
-  @state() private installingOcr = false;
   @state() private working = false;
   @state() private error: string | null = null;
   @state() private supportCode = "";
   @state() private sample: SampleResult | null = null;
   @state() private sampleSource = "";
   @state() private copyState: CopyState = "idle";
-  @state() private stages: SetupStage[] = initialStages();
+  @state() private progress = "Preparing setup…";
   @state() private modelTermsAccepted = false;
+  @state() private existingEngine = false;
   private details: string[] = [];
   private unlisten: Array<() => void> = [];
 
@@ -54,8 +43,18 @@ export class MeowcalSetup extends LitElement {
   }
 
   private async initialize(): Promise<void> {
-    await this.loadSettings();
-    await this.listenForSetup();
+    this.loading = true;
+    try {
+      await this.listenForSetup();
+      if (!window.TauriBridge.isBrowserMode()) {
+        this.reset(await window.TauriBridge.invoke<boolean>("wizard_existing_engine"));
+      }
+      await this.loadSettings();
+    } catch (error) {
+      this.unlisten.splice(0).forEach((unlisten) => unlisten());
+      this.error = this.message(error);
+      this.loading = false;
+    }
   }
 
   private async loadSettings(): Promise<void> {
@@ -63,142 +62,87 @@ export class MeowcalSetup extends LitElement {
     this.loading = true;
     this.error = null;
     try {
-      const [settings, languagesAvailable] = await Promise.all([
-        window.TauriBridge.invoke<AppSettings>("get_settings"),
-        window.TauriBridge.invoke<string[]>("get_ocr_languages"),
-      ]);
+      const settings = await window.TauriBridge.invoke<AppSettings>("get_settings");
       this.settings = ensureDistinctLanguagePair(settings);
-      this.ocrLanguages = new Set(languagesAvailable);
     } catch (error) {
       console.warn("[Meowcal] setup settings unavailable", error);
-      this.error =
-        "Couldn’t load settings or recognition languages. Check the app connection and try again.";
+      this.error = "Couldn’t load settings. Check the app connection and try again.";
     } finally {
       this.loading = false;
     }
   }
 
   private async listenForSetup(): Promise<void> {
-    try {
-      this.unlisten.push(await window.TauriBridge.event.listen("wizard-reset", () => this.reset()));
-      this.unlisten.push(
-        await window.TauriBridge.event.listen("wizard-output", (event) => {
-          const payload = event.payload as { line?: string; stream?: string };
-          if (!payload.line) return;
-          this.details = [...this.details, payload.line];
-          this.advanceForLine(payload.line, payload.stream);
-        }),
-      );
-      this.unlisten.push(
-        await window.TauriBridge.event.listen("wizard-download-complete", (event) => {
-          const payload = event.payload as { success?: boolean; error?: string };
-          if (!payload.success) {
-            this.fail(payload.error ?? "ENGINE_SETUP_FAILED");
-            return;
-          }
-          void this.verifyReady();
-        }),
-      );
-    } catch (error) {
-      this.error = this.message(error);
-    }
+    this.unlisten.push(
+      await window.TauriBridge.event.listen("wizard-reset", (event) =>
+        this.reset(event.payload === true),
+      ),
+    );
+    this.unlisten.push(
+      await window.TauriBridge.event.listen("wizard-output", (event) => {
+        const payload = event.payload as { line?: string; stream?: string };
+        if (!payload.line) return;
+        this.details.push(payload.line);
+        if (this.details.length > 200) this.details.shift();
+        this.progress = setupProgress(payload.line) ?? this.progress;
+      }),
+    );
   }
 
   private message(error: unknown): string {
     return error instanceof Error ? error.message : String(error);
   }
 
-  private sourceReady(): boolean {
-    if (!this.settings) return false;
-    return recognitionReady(this.settings, this.ocrLanguages);
-  }
-
-  private async installSourceOcr(): Promise<void> {
-    if (!this.settings) return;
-    this.installingOcr = true;
-    this.error = null;
-    try {
-      await window.TauriBridge.invoke("install_ocr_language", {
-        languageTag: this.settings.sourceLanguage,
-      });
-      this.ocrLanguages = new Set(await window.TauriBridge.invoke<string[]>("get_ocr_languages"));
-      if (!this.sourceReady()) {
-        this.error = "Windows didn’t report the language as installed. Try again.";
-      }
-    } catch (error) {
-      this.error = this.message(error);
-    } finally {
-      this.installingOcr = false;
-    }
-  }
-
-  private setLanguage(kind: "source" | "target", value: string): void {
-    if (!this.settings) return;
-    this.settings = applyLanguageSelection(this.settings, kind, value);
-  }
-
   private async beginEngineSetup(): Promise<void> {
-    if (!this.modelTermsAccepted) return;
+    if (this.working || !this.modelTermsAccepted || !this.settings) return;
     this.step = 3;
     this.working = true;
     this.error = null;
     this.supportCode = "";
     this.copyState = "idle";
     this.details = [];
-    this.stages = activateStage(initialStages(), 0);
+    this.progress = "Preparing setup…";
     try {
-      if (this.settings) {
-        await window.TauriBridge.invoke("save_settings", { settings: this.settings });
-      }
+      await window.TauriBridge.invoke("save_settings", { settings: this.settings });
       await window.TauriBridge.invoke("wizard_install_engine");
+      await this.verifyReady();
     } catch (error) {
       this.fail(this.message(error));
     }
-  }
-
-  private advanceForLine(line: string, stream?: string): void {
-    const { activeStage } = classifyWizardOutput(line, stream);
-    this.stages = activateStage(this.stages, activeStage);
   }
 
   private async verifyReady(): Promise<void> {
-    try {
-      this.stages = activateStage(this.stages, 3);
-      await window.TauriBridge.invoke("wizard_start_service");
-      const engine = await window.TauriBridge.invoke<EngineStatus>("refresh_engine_status");
-      if (engine.phase !== "ready" || !engine.serviceRunning) throw new Error("ENGINE_NOT_READY");
-      this.stages = activateStage(this.stages, 4);
-      if (!this.settings) throw new Error("SETTINGS_UNAVAILABLE");
-      const { sourceLanguage, targetLanguage } = this.settings;
-      const sourceText = pickSampleTranslation(sourceLanguage);
-      const sample = await window.TauriBridge.invoke<SampleResult>("wizard_test_translation", {
-        sourceText,
-        sourceLanguage,
-        targetLanguage,
-      });
-      if (!sample.translatedText) throw new Error("ENGINE_SAMPLE_TRANSLATION_FAILED");
-      this.sample = sample;
-      this.sampleSource = sourceText;
-      this.stages = this.stages.map((stage) => ({ ...stage, state: "complete" as const }));
-      this.working = false;
-      this.step = 4;
-    } catch (error) {
-      this.fail(this.message(error));
-    }
+    this.progress = "Starting the engine…";
+    await window.TauriBridge.invoke("wizard_start_service");
+    const engine = await window.TauriBridge.invoke<EngineStatus>("refresh_engine_status");
+    if (engine.phase !== "ready" || !engine.serviceRunning) throw new Error("ENGINE_NOT_READY");
+    this.progress = "Running a sample translation…";
+    if (!this.settings) throw new Error("SETTINGS_UNAVAILABLE");
+    const { sourceLanguage, targetLanguage } = this.settings;
+    const sourceText = pickSampleTranslation(sourceLanguage);
+    const sample = await window.TauriBridge.invoke<SampleResult>("wizard_test_translation", {
+      sourceText,
+      sourceLanguage,
+      targetLanguage,
+    });
+    if (!sample.translatedText) throw new Error("ENGINE_SAMPLE_TRANSLATION_FAILED");
+    this.sample = sample;
+    this.sampleSource = sourceText;
+    this.working = false;
+    this.step = 4;
   }
 
   private fail(error: string): void {
-    const failure = failCurrentStage(this.stages);
     this.working = false;
-    this.stages = failure.stages;
-    this.error = failure.message;
+    this.error = "Setup couldn’t finish. Try again or copy the details for help.";
     this.supportCode = error.match(/\bENGINE_[A-Z0-9_]+\b/)?.[0] ?? "ENGINE_SETUP_FAILED";
-    this.details = [...this.details, error];
+    this.details.push(error);
   }
 
-  private reset(): void {
+  private reset(existing = false): void {
     this.modelTermsAccepted = false;
-    this.step = 1;
+    this.existingEngine = existing;
+    this.step = existing ? 4 : 1;
     this.working = false;
     this.error = null;
     this.supportCode = "";
@@ -206,7 +150,7 @@ export class MeowcalSetup extends LitElement {
     this.sampleSource = "";
     this.copyState = "idle";
     this.details = [];
-    this.stages = initialStages();
+    this.progress = "Preparing setup…";
   }
 
   private async copyDetails(): Promise<void> {
@@ -220,23 +164,12 @@ export class MeowcalSetup extends LitElement {
     }
   }
 
-  private async close(): Promise<boolean> {
+  private async close(): Promise<void> {
     try {
       await window.TauriBridge.invoke("close_engine_wizard", {
-        modelDownloaded: Boolean(this.sample),
+        modelDownloaded: Boolean(this.sample) || this.existingEngine,
         selectedModel: null,
       });
-      return true;
-    } catch (error) {
-      this.error = this.message(error);
-      return false;
-    }
-  }
-
-  private async selectArea(): Promise<void> {
-    if (!(await this.close())) return;
-    try {
-      await window.TauriBridge.event.emit(SELECT_AREA_EVENT, null);
     } catch (error) {
       this.error = this.message(error);
     }
@@ -247,28 +180,23 @@ export class MeowcalSetup extends LitElement {
       step: this.step,
       settings: this.settings,
       loading: this.loading,
-      ocrReady: this.sourceReady(),
-      ocrBuiltIn: this.settings !== null && sessionEngine(this.settings) === "ppOcrV6",
-      installingOcr: this.installingOcr,
       working: this.working,
       error: this.error,
       supportCode: this.supportCode,
-      stages: this.stages,
+      progress: this.progress,
       sample: this.sample,
       sampleSource: this.sampleSource,
       copyState: this.copyState,
       modelTermsAccepted: this.modelTermsAccepted,
+      existingEngine: this.existingEngine,
     };
     const actions = {
-      retryLoad: () => void this.loadSettings(),
-      setLanguage: (kind: "source" | "target", value: string) => this.setLanguage(kind, value),
-      installOcr: () => void this.installSourceOcr(),
+      retryLoad: () => void (this.unlisten.length ? this.loadSettings() : this.initialize()),
       prepare: () => void this.beginEngineSetup(),
       copyDetails: () => void this.copyDetails(),
       next: () => (this.step = 2),
       back: () => (this.step = 1),
       close: () => void this.close(),
-      selectArea: () => void this.selectArea(),
       acceptModelTerms: (accepted: boolean) => (this.modelTermsAccepted = accepted),
     };
     return html`

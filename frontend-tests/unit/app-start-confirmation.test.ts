@@ -5,10 +5,11 @@ import type { CaptureRegion, TauriBridgeApi } from "../../src/ui/contracts";
 
 const saved = { x: 10, y: 800, width: 1200, height: 120 };
 
-type Outcome = { requestId: string; region: CaptureRegion | null };
+type Outcome = { requestId: string; region: CaptureRegion | null; startTranslation: boolean };
 
 async function fixture(region: CaptureRegion | null = saved) {
   let stopFailure = false;
+  let startFailure = false;
   let resolve!: (result: Outcome) => void;
   let reject!: (error: Error) => void;
   let requestId = "";
@@ -16,6 +17,7 @@ async function fixture(region: CaptureRegion | null = saved) {
   const invoke = vi.fn(async (command: string, args?: Record<string, unknown>) => {
     if (command === "get_capture_region") return region;
     if (command === "stop_translation" && stopFailure) throw new Error("Could not stop capture");
+    if (command === "start_translation" && startFailure) throw new Error("Display changed");
     if (command === "get_settings") return {};
     if (command === "get_ocr_languages") return ["zh-CN"];
     if (command === "get_engine_status" || command === "refresh_engine_status")
@@ -53,9 +55,13 @@ async function fixture(region: CaptureRegion | null = saved) {
     failStop: () => {
       stopFailure = true;
     },
+    failStart: () => {
+      startFailure = true;
+    },
     listeners,
-    confirm: (value: CaptureRegion | null = saved) => resolve({ requestId, region: value }),
-    mismatch: () => resolve({ requestId: "obsolete", region: saved }),
+    confirm: (value: CaptureRegion | null = saved, startTranslation = true) =>
+      resolve({ requestId, region: value, startTranslation }),
+    mismatch: () => resolve({ requestId: "obsolete", region: saved, startTranslation: true }),
     fail: (message: string) => reject(new Error(message)),
   };
 }
@@ -66,6 +72,50 @@ afterEach(() => {
 });
 
 describe("session area confirmation", () => {
+  it("does not open a selector while an existing-area start is warming", async () => {
+    const { controller, invoke } = await fixture();
+    let finishSave!: () => void;
+    const saving = new Promise<undefined>((resolve) => {
+      finishSave = () => resolve(undefined);
+    });
+    invoke.mockImplementationOnce(async () => saving);
+    const starting = controller.start(true);
+    expect(controller.current().busy).toBe("warming");
+    await controller.selectRegion();
+    expect(invoke).not.toHaveBeenCalledWith("request_area_selection", expect.anything());
+    finishSave();
+    await starting;
+    controller.dispose();
+  });
+  it("starts with the saved area without opening the selector", async () => {
+    const { controller, invoke } = await fixture();
+    await controller.start(true);
+    expect(invoke).not.toHaveBeenCalledWith("request_area_selection", expect.anything());
+    expect(invoke).toHaveBeenCalledWith("start_translation");
+    expect(controller.current()).toMatchObject({ running: true, region: saved });
+    controller.dispose();
+  });
+
+  it("does not start with a missing saved area", async () => {
+    const { controller, invoke } = await fixture(null);
+    await controller.start(true);
+    expect(invoke).not.toHaveBeenCalledWith("start_translation");
+    expect(controller.current()).toMatchObject({ running: false, busy: "idle" });
+    controller.dispose();
+  });
+
+  it("surfaces backend rejection of a stale saved area", async () => {
+    const { controller, failStart } = await fixture();
+    failStart();
+    await controller.start(true);
+    expect(controller.current()).toMatchObject({
+      running: false,
+      busy: "idle",
+      error: "Display changed",
+    });
+    controller.dispose();
+  });
+
   it.each([saved, null])(
     "opens the selector before a session, with cached region %j",
     async (region) => {
@@ -117,6 +167,17 @@ describe("session area confirmation", () => {
     });
     expect(invoke).not.toHaveBeenCalledWith("save_settings", expect.anything());
     expect(invoke).not.toHaveBeenCalledWith("make_engine_ready");
+    controller.dispose();
+  });
+
+  it("saves the selected crop without starting a session", async () => {
+    const { controller, invoke, confirm } = await fixture();
+    const selected = { ...saved, y: 760 };
+    const selecting = controller.start();
+    confirm(selected, false);
+    await selecting;
+    expect(controller.current()).toMatchObject({ region: selected, busy: "idle", running: false });
+    expect(invoke).not.toHaveBeenCalledWith("start_translation");
     controller.dispose();
   });
 

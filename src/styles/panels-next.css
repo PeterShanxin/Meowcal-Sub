@@ -114,6 +114,86 @@
    SETTINGS
    ============================================================================= */
 
+.logging-privacy {
+  padding: 10px 14px;
+  color: var(--text-3);
+  border-top: 1px solid var(--line);
+  font-size: var(--type-label);
+  line-height: 1.5;
+}
+
+.about-entry {
+  width: 100%;
+  color: var(--text-1);
+  background: transparent;
+  border: 0;
+  text-align: left;
+  cursor: pointer;
+}
+
+.about-entry:hover {
+  background: var(--surface-hover);
+}
+
+.about-back {
+  display: inline-flex;
+  align-items: center;
+  justify-self: start;
+  gap: 4px;
+  margin-left: -10px;
+}
+
+.about-back .icon {
+  transform: rotate(180deg);
+}
+
+.about-identity {
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+  margin: 30px 0 42px;
+}
+
+.about-identity h2 {
+  margin: 0;
+  color: var(--text-1);
+  font-family: var(--font-display);
+  font-size: 30px;
+  font-weight: 600;
+}
+
+.about-identity a {
+  margin-top: 6px;
+  color: var(--text-2);
+  font-size: var(--type-caption);
+  text-decoration: none;
+}
+
+.about-identity a:hover {
+  text-decoration: underline;
+}
+
+.about-version {
+  color: var(--text-3);
+  font-size: var(--type-caption);
+}
+
+.about-content {
+  max-width: 520px;
+  margin: 0 auto;
+  color: var(--text-2);
+  font-size: var(--type-caption);
+  line-height: 1.6;
+}
+
+.about-content a {
+  color: var(--accent);
+}
+
+.about-content > p {
+  margin-bottom: 18px;
+}
+
 .update-notes {
   padding: 8px 16px;
   color: var(--text-2);

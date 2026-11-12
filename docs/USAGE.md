@@ -49,6 +49,13 @@ not constitute Windows publisher signing.
 
 ## First translation
 
+On `main` (not yet released), first-time setup asks for agreement to the model
+terms before preparing the engine. Choose languages on Home after setup. Setup
+shows the current operation and download progress reported by Core. A previously
+configured installation shows a completion screen; Core still verifies assets
+when starting the engine. After the model terms are accepted, Core can reuse eligible
+local assets. Cancelling initial setup exits the app.
+
 1. Complete the setup wizard, or choose **Set up translation** on Home. Let
    setup download and test the local engine.
 2. On Home, choose **Original subtitles** and **Translate into**.
@@ -70,15 +77,18 @@ Light plate, and **Exit translation** stops and returns to Home. **Stop translat
 also ends the session.
 
 In the unreleased development build, Home shows readiness through the primary
-button: preparation disables it and shows a spinner; **Start translation** is
-available when ready. Home has no separate status badge or engine-ready line.
-The ready screen shows **Let’s watch** without a subtitle beneath the heading.
-Repair instructions and other actionable messages remain visible when needed.
+button: preparation disables it and shows a spinner; **Select subtitle area**
+opens the selector when ready. The selector offers **Confirm and start**,
+**Redraw**, **Save and exit**, and **Exit**. The mouse can move or resize a
+selection; arrow-key movement and resizing are not available. Home shows
+**Let’s watch** when ready. If a valid area is saved for the current display,
+**Start with saved area** starts without reopening the selector. Repair instructions
+and other actionable messages remain visible when needed.
 
-To choose or adjust the area without starting, use the subtitle-area row on
-Home (**Select** or **Change**) and choose **Use this area**. After that, the
-app can load the engine in the background so the next start is faster. The
-next **Start translation** still asks you to confirm the area.
+In the latest release, to choose or adjust the area without starting, use the
+subtitle-area row on Home (**Select** or **Change**) and choose **Use this area**.
+In the unreleased development build, choose **Select subtitle area**, then
+**Save and exit**. To reuse it directly, choose **Start with saved area**.
 
 The area is a fixed screen region, not an object tracker. When the video moves,
 changes size, or switches between window and full screen, select the area again.
@@ -98,6 +108,11 @@ saved area only when the same screen, bounds, and scaling are still present and
 Home is on that screen.
 
 ## Settings
+
+On `main` (not yet released), **Settings → About** shows the app version,
+provider, project link, and model license and usage terms. The first-time setup
+still presents the provider disclosure and requires agreement to the model terms.
+Settings changes save automatically, with a four-second success notice.
 
 | Setting | What it does | When to change it |
 | --- | --- | --- |

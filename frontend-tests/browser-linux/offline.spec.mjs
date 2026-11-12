@@ -43,20 +43,18 @@ test("main navigation remains usable with an offline backend", async ({ page }) 
   await expect(page.getByRole("slider", { name: /Text size/ })).toBeVisible();
   await navigation.getByRole("button", { name: "Home", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Start the browser backend" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Start translation", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Select subtitle area", exact: true })).toHaveCount(
+    0,
+  );
 });
 
-test("a native capture request cannot report success without the backend", async ({ page }) => {
+test("the offline page does not offer area selection", async ({ page }) => {
   await page.goto("/");
   await expect(page.getByRole("heading", { name: "Start the browser backend" })).toBeVisible();
-  await page.getByRole("button", { name: "No subtitle area yet Select" }).click();
-  await expect(page.getByRole("alert")).toBeVisible();
-  await expect(page.getByRole("alert")).not.toBeEmpty();
-  await expect(page.getByRole("button", { name: "No subtitle area yet Select" })).toBeVisible();
-  await expect(page.getByText("Subtitle area selected", { exact: true })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Select subtitle area", exact: true })).toHaveCount(
+    0,
+  );
   await expect(page.getByRole("button", { name: "Backend unavailable" })).toBeDisabled();
-  await page.getByRole("button", { name: "Dismiss", exact: true }).click();
-  await expect(page.getByRole("alert")).toHaveCount(0);
 });
 
 test("setup navigation never claims OCR installation or translation readiness offline", async ({
@@ -77,7 +75,7 @@ test("setup navigation never claims OCR installation or translation readiness of
   await expect(retry).toBeEnabled();
   await expect(page.getByRole("button", { name: "Continue", exact: true })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Install recognition" })).toHaveCount(0);
-  await expect(page.getByRole("button", { name: "Prepare translation" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Set up", exact: true })).toHaveCount(0);
   await expect(page.getByRole("heading", { name: "Ready to watch" })).toHaveCount(0);
   await expect(page.locator(".status-chip.tone-success")).toHaveCount(0);
   await expect(page.getByRole("heading", { name: "Welcome to Meowcal Sub" })).toBeVisible();

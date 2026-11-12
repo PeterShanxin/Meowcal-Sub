@@ -119,6 +119,9 @@ pub(crate) async fn open_legacy(
     info!("Opening area selector...");
 
     let window = crate::configured_window::get_or_create(&app, "selector")?;
+    if let Err(error) = set_transitions_disabled(&window, true) {
+        warn!(%error, "Could not disable selector window transitions");
+    }
     window.hide().map_err(|e| e.to_string())?;
     window.set_fullscreen(false).map_err(|e| e.to_string())?;
     crate::display_monitor::place(&window, monitor)?;
@@ -172,6 +175,24 @@ pub(crate) async fn open_legacy(
     info!("✅ Area selector opened!");
 
     Ok(())
+}
+
+fn set_transitions_disabled(window: &tauri::WebviewWindow, disabled: bool) -> Result<(), String> {
+    use windows::Win32::Foundation::HWND;
+    use windows::Win32::Graphics::Dwm::{DwmSetWindowAttribute, DWMWA_TRANSITIONS_FORCEDISABLED};
+
+    let hwnd = HWND(window.hwnd().map_err(|error| error.to_string())?.0);
+    let disabled = i32::from(disabled);
+    // SAFETY: hwnd is the selector's live window and disabled is a valid BOOL.
+    unsafe {
+        DwmSetWindowAttribute(
+            hwnd,
+            DWMWA_TRANSITIONS_FORCEDISABLED,
+            std::ptr::addr_of!(disabled).cast(),
+            std::mem::size_of::<i32>() as u32,
+        )
+    }
+    .map_err(|error| error.to_string())
 }
 
 /// Screenshot the selected screen for the selector background.
@@ -261,6 +282,9 @@ pub fn close(app: &AppHandle, snapshot_slot: &SnapshotSlot) -> Result<(), String
         return Err("Selector window not found".to_string());
     };
 
+    if let Err(error) = set_transitions_disabled(&window, true) {
+        warn!(%error, "Could not disable selector window transitions");
+    }
     window.hide().map_err(|e| e.to_string())?;
     // Drop the snapshot to avoid holding a huge base64 string in memory.
     *lock_or_recover(snapshot_slot) = None;

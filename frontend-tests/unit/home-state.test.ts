@@ -114,7 +114,7 @@ describe("deriveHomePresentation", () => {
     [snapshot({ busy: "loading" }), "none", "Checking"],
     [snapshot({ running: true }), "stop", "Running"],
     [snapshot({ running: true, busy: "stopping" }), "stop", "Running"],
-    [snapshot({ busy: "selecting" }), "none", "Select area"],
+    [snapshot({ busy: "selecting" }), "start", "Select area"],
     [snapshot({ busy: "warming" }), "none", "Starting"],
     [snapshot({ busy: "starting" }), "none", "Starting"],
     [snapshot({ engine: { phase: "notInstalled" } }), "setup", "Setup needed"],
@@ -131,7 +131,7 @@ describe("deriveHomePresentation", () => {
     [snapshot({ engine: { phase: "backendUnavailable" } }), "none", "Backend offline"],
     [snapshot({ error: "save failed" }), "start", "Ready"],
     [snapshot({ ocrLanguages: new Set() }), "installOcr", "Almost ready"],
-    [snapshot({ region: null }), "start", "Almost ready"],
+    [snapshot({ region: null }), "start", "Ready"],
     [snapshot({ engine: { phase: "notRunning" } }), "start", "Ready"],
     [snapshot({ engine: { phase: "notrunning" } }), "start", "Ready"],
   ])("maps runtime state to one action", (input, action, statusLabel) => {

@@ -125,6 +125,7 @@ describe("selector confirmation adapter", () => {
       region,
       scaleFactor: 1.5,
       selectionId: 17,
+      startTranslation: true,
     });
   });
 
@@ -134,6 +135,18 @@ describe("selector confirmation adapter", () => {
     expect(invoke).toHaveBeenCalledExactlyOnceWith("complete_area_selection", {
       requestId: "current",
       region: null,
+    });
+  });
+
+  it("saves without requesting translation", async () => {
+    const { invoke, actions } = fixture();
+    await actions.confirmSelection(false);
+    expect(invoke).toHaveBeenCalledExactlyOnceWith("complete_area_selection", {
+      requestId: "current",
+      region,
+      scaleFactor: 1.5,
+      selectionId: 17,
+      startTranslation: false,
     });
   });
 
@@ -215,10 +228,11 @@ for (const display of [
         region: cached,
         scaleFactor: display.scale,
         selectionId: 17,
+        startTranslation: true,
       });
     });
 
-    it("draws, moves, resizes and nudges a crop using only client coordinates", async () => {
+    it("draws, moves and resizes a crop using only client coordinates", async () => {
       const { actions, invoke, mouse, key, box, TestElement } = fixture({
         ...display,
         width: 1280,
@@ -239,9 +253,9 @@ for (const display of [
       actions.handleMouseUp(mouse(640, 540));
       key("ArrowLeft", { ctrlKey: true });
       key("ArrowDown", { shiftKey: true });
-      const selected = { x: 110, y: 470, width: 520, height: 71 };
+      const selected = { x: 120, y: 470, width: 520, height: 70 };
       expect(actions.state.region).toEqual(selected);
-      expect(box.style.left).toBe("110px");
+      expect(box.style.left).toBe("120px");
       expect(box.style.top).toBe("470px");
       await actions.confirmSelection();
       expect(invoke).toHaveBeenCalledExactlyOnceWith("complete_area_selection", {
@@ -249,6 +263,7 @@ for (const display of [
         region: selected,
         scaleFactor: display.scale,
         selectionId: 17,
+        startTranslation: true,
       });
     });
 
@@ -261,13 +276,14 @@ for (const display of [
       await actions.confirmSelection();
       expect(invoke).toHaveBeenCalledExactlyOnceWith("complete_area_selection", {
         requestId: "current",
-        region: { x: 246, y: 540, width: 768, height: 72 },
+        region: { x: 256, y: 540, width: 768, height: 72 },
         scaleFactor: display.scale,
         selectionId: 17,
+        startTranslation: true,
       });
     });
 
-    it("contains restored crops and mouse and keyboard adjustments within the current viewport", async () => {
+    it("contains restored crops and mouse adjustments within the current viewport", async () => {
       const { actions, mouse, key, box } = fixture({
         ...display,
         width: 1280,

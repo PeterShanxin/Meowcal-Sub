@@ -18,6 +18,7 @@
 }
 
 .wizard-footer .primary-button {
+  grid-column: -2 / -1;
   justify-self: end;
 }
 

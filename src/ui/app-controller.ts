@@ -6,11 +6,12 @@ import { backendUnavailablePhase } from "./home-state";
 import { defaultSettings, mergeSettings, recognitionPresets } from "./settings-defaults";
 import { UpdateController } from "./update-controller";
 import { SettingsWriter } from "./settings-writer";
+import { settingsSaveFeedback } from "./settings-feedback";
 import { EngineStatusController } from "./engine-status-controller";
 import { SessionStatusController } from "./session-status-controller";
 import { DisplayController } from "./display-controller";
+import { InitialSetup } from "./initial-setup";
 
-const ONBOARDING_SEEN_KEY = "meowcal.onboardingComplete";
 const NOTICE_DURATION_MS = 4000;
 
 function errorMessage(error: unknown): string {
@@ -26,6 +27,7 @@ export class AppController {
   private autoCheckTimer: number | null = null;
   private noticeTimer: number | null = null;
   private settingsLoaded = false;
+  private initialSetup = new InitialSetup();
   private disposed = false;
   private snapshot: UiSnapshot = {
     settingsSave: { kind: "idle" },
@@ -51,7 +53,9 @@ export class AppController {
   );
   private displays = new DisplayController((patch) => this.publish(patch));
   private updates = new UpdateController((patch) => this.publish(patch));
-  private settingsWriter = new SettingsWriter((settingsSave) => this.publish({ settingsSave }));
+  private settingsWriter = new SettingsWriter((save) =>
+    this.publish(settingsSaveFeedback(this.snapshot, save)),
+  );
 
   constructor(
     private readonly subscriber: (snapshot: UiSnapshot) => void,
@@ -61,7 +65,6 @@ export class AppController {
   current(): UiSnapshot {
     return this.snapshot;
   }
-
   private publish(patch: Partial<UiSnapshot>): void {
     if (this.disposed) return;
     this.snapshot = { ...this.snapshot, ...patch };
@@ -106,8 +109,11 @@ export class AppController {
     this.hideDiagnosticsOutsideDeveloperMode();
     await this.setupEvents();
     await this.displays.start();
-    if (!browserMode && localStorage.getItem(ONBOARDING_SEEN_KEY) !== "true") {
-      await this.openSetup();
+    if (!browserMode) {
+      const error = await this.initialSetup
+        .start(engine, merged.translation.localEngine.model)
+        .catch(errorMessage);
+      if (error) this.publish({ error });
     }
     this.scheduleAutomaticUpdateCheck();
     if (!browserMode) await this.engines.finishPreparation(engine);
@@ -124,14 +130,13 @@ export class AppController {
 
   private async setupEvents(): Promise<void> {
     const sessionUnlisten = await this.sessionStatus.listen();
-    const wizardUnlisten = await window.TauriBridge.event.listen("engine-wizard-closed", () => {
-      localStorage.setItem(ONBOARDING_SEEN_KEY, "true");
-    });
-    const selectAreaUnlisten = await window.TauriBridge.event.listen(
-      "setup-select-area",
-      () => void this.selectRegion(),
+    const wizardUnlisten = await window.TauriBridge.event.listen(
+      "engine-wizard-closed",
+      (event) => {
+        this.initialSetup.closed(event.payload);
+      },
     );
-    this.unlisten.push(...sessionUnlisten, wizardUnlisten, selectAreaUnlisten);
+    this.unlisten.push(...sessionUnlisten, wizardUnlisten);
   }
 
   dispose(): void {
@@ -161,8 +166,8 @@ export class AppController {
     await this.persistSettingsInBackground();
   }
   async selectRegion(): Promise<void> {
+    if (this.snapshot.busy !== "idle") return;
     if (this.snapshot.running) {
-      if (this.snapshot.busy !== "idle") return;
       await this.stop();
       if (!this.snapshot.running) await this.start();
       return;
@@ -184,6 +189,7 @@ export class AppController {
       const result = await window.TauriBridge.invoke<{
         requestId: string;
         region: CaptureRegion | null;
+        startTranslation: boolean;
       }>("request_area_selection", { requestId, startTranslation });
       if (this.disposed) return false;
       if (result.requestId !== requestId)
@@ -192,7 +198,7 @@ export class AppController {
         busy: "idle",
         ...(result.region ? { region: result.region, error: null, captureWarning: null } : {}),
       });
-      return result.region !== null;
+      return result.region !== null && (!startTranslation || result.startTranslation);
     } catch (error) {
       this.publish({ busy: "idle", error: errorMessage(error) });
       return false;
@@ -239,14 +245,16 @@ export class AppController {
     this.publish(patch);
     await this.engines.finishPreparation(engine);
   }
-  async start(): Promise<void> {
+  async start(useSavedArea = false): Promise<void> {
     if (
-      this.snapshot.busy === "warming" ||
-      this.snapshot.busy === "starting" ||
-      this.snapshot.busy === "stopping" ||
-      !(await this.chooseRegion(true))
+      this.disposed ||
+      this.snapshot.running ||
+      this.snapshot.busy !== "idle" ||
+      this.selectionRequest ||
+      (useSavedArea && !this.snapshot.region)
     )
       return;
+    if (!useSavedArea && !(await this.chooseRegion(true))) return;
     this.sessionStatus.reset();
     this.publish({ busy: "warming", error: null, notice: null, captureWarning: null });
     try {
@@ -284,7 +292,6 @@ export class AppController {
   private async persistSettingsInBackground(): Promise<void> {
     await this.saveSettings(true).catch(() => {});
   }
-
   private async editSettings(edit: (settings: AppSettings) => void): Promise<void> {
     const settings = structuredClone(this.snapshot.settings);
     edit(settings);

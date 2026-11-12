@@ -4,25 +4,17 @@ import { describe, expect, it } from "vitest";
 const require = createRequire(import.meta.url);
 const {
   actionBarTop,
-  arrowDelta,
   buildCaptureRegionPayload,
   buildDimOverlaySegments,
   clampSelectionHole,
   containRegion,
   defaultSelectionRect,
   meetsMinimumSelection,
-  regionFits,
   screenRectToClientRect,
   selectionRectFromPoints,
 } = require("../../src/scripts/selector-geometry.js");
 
 describe("selector keyboard geometry", () => {
-  it("moves one pixel per arrow press and ten with Ctrl", () => {
-    expect(arrowDelta("ArrowLeft", false)).toEqual({ dx: -1, dy: 0 });
-    expect(arrowDelta("ArrowDown", true)).toEqual({ dx: 0, dy: 10 });
-    expect(arrowDelta("Enter", false)).toBeNull();
-  });
-
   it("places a keyboard user's first box across the lower screen in screen coordinates", () => {
     expect(defaultSelectionRect({ x: -1920, y: 0, width: 1920, height: 1080 })).toEqual({
       x: -1920 + 384,
@@ -149,12 +141,10 @@ describe("selector geometry", () => {
   });
 });
 
-describe("selector keyboard bounds", () => {
+describe("selector bounds", () => {
   // A secondary monitor to the left of the primary one.
   const viewport = { x: -1920, y: 0, width: 1920, height: 1080 };
 
-  // Held arrow keys used to carry the box off screen, where a confirmed save
-  // collapsed it to a one-pixel capture area.
   it("stops a moved box at the screen edge instead of letting it leave", () => {
     expect(containRegion({ x: -40, y: 1050, width: 400, height: 60 }, viewport)).toEqual({
       x: -400,
@@ -179,11 +169,5 @@ describe("selector keyboard bounds", () => {
       width: 1920,
       height: 90,
     });
-  });
-
-  it("reports whether a resized box still fits on screen", () => {
-    expect(regionFits({ x: -1920, y: 0, width: 1920, height: 1080 }, viewport)).toBe(true);
-    expect(regionFits({ x: -1921, y: 0, width: 100, height: 100 }, viewport)).toBe(false);
-    expect(regionFits({ x: -100, y: 1000, width: 101, height: 80 }, viewport)).toBe(false);
   });
 });

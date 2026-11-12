@@ -118,6 +118,13 @@ fn handle_action(app: &AppHandle, action: TrayAction) {
 
 /// Bring the main window to the front, as the tray Show/Settings actions do.
 fn show_main_window(app: &AppHandle) {
+    if !crate::window_startup::main_startup_allowed() {
+        if let Some(window) = app.get_webview_window("foundry-wizard") {
+            let _ = window.show();
+            let _ = window.set_focus();
+        }
+        return;
+    }
     if let Some(window) = app.get_webview_window("main") {
         let _ = window.show();
         let _ = window.set_focus();

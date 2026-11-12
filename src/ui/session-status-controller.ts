@@ -44,7 +44,8 @@ export class SessionStatusController {
           return;
         }
         this.retiredSession = sessionId;
-        this.captureError ??= "Translation stopped unexpectedly. Start translation again.";
+        this.captureError ??=
+          "Translation stopped unexpectedly. Select the subtitle area to start again.";
         this.publish({
           running: false,
           busy: "idle",

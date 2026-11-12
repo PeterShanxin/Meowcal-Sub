@@ -204,23 +204,20 @@ meowcal-setup {
    MESSAGES
    ============================================================================= */
 
-/* Reserve a row for feedback so errors never cover content or navigation. */
-.app-frame:has(.toast) {
-  grid-template-rows: 32px minmax(0, 1fr) auto 44px;
-}
-
-.app-frame:has(.toast) .app-nav {
-  grid-row: 4;
-}
-
 .toast {
-  grid-row: 3;
+  position: absolute;
+  z-index: 10;
+  bottom: 50px;
+  left: 50%;
+  transform: translateX(-50%);
   display: flex;
   align-items: center;
   gap: 10px;
   width: calc(100% - 24px);
   max-width: 640px;
   min-height: 44px;
+  max-height: 40%;
+  overflow: auto;
   margin: 6px auto;
   padding: 6px 8px 6px 12px;
   color: var(--text-1);
@@ -235,6 +232,22 @@ meowcal-setup {
   flex: 1;
   min-width: 0;
   overflow-wrap: anywhere;
+}
+
+/* Form pages keep persistent errors in the flow so every setting stays reachable. */
+.app-frame:has(.toast):not(:has(.home-screen)) {
+  grid-template-rows: 32px minmax(0, 1fr) auto 44px;
+}
+
+.app-frame:has(.toast):not(:has(.home-screen)) .app-nav {
+  grid-row: 4;
+}
+
+.app-frame:not(:has(.home-screen)) .toast {
+  position: static;
+  grid-row: 3;
+  max-height: none;
+  transform: none;
 }
 
 .toast.error {

@@ -22,6 +22,7 @@ pub struct SelectionRequest {
 pub struct SelectionOutcome {
     pub request_id: String,
     pub region: Option<CaptureRegion>,
+    pub start_translation: bool,
 }
 
 struct PendingSelection {
@@ -73,12 +74,20 @@ impl SelectionRequests {
             .ok_or_else(|| "The area selection is no longer active".into())
     }
 
-    fn finish(&self, request_id: &str, region: Option<CaptureRegion>) -> Result<(), String> {
+    fn finish(
+        &self,
+        request_id: &str,
+        region: Option<CaptureRegion>,
+        start_translation: bool,
+    ) -> Result<(), String> {
         self.selection_id(request_id)?;
         if let Some(pending) = lock_or_recover(&self.pending).take() {
             let _ = pending.sender.send(SelectionOutcome {
                 request_id: request_id.into(),
                 region,
+                start_translation: region.is_some()
+                    && pending.request.start_translation
+                    && start_translation,
             });
         }
         Ok(())
@@ -89,6 +98,7 @@ impl SelectionRequests {
         request_id: &str,
         region: Option<CaptureRegion>,
         selection_id: Option<u64>,
+        start_translation: bool,
         apply: F,
     ) -> Result<(), String>
     where
@@ -103,7 +113,7 @@ impl SelectionRequests {
         // Native display validation, hide and persistence may await. Only this
         // async lock spans them; metadata remains readable by the selector.
         apply(token).await?;
-        self.finish(request_id, region)
+        self.finish(request_id, region, start_translation)
     }
 }
 
@@ -141,7 +151,9 @@ pub async fn request_area_selection(
         {
             lock_or_recover(&state.capture).cancel_selection();
             let _ = crate::selector_window::close(&app, &state.selector_snapshot);
-            let _ = state.area_selection.finish(&request.request_id, None);
+            let _ = state
+                .area_selection
+                .finish(&request.request_id, None, false);
             return Err(error);
         }
         receiver
@@ -164,43 +176,50 @@ pub async fn complete_area_selection(
     region: Option<CaptureRegion>,
     scale_factor: Option<f64>,
     selection_id: Option<u64>,
+    start_translation: Option<bool>,
 ) -> Result<(), String> {
     let state = &*state;
     state
         .area_selection
-        .complete(&request_id, region, selection_id, |token| async move {
-            if let Some(region) = region {
-                let scale = scale_factor.ok_or("Confirmation requires a DPI scale factor")?;
-                crate::app_state::validate_capture_region(region.width, region.height, scale)?;
-                let monitors = crate::display_monitor::available(&app)?;
-                lock_or_recover(&state.capture)
-                    .selection_to_confirm(token, region, &monitors)
-                    .map_err(|error| error.to_string())?;
-                let snapshot = crate::selector_window::snapshot(&state.selector_snapshot);
-                crate::selector_window::close(&app, &state.selector_snapshot)?;
-                if let Err(error) = crate::display_session::set_region(
-                    &app,
-                    state,
-                    region,
-                    scale,
-                    Some(token),
-                    "selector",
-                )
-                .await
-                {
-                    *lock_or_recover(&state.selector_snapshot) = snapshot;
-                    if let Some(window) = app.get_webview_window("selector") {
-                        let _ = window.show();
-                        let _ = window.set_focus();
+        .complete(
+            &request_id,
+            region,
+            selection_id,
+            start_translation.unwrap_or(false),
+            |token| async move {
+                if let Some(region) = region {
+                    let scale = scale_factor.ok_or("Confirmation requires a DPI scale factor")?;
+                    crate::app_state::validate_capture_region(region.width, region.height, scale)?;
+                    let monitors = crate::display_monitor::available(&app)?;
+                    lock_or_recover(&state.capture)
+                        .selection_to_confirm(token, region, &monitors)
+                        .map_err(|error| error.to_string())?;
+                    let snapshot = crate::selector_window::snapshot(&state.selector_snapshot);
+                    crate::selector_window::close(&app, &state.selector_snapshot)?;
+                    if let Err(error) = crate::display_session::set_region(
+                        &app,
+                        state,
+                        region,
+                        scale,
+                        Some(token),
+                        "selector",
+                    )
+                    .await
+                    {
+                        *lock_or_recover(&state.selector_snapshot) = snapshot;
+                        if let Some(window) = app.get_webview_window("selector") {
+                            let _ = window.show();
+                            let _ = window.set_focus();
+                        }
+                        return Err(error);
                     }
-                    return Err(error);
+                } else {
+                    crate::selector_window::close(&app, &state.selector_snapshot)?;
                 }
-            } else {
-                crate::selector_window::close(&app, &state.selector_snapshot)?;
-            }
-            lock_or_recover(&state.capture).cancel_selection();
-            Ok(())
-        })
+                lock_or_recover(&state.capture).cancel_selection();
+                Ok(())
+            },
+        )
         .await
 }
 
@@ -210,7 +229,9 @@ pub async fn cancel_from_window(app: &AppHandle) -> Result<(), String> {
     if let Some(request) = state.area_selection.current() {
         crate::selector_window::close(app, &state.selector_snapshot)?;
         lock_or_recover(&state.capture).cancel_selection();
-        state.area_selection.finish(&request.request_id, None)?;
+        state
+            .area_selection
+            .finish(&request.request_id, None, false)?;
     }
     Ok(())
 }
@@ -221,7 +242,9 @@ pub async fn cancel_after_destroy(app: &AppHandle) {
     if let Some(request) = state.area_selection.current() {
         *lock_or_recover(&state.selector_snapshot) = None;
         lock_or_recover(&state.capture).cancel_selection();
-        let _ = state.area_selection.finish(&request.request_id, None);
+        let _ = state
+            .area_selection
+            .finish(&request.request_id, None, false);
     }
 }
 

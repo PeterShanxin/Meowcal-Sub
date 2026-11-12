@@ -180,7 +180,7 @@ describe("session status reports", () => {
     app.emit("translation-interrupted", { sessionId: 3 });
     expect(app.current()).toMatchObject({
       running: false,
-      error: "Translation stopped unexpectedly. Start translation again.",
+      error: "Translation stopped unexpectedly. Select the subtitle area to start again.",
     });
   });
 
@@ -215,7 +215,8 @@ describe("session status reports", () => {
         screen: "home",
         running: false,
         busy: "idle",
-        error: reason ?? "Translation stopped unexpectedly. Start translation again.",
+        error:
+          reason ?? "Translation stopped unexpectedly. Select the subtitle area to start again.",
         notice: null,
       });
     },

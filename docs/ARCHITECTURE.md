@@ -18,6 +18,19 @@ subtitle overlay, and setup wizard. Vite builds them as a static multi-page
 frontend. Browser development mode serves the same entries and maps bridge
 calls to a loopback-only Rust HTTP adapter.
 
+On native startup the main window remains hidden until the frontend confirms
+completed setup. When Core reports an engine already registered by the app,
+setup offers a completion screen instead of another download. Initial setup
+completion is recorded when the user opens the app; cancelling it exits the app. The
+wizard displays recognized Core progress events without treating the install's
+interleaved download and verification operations as a linear checklist.
+The wizard keeps the latest 200 output lines for copying setup diagnostics.
+
+Area selection returns both the saved region and the user's start intent. A
+save-only confirmation persists the region without starting a session; exiting
+without saving leaves the previous region intact. The request ID and native
+display token still guard every confirmed region.
+
 ```text
 main/setup UI ─┐
 selector UI ───┼─ TauriBridge ─ commands / HTTP adapters ─ application services
@@ -84,10 +97,12 @@ execution and API-namespace discovery remain in `llm/transport_http.rs`
 
 ### Session sequence and event ordering
 
-1. **Start.** Home's **Start translation** opens the selector with
+1. **Start.** Home's **Select subtitle area** opens the selector with
    **Confirm and start**. `area_selection.rs` correlates that confirmation, the
    controller saves settings and waits for engine readiness, and
-   `start_translation` begins the session.
+   `start_translation` begins the session. When an area is available for the
+   current display, **Start with saved area** skips the selector; the backend
+   still validates the saved display and region before starting capture.
 2. **Capture loop.** `commands.rs` shows the overlay, opens the session's OCR
    engine in Core's OCR process, starts the translation workers, then repeats:
    capture, OCR, band filter, eligibility gate, and `Translator::observe`.
