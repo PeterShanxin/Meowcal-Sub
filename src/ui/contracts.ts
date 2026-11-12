@@ -81,7 +81,10 @@ export interface TranslationConfig {
   ocr: OcrConfig;
 }
 
+export type LogLevel = "off" | "basic" | "verbose";
+
 export interface AppSettings {
+  logging: { level: LogLevel };
   sourceLanguage: string;
   targetLanguage: string;
   captureIntervalMs: number;

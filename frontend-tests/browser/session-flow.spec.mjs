@@ -224,3 +224,34 @@ test("display targeting notice survives confirmation and invalidation still stop
     ),
   ).toHaveLength(1);
 });
+
+test("logging is opt-in and shows the captured-content warning", async ({ page }) => {
+  await openMain(page);
+  await page.getByRole("button", { name: "Settings", exact: true }).click();
+  const level = page.getByRole("combobox", { name: "Log level", exact: true });
+  await expect(level).toHaveValue("basic");
+  await expect(page.locator("#logging-privacy")).toContainText("potentially private content");
+  await level.selectOption("verbose");
+  await expect(page.locator("#logging-privacy")).toContainText("Verbose is on");
+  await expect(page.locator("#logging-privacy")).toContainText("Nothing is uploaded automatically");
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () =>
+          window.sessionTest.calls.filter(({ command }) => command === "save_settings").at(-1)?.args
+            .settings.logging.level,
+      ),
+    )
+    .toBe("verbose");
+  await level.selectOption("off");
+  await expect(level).toHaveValue("off");
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () =>
+          window.sessionTest.calls.filter(({ command }) => command === "save_settings").at(-1)?.args
+            .settings.logging.level,
+      ),
+    )
+    .toBe("off");
+});

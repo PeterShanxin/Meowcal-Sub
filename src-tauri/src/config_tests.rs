@@ -202,3 +202,18 @@ fn ocr_engine_defaults_to_pp_ocr_and_survives_a_round_trip() {
     let reloaded: TranslationConfig = serde_json::from_str(&json).unwrap();
     assert_eq!(reloaded.ocr.engine, Engine::Windows);
 }
+
+#[test]
+fn existing_settings_default_to_basic_logging() {
+    let config: AppConfig = serde_json::from_str(r#"{"sourceLanguage":"ja-JP"}"#).unwrap();
+    assert_eq!(
+        config.logging.level,
+        crate::logging_settings::LogLevel::Basic
+    );
+    assert_eq!(config.source_language, "ja-JP");
+    let future: AppConfig = serde_json::from_str(r#"{"logging":{"level":"future"}}"#).unwrap();
+    assert_eq!(
+        future.logging.level,
+        crate::logging_settings::LogLevel::Basic
+    );
+}

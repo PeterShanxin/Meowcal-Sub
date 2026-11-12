@@ -2,6 +2,8 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
+import { defaultSettings, mergeSettings } from "../../src/ui/settings-defaults";
+
 const read = (relativePath) =>
   readFileSync(fileURLToPath(new URL(relativePath, import.meta.url)), "utf8");
 
@@ -19,6 +21,18 @@ const frontendDefault = (field) => {
 };
 
 describe("settings defaults", () => {
+  it("does not enable captured-content logging for new or older settings", () => {
+    expect(defaultSettings.logging.level).toBe("basic");
+    expect(mergeSettings(null).logging.level).toBe("basic");
+    expect(mergeSettings({}).logging.level).toBe("basic");
+    expect(mergeSettings({ logging: {} }).logging.level).toBe("basic");
+    expect(mergeSettings({ logging: { level: "unknown" } }).logging.level).toBe("basic");
+  });
+
+  it.each(["off", "basic", "verbose"])("retains an explicit %s choice", (level) => {
+    expect(mergeSettings({ logging: { level } }).logging.level).toBe(level);
+  });
+
   // `saveSettings` posts the whole settings object back to Rust, so the
   // frontend's copy of a default overwrites the backend's whenever anything is
   // saved. A capture interval the backend had already lowered to 250ms kept

@@ -192,11 +192,31 @@ itself download an application update; **Download and install** does.
 
 ## Logs and diagnostics
 
-The installed app writes one log file per launch to
-`%APPDATA%\com.meowcal.sub\logs\meowcal-sub_<date>_<time>.log`. To open the
-folder, paste `%APPDATA%\com.meowcal.sub\logs` into the File Explorer address
-bar. At startup the app deletes log files older than seven days. There is no
-in-app log-level control.
+The latest release writes one session log per launch and removes `.log` files
+older than seven days at startup. The changes below are on `main` and have not
+shipped in a release yet.
+
+**Settings > Local logs** offers three levels:
+
+- **Off** stops new diagnostic events and capture evidence after settings load.
+- **Basic** (default) records operational diagnostics, without capture images or
+  subtitle text.
+- **Verbose** also saves the original captured region, actual OCR input PNGs,
+  raw OCR text and geometry, and source/translated text locally. Selecting it is
+  explicit consent to retain screen content that can be private. No upload occurs.
+
+Session files use `meowcal-sub_<dev|prod>_<date>_<time>_<pid>.log` and mark each
+entry `[dev]` or `[prod]`. The installed direct app uses
+`%APPDATA%\com.meowcal.sub\logs`; paste that path into File Explorer.
+The existing seven-day startup cleanup still applies to ordinary `.log` files.
+Verbose evidence lives in `logs\verbose`, separately capped at **256 MiB**.
+Before each new evidence record, the app removes its oldest complete or partial
+records as needed. It does not delete unrelated files. A record larger than the
+cap, a writer lock held for more than two seconds, an unexpected file, or a write failure skips evidence without
+stopping translation. Verbose has no separate age expiry. Turning it off stops
+new evidence but does not erase existing records; remove the `verbose` folder
+when you no longer need its private contents. Review files before sharing them.
+Saving PNGs can slow capture; use Verbose for short troubleshooting sessions.
 
 Default logs record timings, character counts, queue depth, engine state,
 support codes, and error codes. They are designed to omit subtitle text and

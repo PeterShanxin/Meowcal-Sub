@@ -27,6 +27,7 @@ function snapshot(patch: Partial<UiSnapshot> = {}): UiSnapshot {
     busy: "idle",
     multipleDisplays: false,
     settings: {
+      logging: { level: "basic" },
       sourceLanguage: "zh-CN",
       targetLanguage: "en-US",
       captureIntervalMs: 500,
