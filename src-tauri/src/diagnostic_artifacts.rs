@@ -103,7 +103,7 @@ fn encode_frame(mut bgra: Vec<u8>, width: u32, height: u32) -> io::Result<Vec<u8
     {
         return Err(io::Error::other("Invalid diagnostics frame"));
     }
-    for pixel in bgra.chunks_exact_mut(4) {
+    for pixel in bgra.as_chunks_mut::<4>().0 {
         pixel.swap(0, 2);
         // GDI's unused alpha byte can be zero; screen evidence is opaque.
         pixel[3] = 255;
