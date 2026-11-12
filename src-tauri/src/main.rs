@@ -62,7 +62,12 @@ fn main() {
             .into();
     }
     // --- Step 1: Set up logging ---
-    meowcal_sub::app_logging::init(http_only_mode, &context.config().identifier);
+    let log_identifier = if http_only_mode {
+        meowcal_sub::app_profile::AppProfile::current().identifier()
+    } else {
+        &context.config().identifier
+    };
+    meowcal_sub::app_logging::init(http_only_mode, log_identifier);
 
     info!("🐱 Meowcal Sub starting up...");
 

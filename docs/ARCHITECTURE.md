@@ -170,7 +170,7 @@ record directories containing known regular files are pruned. Unexpected files
 are preserved and stop the write. Oversized records are skipped. Disabling
 Verbose does not delete existing evidence. This feature is not yet released.
 
-There is no size-based rotation.
+Ordinary `.log` files have no size-based rotation.
 
 The browser backend reads `%APPDATA%\<log identifier>\config.json` through
 `http_config.rs`. `src-tauri/src/bin/subtitle-eval.rs` reads
