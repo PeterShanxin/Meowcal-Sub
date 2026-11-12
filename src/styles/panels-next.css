@@ -114,20 +114,36 @@
    SETTINGS
    ============================================================================= */
 
-/* Release notes arrive as plain text with the author's own line breaks. */
 .update-notes {
-  max-height: 140px;
-  margin: 0;
-  padding: 8px 12px;
-  overflow-y: auto;
-  color: var(--text-3);
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-lg);
-  font-family: inherit;
-  font-size: var(--type-label);
-  white-space: pre-wrap;
+  padding: 8px 16px;
+  color: var(--text-2);
+  font-size: var(--type-body);
+  line-height: 1.6;
   overflow-wrap: anywhere;
+}
+
+.update-notes h3 {
+  margin: 0 0 8px;
+  color: var(--text-1);
+  font-size: var(--type-body);
+}
+
+.update-notes ul {
+  margin: 0 0 12px;
+  padding-left: 20px;
+}
+
+.update-notes li + li {
+  margin-top: 8px;
+}
+
+.update-notes strong {
+  color: var(--text-1);
+}
+
+.update-notes a {
+  color: var(--accent);
+  text-underline-offset: 3px;
 }
 
 .disclosure summary {

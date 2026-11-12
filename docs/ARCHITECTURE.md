@@ -286,6 +286,10 @@ Shared contracts have one owner before parallel decomposition begins:
   `update_diagnostics.rs` records source, timing, result, and error category in
   the session log without raw errors or request URLs. Browser mode has no updater;
   Store builds keep Microsoft Store as their update owner.
+  `ui/update-notes.ts` extracts up to three short highlights for both
+  `build-updater-manifest.mjs` and the Settings view. The view renders text and
+  bold labels through Lit, never release-supplied HTML. Full notes open the
+  canonical GitHub release for the available version.
 - Display state: the pipeline owns translated/source-only/failure semantics.
   The overlay renders the supplied state and cannot relabel OCR as translation.
   `subtitle_activity.rs` owns the 15-second healthy-empty waiting threshold,

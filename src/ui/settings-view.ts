@@ -3,6 +3,7 @@ import type { OcrEngine, Tone, UiSnapshot } from "./contracts";
 import { icon } from "./icons";
 import { backendUnavailablePhase } from "./home-state";
 import { deriveUpdatePresentation } from "./update-state";
+import { summarizeUpdateNotes } from "./update-notes";
 import { renderModelLicense } from "./model-license";
 import { profileOf, type Profile } from "./recognition";
 
@@ -180,7 +181,31 @@ function renderEngineAndUpdates(snapshot: UiSnapshot, actions: SettingsActions):
         }
       </div>
     </div>
-    ${update.notes ? html`<pre class="update-notes">${update.notes}</pre>` : nothing}
+    ${snapshot.update.kind === "available" ? renderUpdateNotes(snapshot.update.version, update.notes) : nothing}
+  `;
+}
+
+function renderUpdateNotes(version: string, notes: string | null): TemplateResult {
+  const highlights = summarizeUpdateNotes(notes);
+  return html`
+    <section class="update-notes" aria-label="What's new">
+      ${
+        highlights.length
+          ? html`
+              <h3>What's new</h3>
+              <ul>
+                ${highlights.map(({ title, detail }) => html`<li>${title ? html`<strong>${title}</strong> ` : nothing}${detail}</li>`)}
+              </ul>
+            `
+          : nothing
+      }
+      <a
+        href=${`https://github.com/PeterShanxin/Meowcal-Sub/releases/tag/v${encodeURIComponent(version)}`}
+        target="_blank"
+        rel="noopener noreferrer"
+        >Full release notes ↗</a
+      >
+    </section>
   `;
 }
 

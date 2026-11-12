@@ -96,6 +96,8 @@ immediate publication if certified; it does not bypass certification. The artifa
 can still be dispatched independently. See [Store distribution](STORE_DISTRIBUTION.md).
 
 Release notes follow [the release notes standard](RELEASE_NOTES.md).
+The manifest contains a three-bullet summary; the complete notes remain the
+GitHub release body. Both come from the same versioned Markdown file.
 
 The `.sig` files are not published. The updater reads the signature text out of
 `latest.json` and never fetches a separate file.
