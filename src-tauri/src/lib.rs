@@ -129,6 +129,7 @@ pub mod configured_window;
 /// System tray icon and menu
 pub mod tray;
 pub mod window_lifecycle;
+pub mod window_startup;
 /// Subprocesses that do not flash a console window over playback
 pub mod windowless_command;
 pub mod wizard_contracts;

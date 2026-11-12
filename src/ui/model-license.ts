@@ -3,25 +3,21 @@ import license from "../../licenses/tencent-hy/License.txt?raw";
 import notice from "../../licenses/tencent-hy/Notice.txt?raw";
 import "../styles/model-license.css";
 
-export function renderModelLicense() {
-  return html`<section class="model-license" aria-label="Translation model terms">
-    <p>
+export function renderProvider() {
+  return html`<p>
       Provided by
       <a href="https://github.com/PeterShanxin" target="_blank" rel="noopener noreferrer"
-        >@PeterShanxin</a
-      >. Not affiliated with, associated with, sponsored or endorsed by Tencent.
+        >Shanxin Li (@PeterShanxin)</a
+      >, an individual.
     </p>
+    <p>Not affiliated with, associated with, sponsored or endorsed by Tencent.</p>`;
+}
+
+export function renderModelLicense() {
+  return html`<section class="model-license" aria-label="Translation model terms">
     <details>
       <summary>Model license and usage terms</summary>
       <p><strong>HY-MT1.5 translation model</strong></p>
-      <p>
-        Meowcal Sub is provided by Shanxin Li (<a
-          href="mailto:shanxinpeter@gmail.com"
-          target="_blank"
-          rel="noopener noreferrer"
-          >shanxinpeter@gmail.com</a
-        >), an individual.
-      </p>
       <p>
         The model license excludes use in the European Union, United Kingdom, and South Korea,
         including use of the model’s outputs in those territories.

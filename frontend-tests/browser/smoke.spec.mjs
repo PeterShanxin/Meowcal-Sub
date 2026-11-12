@@ -39,7 +39,9 @@ test("status notices do not intercept the primary action in a compact window", a
     };
   });
   await expect(page.locator(".toast.notice")).toContainText("Subtitle area selected");
-  await page.getByRole("button", { name: "Start translation", exact: true }).click({ trial: true });
+  await page
+    .getByRole("button", { name: "Select subtitle area", exact: true })
+    .click({ trial: true });
 });
 
 test("the multi-display hint is quiet, fits a compact Home and explains session pinning", async ({
@@ -61,7 +63,9 @@ test("the multi-display hint is quiet, fits a compact Home and explains session 
   await expect(page.locator(".display-notice")).toHaveText(
     "检测到多个显示器，将使用当前窗口所在的屏幕。",
   );
-  await page.getByRole("button", { name: "Start translation", exact: true }).click({ trial: true });
+  await page
+    .getByRole("button", { name: "Select subtitle area", exact: true })
+    .click({ trial: true });
   await page.evaluate(() => {
     const app = document.querySelector("meowcal-app");
     app.snapshot = { ...app.snapshot, running: true };
@@ -166,11 +170,21 @@ test("normal setup presents one private HY-MT engine without infrastructure choi
   await page.getByRole("button", { name: "Settings" }).click();
   await expect(page.getByText("Keep running in the tray")).toHaveCount(0);
   await expect(page.getByText("Start with Windows")).toHaveCount(0);
+  await page.getByRole("button", { name: "About", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "About" })).toBeFocused();
+  await expect(page.getByRole("link", { name: "Meowcal Sub on GitHub" })).toHaveAttribute(
+    "href",
+    "https://github.com/PeterShanxin/Meowcal-Sub",
+  );
+  await expect(page.getByRole("link", { name: "Shanxin Li (@PeterShanxin)" })).toBeVisible();
+  await expect(page.getByText(/Not affiliated with/)).toBeVisible();
   const modelTerms = page.locator(".model-license summary");
   await expect(page.getByText(/The model license excludes use/)).toBeHidden();
   await modelTerms.click();
   await expect(page.getByLabel("Tencent HY Community License Agreement")).toBeVisible();
   await modelTerms.click();
+  await page.getByRole("button", { name: "Settings", exact: true }).first().click();
+  await expect(page.getByRole("heading", { name: "Settings" })).toBeFocused();
   const autoCheckInput = page.getByLabel(/Automatically check for updates/i);
   await expect(autoCheckInput).toBeVisible();
   await expect(autoCheckInput).toBeChecked();
@@ -196,7 +210,6 @@ test("normal setup presents one private HY-MT engine without infrastructure choi
 
   await page.goto("/wizard.html");
   await expect(page.getByRole("heading", { name: "Welcome to Meowcal Sub" })).toBeVisible();
-  await expect(page.getByText("Everything stays on this PC")).toBeVisible();
   await expect(page.locator("body")).not.toContainText("Foundry");
   await expect(page.locator("body")).not.toContainText("winget");
   await expect(page.locator("body")).not.toContainText("Model ID");
@@ -217,13 +230,14 @@ test("guided engine setup has one install action and no infrastructure choices",
   await expect(page.getByRole("heading", { name: "Welcome to Meowcal Sub" })).toBeFocused();
 
   await page.getByRole("button", { name: /Continue/ }).click();
-  await expect(page.getByRole("heading", { name: "Choose your languages" })).toBeVisible();
-  await expect(page.getByLabel("Original subtitles")).toBeVisible();
-  await expect(page.getByLabel("Translate into")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Set up the translation model" })).toBeVisible();
+  await expect(page.getByLabel("Original subtitles")).toHaveCount(0);
+  await expect(page.getByLabel("Translate into")).toHaveCount(0);
   const consent = page.getByRole("checkbox", { name: /I agree to the model license/ });
   await expect(consent).not.toBeChecked();
-  await expect(page.getByText(/Meowcal Sub is provided by Shanxin Li/)).toBeHidden();
-  const contact = page.getByRole("link", { name: "@PeterShanxin" });
+  await expect(page.getByText(/Not affiliated with/)).toBeVisible();
+  const contact = page.getByRole("link", { name: "Shanxin Li (@PeterShanxin)" });
+  await expect(contact).toBeVisible();
   await expect(contact).toHaveAttribute("href", "https://github.com/PeterShanxin");
   await expect(contact).toHaveAttribute("target", "_blank");
   const terms = page.locator(".model-license summary");
@@ -235,22 +249,14 @@ test("guided engine setup has one install action and no infrastructure choices",
   await terms.focus();
   await page.keyboard.press("Enter");
   await expect(restrictions).toBeVisible();
-  await expect(page.getByText(/Meowcal Sub is provided by Shanxin Li/)).toBeVisible();
-  await expect(page.getByRole("link", { name: "shanxinpeter@gmail.com" })).toHaveAttribute(
-    "href",
-    "mailto:shanxinpeter@gmail.com",
-  );
+  await expect(page.locator('a[href^="mailto:"]')).toHaveCount(0);
   await expect(page.getByLabel("Tencent HY Community License Agreement")).toContainText(
     "ACCEPTABLE USE POLICY",
   );
   await page.keyboard.press("Enter");
   await expect(restrictions).toBeHidden();
   // Exercise the UI gate without downloading a model or accepting terms for a real user.
-  await page.evaluate(() => {
-    const setup = document.querySelector("meowcal-setup");
-    setup.ocrLanguages = new Set([setup.settings.sourceLanguage]);
-  });
-  const prepare = page.getByRole("button", { name: "Prepare translation" });
+  const prepare = page.getByRole("button", { name: "Set up", exact: true });
   await expect(prepare).toBeDisabled();
   await consent.check();
   await expect(prepare).toBeEnabled();

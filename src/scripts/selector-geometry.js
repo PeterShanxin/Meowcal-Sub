@@ -107,22 +107,6 @@
     return region.width >= minWidth && region.height >= minHeight;
   }
 
-  const ARROW_DIRECTIONS = {
-    ArrowLeft: [-1, 0],
-    ArrowRight: [1, 0],
-    ArrowUp: [0, -1],
-    ArrowDown: [0, 1],
-  };
-
-  // One pixel per press, or ten with Ctrl, so the keyboard can both line a box
-  // up exactly and cross a screen without hundreds of presses.
-  function arrowDelta(key, fast) {
-    const direction = ARROW_DIRECTIONS[key];
-    if (!direction) return null;
-    const step = fast ? 10 : 1;
-    return { dx: direction[0] * step, dy: direction[1] * step };
-  }
-
   // The box a keyboard user starts from: centred across the lower part of the
   // screen, where subtitles usually sit. `viewport` is in screen coordinates.
   function defaultSelectionRect(viewport) {
@@ -144,9 +128,7 @@
     return Math.max(gap, box.top - gap - barHeight);
   }
 
-  // Keyboard adjustments stay on the selector's screen: a box carried past an
-  // edge can no longer be seen or adjusted, and saving it collapses the capture
-  // area to a sliver. `viewport` is in screen coordinates.
+  // Keep the box visible on the selector's screen.
   function containRegion(region, viewport) {
     const width = Math.min(region.width, viewport.width);
     const height = Math.min(region.height, viewport.height);
@@ -158,25 +140,14 @@
     };
   }
 
-  function regionFits(region, viewport) {
-    return (
-      region.x >= viewport.x &&
-      region.y >= viewport.y &&
-      region.x + region.width <= viewport.x + viewport.width &&
-      region.y + region.height <= viewport.y + viewport.height
-    );
-  }
-
   return {
     actionBarTop,
-    arrowDelta,
     buildCaptureRegionPayload,
     buildDimOverlaySegments,
     clampSelectionHole,
     containRegion,
     defaultSelectionRect,
     meetsMinimumSelection,
-    regionFits,
     screenRectToClientRect,
     selectionRectFromPoints,
   };

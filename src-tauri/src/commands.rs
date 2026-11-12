@@ -776,8 +776,8 @@ pub async fn stop_translation(state: State<'_, AppState>, app: AppHandle) -> Res
 
 /// Show the foundry-wizard window, resetting state for a fresh run
 #[tauri::command]
-pub async fn open_engine_wizard(app: AppHandle) -> Result<(), String> {
-    crate::wizard_window::open(&app)
+pub async fn open_engine_wizard(app: AppHandle, existing: Option<bool>) -> Result<(), String> {
+    crate::wizard_window::open(&app, existing.unwrap_or(false))
 }
 
 /// Hide the foundry-wizard window and notify the main window
@@ -820,22 +820,13 @@ pub async fn wizard_install_engine(
                     crate::engine_recovery::cache_root_of(&paths);
                 save_config(&app, &config)?;
             }
-            let _ = app.emit_to(
-                "foundry-wizard",
-                "wizard-download-complete",
-                serde_json::json!({"success": true}),
-            );
+            Ok(())
         }
         Err(error) => {
             warn!("Local Translation Engine install failed: {}", error);
-            let _ = app.emit_to(
-                "foundry-wizard",
-                "wizard-download-complete",
-                serde_json::json!({"success": false, "error": error}),
-            );
+            Err(error)
         }
     }
-    Ok(())
 }
 
 #[tauri::command]

@@ -1,0 +1,35 @@
+import { html, type TemplateResult } from "lit";
+import type { LogLevel } from "./contracts";
+
+const descriptions: Record<LogLevel, string> = {
+  off: "No new logs or captures.",
+  basic: "Operational diagnostics only.",
+  verbose:
+    "Saves captures, OCR images and subtitles locally, including translations. Content may be private.",
+};
+
+export function renderLogging(
+  level: LogLevel,
+  onChange: (level: LogLevel) => void,
+): TemplateResult {
+  return html`
+    <h2 class="group-label">Local logs</h2>
+    <div class="list">
+      <label class="list-row">
+        <span><strong>Log level</strong></span>
+        <select
+          class="select compact"
+          aria-label="Log level"
+          aria-describedby="logging-privacy"
+          .value=${level}
+          @change=${(event: Event) => onChange((event.target as HTMLSelectElement).value as LogLevel)}
+        >
+          <option value="off">Off</option>
+          <option value="basic">Basic</option>
+          <option value="verbose">Verbose</option>
+        </select>
+      </label>
+      <p class="logging-privacy" id="logging-privacy">${descriptions[level]}</p>
+    </div>
+  `;
+}

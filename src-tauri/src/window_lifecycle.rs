@@ -203,8 +203,8 @@ pub fn restore_and_show_main(app: &AppHandle, preferences: &WindowPreferences) {
     show_main_if_ready(app);
 }
 
-fn show_main_if_ready(app: &AppHandle) {
-    if MAIN_GEOMETRY_READY.load(Ordering::Acquire) && MAIN_PAGE_READY.load(Ordering::Acquire) {
+pub(crate) fn show_main_if_ready(app: &AppHandle) {
+    if crate::window_startup::ready_to_show(&MAIN_GEOMETRY_READY, &MAIN_PAGE_READY) {
         if let Some(window) = app.get_webview_window("main") {
             if MAIN_SHOW_SCHEDULED.swap(true, Ordering::AcqRel) {
                 return;

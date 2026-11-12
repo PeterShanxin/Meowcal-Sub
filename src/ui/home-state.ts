@@ -57,16 +57,10 @@ export function deriveHomePresentation(snapshot: UiSnapshot): HomePresentation {
 
   if (snapshot.busy === "selecting") {
     return {
-      state: "checking",
+      ...deriveHomePresentation({ ...snapshot, busy: "idle" }),
       statusLabel: "Select area",
-      title: "Confirm the subtitle area",
-      description: "Confirm the saved box or adjust it to fit the original subtitles.",
-      action: "none",
       actionLabel: "Confirm in the selector…",
-      actionIcon: "area",
       actionDisabled: true,
-      supportLine: "Cancel to return without starting",
-      supportTone: "neutral",
     };
   }
 
@@ -167,29 +161,14 @@ export function deriveHomePresentation(snapshot: UiSnapshot): HomePresentation {
     };
   }
 
-  if (!snapshot.region) {
-    return {
-      state: "notReady",
-      statusLabel: "Almost ready",
-      title: "Choose the subtitle area",
-      description: "Start translation, then confirm a box around the original subtitles.",
-      action: "start",
-      actionLabel: "Start translation",
-      actionIcon: "area",
-      actionDisabled: false,
-      supportLine: "",
-      supportTone: "warning",
-    };
-  }
-
   return {
     state: "ready",
     statusLabel: "Ready",
     title: "Let’s watch",
     description: "",
     action: "start",
-    actionLabel: "Start translation",
-    actionIcon: "play",
+    actionLabel: "Select subtitle area",
+    actionIcon: "area",
     actionDisabled: snapshot.busy !== "idle",
     supportLine: "",
     supportTone: "success",

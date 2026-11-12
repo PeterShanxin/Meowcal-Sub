@@ -1,15 +1,17 @@
 import { html, nothing, type TemplateResult } from "lit";
-import type { LogLevel, OcrEngine, Tone, UiSnapshot } from "./contracts";
+import type { LogLevel, OcrEngine, UiSnapshot } from "./contracts";
 import { icon } from "./icons";
 import { backendUnavailablePhase } from "./home-state";
 import { deriveUpdatePresentation } from "./update-state";
 import { summarizeUpdateNotes } from "./update-notes";
-import { renderModelLicense } from "./model-license";
+import { renderModelLicense, renderProvider } from "./model-license";
+import { renderLogging } from "./logging-view";
 import { profileOf, type Profile } from "./recognition";
 
 type Recognition = "fast" | "balanced" | "accurate";
 
 interface SettingsActions {
+  onAbout(): void;
   onLogLevel(level: LogLevel): void;
   onRecognition(value: Recognition): void;
   onOcrEngine(engine: OcrEngine): void;
@@ -27,9 +29,7 @@ interface SettingsActions {
 }
 
 interface EngineRow {
-  tone: Tone;
   chip: string;
-  detail: string;
   actionLabel: string | null;
   actionIsPrimary: boolean;
   canTest: boolean;
@@ -47,12 +47,7 @@ function engineRow(snapshot: UiSnapshot): EngineRow {
   if (snapshot.busy === "loading" || phase === "preparing" || phase === "busy") {
     const chip = snapshot.busy === "loading" ? "Checking" : phase === "busy" ? "Busy" : "Preparing";
     return {
-      tone: "neutral",
       chip,
-      detail:
-        phase === "busy"
-          ? "Waiting for the current engine operation"
-          : "Checking the engine on this PC",
       actionLabel: "Repair",
       actionIsPrimary: false,
       canTest: false,
@@ -60,9 +55,7 @@ function engineRow(snapshot: UiSnapshot): EngineRow {
   }
   if (phase === "ready" || phase === "notRunning" || phase === "notrunning") {
     return {
-      tone: "success",
       chip: "Ready",
-      detail: "Installed and working",
       actionLabel: "Repair",
       actionIsPrimary: false,
       canTest: true,
@@ -70,9 +63,7 @@ function engineRow(snapshot: UiSnapshot): EngineRow {
   }
   if (phase === backendUnavailablePhase) {
     return {
-      tone: "danger",
       chip: "Backend offline",
-      detail: "Start the browser backend to check the engine",
       actionLabel: null,
       actionIsPrimary: false,
       canTest: false,
@@ -80,18 +71,14 @@ function engineRow(snapshot: UiSnapshot): EngineRow {
   }
   if (phase === "notInstalled" || phase === "notinstalled") {
     return {
-      tone: "warning",
       chip: "Not installed",
-      detail: "Set it up to start translating",
       actionLabel: "Set up",
       actionIsPrimary: true,
       canTest: false,
     };
   }
   return {
-    tone: "danger",
     chip: "Needs repair",
-    detail: "Repair it before translating",
     actionLabel: "Repair",
     actionIsPrimary: true,
     canTest: false,
@@ -126,11 +113,8 @@ function renderEngineAndUpdates(snapshot: UiSnapshot, actions: SettingsActions):
     <h2 class="group-label">Engine and updates</h2>
     <div class="list">
       <div class="list-row">
-        <span><strong>Translation engine</strong><small>${engine.detail}</small></span>
+        <span><strong>Translation engine</strong><small>${engine.chip}</small></span>
         <span class="row-end">
-          <span class=${`status-chip tone-${engine.tone}`}
-            ><span class="dot"></span>${engine.chip}</span
-          >
           <button
             class="secondary-button"
             type="button"
@@ -354,34 +338,37 @@ export function renderSettings(snapshot: UiSnapshot, actions: SettingsActions): 
           ${renderProfile(snapshot, actions)}
         </div>
         ${renderAdvanced(snapshot, actions)} ${renderEngineAndUpdates(snapshot, actions)}
-        <h2 class="section-label">Local logs</h2>
+        ${renderLogging(snapshot.settings.logging.level, actions.onLogLevel)}
+        ${renderDeveloper(snapshot, actions)}
         <div class="list">
-          <label class="list-row">
-            <span
-              ><strong>Log level</strong
-              ><small>Basic keeps operational details without captured content</small></span
-            >
-            <select
-              aria-label="Log level"
-              aria-describedby="logging-privacy"
-              .value=${snapshot.settings.logging.level}
-              @change=${(event: Event) => actions.onLogLevel((event.target as HTMLSelectElement).value as LogLevel)}
-            >
-              <option value="off">Off</option>
-              <option value="basic">Basic</option>
-              <option value="verbose">Verbose</option>
-            </select>
-          </label>
+          <button class="list-row about-entry" type="button" @click=${actions.onAbout}>
+            <strong>About</strong>${icon("chevron-right")}
+          </button>
         </div>
-        <p id="logging-privacy">
-          ${
-            snapshot.settings.logging.level === "verbose"
-              ? "Verbose is on: original captures, OCR input images, raw OCR text and translations are saved locally. They may contain private screen content. Diagnostic files use up to 256 MiB; the oldest are removed when full. Nothing is uploaded automatically."
-              : "Verbose saves original captures, OCR input images, raw OCR text and translations locally. Enable it only when you want to keep this potentially private content."
-          }
-        </p>
-        ${renderModelLicense()} ${renderDeveloper(snapshot, actions)}
       </div>
     </main>
   `;
+}
+
+export function renderAbout(version: string | null, onBack: () => void): TemplateResult {
+  return html`<main class="screen" aria-labelledby="about-title">
+    <div class="page">
+      <button class="quiet-button about-back" type="button" @click=${onBack}>
+        ${icon("chevron-right")}Settings
+      </button>
+      <header class="page-head"><h1 id="about-title" tabindex="-1">About</h1></header>
+      <div class="about-identity">
+        <h2>Meowcal Sub</h2>
+        <p class="about-version">${version ?? "Version unavailable"}</p>
+        <a
+          href="https://github.com/PeterShanxin/Meowcal-Sub"
+          target="_blank"
+          rel="noopener noreferrer"
+          aria-label="Meowcal Sub on GitHub"
+          >GitHub ↗</a
+        >
+      </div>
+      <div class="about-content">${renderProvider()} ${renderModelLicense()}</div>
+    </div>
+  </main>`;
 }

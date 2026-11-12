@@ -41,17 +41,6 @@
   color: var(--text-2);
 }
 
-.benefit-list .list-row {
-  grid-template-columns: 28px minmax(0, 1fr);
-  min-height: 46px;
-}
-
-.benefit-list .list-row > .icon {
-  width: 20px;
-  height: 20px;
-  color: var(--accent);
-}
-
 .wizard-note {
   display: flex;
   align-items: center;
@@ -65,75 +54,6 @@
 .wizard-note .icon {
   width: 14px;
   height: 14px;
-}
-
-.setup-progress {
-  display: grid;
-  gap: 6px;
-}
-
-.setup-progress-label {
-  display: flex;
-  justify-content: space-between;
-  color: var(--text-2);
-  font-size: var(--type-caption);
-}
-
-.setup-progress-label span:last-child {
-  color: var(--text-3);
-  font-variant-numeric: tabular-nums;
-}
-
-.progress-track {
-  height: 4px;
-  overflow: hidden;
-  background: rgba(255, 255, 255, 0.12);
-  border-radius: 4px;
-}
-
-.progress-track span {
-  display: block;
-  height: 100%;
-  background: var(--accent);
-  border-radius: inherit;
-  transition: width 300ms ease;
-}
-
-.setup-stages li {
-  display: grid;
-  grid-template-columns: 20px minmax(0, 1fr) auto;
-  gap: 10px;
-  align-items: center;
-  min-height: 31px;
-  padding: 3px 12px;
-  font-size: 13.5px;
-}
-
-.setup-stages li + li {
-  border-top: 1px solid var(--line);
-}
-
-.setup-stages small {
-  font-size: var(--type-label);
-}
-
-.setup-stages .pending {
-  color: var(--text-3);
-}
-
-.setup-stages .complete .icon,
-.setup-stages .complete small {
-  color: var(--success);
-}
-
-.setup-stages .active .icon,
-.setup-stages .active small {
-  color: var(--accent);
-}
-
-.setup-stages .error .icon,
-.setup-stages .error small {
-  color: var(--danger);
 }
 
 .setup-sample {
@@ -164,11 +84,6 @@
 @media (max-height: 470px) {
   .wizard-content {
     padding-top: 8px;
-  }
-
-  .setup-stages li {
-    min-height: 26px;
-    padding-block: 1px;
   }
 
   .error-actions {

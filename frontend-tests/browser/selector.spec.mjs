@@ -147,6 +147,7 @@ test("session confirmation carries both the request identity and display selecti
         height: Math.max(40, Math.round(page.viewportSize().height * 0.1)),
       },
       scaleFactor: 1.5,
+      startTranslation: true,
     });
   expect(
     await page.evaluate(() =>
@@ -158,7 +159,8 @@ test("session confirmation carries both the request identity and display selecti
 test("Cancel during session confirmation sends no replacement crop", async ({ page }) => {
   await openSelector(page, 2, true);
   await page.keyboard.press("Enter");
-  await page.keyboard.press("Escape");
+  await expect(page.locator("#cancel-btn kbd")).toHaveText("Esc");
+  await page.getByRole("button", { name: "Cancel", exact: true }).click();
   await expect
     .poll(() =>
       page.evaluate(
@@ -173,4 +175,47 @@ test("Cancel during session confirmation sends no replacement crop", async ({ pa
       window.selectorTest.calls.filter((call) => call.command === "set_capture_region"),
     ),
   ).toHaveLength(0);
+});
+
+test("Save and exit submits the area without requesting translation", async ({ page }) => {
+  await openSelector(page, 2, true);
+  await page.keyboard.press("Enter");
+  await page.getByRole("button", { name: "Save and exit" }).click();
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () => window.selectorTest.calls.find((c) => c.command === "complete_area_selection")?.args,
+      ),
+    )
+    .toMatchObject({ requestId: "request-17", startTranslation: false, selectionId: 17 });
+});
+
+test("Exit cancels and arrow keys do not change the selection", async ({ page }) => {
+  await openSelector(page, 2, true);
+  await page.keyboard.press("Enter");
+  const before = await page.locator("#selection-box").getAttribute("style");
+  await page.keyboard.press("ArrowLeft");
+  await page.keyboard.press("Shift+ArrowDown");
+  await expect(page.locator("#selection-box")).toHaveAttribute("style", before);
+  await page.getByRole("button", { name: "Exit", exact: true }).click();
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () => window.selectorTest.calls.find((c) => c.command === "complete_area_selection")?.args,
+      ),
+    )
+    .toEqual({ requestId: "request-17", region: null });
+});
+
+test("selector actions fit a narrow screen", async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 500 });
+  await openSelector(page, 1, true);
+  await page.keyboard.press("Enter");
+  const buttons = page.locator("#action-buttons");
+  const bar = await buttons.boundingBox();
+  expect(bar.x).toBeGreaterThanOrEqual(0);
+  expect(bar.x + bar.width).toBeLessThanOrEqual(320);
+  for (const name of ["Confirm and start", "Redraw", "Save and exit", "Exit"]) {
+    await expect(buttons.getByRole("button", { name, exact: true })).toBeVisible();
+  }
 });

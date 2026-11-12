@@ -112,6 +112,9 @@ kbd {
 }
 
 .cancel-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
     height: 30px;
     padding: 0 12px;
     color: var(--text-2);
@@ -126,6 +129,10 @@ kbd {
 .cancel-btn:hover {
     color: var(--text-1);
     background: var(--surface-hover);
+}
+
+#save-exit-btn[hidden] {
+    display: none;
 }
 
 /* --- Selection Box --- */
@@ -180,7 +187,7 @@ kbd {
 }
 
 /* --- Resize Handles --- */
-/* A 24px pointer and keyboard target around a 7px visible square. */
+/* A 24px pointer target around a 7px visible square. */
 .resize-handle {
     position: absolute;
     width: 24px;
@@ -208,17 +215,6 @@ kbd {
     transform: scale(1.4);
 }
 
-.resize-handle:focus-visible {
-    outline: none;
-}
-
-.resize-handle:focus-visible::after {
-    transform: scale(1.4);
-    box-shadow:
-        0 0 0 1px rgba(0, 0, 0, 0.55),
-        0 0 0 3px var(--focus);
-}
-
 /* Show handles after selection is complete */
 .selection-box.has-selection .resize-handle {
     opacity: 1;
@@ -241,6 +237,10 @@ kbd {
     transform: translateX(-50%);
     display: none;
     gap: 8px;
+    width: max-content;
+    max-width: calc(100vw - 24px);
+    flex-wrap: wrap;
+    justify-content: center;
     cursor: default;
     z-index: 200;
 }

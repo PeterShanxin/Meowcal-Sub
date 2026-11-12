@@ -22,7 +22,11 @@ function createController(
     invoke: (async (command, args) => {
       const result = await (args === undefined ? invoke(command) : invoke(command, args));
       if (command === "request_area_selection" && result === undefined) {
-        return { requestId: args?.requestId, region: { x: 10, y: 800, width: 1200, height: 120 } };
+        return {
+          requestId: args?.requestId,
+          region: { x: 10, y: 800, width: 1200, height: 120 },
+          startTranslation: args?.startTranslation,
+        };
       }
       return result;
     }) as TauriBridgeApi["invoke"],
@@ -78,6 +82,23 @@ describe("AppController settings persistence", () => {
         settings: { ...original, logging: { level } },
       });
     }
+  });
+
+  it("keeps successful settings feedback visible for 4 seconds", async () => {
+    vi.useFakeTimers();
+    const { controller } = createController(vi.fn().mockResolvedValue(undefined));
+    await controller.initialize();
+    controller.setScreen("settings");
+    await controller.setLogLevel("off");
+    expect(controller.current()).toMatchObject({
+      settingsSave: { kind: "idle" },
+      notice: "Settings saved",
+    });
+    await vi.advanceTimersByTimeAsync(3999);
+    expect(controller.current().notice).toBe("Settings saved");
+    await vi.advanceTimersByTimeAsync(1);
+    expect(controller.current().notice).toBeNull();
+    controller.dispose();
   });
 
   it("returns to Home with a stopped session when translation is exited from the overlay", async () => {
@@ -229,6 +250,8 @@ describe("AppController settings persistence", () => {
     });
     const { controller, snapshots } = createController(invoke as TauriBridgeApi["invoke"]);
 
+    await controller.initialize();
+    invoke.mockClear();
     await expect(controller.start()).resolves.toBeUndefined();
 
     expect(snapshots.at(-1)).toMatchObject({
@@ -362,6 +385,8 @@ describe("AppController settings persistence", () => {
     });
     const { controller, snapshots } = createController(invoke as TauriBridgeApi["invoke"]);
 
+    await controller.initialize();
+    invoke.mockClear();
     await controller.start();
 
     expect(invoke.mock.calls.map(([command]) => command)).toEqual([
@@ -696,16 +721,54 @@ describe("AppController settings persistence", () => {
     expect(snapshots).toHaveLength(count);
   });
 
-  // A cancelled setup used to leave the flag unset, so the wizard reopened on
-  // every launch and Home's own setup action was never reachable (#74).
-  it("stops opening setup by itself once the user has closed it, finished or not", async () => {
+  it("quits initial setup without marking it complete when cancelled", async () => {
     const invoke = vi.fn().mockResolvedValue(undefined);
     const { controller, listeners, storage } = createController(invoke, undefined, false);
 
     await controller.initialize();
     listeners.get("engine-wizard-closed")?.({ payload: { modelDownloaded: false } });
 
-    expect(storage.setItem).toHaveBeenCalledWith("meowcal.onboardingComplete", "true");
+    expect(storage.setItem).not.toHaveBeenCalledWith("meowcal.setupAcknowledged", "true");
+    expect(invoke).toHaveBeenCalledWith("quit_initial_setup");
+    controller.dispose();
+  });
+
+  it("shows the main window when initial setup completes", async () => {
+    const invoke = vi.fn().mockResolvedValue(undefined);
+    const { controller, listeners, storage } = createController(invoke, undefined, false);
+    await controller.initialize();
+    listeners.get("engine-wizard-closed")?.({ payload: { modelDownloaded: true } });
+    expect(storage.setItem).toHaveBeenCalledWith("meowcal.setupAcknowledged", "true");
+    expect(invoke).toHaveBeenCalledWith("show_main_after_setup");
+    controller.dispose();
+  });
+
+  it("shows the existing-engine completion screen before opening the app", async () => {
+    const invoke = vi.fn(async (command: string) => {
+      if (command === "get_engine_status") return { phase: "notRunning" };
+      if (command === "get_settings") return { translation: { localEngine: { model: "HY-MT" } } };
+      return undefined;
+    });
+    const { controller, storage } = createController(
+      invoke as TauriBridgeApi["invoke"],
+      undefined,
+      false,
+    );
+    await controller.initialize();
+    expect(invoke).toHaveBeenCalledWith("open_engine_wizard", { existing: true });
+    expect(invoke).not.toHaveBeenCalledWith("show_main_after_setup");
+    expect(storage.setItem).not.toHaveBeenCalledWith("meowcal.setupAcknowledged", "true");
+    controller.dispose();
+  });
+
+  it("still asks for model terms when only unregistered local assets exist", async () => {
+    const invoke = vi.fn(async (command: string) =>
+      command === "get_engine_status" ? { phase: "notRunning" } : undefined,
+    );
+    const { controller } = createController(invoke as TauriBridgeApi["invoke"], undefined, false);
+    await controller.initialize();
+    expect(invoke).toHaveBeenCalledWith("open_engine_wizard");
+    expect(invoke).not.toHaveBeenCalledWith("show_main_after_setup");
     controller.dispose();
   });
 
@@ -717,22 +780,6 @@ describe("AppController settings persistence", () => {
     await controller.initialize();
 
     expect(invoke).not.toHaveBeenCalledWith("open_engine_wizard");
-    controller.dispose();
-  });
-
-  it("opens area selection when setup hands over to it", async () => {
-    const invoke = vi.fn().mockResolvedValue(undefined);
-    const { controller, listeners } = createController(invoke);
-
-    await controller.initialize();
-    listeners.get("setup-select-area")?.({ payload: null });
-
-    await vi.waitFor(() =>
-      expect(invoke).toHaveBeenCalledWith(
-        "request_area_selection",
-        expect.objectContaining({ startTranslation: false }),
-      ),
-    );
     controller.dispose();
   });
 

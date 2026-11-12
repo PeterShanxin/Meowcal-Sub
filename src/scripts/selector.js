@@ -1,12 +1,10 @@
 const {
     actionBarTop,
-    arrowDelta,
     buildCaptureRegionPayload,
     buildDimOverlaySegments,
     containRegion,
     defaultSelectionRect,
     meetsMinimumSelection,
-    regionFits,
     selectionRectFromPoints,
 } = window.SelectorGeometry;
 // Shared with the overlay, which enforces a larger minimum rectangle.
@@ -36,6 +34,8 @@ let actionButtons = null;
 let confirmBtn = null;
 let retryBtn = null;
 let cancelBtn = null;
+let saveExitBtn = null;
+let exitBtn = null;
 let errorText = null;
 let desktopSnapshot = null;
 let overlayTop = null;
@@ -70,6 +70,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     confirmBtn = document.getElementById('confirm-btn');
     retryBtn = document.getElementById('retry-btn');
     cancelBtn = document.getElementById('cancel-btn');
+    saveExitBtn = document.getElementById('save-exit-btn');
+    exitBtn = document.getElementById('exit-btn');
     errorText = document.getElementById('selector-error');
     desktopSnapshot = document.getElementById('desktop-snapshot');
     overlayTop = document.getElementById('overlay-top');
@@ -151,6 +153,7 @@ function applySelectionRequest(request) {
     state.request = request;
     const label = request?.startTranslation ? 'Confirm and start' : 'Use this area';
     document.querySelectorAll('[data-confirm-label]').forEach(element => { element.textContent = label; });
+    if (saveExitBtn) saveExitBtn.hidden = !request?.startTranslation;
 }
 
 function applySelectorSnapshot(snapshot) {
@@ -233,6 +236,14 @@ function setupEventListeners() {
     retryBtn?.addEventListener('click', (e) => {
         e.stopPropagation();
         resetSelection();
+    });
+    saveExitBtn?.addEventListener('click', (e) => {
+        e.stopPropagation();
+        confirmSelection(false);
+    });
+    exitBtn?.addEventListener('click', (e) => {
+        e.stopPropagation();
+        cancelSelection();
     });
 }
 
@@ -409,21 +420,6 @@ function handleKeyDown(e) {
         return;
     }
 
-    const delta = arrowDelta(e.key, e.ctrlKey);
-    if (!delta || !state.hasSelection) return;
-    e.preventDefault();
-
-    // A focused handle resizes from its own edge; Shift resizes from the
-    // bottom-right corner; otherwise the whole box moves. Neither leaves the screen.
-    const handle = e.target instanceof HTMLElement ? e.target.dataset.position : undefined;
-    if (handle || e.shiftKey) {
-        const resized = resizeRegion(state.region, handle || 'se', delta.dx, delta.dy, MIN_RESIZE_SIZE);
-        if (regionFits(resized, viewport)) setRegion(resized);
-    } else {
-        setRegion(containRegion(moveRegion(state.region, delta.dx, delta.dy), viewport));
-    }
-    setPhase('adjust');
-    updateSelectionBox();
 }
 
 // =============================================================================
@@ -460,7 +456,7 @@ function calculateRegion() {
 // SELECTION ACTIONS
 // =============================================================================
 
-async function confirmSelection() {
+async function confirmSelection(startTranslation = Boolean(state.request?.startTranslation)) {
     if (!state.region || state.isSaving) return;
     state.isSaving = true;
 
@@ -482,7 +478,7 @@ async function confirmSelection() {
         if (state.request) {
             const { scaleFactor: scale, ...region } = regionData;
             await window.TauriBridge.invoke('complete_area_selection', {
-                requestId: state.request.requestId, region, scaleFactor: scale, selectionId: state.selectionId,
+                requestId: state.request.requestId, region, scaleFactor: scale, selectionId: state.selectionId, startTranslation,
             });
         } else {
             await window.__TAURI__.core.invoke('set_capture_region', { ...regionData, selectionId: state.selectionId });

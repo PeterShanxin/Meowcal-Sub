@@ -8,12 +8,13 @@ import { deriveHomePresentation } from "./home-state";
 import { renderHome } from "./home-view";
 import { icon } from "./icons";
 import { profiles } from "./recognition";
-import { renderSettings } from "./settings-view";
+import { renderAbout, renderSettings } from "./settings-view";
 import "./meowcal-titlebar";
 
 @customElement("meowcal-app")
 export class MeowcalApp extends LitElement {
   @state() private snapshot!: UiSnapshot;
+  @state() private aboutOpen = false;
   private controller = new AppController((snapshot) => {
     this.snapshot = snapshot;
   });
@@ -38,7 +39,7 @@ export class MeowcalApp extends LitElement {
 
   protected updated(changed: Map<PropertyKey, unknown>): void {
     const previous = changed.get("snapshot") as UiSnapshot | undefined;
-    if (previous && previous.screen !== this.snapshot.screen) {
+    if ((previous && previous.screen !== this.snapshot.screen) || changed.has("aboutOpen")) {
       this.querySelector<HTMLElement>("h1")?.focus();
     }
   }
@@ -81,7 +82,9 @@ export class MeowcalApp extends LitElement {
       });
     }
     if (snapshot.screen === "settings") {
+      if (this.aboutOpen) return renderAbout(snapshot.appVersion, () => (this.aboutOpen = false));
       return renderSettings(snapshot, {
+        onAbout: () => (this.aboutOpen = true),
         onLogLevel: (level) => void this.controller.setLogLevel(level),
         onRecognition: (value) => void this.controller.setRecognitionPreset(value),
         onOcrEngine: (engine) => void this.controller.setRecognition({ engine }),
@@ -104,8 +107,8 @@ export class MeowcalApp extends LitElement {
     return renderHome(snapshot, presentation, {
       onSource: (value) => void this.controller.setLanguage("source", value),
       onTarget: (value) => void this.controller.setLanguage("target", value),
-      onRegion: () => void this.controller.selectRegion(),
       onPrimary: () => void this.runPrimary(presentation),
+      onStartSaved: () => void this.controller.start(true),
     });
   }
 
@@ -116,7 +119,10 @@ export class MeowcalApp extends LitElement {
         type="button"
         class=${selected ? "nav-button selected" : "nav-button"}
         aria-current=${selected ? "page" : nothing}
-        @click=${() => this.controller.setScreen(screen)}
+        @click=${() => {
+          this.aboutOpen = false;
+          this.controller.setScreen(screen);
+        }}
       >
         ${icon(glyph)}<span>${label}</span>
         ${

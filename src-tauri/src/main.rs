@@ -122,7 +122,10 @@ fn main() {
             meowcal_sub::overlay::commands::set_overlay_window_clip,
             // Engine setup wizard commands
             commands::open_engine_wizard,
+            meowcal_sub::wizard_window::wizard_existing_engine,
             commands::close_engine_wizard,
+            meowcal_sub::window_startup::show_main_after_setup,
+            meowcal_sub::window_startup::quit_initial_setup,
             commands::wizard_install_engine,
             commands::wizard_start_service,
             commands::wizard_test_translation,

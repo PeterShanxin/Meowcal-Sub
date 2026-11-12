@@ -4,16 +4,25 @@
 //! the wizard so it can be reopened, and both paths tell the main window the
 //! wizard is gone so it can refresh engine status.
 
+use std::sync::atomic::{AtomicBool, Ordering};
 use tauri::{AppHandle, Emitter, Manager};
 use tracing::info;
 
+static EXISTING_ENGINE: AtomicBool = AtomicBool::new(false);
+
+#[tauri::command]
+pub fn wizard_existing_engine() -> bool {
+    EXISTING_ENGINE.load(Ordering::Acquire)
+}
+
 /// Show the foundry-wizard window, resetting state for a fresh run
-pub fn open(app: &AppHandle) -> Result<(), String> {
+pub fn open(app: &AppHandle, existing: bool) -> Result<(), String> {
     info!("Opening Foundry setup wizard");
+    EXISTING_ENGINE.store(existing, Ordering::Release);
     let window = crate::configured_window::get_or_create(app, "foundry-wizard")?;
 
     // Emit reset event so the wizard JS resets to step 1 and clears timers
-    let _ = window.emit("wizard-reset", ());
+    let _ = window.emit("wizard-reset", existing);
     window.show().map_err(|e| e.to_string())?;
     window.set_focus().map_err(|e| e.to_string())?;
     window.center().map_err(|e| e.to_string())?;

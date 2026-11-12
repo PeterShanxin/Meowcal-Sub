@@ -30,16 +30,12 @@
         </span>
         <span class="hint hint-adjust">
             <kbd>Enter</kbd> <span data-confirm-label>Use this area</span>
-            <span class="hint-sep">·</span>
-            Arrow keys move
-            <span class="hint-sep">·</span>
-            <kbd>Shift</kbd> + arrows resize
         </span>
         <span class="hint hint-error">
             <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7.5v5.5M12 16.4v.1"/></svg>
             <span id="selector-error"></span>
         </span>
-        <button class="cancel-btn" id="cancel-btn" type="button" title="Cancel (Esc)" aria-keyshortcuts="Escape">Cancel</button>
+        <button class="cancel-btn" id="cancel-btn" type="button" title="Cancel (Esc)" aria-label="Cancel" aria-keyshortcuts="Escape"><kbd aria-hidden="true">Esc</kbd> Cancel</button>
     </div>
 
     <!-- Selection rectangle -->
@@ -49,15 +45,14 @@
         <span class="corner bottom-left"></span>
         <span class="corner bottom-right"></span>
 
-        <!-- Resize handles: focus one and use the arrow keys to resize from it -->
-        <div class="resize-handle" data-position="nw" role="button" tabindex="0" aria-label="Resize from top-left corner"></div>
-        <div class="resize-handle" data-position="n" role="button" tabindex="0" aria-label="Resize from top edge"></div>
-        <div class="resize-handle" data-position="ne" role="button" tabindex="0" aria-label="Resize from top-right corner"></div>
-        <div class="resize-handle" data-position="w" role="button" tabindex="0" aria-label="Resize from left edge"></div>
-        <div class="resize-handle" data-position="e" role="button" tabindex="0" aria-label="Resize from right edge"></div>
-        <div class="resize-handle" data-position="sw" role="button" tabindex="0" aria-label="Resize from bottom-left corner"></div>
-        <div class="resize-handle" data-position="s" role="button" tabindex="0" aria-label="Resize from bottom edge"></div>
-        <div class="resize-handle" data-position="se" role="button" tabindex="0" aria-label="Resize from bottom-right corner"></div>
+        <div class="resize-handle" data-position="nw"></div>
+        <div class="resize-handle" data-position="n"></div>
+        <div class="resize-handle" data-position="ne"></div>
+        <div class="resize-handle" data-position="w"></div>
+        <div class="resize-handle" data-position="e"></div>
+        <div class="resize-handle" data-position="sw"></div>
+        <div class="resize-handle" data-position="s"></div>
+        <div class="resize-handle" data-position="se"></div>
     </div>
 
     <!-- Actions, placed beside the selection once there is one -->
@@ -70,6 +65,8 @@
             <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4.5 12a7.5 7.5 0 1 0 2.2-5.3M4.5 4v4.5H9"/></svg>
             Redraw
         </button>
+        <button class="secondary-button" id="save-exit-btn" type="button">Save and exit</button>
+        <button class="secondary-button" id="exit-btn" type="button">Exit</button>
     </div>
 
     <script type="module" src="./entries/selector.ts"></script>

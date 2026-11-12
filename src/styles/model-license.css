@@ -6,6 +6,20 @@
   text-align: left;
 }
 
+.model-disclosure {
+  margin: 8px 0 0 21px;
+  color: var(--text-2);
+  font-size: var(--type-caption);
+}
+
+.model-disclosure a {
+  color: var(--accent);
+}
+
+.model-disclosure .model-license {
+  margin-block: 8px;
+}
+
 .model-license summary {
   cursor: pointer;
   color: var(--accent);
