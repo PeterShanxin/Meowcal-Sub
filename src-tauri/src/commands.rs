@@ -34,7 +34,6 @@ pub fn get_system_info() -> SystemInfo {
     crate::system_info::describe()
 }
 
-
 #[tauri::command]
 pub async fn get_ocr_languages(state: State<'_, AppState>) -> Result<Vec<String>, String> {
     state.startup_gate.wait_until_ready().await?;

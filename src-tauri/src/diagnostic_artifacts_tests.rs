@@ -91,3 +91,13 @@ fn links_are_not_followed_or_removed() -> io::Result<()> {
     std::fs::remove_dir_all(root)?;
     std::fs::remove_dir_all(external)
 }
+
+#[test]
+fn capture_png_is_opaque_and_preserves_rgb() {
+    let png = encode_frame(vec![0, 0, 255, 255, 255, 0, 0, 0], 2, 1).unwrap();
+    let image = image::load_from_memory(&png).unwrap().to_rgba8();
+    assert_eq!(image.dimensions(), (2, 1));
+    assert_eq!(image.into_raw(), vec![255, 0, 0, 255, 0, 0, 255, 255]);
+    assert!(encode_frame(vec![0; 3], 1, 1).is_err());
+    assert!(encode_frame(Vec::new(), 0, 0).is_err());
+}

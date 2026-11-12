@@ -43,32 +43,9 @@ pub async fn record(
         if !logging_settings::verbose() {
             return Ok(());
         }
-        let png = match frame {
-            Some((mut bgra, width, height)) => {
-                let expected = u64::from(width) * u64::from(height) * 4;
-                if expected != bgra.len() as u64
-                    || bgra.len() > MAX_FRAME_BYTES
-                    || width == 0
-                    || height == 0
-                {
-                    return Err(io::Error::other("Invalid diagnostics frame"));
-                }
-                for pixel in bgra.chunks_exact_mut(4) {
-                    pixel.swap(0, 2);
-                }
-                let mut bytes = Vec::new();
-                image::ImageEncoder::write_image(
-                    image::codecs::png::PngEncoder::new(&mut bytes),
-                    &bgra,
-                    width,
-                    height,
-                    image::ExtendedColorType::Rgba8,
-                )
-                .map_err(io::Error::other)?;
-                Some(bytes)
-            }
-            None => None,
-        };
+        let png = frame
+            .map(|(bgra, width, height)| encode_frame(bgra, width, height))
+            .transpose()?;
         let json = serde_json::to_vec_pretty(&serde_json::json!({
             "kind": kind, "profile": crate::app_logging::profile_label(),
             "timestamp": chrono::Utc::now().to_rfc3339(), "frame": identity, "detail": detail,
@@ -89,6 +66,32 @@ pub async fn record(
         // Do not echo data or backend errors: they can contain captured text.
         tracing::warn!("Local verbose evidence could not be saved");
     }
+}
+
+fn encode_frame(mut bgra: Vec<u8>, width: u32, height: u32) -> io::Result<Vec<u8>> {
+    let expected = u64::from(width) * u64::from(height) * 4;
+    if expected != bgra.len() as u64
+        || bgra.len() > MAX_FRAME_BYTES
+        || width == 0
+        || height == 0
+    {
+        return Err(io::Error::other("Invalid diagnostics frame"));
+    }
+    for pixel in bgra.chunks_exact_mut(4) {
+        pixel.swap(0, 2);
+        // GDI's unused alpha byte can be zero; screen evidence is opaque.
+        pixel[3] = 255;
+    }
+    let mut bytes = Vec::new();
+    image::ImageEncoder::write_image(
+        image::codecs::png::PngEncoder::new(&mut bytes),
+        &bgra,
+        width,
+        height,
+        image::ExtendedColorType::Rgba8,
+    )
+    .map_err(io::Error::other)?;
+    Ok(bytes)
 }
 
 fn plain_directory(path: &Path) -> io::Result<()> {
