@@ -5,8 +5,11 @@
 
 Meowcal Sub is a Windows desktop application for private, local subtitle
 translation. It is an AGPL-3.0-only community project. The approved product
-direction is a curated Tencent HY-MT engine, Windows OCR, and a Tauri 2/Rust
-application. It is not a general local-model frontend.
+direction is a Tauri 2/Rust application, a curated Tencent HY-MT engine, and OCR
+in Meowcal Core: PP-OCRv6 by default, with Windows OCR when the user selects it
+or the source language is Korean
+([ADR-0007](docs/adr/0007-embedded-pp-ocr-recognizer.md)). It is not a general
+local-model frontend.
 
 Read these documents before changing the repository:
 
@@ -113,6 +116,48 @@ Windows services. Expect **Backend offline** until a real backend is available.
 `npm run test:browser:linux` exercises that offline state; it does not establish
 working translation, persisted backend settings, or native capture.
 
+## Build modes and user data
+
+The Tauri identifier selects config, WebView data, and the Core profile. The
+Rust build profile selects the session log folder. Choose the command by the
+data it is allowed to touch:
+
+| Command | App build | Config and WebView data | Core profile and storage | Session logs |
+| --- | --- | --- | --- | --- |
+| `.\dev-tauri.cmd` | debug app, release Core | `com.meowcal.sub.dev` | `development`, Core built from `core/` | `%APPDATA%\com.meowcal.sub.dev\logs` |
+| `npm run tauri:dev -- --release` | release | `com.meowcal.sub.dev` | `development`, Core built from `core/` | `%APPDATA%\com.meowcal.sub\logs` unless `MEOWCAL_LOG_DIR` is set |
+| `.\dev-browser.cmd` | debug HTTP backend | `%APPDATA%\com.meowcal.sub.dev\config.json` | the build fetches the reviewed Core release named by `config/meowcal-core.lock.json` | console |
+| `npx tauri build`, `.\scripts\build-package.ps1`, or their executables | release | `com.meowcal.sub` (production) | `production` | `%APPDATA%\com.meowcal.sub\logs` |
+
+Core storage defaults to `%LOCALAPPDATA%\Meowcal\Core\sub1\<profile>\<version>\<architecture>`.
+Store builds use separate identifiers; see
+[Store distribution](docs/STORE_DISTRIBUTION.md#updates-and-data).
+
+- **UI iteration:** `.\dev-browser.cmd`. It proves presentation and the
+  browser-to-Rust bridge only, never capture, OCR, overlay, or tray behavior.
+- **Native development with real Core:** `.\dev-tauri.cmd`. It builds Core
+  and OverlayHost for the host architecture, then starts the debug app with
+  the `core-source-candidate` feature, so the app runs the Core built from this
+  checkout. Core is built in release mode; the app's own capture,
+  preprocessing, and subtitle logic are debug builds.
+- **Timing or CPU measurements:** use an optimized build with the development
+  identifier. After `.\dev-tauri.cmd` has prepared Core and OverlayHost once,
+  run from a Visual Studio developer shell:
+
+  ```powershell
+  $env:MEOWCAL_LOG_DIR = Join-Path $env:APPDATA 'com.meowcal.sub.dev\logs-release'
+  npm run tauri:dev -- --release
+  ```
+
+  Without `MEOWCAL_LOG_DIR`, a release-profile build writes its session logs to
+  the installed application's log folder. Do not compare timings from a debug
+  build with a release build.
+- **Production packaging:** `.\scripts\build-package.ps1 -Architecture auto`
+  creates installers. Validate them by installing the package (the release
+  manual gate uses the `release-preflight` installer), not by starting the
+  built executable from the checkout: that executable uses the production
+  identifier and the installed application's config.
+
 ## Isolated work
 
 Use one Git worktree per branch. Do not modify another task's checkout or reuse
@@ -209,8 +254,10 @@ treat this repository going public as completing that gate.
 ## Continuous integration
 
 Every pull request, including forks and Dependabot, is classified first.
-Runtime, build, and workflow changes get the hosted Windows verify gate on
-`windows-11-arm`. Those jobs install the toolchain and run `scripts/verify.ps1`.
+Runtime, build, and workflow changes get the hosted Windows verify gate:
+`windows-11-arm` runs the ARM64 lint, tests, and frontend/browser stage, and
+`windows-2025` runs the x64 lint and tests. Those jobs install the toolchain and
+run `scripts/verify.ps1`.
 Documentation-only pull requests skip that Windows suite; Ubuntu wrappers keep
 the required check names green. They are the merge gate. They use read-only
 contents and pull-request permission and do not receive signing or
@@ -281,7 +328,7 @@ The ten `area:` values, and where the boundary between neighbours falls:
 | Label | Covers |
 |---|---|
 | `area:engine` | HY-MT model, install, manifest, engine runtime and process lifecycle |
-| `area:ocr` | Windows OCR, language capability, preprocessing, recognition |
+| `area:ocr` | OCR engines (PP-OCRv6 and Windows OCR), language capability, preprocessing, recognition |
 | `area:translation` | prompt, model request, response parsing, validation, output quality |
 | `area:pipeline` | capture-to-overlay orchestration: retry, dedupe, queue, session state |
 | `area:lifecycle` | startup, shutdown, window, tray, sleep, resume, persistence |
@@ -318,8 +365,13 @@ Merging always produces a merge commit - squash and rebase are disabled - and
 the merged branch is deleted automatically. Your local branch and worktree are
 untouched; `git fetch --prune` clears the stale remote pointers.
 
-Read it before your first pull request. These are the rules it deliberately
-leaves to review rather than mechanizing:
+Update affected documentation in the same pull request, and answer the
+template's **Documentation** section. The
+[Agent Guide](docs/AGENT_GUIDE.md#documentation-maintenance) maps each kind of
+change to the documents it affects.
+
+Read the change contract before your first pull request. These are the rules
+it deliberately leaves to review rather than mechanizing:
 
 - Keep one bounded concern per pull request.
 - Do not mix a visible product change with broad behavior-preserving extraction.

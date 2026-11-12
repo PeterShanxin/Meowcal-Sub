@@ -53,8 +53,10 @@ and **3 GiB free on the engine installation drive**. These are setup checks,
 not a guarantee of smooth performance; leave headroom for your video player.
 
 First-time setup downloads the local translation runtime and model, about
-**1.1 GB**. Allow additional space for caches and retained versions. Windows may
-also need the OCR language for your original subtitles.
+**1.1 GB**. Allow additional space for caches and retained versions. The
+built-in PP-OCRv6 recognizer needs no Windows language. Windows OCR, used for
+Korean subtitles or when you choose it, needs the Windows recognition language
+for your original subtitles.
 
 **Windows may show an unknown-publisher warning.** Installers are not
 Authenticode-signed. Download only from this repository and compare the file's
@@ -65,12 +67,13 @@ SHA-256 with the release checksums; do not disable Windows security globally.
 
 1. **Set up translation.** Open the app and complete the guided setup. Choose
    the original subtitle language and the language you want to read; let setup
-   install and test the engine and check the Windows recognition language.
-2. **Select subtitle area.** Move the app window onto the screen playing the
-   video, then draw a box around the original subtitles, not the whole video.
-   Keep that area visible; reselect it when the video moves or changes size.
-3. **Start translation.** Watch with the floating translation overlay. Use
-   **Subtitle style** for text size and a Dark or Light plate; use
+   install and test the engine.
+2. **Start translation.** Move the app window onto the screen playing the
+   video and choose **Start translation**. Draw a box around the original
+   subtitles, not the whole video, and choose **Confirm and start**. Reselect
+   the area when the video moves or changes size.
+3. **Watch.** Read the floating translation overlay. Use **Subtitle style** for
+   text size and a Dark or Light plate; use **Exit translation** or
    **Stop translation** when you are done.
 
 ![Workflow diagram: select visible subtitles, read them with on-device OCR, translate with local HY-MT, and show a floating overlay.](docs/assets/architecture.svg)
@@ -148,6 +151,22 @@ See the [architecture](docs/ARCHITECTURE.md),
 [Core design decision](docs/adr/0004-versioned-meowcal-core.md), and
 [Core performance evidence](docs/CORE_PERFORMANCE.md). Those measurements describe
 specific test conditions, not a universal end-to-end subtitle latency guarantee.
+
+## Documentation
+
+| Document | Read it for |
+| --- | --- |
+| [User guide](docs/USAGE.md) | Settings, what the app is doing, troubleshooting, logs, and safe problem reports |
+| [Release notes](docs/releases/) | What each published version changed |
+| [Architecture](docs/ARCHITECTURE.md) | Data flow, subtitle queue and timing, recovery, and storage |
+| [Contributing](CONTRIBUTING.md) | Building, testing, and proposing changes |
+| [Agent guide](docs/AGENT_GUIDE.md) | The working contract, quality bar, and documentation rules |
+| [Evaluation](evals/README.md) | Validation layers and measurement method |
+| [Meowcal Core](core/README.md) | Core's API and storage contract |
+
+This README and the user guide describe the latest release, v0.9.1. The
+architecture, contributor, and evaluation documents follow the `main` branch,
+which can include changes that no release has shipped yet.
 
 ## Help and contribute
 

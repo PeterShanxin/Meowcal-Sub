@@ -130,6 +130,9 @@ the guidance comments, and keep the answers short.
   observed result - or state plainly that the gate is outstanding. Attach a
   screenshot or recording for a visible change. Browser mode is never native
   evidence.
+- **Documentation** - each document this pull request updates, or why no
+  document is affected. [Documentation maintenance](AGENT_GUIDE.md#documentation-maintenance)
+  maps change types to documents.
 - **Risk and rollback** - what breaks if this is wrong, and how to undo it.
 - **Issues** - link the owning issue. Use a closing keyword (`Closes #37`) only
   when merging this pull request genuinely finishes that issue, including its
@@ -148,7 +151,8 @@ the guidance comments, and keep the answers short.
 A `[bot]` author is exempt from the title check. A human who adopts a bot's
 branch owns its title from that point on. Routine maintenance still uses the
 template; "Manual Windows validation" is answered with `Not applicable - no
-visible behavior change`, never left blank.
+visible behavior change`, and "Documentation" with the reason no document is
+affected. Neither is left blank.
 
 ## Merge history and branch cleanup
 
