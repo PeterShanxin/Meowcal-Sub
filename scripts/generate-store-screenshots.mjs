@@ -9,8 +9,16 @@ const config = JSON.parse(await readFile("src-tauri/tauri.conf.json", "utf8"));
 const main = config.app.windows.find((window) => window.label === "main");
 const server = await createServer({ server: { port: 0, strictPort: false } });
 const scene = `data:image/webp;base64,${(await readFile(`${output}/coast.webp`)).toString("base64")}`;
-const source = "The sea is quiet. We still have time.";
-const translation = "海面很平静，我们还有时间。";
+const samples = {
+  en: {
+    source: "海面很平静，我们还有时间。",
+    translation: "The sea is quiet. We still have time.",
+  },
+  "zh-CN": {
+    source: "The sea is quiet. We still have time.",
+    translation: "海面很平静，我们还有时间。",
+  },
+};
 const region = { x: 240, y: 400, width: 800, height: 70 };
 let browser;
 
@@ -104,7 +112,7 @@ async function desktopCard(capture, path) {
   await page.close();
 }
 
-async function film() {
+async function film(source) {
   const page = await browser.newPage({
     viewport: { width: 1280, height: 720 },
     deviceScaleFactor: 2,
@@ -123,15 +131,16 @@ try {
   await server.listen();
   const { defaultSettings } = await server.ssrLoadModule("/ui/settings-defaults.ts");
   browser = await chromium.launch({ channel: process.env.MEOWCAL_BROWSER_CHANNEL || "msedge" });
-  const filmPng = await film();
-  const snapshot = `data:image/png;base64,${filmPng.toString("base64")}`;
   for (const language of ["en", "zh-CN"]) {
     const zh = language === "zh-CN";
+    const { source, translation } = samples[language];
+    const filmPng = await film(source);
+    const snapshot = `data:image/png;base64,${filmPng.toString("base64")}`;
     const settings = {
       ...structuredClone(defaultSettings),
       uiLanguage: language,
-      sourceLanguage: "en-US",
-      targetLanguage: "zh-CN",
+      sourceLanguage: zh ? "en-US" : "zh-CN",
+      targetLanguage: zh ? "zh-CN" : "en-US",
       autoCheckUpdates: false,
     };
     const { page, errors } = await openApp(settings);
@@ -195,7 +204,7 @@ try {
   }
   await writeFile(
     `${output}/capture.json`,
-    `${JSON.stringify({ appVersion: config.version, viewport: [1280, 720], scale: 2, appViewport: [main.width, main.height], languages: ["en", "zh-CN"], source, translation, method: "Actual frontend with deterministic sample state; original demonstration film background." }, null, 2)}\n`,
+    `${JSON.stringify({ appVersion: config.version, viewport: [1280, 720], scale: 2, appViewport: [main.width, main.height], samples, method: "Actual frontend with deterministic sample state; original demonstration film background." }, null, 2)}\n`,
   );
   console.log("Captured 10 localized Store screenshots at 2560 × 1440.");
 } finally {

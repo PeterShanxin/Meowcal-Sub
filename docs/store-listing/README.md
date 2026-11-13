@@ -20,8 +20,9 @@ and events. It preserves app dimensions and shows the Store update controls.
 It does not alter the app or an installed profile. These are frontend captures,
 not native capture/OCR/translation test evidence. `capture.json` records the
 version and sample text. `coast.webp` is an original imagegen-created example
-film still; the English source line and Chinese translation are authored sample
-content. UI, selection, and overlay controls come from application code.
+film still. The authored sample translates Chinese to English for the English
+listing, and English to Chinese for the Chinese listing. UI, selection, and
+overlay controls come from application code.
 
 Check each language visually after regeneration. Keep text sharp, retain the
 captured aspect ratio, and avoid additional marketing copy or logos inside
