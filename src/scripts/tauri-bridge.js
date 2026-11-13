@@ -29,6 +29,7 @@
     // Commands that are not available in browser mode (require Tauri window APIs)
     const TAURI_ONLY_COMMANDS = [
         'get_display_context',
+        'get_system_ui_language',
         'open_area_selector',
         'request_area_selection',
         'get_area_selection_request',
@@ -61,6 +62,7 @@
         // Settings
         'get_settings': { method: 'GET', path: '/settings' },
         'save_settings': { method: 'POST', path: '/settings' },
+        'set_ui_language': { method: 'POST', path: '/ui-language' },
 
         // Translation diagnostics
         'get_translation_diagnostics': { method: 'GET', path: '/translation/diagnostics' },

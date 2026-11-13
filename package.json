@@ -14,7 +14,7 @@
     "version:check": "node scripts/check-version-sync.mjs",
     "commits:check": "node scripts/check-commit-contract.mjs --base origin/main --head HEAD",
     "runners:check": "node scripts/check-workflow-runners.mjs",
-    "docs:check": "node scripts/check-doc-links.mjs",
+    "docs:check": "node scripts/check-doc-links.mjs && node scripts/check-bilingual-docs.mjs",
     "typecheck": "tsc --noEmit",
     "prepare:validation": "pwsh -NoProfile -File scripts/prepare-validation-resources.ps1",
     "prepare:core": "pwsh -NoProfile -File scripts/prepare-core-resource.ps1 -Configuration Release",
@@ -27,11 +27,12 @@
     "test:frontend": "vitest run --coverage && node --test evals/band-gate/report.test.mjs",
     "test:browser": "playwright test",
     "test:browser:linux": "playwright test --config playwright.linux.config.mjs",
-    "frontend:check": "npm run version:check && npm run runners:check && npm run docs:check && npm run format:check && npm run lint && npm run typecheck && npm run build:web && npm run test:frontend && npm run test:browser",
+    "frontend:check": "npm run version:check && npm run runners:check && npm run docs:check && npm run i18n:check && npm run format:check && npm run lint && npm run typecheck && npm run build:web && npm run test:frontend && npm run test:browser",
     "tauri": "tauri",
     "tauri:dev": "tauri dev --features core-source-candidate --config src-tauri/tauri.dev.conf.json",
     "tauri:build": "tauri build",
-    "dev:ui-audit": "vite --config frontend-tests/ui-audit/vite.config.mjs"
+    "dev:ui-audit": "vite --config frontend-tests/ui-audit/vite.config.mjs",
+    "i18n:check": "node scripts/check-i18n.mjs"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",
@@ -42,6 +43,7 @@
     "eslint": "10.13.0",
     "globals": "17.13.0",
     "prettier": "3.9.10",
+    "sharp": "0.35.5",
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.72.1",
     "vite": "^8.3.5",

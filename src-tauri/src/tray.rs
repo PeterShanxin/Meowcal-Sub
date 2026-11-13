@@ -5,6 +5,7 @@
 //! contract between the tray and the app can be pinned in tests.
 
 use crate::app_profile::AppProfile;
+use crate::ui_language::Locale;
 use tauri::{
     menu::{Menu, MenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
@@ -16,6 +17,7 @@ const MENU_ITEM_SHOW: &str = "show";
 const MENU_ITEM_SELECT_AREA: &str = "select_area";
 const MENU_ITEM_SETTINGS: &str = "settings";
 const MENU_ITEM_QUIT: &str = "quit";
+const TRAY_ID: &str = "main";
 
 /// The actions the tray menu can trigger, keyed by menu item id.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -37,8 +39,37 @@ fn action_for_menu_id(id: &str) -> Option<TrayAction> {
     }
 }
 
-fn tooltip_for(profile: AppProfile) -> String {
-    format!("{} - Click to show", profile.display_name())
+fn tooltip_for(profile: AppProfile, locale: Locale) -> String {
+    format!(
+        "{} - {}",
+        locale.brand(profile),
+        locale.text("Click to show", "点击显示")
+    )
+}
+
+fn menu_for(app: &AppHandle, locale: Locale) -> tauri::Result<Menu<tauri::Wry>> {
+    let items = [
+        (MENU_ITEM_SHOW, locale.text("Show Window", "显示窗口")),
+        (
+            MENU_ITEM_SELECT_AREA,
+            locale.text("Select Area", "选择区域"),
+        ),
+        (MENU_ITEM_SETTINGS, locale.text("Settings", "设置")),
+        (MENU_ITEM_QUIT, locale.text("Quit", "退出")),
+    ];
+    let menu = Menu::new(app)?;
+    for (id, label) in items {
+        menu.append(&MenuItem::with_id(app, id, label, true, None::<&str>)?)?;
+    }
+    Ok(menu)
+}
+
+pub fn localize(app: &AppHandle, locale: Locale) -> tauri::Result<()> {
+    if let Some(tray) = app.tray_by_id(TRAY_ID) {
+        tray.set_menu(Some(menu_for(app, locale)?))?;
+        tray.set_tooltip(Some(tooltip_for(AppProfile::current(), locale)))?;
+    }
+    Ok(())
 }
 
 /// Build the tray icon and its menu.
@@ -47,27 +78,12 @@ fn tooltip_for(profile: AppProfile) -> String {
 /// to `_tray` in the caller is enough, matching the pre-extraction setup
 /// closure. The caller decides when this runs during startup.
 pub fn setup(app: &tauri::App) -> tauri::Result<()> {
-    let show_item = MenuItem::with_id(app, MENU_ITEM_SHOW, "Show Window", true, None::<&str>)?;
-    let select_area_item = MenuItem::with_id(
-        app,
-        MENU_ITEM_SELECT_AREA,
-        "Select Area",
-        true,
-        None::<&str>,
-    )?;
-    let settings_item = MenuItem::with_id(app, MENU_ITEM_SETTINGS, "Settings", true, None::<&str>)?;
-    let quit_item = MenuItem::with_id(app, MENU_ITEM_QUIT, "Quit", true, None::<&str>)?;
-
-    // Build the tray menu
-    let menu = Menu::with_items(
-        app,
-        &[&show_item, &select_area_item, &settings_item, &quit_item],
-    )?;
-
-    let tooltip = tooltip_for(AppProfile::current());
+    let locale = crate::ui_language::current(app.handle());
+    let menu = menu_for(app.handle(), locale)?;
+    let tooltip = tooltip_for(AppProfile::current(), locale);
 
     // Create the tray icon
-    let _tray = TrayIconBuilder::new()
+    let _tray = TrayIconBuilder::with_id(TRAY_ID)
         .icon(app.default_window_icon().unwrap().clone())
         .menu(&menu)
         .tooltip(&tooltip)
@@ -158,12 +174,16 @@ mod tests {
     #[test]
     fn tray_tooltip_identifies_only_development_builds() {
         assert_eq!(
-            tooltip_for(AppProfile::Production),
+            tooltip_for(AppProfile::Production, Locale::English),
             "Meowcal Sub - Click to show"
         );
         assert_eq!(
-            tooltip_for(AppProfile::Development),
+            tooltip_for(AppProfile::Development, Locale::English),
             "Meowcal Sub - Dev - Click to show"
+        );
+        assert_eq!(
+            tooltip_for(AppProfile::Production, Locale::SimplifiedChinese),
+            "Meowcal Sub · 妙影 - 点击显示"
         );
     }
 }

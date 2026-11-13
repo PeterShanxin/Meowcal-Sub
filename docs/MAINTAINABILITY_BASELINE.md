@@ -36,12 +36,18 @@ and selector geometry, appearance, timer, and payload rules from #33/#34; the
 main and setup state and controllers from #33; and the repository's own gates,
 because a gate that is wrong fails open.
 
+The scope also includes interface locale resolution, runtime event handling,
+selector/overlay message catalogs, and bilingual-document consistency rules.
+These additions retain the existing coverage floors. Catalog key and placeholder
+coverage is checked separately by `npm run i18n:check`; browser tests cover
+rendering and live language changes.
+
 Deliberately outside the scope, and why:
 
 | Not measured                                                              | Reason                                                  |
 | ------------------------------------------------------------------------- | ------------------------------------------------------- |
 | `src/scripts/overlay.js`, `selector.js`, `tauri-bridge.js`                | DOM and Tauri adapters; selector VM tests run outside module coverage  |
-| `src/ui/*-view.ts`, `meowcal-app.ts`, `meowcal-setup.ts`, `src/entries/*` | Lit components and entries; need a DOM                  |
+| `src/ui/*-view.ts`, `meowcal-app.ts`, `meowcal-setup.ts`, `src/entries/*`, `src/i18n/lit-controller.ts` | Lit components, lifecycle adapter, and entries; need a DOM |
 | `src/ui/contracts.ts`                                                     | types only — nothing survives compilation to measure    |
 | all Rust                                                                  | no coverage instrumentation on the toolchain; see below |
 
@@ -84,12 +90,12 @@ decomposition-owned hotspots are:
 | File                                 | Ceiling | Reduction owner   |
 | ------------------------------------ | ------: | ----------------- |
 | `src-tauri/src/llm/foundry_local.rs` | 1,557 | #32               |
-| `src-tauri/src/commands.rs`          | 880 | #31 / #32 surface |
-| `src/scripts/overlay.js`             | 1,027 | #34               |
+| `src-tauri/src/commands.rs`          | 865 | #31 / #32 surface |
+| `src/scripts/overlay.js`             | 1,012 | #34               |
 | `src-tauri/src/llm/context.rs`       | 620 | #32               |
 | `src-tauri/src/llm/manager.rs`       | 699 | #32               |
-| `src/scripts/selector.js`            | 619 | #34               |
-| `src-tauri/src/config.rs`            | 473 | #31               |
+| `src/scripts/selector.js`            | 604 | #34               |
+| `src-tauri/src/config.rs`            | 471 | #31               |
 
 `main.rs` left the legacy list in the #31 lifecycle wave. `http_server.rs`
 left it in the #32 engine-status wave (now under the 400-line new-file

@@ -16,3 +16,6 @@ import "../scripts/overlay-toolbar.js";
 import "../scripts/overlay-diagnostics.js";
 import "../scripts/overlay.js";
 import "../scripts/tauri-bridge.js";
+
+import { initializeOverlayLocale } from "../scripts/overlay-i18n.js";
+document.addEventListener("DOMContentLoaded", initializeOverlayLocale);

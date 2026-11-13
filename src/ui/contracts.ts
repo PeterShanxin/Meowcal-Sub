@@ -1,3 +1,4 @@
+import type { UiLanguage } from "../i18n";
 import type { DownloadEvent, UpdateStatus } from "./update-state";
 
 export type AppScreen = "home" | "appearance" | "settings";
@@ -84,6 +85,7 @@ export interface TranslationConfig {
 export type LogLevel = "off" | "basic" | "verbose";
 
 export interface AppSettings {
+  uiLanguage?: UiLanguage;
   logging: { level: LogLevel };
   sourceLanguage: string;
   targetLanguage: string;
@@ -118,6 +120,7 @@ export interface UiSnapshot {
   running: boolean;
   error: string | null;
   notice: string | null;
+  noticeParameters?: Record<string, string | number>;
   /** The latest non-fatal capture report for this session; capture keeps running. */
   captureWarning: string | null;
   developerMode: boolean;

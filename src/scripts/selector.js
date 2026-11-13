@@ -1,3 +1,5 @@
+import { t, subscribeLocale } from "../i18n/index";
+
 const {
     actionBarTop,
     buildCaptureRegionPayload,
@@ -13,8 +15,8 @@ const MIN_RESIZE_SIZE = 30;
 const ACTION_BAR_GAP = 12;
 
 // Shown in the hint bar instead of a native dialog or a silently dropped drag (#76).
-const TOO_SMALL_MESSAGE = 'Area too small. Drag across one full line of subtitles.';
-const SAVE_FAILED_MESSAGE = 'Couldn’t save the area. Try again.';
+const TOO_SMALL_MESSAGE = 'selector.tooSmall';
+const SAVE_FAILED_MESSAGE = 'selector.saveFailed';
 
 const state = {
     isSelecting: false,
@@ -27,6 +29,7 @@ const state = {
     region: null,
     request: null,
     selectionId: null,
+    errorKey: null,
 };
 
 let selectionBox = null;
@@ -43,9 +46,7 @@ let overlayLeft = null;
 let overlayRight = null;
 let overlayBottom = null;
 
-// =============================================================================
 // INITIALIZATION
-// =============================================================================
 
 document.addEventListener('DOMContentLoaded', async () => {
     // Force transparent background via WebView2 API (workaround for Tauri 2.0 transparency issues)
@@ -90,6 +91,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     await setupSelectorSnapshotBackground();
 
     await loadSelectionRequest();
+    const unsubscribeLocale = subscribeLocale(() => {
+        applySelectionRequest(state.request);
+        if (state.errorKey) errorText.textContent = t(state.errorKey);
+    });
+    window.addEventListener("pagehide", unsubscribeLocale, { once: true });
 
     // Set up event listeners
     setupEventListeners();
@@ -113,9 +119,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (!state.hasSelection) document.body.focus();
 });
 
-// =============================================================================
 // DESKTOP SNAPSHOT BACKGROUND (TRANSPARENCY WORKAROUND)
-// =============================================================================
 
 async function setupSelectorSnapshotBackground() {
     if (!window.__TAURI__?.core?.invoke || !desktopSnapshot) return;
@@ -151,7 +155,7 @@ async function loadSelectionRequest() {
 
 function applySelectionRequest(request) {
     state.request = request;
-    const label = request?.startTranslation ? 'Confirm and start' : 'Use this area';
+    const label = t(request?.startTranslation ? 'selector.start' : 'selector.use');
     document.querySelectorAll('[data-confirm-label]').forEach(element => { element.textContent = label; });
     if (saveExitBtn) saveExitBtn.hidden = !request?.startTranslation;
 }
@@ -163,9 +167,7 @@ function applySelectorSnapshot(snapshot) {
     else desktopSnapshot.removeAttribute('src');
 }
 
-// =============================================================================
 // DIM OVERLAY ("HOLE" AROUND SELECTION)
-// =============================================================================
 
 function dimOverlayFull() {
     if (!overlayTop || !overlayLeft || !overlayRight || !overlayBottom) return;
@@ -205,9 +207,7 @@ function applyDimSegmentStyle(element, segment, fullWidth = false) {
     element.style.height = `${segment.height}px`;
 }
 
-// =============================================================================
 // EVENT LISTENERS
-// =============================================================================
 
 function setupEventListeners() {
     // Mouse events for selection (on overlay area only)
@@ -247,9 +247,7 @@ function setupEventListeners() {
     });
 }
 
-// =============================================================================
 // EXISTING REGION PRELOAD
-// =============================================================================
 
 async function restoreExistingSelection() {
     if (!window.__TAURI__?.core?.invoke) return;
@@ -266,9 +264,10 @@ async function restoreExistingSelection() {
     }
 }
 
-function setPhase(phase, message = '') {
+function setPhase(phase, messageKey = null) {
     document.body.dataset.phase = phase;
-    if (errorText) errorText.textContent = message;
+    state.errorKey = messageKey;
+    if (errorText) errorText.textContent = messageKey ? t(messageKey) : '';
 }
 
 function setRegion(region) {
@@ -295,9 +294,7 @@ function showSelection(region) {
     confirmBtn?.focus({ preventScroll: true });
 }
 
-// =============================================================================
 // MOUSE HANDLERS
-// =============================================================================
 
 // All selector geometry is in local CSS pixels; the backend adds the display origin.
 function selectorViewport() {
@@ -396,9 +393,7 @@ function handleMouseUp(e) {
     showSelection(region);
 }
 
-// =============================================================================
 // KEYBOARD HANDLERS
-// =============================================================================
 
 function handleKeyDown(e) {
     if (e.key === 'Escape') {
@@ -422,9 +417,7 @@ function handleKeyDown(e) {
 
 }
 
-// =============================================================================
 // SELECTION BOX UPDATE
-// =============================================================================
 
 function updateSelectionBox() {
     const region = calculateRegion();
@@ -452,9 +445,7 @@ function calculateRegion() {
     );
 }
 
-// =============================================================================
 // SELECTION ACTIONS
-// =============================================================================
 
 async function confirmSelection(startTranslation = Boolean(state.request?.startTranslation)) {
     if (!state.region || state.isSaving) return;
@@ -488,7 +479,7 @@ async function confirmSelection(startTranslation = Boolean(state.request?.startT
         resetSelection();
     } catch (error) {
         console.error('Failed to save region:', error);
-        setPhase('error', typeof error === 'string' ? error : SAVE_FAILED_MESSAGE);
+        setPhase('error', String(error).includes('display changed') ? 'selector.displayChanged' : SAVE_FAILED_MESSAGE);
     } finally {
         state.isSaving = false;
     }
@@ -522,7 +513,7 @@ async function cancelSelection() {
         resetSelection();
     } catch (error) {
         console.error('Failed to cancel area selection:', error);
-        setPhase('error', 'Couldn’t close the selector. Try again.');
+        setPhase('error', 'selector.closeFailed');
     } finally {
         state.isSaving = false;
     }
@@ -532,9 +523,7 @@ async function closeWindow() {
     await window.TauriBridge.invoke('close_area_selector');
 }
 
-// =============================================================================
 // DRAG AND RESIZE FUNCTIONALITY
-// =============================================================================
 
 let isDragging = false;
 let isResizing = false;

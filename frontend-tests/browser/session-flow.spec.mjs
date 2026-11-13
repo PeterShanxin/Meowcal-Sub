@@ -355,10 +355,12 @@ test("display targeting notice survives confirmation and invalidation still stop
     window.sessionTest.emit("display-context-changed", null);
   });
   await expect(page.locator(".display-notice")).toHaveText(
-    "检测到多个显示器，将使用当前窗口所在的屏幕。",
+    "Multiple displays detected. The screen containing this window will be used.",
   );
   await startConfirmed(page);
-  await expect(page.locator(".display-notice")).toHaveText("翻译期间将保持使用已选屏幕。");
+  await expect(page.locator(".display-notice")).toHaveText(
+    "The selected screen stays in use during translation.",
+  );
   await page.evaluate(() => {
     window.sessionTest.running = false;
     window.sessionTest.region = null;

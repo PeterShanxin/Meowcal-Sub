@@ -224,6 +224,30 @@ to a known address while debugging, set `MEOWCAL_FRONTEND_PORT` and
 `MEOWCAL_HTTP_PORT`; `.\dev-browser.cmd` reads the same two variables and
 defaults to 3000 and 3001.
 
+### Interface translations and user documentation
+
+Keep English and Simplified Chinese UI messages together in `src/i18n/`.
+Use matching named placeholders in both languages, and keep captured subtitle
+content and stable error codes out of the UI translation catalog. The
+[interface-language architecture](docs/ARCHITECTURE.md#interface-language)
+defines preference persistence and cross-window updates.
+
+Update both README files and both user guides in the same pull request when
+behavior or labels change. Run these focused checks before the full gate:
+
+```powershell
+npm run i18n:check
+npm run docs:check
+```
+
+The checks detect missing translations, structural differences, stale link
+destinations, and mismatched commands; reviewers still check meaning and natural
+wording in both languages. Keep published behavior distinct from unreleased
+features. Refresh affected real screenshots using the
+[brand asset instructions](docs/assets/README.md). Developer and legal documents
+may remain in English. The [agent guide](docs/AGENT_GUIDE.md#documentation-maintenance)
+owns the complete maintenance rule.
+
 ## License and contributor agreement
 
 Community source is licensed under the GNU Affero General Public License

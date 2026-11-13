@@ -1,3 +1,4 @@
+import { t } from "../i18n";
 export const languages = [
   { value: "zh-CN", label: "Chinese (Simplified)" },
   { value: "zh-TW", label: "Chinese (Traditional)" },
@@ -10,7 +11,7 @@ export const languages = [
 ] as const;
 
 export function languageLabel(value: string): string {
-  return languages.find((language) => language.value === value)?.label ?? value;
+  return t(languages.find((language) => language.value === value)?.label ?? value);
 }
 
 export interface LanguagePair {

@@ -307,6 +307,7 @@ if ($Stage -in @("All", "Frontend")) {
         # document-class list, and CONTRIBUTING's read order from quietly
         # pointing at a file somebody renamed.
         Invoke-NpmStep "Documentation links" @("run", "docs:check")
+        Invoke-NpmStep "Interface translation coverage" @("run", "i18n:check")
         Invoke-NpmStep "Frontend format" @("run", "format:check")
         Invoke-NpmStep "Frontend lint" @("run", "lint")
         Invoke-NpmStep "Frontend typecheck" @("run", "typecheck")

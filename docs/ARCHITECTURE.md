@@ -193,6 +193,42 @@ The browser backend reads `%APPDATA%\<log identifier>\config.json` through
 [`CONTRIBUTING.md`](../CONTRIBUTING.md#build-modes-and-user-data) maps each
 development and packaging command to the data it uses.
 
+### Interface language
+
+`AppConfig.uiLanguage` stores `system` (the default for old and new profiles),
+`en`, or `zh-CN`. It does not change `sourceLanguage` or `targetLanguage`.
+`ui_language.rs` resolves the Windows display language through
+`GetUserDefaultUILanguage`; `get_system_ui_language` gives webviews the same
+result as native window titles, tray items, and dialogs. Browser previews use
+the first entry in `navigator.languages`. Every Chinese variant resolves to
+Simplified Chinese; all other system languages resolve to English.
+
+`set_ui_language` changes only the language preference through the durable
+config transaction. After a successful save, native surfaces update and the
+app emits `ui-language-changed` with the stored preference. The browser adapter
+uses `POST /api/ui-language` with `{ "language": "system" | "en" | "zh-CN" }`.
+Ordinary `save_settings` calls preserve the live language preference, so a stale
+setup or overlay snapshot cannot undo a newer language choice. Failed writes
+do not publish a saved preference.
+
+`SettingsWriter` queues settings and language edits separately. Only explicit
+Retry repeats unrelated failed writes; their unsaved errors remain visible
+after another field saves successfully.
+
+`src/i18n/index.ts` owns locale resolution, named-parameter formatting, and
+subscriptions. `en-zh.json` pairs English source messages with Chinese text;
+`overlay-messages.ts` supplies namespaced selector and overlay messages.
+`runtime.ts` reads the saved preference, listens for native language events and
+system-language changes, and guards startup reads against newer events.
+`lit-controller.ts` requests a render when the locale changes; selector and
+overlay adapters update their existing controls. Translation text, captured
+text, protocol codes, and technical diagnostic details are not translated by
+this layer. Language switching does not restart the subtitle session.
+
+The English interface uses **Meowcal Sub** and the Chinese interface uses
+**Meowcal Sub · 妙影**. Development windows retain their `Dev` marker. Package
+identifiers and storage locations remain independent of the display name.
+
 ## Ownership boundaries
 
 | Boundary                   | Current owner                                                                                                                                                                                                         | Target owner and rule                                                                                                                                                                        |

@@ -1,8 +1,4 @@
-<p align="center">
-  <img src="docs/assets/logo.png" width="96" alt="Meowcal Sub 猫咪图标">
-</p>
-
-<h1 align="center">Meowcal Sub</h1>
+<h1 align="center">Meowcal Sub · 妙影</h1>
 
 <p align="center">
   <strong>把屏幕上已有的字幕，翻译成你想读的语言。</strong><br>
@@ -23,8 +19,10 @@
 </p>
 
 <p align="center">
-  <img src="docs/assets/screenshot-home.png" width="640" alt="Meowcal Sub 主界面：准备把英文字幕翻译成简体中文，并显示 Start translation 按钮。">
+  <img src="docs/assets/hero.zh-CN.svg" width="1200" alt="Meowcal Sub · 妙影：全本地运行，保护隐私，无付费。右侧为当前中文主界面。">
 </p>
+
+> **开发版预览：** 新品牌、双语界面及图中的最新首页尚未发布。下方下载链接仍指向 v0.9.1。
 
 圈出视频中的原字幕区域。Meowcal Sub 会识别这块区域的文字，在本机翻译，
 再用悬浮字幕显示译文。正常使用不需要另外寻找字幕文件、注册云服务账号或填写 API key。
@@ -58,9 +56,14 @@ MSI 安装包和 `SHA256SUMS.txt` 校验文件也在该发布页。
 
 **Windows 可能提示“未知发布者”。** 安装包尚未使用 Authenticode 签名。
 请只从本仓库下载，并将文件的 SHA-256 与发布页校验文件比对；不要全局关闭 Windows 安全防护。
-[安装与校验帮助（英文）→](docs/USAGE.md#installation)
+[安装与校验帮助 →](docs/USAGE.zh-CN.md#安装)
 
 ## 开始使用
+
+**尚未发布的双语界面：** 在 **设置 → 界面语言** 中选择 **跟随系统**、
+**English** 或 **简体中文**，立即生效并保存。界面语言不影响原字幕和目标语言。
+最新开发版在首页使用 **选择字幕区域**，并支持 **使用已保存区域开始**。
+以下步骤中的英文按钮名称对应当前下载版本。详见[使用指南](docs/USAGE.zh-CN.md#界面语言)。
 
 1. **设置翻译。** 打开应用并完成设置向导。选择原字幕语言和目标语言，
    让向导安装并测试翻译引擎。
@@ -70,9 +73,9 @@ MSI 安装包和 `SHA256SUMS.txt` 校验文件也在该发布页。
 3. **观看。** 通过悬浮字幕阅读译文。在 **Subtitle style** 调整字号和深色／浅色底板；
    结束后点击 **Exit translation** 或 **Stop translation**。
 
-![流程示意图：圈选已有字幕，在本机识别文字，在本机通过 HY-MT 翻译，再显示悬浮字幕。](docs/assets/architecture.svg)
+![流程示意图：圈选已有字幕，在本机识别文字，在本机通过 HY-MT 翻译，再显示悬浮字幕。](docs/assets/architecture.zh-CN.svg)
 
-[设置、故障排查与常见问题（英文）→](docs/USAGE.md)
+[设置、故障排查与常见问题 →](docs/USAGE.zh-CN.md)
 
 ## 为观看而做
 
@@ -98,7 +101,7 @@ MSI 安装包和 `SHA256SUMS.txt` 校验文件也在该发布页。
 **GPU 支持因架构而异。** ARM64 的 Adreno 加速仅对已验证的硬件／驱动组合启用，
 GPU 就绪检查超时后可尝试 CPU 回退。x64 版只在有独立显卡时使用 Vulkan，否则在 CPU 上运行；GPU 就绪检查超时后同样可尝试 CPU 回退。
 无论哪种架构，如果 GPU 翻译出现异常，可以选择 **Settings → Profile → Compatibility**。
-[GPU 兼容性说明（英文）→](docs/USAGE.md#how-does-gpu-support-differ-by-architecture)
+[GPU 兼容性说明 →](docs/USAGE.zh-CN.md#不同架构的-gpu-支持有何区别)
 
 ## 隐私与联网
 
@@ -119,7 +122,7 @@ GPU 就绪检查超时后可尝试 CPU 回退。x64 版只在有独立显卡时�
 
 ## More Meow tools
 
-观看、理解和构建，各有一个小工具。猫猫不变，分工不同。
+面向观看、理解和构建的小工具，各自专注一个任务。
 
 | 项目 | 用来做什么 |
 | --- | --- |
@@ -146,7 +149,7 @@ Core 是底层运行环境，不是用户需要额外手动安装的应用。
 
 | 文档 | 用途 |
 | --- | --- |
-| [使用指南（英文）](docs/USAGE.md) | 设置项、应用当前状态、故障排查、日志，以及如何安全地反馈问题 |
+| [使用指南](docs/USAGE.zh-CN.md) · [安装](docs/USAGE.zh-CN.md#安装) · [常见问题](docs/USAGE.zh-CN.md#常见问题) · [故障排查](docs/USAGE.zh-CN.md#故障排查) | 设置项、应用当前状态、故障排查、日志，以及如何安全地反馈问题 |
 | [版本说明](docs/releases/) | 每个已发布版本的改动 |
 | [架构说明](docs/ARCHITECTURE.md) | 数据流、字幕队列与时序、恢复机制和存储位置 |
 | [贡献指南](CONTRIBUTING.md) | 构建、测试和提交改动 |
@@ -154,8 +157,8 @@ Core 是底层运行环境，不是用户需要额外手动安装的应用。
 | [评估说明](evals/README.md) | 各层验证方法与测量方法 |
 | [Meowcal Core](core/README.md) | Core 的 API 与存储约定 |
 
-本页和使用指南对应最新发布版本 v0.9.1。架构、贡献和评估文档跟随 `main` 分支，
-其中可能包含尚未发布的改动。
+本页和使用指南以最新发布版本 v0.9.1 为基础，并明确标记尚未发布的功能。
+架构、贡献和评估文档跟随 `main` 分支。
 
 ## 反馈与参与
 

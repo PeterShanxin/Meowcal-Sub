@@ -17,6 +17,8 @@ pub struct AppState {
     pub startup_gate: StartupGate,
     /// Current app configuration (settings)
     pub config: Mutex<AppConfig>,
+    /// Keep settings persistence and native publication in the same order across webviews.
+    pub settings_save: tokio::sync::Mutex<()>,
     /// Whether translation is currently active
     pub is_running: Mutex<bool>,
     pub session_lifecycle: crate::session_lifecycle::SessionLifecycle,
@@ -50,6 +52,7 @@ impl Default for AppState {
         Self {
             startup_gate: StartupGate::default(),
             config: Mutex::new(AppConfig::default()),
+            settings_save: tokio::sync::Mutex::new(()),
             is_running: Mutex::new(false),
             session_lifecycle: crate::session_lifecycle::SessionLifecycle::default(),
             topology_watch: Mutex::new(None),

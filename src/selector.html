@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Select Area</title>
+    <title data-i18n="selector.title">Select Area</title>
     <link rel="stylesheet" href="styles/tokens.css">
     <link rel="stylesheet" href="styles/controls.css">
     <link rel="stylesheet" href="styles/selector.css">
@@ -24,9 +24,9 @@
     <div class="instructions" id="instructions" role="status" aria-live="polite">
         <span class="hint hint-draw">
             <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="6.5" width="17" height="11" rx="1.5" stroke-dasharray="3 2.4"/></svg>
-            Drag across one line of subtitles
+            <span data-i18n="selector.draw">Drag across one line of subtitles</span>
             <span class="hint-sep">·</span>
-            <kbd>Enter</kbd> Place a box
+            <kbd>Enter</kbd> <span data-i18n="selector.place">Place a box</span>
         </span>
         <span class="hint hint-adjust">
             <kbd>Enter</kbd> <span data-confirm-label>Use this area</span>
@@ -35,7 +35,7 @@
             <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7.5v5.5M12 16.4v.1"/></svg>
             <span id="selector-error"></span>
         </span>
-        <button class="cancel-btn" id="cancel-btn" type="button" title="Cancel (Esc)" aria-label="Cancel" aria-keyshortcuts="Escape"><kbd aria-hidden="true">Esc</kbd> Cancel</button>
+        <button class="cancel-btn" id="cancel-btn" type="button" title="Cancel (Esc)" data-i18n-title="selector.cancelHint" aria-label="Cancel" data-i18n-aria-label="selector.cancel" aria-keyshortcuts="Escape"><kbd aria-hidden="true">Esc</kbd> <span data-i18n="selector.cancel">Cancel</span></button>
     </div>
 
     <!-- Selection rectangle -->
@@ -63,10 +63,10 @@
         </button>
         <button class="secondary-button" id="retry-btn" type="button">
             <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4.5 12a7.5 7.5 0 1 0 2.2-5.3M4.5 4v4.5H9"/></svg>
-            Redraw
+            <span data-i18n="selector.redraw">Redraw</span>
         </button>
-        <button class="secondary-button" id="save-exit-btn" type="button">Save and exit</button>
-        <button class="secondary-button" id="exit-btn" type="button">Exit</button>
+        <button class="secondary-button" id="save-exit-btn" type="button" data-i18n="selector.saveExit">Save and exit</button>
+        <button class="secondary-button" id="exit-btn" type="button" data-i18n="selector.exit">Exit</button>
     </div>
 
     <script type="module" src="./entries/selector.ts"></script>

@@ -89,6 +89,8 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             commands::get_settings,
             commands::save_settings,
+            meowcal_sub::ui_language::get_system_ui_language,
+            meowcal_sub::ui_language::set_ui_language,
             commands::set_capture_region,
             commands::get_capture_region,
             commands::get_display_context,
@@ -166,7 +168,6 @@ fn main() {
                 app.handle(),
                 &loaded_config.window_preferences,
             );
-            app.state::<AppState>().startup_gate.mark_ready();
 
             // --- Spawn OverlayHost.exe + start IPC server (WinUI features) ---
             //
@@ -203,6 +204,8 @@ fn main() {
 
             // Create menu items and the tray icon
             meowcal_sub::tray::setup(app)?;
+            meowcal_sub::ui_language::apply(app.handle(), loaded_config.ui_language);
+            app.state::<AppState>().startup_gate.mark_ready();
 
             // Overlay liveness listeners: the frontend announces readiness and
             // heartbeats; the timestamps drive bounded recovery in

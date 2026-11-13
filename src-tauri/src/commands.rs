@@ -43,8 +43,8 @@ pub async fn get_ocr_languages(state: State<'_, AppState>) -> Result<Vec<String>
 /// Install an OCR language pack via an elevated PowerShell window.
 /// Triggers a UAC prompt — the user must approve the elevation.
 #[tauri::command]
-pub async fn install_ocr_language(language_tag: String) -> Result<(), String> {
-    crate::ocr_language_packs::install(language_tag).await
+pub async fn install_ocr_language(app: AppHandle, language_tag: String) -> Result<(), String> {
+    crate::ocr_language_packs::install(language_tag, crate::ui_language::current(&app)).await
 }
 
 // =============================================================================

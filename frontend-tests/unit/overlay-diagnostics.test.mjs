@@ -1,8 +1,9 @@
-import { createRequire } from "node:module";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
+afterEach(() => setUiLanguage("en"));
 
-const require = createRequire(import.meta.url);
-const { buildDiagnosticsText } = require("../../src/scripts/overlay-diagnostics.js");
+import "../../src/scripts/overlay-diagnostics.js";
+import { setUiLanguage } from "../../src/i18n/index";
+const { buildDiagnosticsText } = globalThis.OverlayDiagnostics;
 
 describe("overlay diagnostics text", () => {
   // Latency was the top complaint after a full episode, and there was nowhere
@@ -53,4 +54,17 @@ describe("overlay diagnostics text", () => {
     });
     expect(text).toBe("State: sourceUnreadable · tooShort · 11:41:14 PM");
   });
+});
+
+it("localizes diagnostic labels without translating source text or protocol codes", () => {
+  setUiLanguage("zh-CN");
+  expect(
+    buildDiagnosticsText({
+      state: "translated",
+      backendUsed: "mock",
+      source: "A subtitle",
+      totalMs: 80,
+      modelMs: 60,
+    }),
+  ).toBe("状态：translated · mock（仅原文）\n延迟：80 毫秒（模型 60 毫秒）\n原文：A subtitle");
 });

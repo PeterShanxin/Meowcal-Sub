@@ -24,6 +24,7 @@ export default defineConfig({
       reporter: ["text", "json-summary"],
       thresholds: baseline.frontendCoverageMinimum,
     },
+    setupFiles: ["frontend-tests/locale-setup.ts"],
     environment: "node",
     include: ["frontend-tests/unit/**/*.test.{mjs,ts}"],
     watch: false,

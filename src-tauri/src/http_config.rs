@@ -111,8 +111,30 @@ pub async fn get_settings(State(state): State<HttpAppState>) -> impl IntoRespons
 /// are not the ones on disk.
 pub async fn save_settings(
     State(state): State<HttpAppState>,
-    Json(settings): Json<AppConfig>,
+    Json(mut settings): Json<AppConfig>,
 ) -> impl IntoResponse {
+    let _save = state.settings_save.lock().await;
+    settings.ui_language = lock_or_recover(&state.config).ui_language;
+    persist_settings(&state, settings).await
+}
+
+#[derive(serde::Deserialize)]
+pub struct UiLanguageRequest {
+    pub language: crate::ui_language::UiLanguage,
+}
+
+/// POST /api/ui-language - Change the interface language without replacing settings.
+pub async fn set_ui_language(
+    State(state): State<HttpAppState>,
+    Json(request): Json<UiLanguageRequest>,
+) -> impl IntoResponse {
+    let _save = state.settings_save.lock().await;
+    let mut settings = lock_or_recover(&state.config).clone();
+    settings.ui_language = request.language;
+    persist_settings(&state, settings).await
+}
+
+async fn persist_settings(state: &HttpAppState, settings: AppConfig) -> axum::response::Response {
     match save_standalone_config_offloaded(state.config_path.clone(), settings.clone()).await {
         Ok(()) => {
             crate::logging_settings::apply(settings.logging.level);

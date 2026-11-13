@@ -1,5 +1,17 @@
 $ErrorActionPreference = 'Stop'
 $repositoryRoot = Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
+$config = Get-Content "$repositoryRoot/src-tauri/tauri.conf.json" -Raw | ConvertFrom-Json
+$nsis = $config.bundle.windows.nsis
+if (($nsis.languages -join ',') -cne 'English,SimpChinese' -or -not $nsis.displayLanguageSelector) {
+    throw 'NSIS must offer English and Simplified Chinese in its language selector.'
+}
+if ($nsis.installerIcon -cne 'icons/icon.ico' -or $nsis.uninstallerIcon -cne 'icons/icon.ico' -or
+    $config.bundle.icon -notcontains 'icons/icon.ico') {
+    throw 'Application, installer and uninstaller must share the Windows brand icon.'
+}
+if ($config.productName -cne 'Meowcal Sub' -or $config.identifier -cne 'com.meowcal.sub') {
+    throw 'Localized presentation must retain the existing product and installation identity.'
+}
 $action = Get-Content "$repositoryRoot/.github/actions/windows-package-build/action.yml" -Raw
 function Get-ActionRun([string]$Name) {
     $step = [regex]::Match($action, "(?ms)^    - name: $([regex]::Escape($Name))\r?`n(?<step>.*?)(?=^    - |\z)")

@@ -1,16 +1,17 @@
+import { t, getUiLanguage, type UiLanguage } from "../i18n";
 import { html, nothing, type TemplateResult } from "lit";
 import type { LogLevel, OcrEngine, UiSnapshot } from "./contracts";
 import { icon } from "./icons";
 import { backendUnavailablePhase } from "./home-state";
 import { deriveUpdatePresentation } from "./update-state";
 import { summarizeUpdateNotes } from "./update-notes";
-import { renderModelLicense, renderProvider } from "./model-license";
 import { renderLogging } from "./logging-view";
 import { profileOf, type Profile } from "./recognition";
 
 type Recognition = "fast" | "balanced" | "accurate";
 
 interface SettingsActions {
+  onUiLanguage(value: UiLanguage): void;
   onAbout(): void;
   onLogLevel(level: LogLevel): void;
   onRecognition(value: Recognition): void;
@@ -45,25 +46,26 @@ function recognition(snapshot: UiSnapshot): Recognition {
 function engineRow(snapshot: UiSnapshot): EngineRow {
   const phase = snapshot.engine?.phase ?? "unknown";
   if (snapshot.busy === "loading" || phase === "preparing" || phase === "busy") {
-    const chip = snapshot.busy === "loading" ? "Checking" : phase === "busy" ? "Busy" : "Preparing";
+    const chip =
+      snapshot.busy === "loading" ? t("Checking") : phase === "busy" ? t("Busy") : t("Preparing");
     return {
       chip,
-      actionLabel: "Repair",
+      actionLabel: t("Repair"),
       actionIsPrimary: false,
       canTest: false,
     };
   }
   if (phase === "ready" || phase === "notRunning" || phase === "notrunning") {
     return {
-      chip: "Ready",
-      actionLabel: "Repair",
+      chip: t("Ready"),
+      actionLabel: t("Repair"),
       actionIsPrimary: false,
       canTest: true,
     };
   }
   if (phase === backendUnavailablePhase) {
     return {
-      chip: "Backend offline",
+      chip: t("Backend offline"),
       actionLabel: null,
       actionIsPrimary: false,
       canTest: false,
@@ -71,15 +73,15 @@ function engineRow(snapshot: UiSnapshot): EngineRow {
   }
   if (phase === "notInstalled" || phase === "notinstalled") {
     return {
-      chip: "Not installed",
-      actionLabel: "Set up",
+      chip: t("Not installed"),
+      actionLabel: t("Set up"),
       actionIsPrimary: true,
       canTest: false,
     };
   }
   return {
-    chip: "Needs repair",
-    actionLabel: "Repair",
+    chip: t("Needs repair"),
+    actionLabel: t("Repair"),
     actionIsPrimary: true,
     canTest: false,
   };
@@ -110,19 +112,19 @@ function renderEngineAndUpdates(snapshot: UiSnapshot, actions: SettingsActions):
   const update = deriveUpdatePresentation(snapshot.update, snapshot.appVersion);
   const runUpdate = update.action === "install" ? actions.onInstallUpdate : actions.onCheckUpdates;
   return html`
-    <h2 class="group-label">Engine and updates</h2>
+    <h2 class="group-label">${t("Engine and updates")}</h2>
     <div class="list">
       <div class="list-row">
-        <span><strong>Translation engine</strong><small>${engine.chip}</small></span>
+        <span><strong>${t("Translation engine")}</strong><small>${engine.chip}</small></span>
         <span class="row-end">
           <button
             class="secondary-button"
             type="button"
-            title=${engine.canTest ? nothing : "Available once the engine is ready"}
+            title=${engine.canTest ? nothing : t("Available once the engine is ready")}
             @click=${actions.onTest}
             ?disabled=${!engine.canTest || snapshot.busy !== "idle"}
           >
-            Test
+            ${t("Test")}
           </button>
           ${
             engine.actionLabel
@@ -142,8 +144,8 @@ function renderEngineAndUpdates(snapshot: UiSnapshot, actions: SettingsActions):
         snapshot.update.kind === "store"
           ? nothing
           : switchRow(
-              "Automatically check for updates",
-              "At most once a day, after startup",
+              t("Automatically check for updates"),
+              t("At most once a day, after startup"),
               snapshot.settings.autoCheckUpdates !== false,
               actions.onAutoCheckUpdates,
             )
@@ -173,11 +175,11 @@ function renderEngineAndUpdates(snapshot: UiSnapshot, actions: SettingsActions):
 function renderUpdateNotes(version: string, notes: string | null): TemplateResult {
   const highlights = summarizeUpdateNotes(notes);
   return html`
-    <section class="update-notes" aria-label="What's new">
+    <section class="update-notes" aria-label=${t("What's new")}>
       ${
         highlights.length
           ? html`
-              <h3>What's new</h3>
+              <h3>${t("What's new")}</h3>
               <ul>
                 ${highlights.map(({ title, detail }) => html`<li>${title ? html`<strong>${title}</strong> ` : nothing}${detail}</li>`)}
               </ul>
@@ -188,7 +190,7 @@ function renderUpdateNotes(version: string, notes: string | null): TemplateResul
         href=${`https://github.com/PeterShanxin/Meowcal-Sub/releases/tag/v${encodeURIComponent(version)}`}
         target="_blank"
         rel="noopener noreferrer"
-        >Full release notes ↗</a
+        >${t("Full release notes ↗")}</a
       >
     </section>
   `;
@@ -197,11 +199,11 @@ function renderUpdateNotes(version: string, notes: string | null): TemplateResul
 function renderDeveloper(snapshot: UiSnapshot, actions: SettingsActions): TemplateResult {
   return html`
     <details class="disclosure" ?open=${snapshot.developerMode}>
-      <summary>${icon("chevron-right")}Developer options</summary>
+      <summary>${icon("chevron-right")}${t("Developer options")}</summary>
       <div class="list">
         ${switchRow(
-          "Developer mode",
-          "Diagnostics for development only",
+          t("Developer mode"),
+          t("Diagnostics for development only"),
           snapshot.developerMode,
           actions.onDeveloper,
         )}
@@ -209,16 +211,18 @@ function renderDeveloper(snapshot: UiSnapshot, actions: SettingsActions): Templa
           snapshot.developerMode
             ? html`
                 ${switchRow(
-                  "Show subtitle diagnostics",
-                  "Adds recognition details beside the live subtitles",
+                  t("Show subtitle diagnostics"),
+                  t("Adds recognition details beside the live subtitles"),
                   snapshot.settings.overlay.showDiagnostics,
                   actions.onDiagnostics,
                 )}
                 <div class="list-row developer-readout">
-                  <span>Engine phase</span><code>${snapshot.engine?.phase ?? "unknown"}</code>
+                  <span>${t("Engine phase")}</span
+                  ><code>${snapshot.engine?.phase ?? t("Unknown")}</code>
                 </div>
                 <div class="list-row developer-readout">
-                  <span>Support code</span><code>${snapshot.engine?.supportCode ?? "None"}</code>
+                  <span>${t("Support code")}</span
+                  ><code>${snapshot.engine?.supportCode ?? t("None")}</code>
                 </div>
               `
             : nothing
@@ -242,22 +246,22 @@ function renderProfile(snapshot: UiSnapshot, actions: SettingsActions): Template
     <label class="list-row">
       <span
         ><strong
-          >Profile
-          <span class="info-hint" role="img" aria-label=${koreanNote} title=${koreanNote}
+          >${t("Profile")}
+          <span class="info-hint" role="img" aria-label=${t(koreanNote)} title=${t(koreanNote)}
             >${icon("info")}</span
           ></strong
-        ><small>${profileDetail[profile]}</small></span
+        ><small>${t(profileDetail[profile])}</small></span
       >
       <select
         class="select compact"
         @change=${(event: Event) =>
           actions.onProfile((event.target as HTMLSelectElement).value as Profile)}
       >
-        <option value="automatic" .selected=${profile === "automatic"}>Automatic</option>
+        <option value="automatic" .selected=${profile === "automatic"}>${t("Automatic")}</option>
         <option value="compatibility" .selected=${profile === "compatibility"}>
-          Compatibility
+          ${t("Compatibility")}
         </option>
-        ${profile === "custom" ? html`<option value="custom" disabled .selected=${true}>Custom</option>` : nothing}
+        ${profile === "custom" ? html`<option value="custom" disabled .selected=${true}>${t("Custom")}</option>` : nothing}
       </select>
     </label>
   `;
@@ -267,12 +271,12 @@ function renderAdvanced(snapshot: UiSnapshot, actions: SettingsActions): Templat
   const ocr = snapshot.settings.translation.ocr;
   return html`
     <details class="disclosure">
-      <summary>${icon("chevron-right")}Advanced</summary>
+      <summary>${icon("chevron-right")}${t("Advanced")}</summary>
       <div class="list">
         <label class="list-row">
           <span
-            ><strong>Text recognition</strong
-            ><small>PP-OCRv6 reads subtitles more steadily</small></span
+            ><strong>${t("Text recognition")}</strong
+            ><small>${t("PP-OCRv6 reads subtitles more steadily")}</small></span
           >
           <select
             class="select compact"
@@ -285,8 +289,8 @@ function renderAdvanced(snapshot: UiSnapshot, actions: SettingsActions): Templat
           </select>
         </label>
         ${switchRow(
-          "Run the engine on CPU only",
-          "Try this if translations come out garbled or your PC stalls",
+          t("Run the engine on CPU only"),
+          t("Try this if translations come out garbled or your PC stalls"),
           snapshot.settings.translation.localEngine.cpuOnly,
           actions.onCpuOnly,
         )}
@@ -294,8 +298,8 @@ function renderAdvanced(snapshot: UiSnapshot, actions: SettingsActions): Templat
           ocr.engine === "windows"
             ? html`<label class="list-row">
                 <span
-                  ><strong>Recognition quality</strong
-                  ><small>Balanced suits most subtitles</small></span
+                  ><strong>${t("Recognition quality")}</strong
+                  ><small>${t("Balanced suits most subtitles")}</small></span
                 >
                 <select
                   class="select compact"
@@ -303,9 +307,9 @@ function renderAdvanced(snapshot: UiSnapshot, actions: SettingsActions): Templat
                   @change=${(event: Event) =>
                     actions.onRecognition((event.target as HTMLSelectElement).value as Recognition)}
                 >
-                  <option value="fast">Fast</option>
-                  <option value="balanced">Balanced</option>
-                  <option value="accurate">Accurate</option>
+                  <option value="fast">${t("Fast")}</option>
+                  <option value="balanced">${t("Balanced")}</option>
+                  <option value="accurate">${t("Accurate")}</option>
                 </select>
               </label>`
             : nothing
@@ -319,19 +323,44 @@ export function renderSettings(snapshot: UiSnapshot, actions: SettingsActions): 
   return html`
     <main class="screen" aria-labelledby="settings-title">
       <div class="page">
-        <header class="page-head"><h1 id="settings-title" tabindex="-1">Settings</h1></header>
+        <header class="page-head">
+          <h1 id="settings-title" tabindex="-1">${t("Settings")}</h1>
+        </header>
 
-        <h2 class="group-label">Translation</h2>
+        <div class="list">
+          <label class="list-row">
+            <span
+              ><strong>${t("App language")}</strong
+              ><small>${t("Applies immediately. Subtitle languages stay unchanged.")}</small></span
+            >
+            <select
+              class="select compact"
+              aria-label=${t("App language")}
+              ?disabled=${snapshot.busy === "loading"}
+              .value=${getUiLanguage()}
+              @change=${(event: Event) => actions.onUiLanguage((event.target as HTMLSelectElement).value as UiLanguage)}
+            >
+              <option value="system" ?selected=${getUiLanguage() === "system"}>
+                ${t("System default")}
+              </option>
+              <option value="en" lang="en" ?selected=${getUiLanguage() === "en"}>English</option>
+              <option value="zh-CN" lang="zh-CN" ?selected=${getUiLanguage() === "zh-CN"}>
+                简体中文
+              </option>
+            </select>
+          </label>
+        </div>
+        <h2 class="group-label">${t("Translation")}</h2>
         <div class="list">
           ${switchRow(
-            "Translate any text",
-            "Pages, apps, and games, not just subtitles",
+            t("Translate any text"),
+            t("Pages, apps, and games, not just subtitles"),
             snapshot.settings.translation.translateAllOcrText,
             actions.onTranslateAllOcrText,
           )}
           ${switchRow(
-            "Keep names consistent",
-            "Remembers names and terms across nearby lines",
+            t("Keep names consistent"),
+            t("Remembers names and terms across nearby lines"),
             snapshot.settings.translation.enableContextAware,
             actions.onContinuity,
           )}
@@ -342,33 +371,10 @@ export function renderSettings(snapshot: UiSnapshot, actions: SettingsActions): 
         ${renderDeveloper(snapshot, actions)}
         <div class="list">
           <button class="list-row about-entry" type="button" @click=${actions.onAbout}>
-            <strong>About</strong>${icon("chevron-right")}
+            <strong>${t("About")}</strong>${icon("chevron-right")}
           </button>
         </div>
       </div>
     </main>
   `;
-}
-
-export function renderAbout(version: string | null, onBack: () => void): TemplateResult {
-  return html`<main class="screen" aria-labelledby="about-title">
-    <div class="page">
-      <button class="quiet-button about-back" type="button" @click=${onBack}>
-        ${icon("chevron-right")}Settings
-      </button>
-      <header class="page-head"><h1 id="about-title" tabindex="-1">About</h1></header>
-      <div class="about-identity">
-        <h2>Meowcal Sub</h2>
-        <p class="about-version">${version ?? "Version unavailable"}</p>
-        <a
-          href="https://github.com/PeterShanxin/Meowcal-Sub"
-          target="_blank"
-          rel="noopener noreferrer"
-          aria-label="Meowcal Sub on GitHub"
-          >GitHub ↗</a
-        >
-      </div>
-      <div class="about-content">${renderProvider()} ${renderModelLicense()}</div>
-    </div>
-  </main>`;
 }

@@ -16,49 +16,56 @@ const test = base.extend({
 
 // Native IPC is the test boundary. These checks exercise the real overlay DOM,
 // styling and clip payloads, but do not establish Windows window behaviour.
-async function openOverlay(page, region = { x: 100, y: 180, width: 350, height: 100 }) {
-  await page.addInitScript((captureRegion) => {
-    const listeners = new Map();
-    window.overlayTest = {
-      region: captureRegion,
-      calls: [],
-      exitFailure: null,
-      pendingExit: null,
-      cursor: { x: captureRegion.x * devicePixelRatio, y: captureRegion.y * devicePixelRatio },
-      emit(name, payload) {
-        for (const listener of listeners.get(name) ?? []) listener({ payload });
-      },
-    };
-    window.__TAURI__ = {
-      core: {
-        async invoke(command, args) {
-          window.overlayTest.calls.push({ command, args });
-          if (command === "get_capture_region") return window.overlayTest.region;
-          if (command === "get_settings") return { overlay: {} };
-          if (command === "exit_translation") {
-            if (window.overlayTest.exitFailure) throw new Error(window.overlayTest.exitFailure);
-            await new Promise((resolve) => (window.overlayTest.pendingExit = resolve));
-          }
+async function openOverlay(
+  page,
+  region = { x: 100, y: 180, width: 350, height: 100 },
+  uiLanguage = "en",
+) {
+  await page.addInitScript(
+    ({ captureRegion, uiLanguage }) => {
+      const listeners = new Map();
+      window.overlayTest = {
+        region: captureRegion,
+        calls: [],
+        exitFailure: null,
+        pendingExit: null,
+        cursor: { x: captureRegion.x * devicePixelRatio, y: captureRegion.y * devicePixelRatio },
+        emit(name, payload) {
+          for (const listener of listeners.get(name) ?? []) listener({ payload });
         },
-      },
-      event: {
-        async listen(name, callback) {
-          if (!listeners.has(name)) listeners.set(name, []);
-          listeners.get(name).push(callback);
-          return () => {};
+      };
+      window.__TAURI__ = {
+        core: {
+          async invoke(command, args) {
+            window.overlayTest.calls.push({ command, args });
+            if (command === "get_capture_region") return window.overlayTest.region;
+            if (command === "get_settings") return { overlay: {}, uiLanguage };
+            if (command === "exit_translation") {
+              if (window.overlayTest.exitFailure) throw new Error(window.overlayTest.exitFailure);
+              await new Promise((resolve) => (window.overlayTest.pendingExit = resolve));
+            }
+          },
         },
-        async emit() {},
-      },
-      webview: { getCurrentWebview: () => ({ setBackgroundColor: async () => {} }) },
-      window: {
-        getCurrentWindow: () => ({
-          scaleFactor: async () => devicePixelRatio,
-          innerPosition: async () => ({ x: 0, y: 0 }),
-        }),
-        cursorPosition: async () => window.overlayTest.cursor,
-      },
-    };
-  }, region);
+        event: {
+          async listen(name, callback) {
+            if (!listeners.has(name)) listeners.set(name, []);
+            listeners.get(name).push(callback);
+            return () => {};
+          },
+          async emit() {},
+        },
+        webview: { getCurrentWebview: () => ({ setBackgroundColor: async () => {} }) },
+        window: {
+          getCurrentWindow: () => ({
+            scaleFactor: async () => devicePixelRatio,
+            innerPosition: async () => ({ x: 0, y: 0 }),
+          }),
+          cursorPosition: async () => window.overlayTest.cursor,
+        },
+      };
+    },
+    { captureRegion: region, uiLanguage },
+  );
   await page.goto("/overlay.html");
   await expect.poll(() => page.locator("#capture-frame").getAttribute("style")).toContain("width");
   await page.evaluate(() => window.overlayTest.emit("overlay-visibility", true));
@@ -557,4 +564,34 @@ test("successive cues replace text without a slide or a moving subtitle anchor",
   expect(sample.bottom).toBeLessThan(region.y);
   expect(sample.after.bottom).toBeCloseTo(sample.before.bottom, 1);
   expect(sample.after.centerX).toBeCloseTo(sample.before.centerX, 1);
+});
+
+test("Chinese overlay switches controls and interruption copy while preserving subtitles", async ({
+  page,
+}) => {
+  await openOverlay(page, undefined, "zh-CN");
+  await expect(page.getByRole("button", { name: "字幕样式", exact: true })).toBeVisible();
+  await expect(page.locator("#overlay-session-status")).toContainText("正在准备翻译…");
+  await page.evaluate(() => {
+    window.overlayTest.emit("translation-update", {
+      sessionId: 1,
+      captureId: 1,
+      updateId: 1,
+      displayState: "translated",
+      translated: "A subtitle stays in its selected translation language.",
+      timestamp: Date.now(),
+    });
+    window.overlayTest.emit("capture-status", { isError: true });
+  });
+  await expect(page.locator("#overlay-session-status")).toContainText("翻译已中断。");
+  const before = await page.locator("#subtitle-container").boundingBox();
+  await page.evaluate(() => window.overlayTest.emit("ui-language-changed", "en"));
+  await expect(page.getByRole("button", { name: "Subtitle style", exact: true })).toBeVisible();
+  await expect(page.locator("#overlay-session-status")).toContainText(
+    "Translation is interrupted.",
+  );
+  await expect(page.locator("#subtitle-text")).toHaveText(
+    "A subtitle stays in its selected translation language.",
+  );
+  expect(await page.locator("#subtitle-container").boundingBox()).toEqual(before);
 });

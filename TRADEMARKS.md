@@ -1,6 +1,6 @@
 # Trademarks
 
-"Meowcal Sub", "Meowcal", the Meowcal Sub logo, and related branding identify
+"Meowcal Sub", "妙影", "Meowcal", the Meowcal Sub logo, and related branding identify
 this project. They are not registered trademarks. Do not write ® after them.
 
 The [GNU Affero General Public License version 3 only](LICENSE) covers the

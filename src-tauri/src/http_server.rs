@@ -29,6 +29,7 @@ use crate::sync_utils::lock_or_recover;
 #[derive(Clone)]
 pub struct HttpAppState {
     pub config: Arc<Mutex<AppConfig>>,
+    pub settings_save: Arc<tokio::sync::Mutex<()>>,
     pub capture_region: Arc<Mutex<Option<CaptureRegion>>>,
     pub translation_diagnostics: Arc<Mutex<TranslationDiagnosticsState>>,
     pub config_path: PathBuf,
@@ -41,6 +42,7 @@ impl HttpAppState {
 
         Self {
             config: Arc::new(Mutex::new(config)),
+            settings_save: Arc::new(tokio::sync::Mutex::new(())),
             capture_region: Arc::new(Mutex::new(None)),
             translation_diagnostics: Arc::new(Mutex::new(TranslationDiagnosticsState::default())),
             config_path,
@@ -338,6 +340,10 @@ pub fn create_router(state: HttpAppState) -> Router {
         // Settings
         .route("/api/settings", get(get_settings))
         .route("/api/settings", post(save_settings))
+        .route(
+            "/api/ui-language",
+            post(crate::http_config::set_ui_language),
+        )
         // Translation diagnostics
         .route(
             "/api/translation/diagnostics",

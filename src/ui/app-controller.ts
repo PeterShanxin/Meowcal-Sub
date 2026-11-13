@@ -1,3 +1,5 @@
+import { errorMessage } from "./error-copy";
+import { previewUiLanguage, type UiLanguage } from "../i18n";
 import type { AppScreen, AppSettings, CaptureRegion, UiSnapshot } from "./contracts";
 import { applyRecognition, type RecognitionChoice } from "./recognition";
 import { pickSampleTranslation } from "./sample-translations";
@@ -13,11 +15,6 @@ import { DisplayController } from "./display-controller";
 import { InitialSetup } from "./initial-setup";
 
 const NOTICE_DURATION_MS = 4000;
-
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
-}
-
 type WizardTestResult = { translatedText?: string; latencyMs?: number };
 
 export class AppController {
@@ -160,10 +157,16 @@ export class AppController {
   setScreen(screen: AppScreen): void {
     this.publish({ screen, notice: null });
   }
+  async setUiLanguage(value: UiLanguage): Promise<void> {
+    if (this.snapshot.busy === "loading") return;
+    previewUiLanguage(value);
+    this.publish({ settings: { ...this.snapshot.settings, uiLanguage: value } });
+    await this.settingsWriter.saveLanguage(value).catch(() => {});
+  }
   async setLanguage(kind: "source" | "target", value: string): Promise<void> {
     const settings = applyLanguageSelection(structuredClone(this.snapshot.settings), kind, value);
     this.publish({ settings, notice: null });
-    await this.persistSettingsInBackground();
+    await this.saveSettings(true).catch(() => {});
   }
   async selectRegion(): Promise<void> {
     if (this.snapshot.busy !== "idle") return;
@@ -281,22 +284,19 @@ export class AppController {
   }
   async saveSettings(silent = false): Promise<void> {
     try {
-      await this.settingsWriter.save(this.snapshot.settings);
+      if (silent) await this.settingsWriter.save(this.snapshot.settings);
+      else await this.settingsWriter.retry();
       this.settingsLoaded = true;
       if (!silent) this.publish({ notice: "Settings saved" });
     } catch (error) {
       if (silent) throw error;
     }
   }
-
-  private async persistSettingsInBackground(): Promise<void> {
-    await this.saveSettings(true).catch(() => {});
-  }
   private async editSettings(edit: (settings: AppSettings) => void): Promise<void> {
     const settings = structuredClone(this.snapshot.settings);
     edit(settings);
     this.publish({ settings });
-    await this.persistSettingsInBackground();
+    await this.saveSettings(true).catch(() => {});
   }
   async setLogLevel(level: AppSettings["logging"]["level"]): Promise<void> {
     await this.editSettings((settings) => (settings.logging = { level }));
@@ -333,7 +333,7 @@ export class AppController {
     if (this.overlaySaveId !== null) window.clearTimeout(this.overlaySaveId);
     this.overlaySaveId = window.setTimeout(() => {
       this.overlaySaveId = null;
-      void this.persistSettingsInBackground();
+      void this.saveSettings(true).catch(() => {});
     }, 250);
   }
   async updatePreference(
@@ -353,7 +353,11 @@ export class AppController {
       });
       if (!result.translatedText) throw new Error("The sample translation did not return text.");
       const latency = result.latencyMs ? ` · ${result.latencyMs} ms` : "";
-      this.publish({ busy: "idle", notice: `Sample passed${latency}` });
+      this.publish({
+        busy: "idle",
+        notice: "Sample passed{latency}",
+        noticeParameters: { latency },
+      });
     } catch (error) {
       this.publish({ busy: "idle", notice: null, error: errorMessage(error) });
     }
@@ -373,7 +377,7 @@ export class AppController {
     settings.lastUpdateCheckTimeMs = completedAt;
     this.publish({ settings });
     if (!this.settingsLoaded) return;
-    await this.persistSettingsInBackground();
+    await this.saveSettings(true).catch(() => {});
   }
   async checkForUpdates(): Promise<void> {
     await this.updates.check("manual");

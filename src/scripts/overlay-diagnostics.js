@@ -1,3 +1,5 @@
+import { t } from "../i18n/index";
+
 /* global module */
 
 // Builds the text of the overlay diagnostics panel.
@@ -21,7 +23,7 @@
       // fallback that never happened.
       return "";
     }
-    return backendUsed === "mock" ? "mock (source only)" : backendUsed;
+    return backendUsed === "mock" ? t("overlay.sourceOnly") : backendUsed;
   }
 
   function latencyLine(modelMs, totalMs) {
@@ -30,7 +32,7 @@
     if (total <= 0) return "";
     // Model time is called out separately because it is the part no amount of
     // pipeline tuning can remove - it is the translator thinking.
-    return model > 0 ? `Latency: ${total}ms (model ${model}ms)` : `Latency: ${total}ms`;
+    return t(model > 0 ? "overlay.modelLatency" : "overlay.latency", { model, total });
   }
 
   /**
@@ -42,7 +44,7 @@
   function buildDiagnosticsText(update) {
     const warnings = Array.isArray(update?.warnings) ? update.warnings.filter(Boolean) : [];
     const status = [
-      `State: ${update?.state || "unknown"}`,
+      t("overlay.state", { state: update?.state || "unknown" }),
       engineLabel(update?.backendUsed),
       warnings.join(", "),
       update?.now || "",
@@ -52,7 +54,7 @@
     return [
       status.join(" · "),
       latencyLine(update?.modelMs, update?.totalMs),
-      source ? `Source: ${source}` : "",
+      source ? t("overlay.source", { source }) : "",
     ]
       .filter(Boolean)
       .join("\n");

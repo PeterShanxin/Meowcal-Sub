@@ -1,13 +1,14 @@
 # Using Meowcal Sub
 
-[Back to the project](../README.md) · [简体中文简介](../README.zh-CN.md)
+[Back to the project](../README.md) · [简体中文](USAGE.zh-CN.md)
 
 Meowcal Sub translates **visible text in a selected screen region**, not audio.
 Start with a video that already displays subtitles in Chinese, Japanese,
 Korean, English, Spanish, French, or German.
 
-This guide describes the latest published application release. To see what a
-specific release changed, read its notes under [`releases/`](releases/).
+This guide covers the latest published application release, v0.9.1, and marks
+unreleased changes where they differ. For each version, see its notes under
+[`releases/`](releases/).
 
 ## Installation
 
@@ -106,6 +107,19 @@ changes, translation stops and the overlay hides. Reconnecting does not resume
 capture; select the subtitle area again. After a restart, the app restores a
 saved area only when the same screen, bounds, and scaling are still present and
 Home is on that screen.
+
+## App language
+
+**Not yet released:** In **Settings → App language**, choose **System default**,
+**English**, or **简体中文**. System default uses Simplified Chinese for a Chinese
+system language, and English for other system languages. Changes apply immediately
+and the preference is saved for the next launch. The Chinese interface shows
+**Meowcal Sub · 妙影**; the English interface shows **Meowcal Sub**.
+
+App language is independent of **Original subtitles** and **Translate into**.
+For example, you can use a Chinese interface while translating Japanese subtitles
+into English. Changing the interface language leaves the subtitle language pair
+and captured or translated text unchanged.
 
 ## Settings
 

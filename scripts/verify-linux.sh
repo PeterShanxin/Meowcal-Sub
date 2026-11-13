@@ -56,7 +56,7 @@ if [[ "$stage" == all || "$stage" == frontend ]]; then
   fi
   run npm ci --ignore-scripts
   run node --test scripts/tests/verify-linux.test.mjs
-  for check in version:check runners:check docs:check format:check lint typecheck build:web maintainability test:frontend; do
+  for check in version:check runners:check docs:check i18n:check format:check lint typecheck build:web maintainability test:frontend; do
     run npm run "$check"
   done
   run npm exec -- playwright install chromium

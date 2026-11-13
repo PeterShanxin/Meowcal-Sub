@@ -210,6 +210,7 @@ exit /b 0
         "run version:check",
         "run runners:check",
         "run docs:check",
+        "run i18n:check",
         "run format:check",
         "run lint",
         "run typecheck",
@@ -236,6 +237,7 @@ exit /b 0
         "run version:check",
         "run runners:check",
         "run docs:check",
+        "run i18n:check",
         "run format:check",
         "run lint",
         "run typecheck",
@@ -302,6 +304,7 @@ exit /b 0
         "run version:check",
         "run runners:check",
         "run docs:check",
+        "run i18n:check",
         "run format:check",
         "run lint"
     ) $npmFailure.NpmCommands "Npm failure short-circuit"

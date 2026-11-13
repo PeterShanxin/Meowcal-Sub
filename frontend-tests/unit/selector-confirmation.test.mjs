@@ -1,10 +1,15 @@
 import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import vm from "node:vm";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { t, setUiLanguage } from "../../src/i18n/index";
+afterEach(() => setUiLanguage("en"));
 
 const require = createRequire(import.meta.url);
-const source = readFileSync(new URL("../../src/scripts/selector.js", import.meta.url), "utf8");
+const source = readFileSync(
+  new URL("../../src/scripts/selector.js", import.meta.url),
+  "utf8",
+).replace(/^import .*?;\r?\n/, "");
 const region = { x: 10, y: 800, width: 1200, height: 120 };
 
 function fixture({
@@ -44,6 +49,7 @@ function fixture({
   const buttons = new TestElement();
   const dimSegments = Array.from({ length: 4 }, () => new TestElement());
   const context = {
+    t,
     window: {
       TauriBridge: { invoke },
       __TAURI__: {
@@ -307,3 +313,14 @@ for (const display of [
     });
   });
 }
+
+it("keeps selection intent and saved coordinates when confirmation copy is Chinese", async () => {
+  setUiLanguage("zh-CN");
+  const { actions, labels, invoke, context } = fixture();
+  expect(labels.map((label) => label.textContent)).toEqual(["确认并开始", "确认并开始"]);
+  invoke.mockRejectedValueOnce("The display changed. Select the subtitle area again.");
+  await actions.confirmSelection();
+  expect(actions.errorText.textContent).toBe("显示器已变更，请重新选择字幕区域。");
+  expect(context.document.body.dataset.phase).toBe("error");
+  expect(actions.state.region).toEqual(region);
+});

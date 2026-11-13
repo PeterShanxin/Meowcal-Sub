@@ -1,3 +1,5 @@
+import { t } from "../i18n";
+import { LocaleController } from "../i18n/lit-controller";
 import { LitElement, html } from "lit";
 import { customElement, state } from "lit/decorators.js";
 import type { AppSettings, EngineStatus } from "./contracts";
@@ -9,6 +11,10 @@ import "./meowcal-titlebar";
 
 @customElement("meowcal-setup")
 export class MeowcalSetup extends LitElement {
+  constructor() {
+    super();
+    new LocaleController(this);
+  }
   @state() private step = 1;
   @state() private settings: AppSettings | null = null;
   @state() private loading = true;
@@ -84,7 +90,7 @@ export class MeowcalSetup extends LitElement {
         if (!payload.line) return;
         this.details.push(payload.line);
         if (this.details.length > 200) this.details.shift();
-        this.progress = setupProgress(payload.line) ?? this.progress;
+        if (setupProgress(payload.line)) this.progress = payload.line;
       }),
     );
   }
@@ -183,7 +189,7 @@ export class MeowcalSetup extends LitElement {
       working: this.working,
       error: this.error,
       supportCode: this.supportCode,
-      progress: this.progress,
+      progress: setupProgress(this.progress) ?? t(this.progress),
       sample: this.sample,
       sampleSource: this.sampleSource,
       copyState: this.copyState,
@@ -201,7 +207,7 @@ export class MeowcalSetup extends LitElement {
     };
     return html`
       <div class="wizard-frame">
-        <meowcal-titlebar label="Meowcal Sub Setup" no-maximize></meowcal-titlebar>
+        <meowcal-titlebar label=${t("Meowcal Sub Setup")} no-maximize></meowcal-titlebar>
         ${renderStep(view, actions)} ${renderFooter(view, actions)}
       </div>
     `;

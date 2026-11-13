@@ -8,6 +8,7 @@ use tauri::async_runtime;
 use tracing::{info, warn};
 
 use crate::ocr::CoreOcr;
+use crate::ui_language::Locale;
 
 /// List OCR language packs installed on this system.
 /// Returns BCP-47 tags (e.g. ["en-US", "zh-CN"]).
@@ -53,7 +54,7 @@ pub fn capability_tag(language_tag: &str) -> Result<&'static str, String> {
 
 /// Install an OCR language pack via an elevated PowerShell window.
 /// Triggers a UAC prompt — the user must approve the elevation.
-pub async fn install(language_tag: String) -> Result<(), String> {
+pub async fn install(language_tag: String, locale: Locale) -> Result<(), String> {
     let capability_tag = capability_tag(&language_tag)?.to_string();
 
     info!(
@@ -63,20 +64,7 @@ pub async fn install(language_tag: String) -> Result<(), String> {
 
     async_runtime::spawn_blocking(move || {
         // Build the inner (elevated) PowerShell script
-        let inner_script = format!(
-            "Write-Host 'Installing OCR language pack: {tag}...' -ForegroundColor Cyan; \
-             Write-Host ''; \
-             $cap = Get-WindowsCapability -Online | Where-Object {{ $_.Name -Like 'Language.OCR*{tag}*' -and $_.State -ne 'Installed' }}; \
-             if ($cap) {{ \
-                 $cap | Add-WindowsCapability -Online; \
-                 Write-Host ''; \
-                 Write-Host 'Done! OCR language pack installed successfully.' -ForegroundColor Green \
-             }} else {{ \
-                 Write-Host 'Language pack is already installed or not available.' -ForegroundColor Yellow \
-             }}; \
-             Start-Sleep -Seconds 5",
-            tag = capability_tag
-        );
+        let inner_script = installation_script(&capability_tag, locale);
 
         // Outer PowerShell spawns an elevated inner shell via Start-Process -Verb RunAs
         let mut cmd = crate::windowless_command::std_command("powershell");
@@ -112,9 +100,47 @@ pub async fn install(language_tag: String) -> Result<(), String> {
     .map_err(|e| e.to_string())?
 }
 
+fn installation_script(capability_tag: &str, locale: Locale) -> String {
+    let installing = locale.text("Installing OCR language pack", "正在安装 OCR 语言包");
+    let complete = locale.text(
+        "OCR language pack installed successfully.",
+        "OCR 语言包安装成功。",
+    );
+    let unavailable = locale.text(
+        "Language pack is already installed or not available.",
+        "语言包已安装或暂不可用。",
+    );
+    format!(
+        "Write-Host '{installing}: {capability_tag}...' -ForegroundColor Cyan; \
+         Write-Host ''; \
+         $cap = Get-WindowsCapability -Online | Where-Object {{ $_.Name -Like 'Language.OCR*{capability_tag}*' -and $_.State -ne 'Installed' }}; \
+         if ($cap) {{ \
+             $cap | Add-WindowsCapability -Online; \
+             Write-Host ''; \
+             Write-Host '{complete}' -ForegroundColor Green \
+         }} else {{ \
+             Write-Host '{unavailable}' -ForegroundColor Yellow \
+         }}; \
+         Start-Sleep -Seconds 5"
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn installation_copy_follows_ui_language_without_translating_capability_names() {
+        let english = installation_script("zh-Hans", Locale::English);
+        let chinese = installation_script("zh-Hans", Locale::SimplifiedChinese);
+        assert!(english.contains("Installing OCR language pack"));
+        assert!(chinese.contains("正在安装 OCR 语言包"));
+        assert!(chinese.contains("OCR 语言包安装成功。"));
+        for script in [english, chinese] {
+            assert!(script.contains("Language.OCR*zh-Hans*"));
+            assert!(script.contains("Add-WindowsCapability -Online"));
+        }
+    }
 
     #[test]
     fn maps_every_offered_language_to_its_capability_tag() {

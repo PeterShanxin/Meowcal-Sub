@@ -9,6 +9,25 @@ use meowcal_sub::commands::get_system_info;
 use meowcal_sub::update_diagnostics::UpdateCheckDiagnostic;
 
 #[test]
+fn system_ui_language_returns_a_supported_locale_tag() {
+    let locale = meowcal_sub::ui_language::get_system_ui_language();
+    assert!(matches!(locale, "en" | "zh-CN"));
+    #[cfg(target_os = "windows")]
+    {
+        let primary_language =
+            unsafe { windows::Win32::Globalization::GetUserDefaultUILanguage() } & 0x03ff;
+        assert_eq!(
+            locale,
+            if primary_language == 0x04 {
+                "zh-CN"
+            } else {
+                "en"
+            }
+        );
+    }
+}
+
+#[test]
 fn update_check_diagnostics_preserve_the_frontend_contract() -> Result<(), serde_json::Error> {
     let value = serde_json::json!({
         "requestId": 7,

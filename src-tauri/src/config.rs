@@ -1,7 +1,3 @@
-// =============================================================================
-// CONFIG.RS - Application Configuration
-// =============================================================================
-
 pub use crate::capture_region::CaptureRegion;
 pub use crate::engine_config::ManagedLocalRuntimeConfig;
 use crate::translation_eligibility::Eligibility;
@@ -16,6 +12,8 @@ use serde::{Deserialize, Serialize};
 // and a failed parse is what #64 turns into a wipe (#69 review).
 #[serde(rename_all = "camelCase", default)] // camelCase in JSON (JavaScript convention)
 pub struct AppConfig {
+    pub ui_language: crate::ui_language::UiLanguage,
+
     /// The language to translate FROM (source language)
     /// Examples: "en-US", "ja-JP", "zh-CN"
     pub source_language: String,
@@ -378,6 +376,7 @@ pub struct FoundryLocalConfig {
 impl Default for AppConfig {
     fn default() -> Self {
         Self {
+            ui_language: Default::default(),
             source_language: "en-US".to_string(),
             target_language: "zh-CN".to_string(), // Chinese as default target
             capture_interval_ms: 250,             // Capture every 250ms

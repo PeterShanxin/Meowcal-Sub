@@ -75,11 +75,11 @@ describe("tauri window chrome", () => {
 
   // Tauri creates a tray icon for `app.trayIcon`, and the tray module builds a
   // second one with the menu and click handlers. Declaring both put two
-  // identical cats in the tray, only one of which responded to clicks.
+  // identical icons in the tray, only one of which responded to clicks.
   it("declares the tray icon in exactly one place", () => {
     expect(config.app.trayIcon).toBeUndefined();
     expect(mainRs).not.toContain("TrayIconBuilder::new()");
-    expect(trayRs).toContain("TrayIconBuilder::new()");
+    expect(trayRs).toContain("TrayIconBuilder::with_id(TRAY_ID)");
   });
 
   it.each(["main", "foundry-wizard"])("draws its own title bar on %s", (label) => {
@@ -109,7 +109,7 @@ describe("tauri window chrome", () => {
   // bundler emitted the file under a content hash, so the app shipped with no
   // logo in its own title bar. The logo is now drawn inline, with no path at all.
   it("draws the title bar logo inline instead of loading it from a path", () => {
-    expect(titlebar).toContain("catLogo()");
+    expect(titlebar).toContain("brandLogo()");
     expect(titlebar).not.toContain('src="./assets/');
   });
 

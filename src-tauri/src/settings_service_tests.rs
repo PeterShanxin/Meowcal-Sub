@@ -146,3 +146,20 @@ fn user_editable_settings_still_come_from_the_submitted_config() {
     assert_eq!(merged.target_language, "ja-JP");
     assert_eq!(merged.capture_interval_ms, 1234);
 }
+
+#[test]
+fn stale_window_settings_cannot_replace_the_live_interface_language() {
+    use crate::ui_language::UiLanguage;
+    let live = AppConfig {
+        ui_language: UiLanguage::SimplifiedChinese,
+        ..AppConfig::default()
+    };
+    let submitted = AppConfig {
+        ui_language: UiLanguage::English,
+        target_language: "ja-JP".into(),
+        ..AppConfig::default()
+    };
+    let merged = merge_app_owned_state(submitted, None, None, &live);
+    assert_eq!(merged.ui_language, UiLanguage::SimplifiedChinese);
+    assert_eq!(merged.target_language, "ja-JP");
+}

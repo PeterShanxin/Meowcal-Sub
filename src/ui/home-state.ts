@@ -1,3 +1,4 @@
+import { t } from "../i18n";
 import type { HomePresentation, UiSnapshot } from "./contracts";
 import { describeCaptureWarning } from "./error-copy";
 import { recognitionReady } from "./recognition";
@@ -27,14 +28,14 @@ export function deriveHomePresentation(snapshot: UiSnapshot): HomePresentation {
   if (snapshot.busy === "loading") {
     return {
       state: "checking",
-      statusLabel: "Checking",
-      title: "Getting things ready",
-      description: "Checking translation, recognition, and your subtitle area.",
+      statusLabel: t("Checking"),
+      title: t("Getting things ready"),
+      description: t("Checking translation, recognition, and your subtitle area."),
       action: "none",
-      actionLabel: "Checking this PC…",
+      actionLabel: t("Checking this PC…"),
       actionIcon: "spinner",
       actionDisabled: true,
-      supportLine: "Everything stays on this PC",
+      supportLine: t("Everything stays on this PC"),
       supportTone: "neutral",
     };
   }
@@ -43,14 +44,16 @@ export function deriveHomePresentation(snapshot: UiSnapshot): HomePresentation {
     const warning = snapshot.captureWarning;
     return {
       state: "running",
-      statusLabel: "Running",
-      title: "Subtitles are live",
-      description: "Translated subtitles appear above your selected area.",
+      statusLabel: t("Running"),
+      title: t("Subtitles are live"),
+      description: t("Translated subtitles appear above your selected area."),
       action: "stop",
-      actionLabel: snapshot.busy === "stopping" ? "Stopping…" : "Stop translation",
+      actionLabel: snapshot.busy === "stopping" ? t("Stopping…") : t("Stop translation"),
       actionIcon: "stop",
       actionDisabled: snapshot.busy !== "idle",
-      supportLine: warning ? describeCaptureWarning(warning) : "Overlay active · Local processing",
+      supportLine: warning
+        ? describeCaptureWarning(warning)
+        : t("Overlay active · Local processing"),
       supportTone: warning ? "warning" : "success",
     };
   }
@@ -58,8 +61,8 @@ export function deriveHomePresentation(snapshot: UiSnapshot): HomePresentation {
   if (snapshot.busy === "selecting") {
     return {
       ...deriveHomePresentation({ ...snapshot, busy: "idle" }),
-      statusLabel: "Select area",
-      actionLabel: "Confirm in the selector…",
+      statusLabel: t("Select area"),
+      actionLabel: t("Confirm in the selector…"),
       actionDisabled: true,
     };
   }
@@ -67,14 +70,14 @@ export function deriveHomePresentation(snapshot: UiSnapshot): HomePresentation {
   if (snapshot.busy === "warming" || snapshot.busy === "starting") {
     return {
       state: "checking",
-      statusLabel: "Starting",
-      title: "Starting translation",
-      description: "The first start takes a little longer while the engine warms up.",
+      statusLabel: t("Starting"),
+      title: t("Starting translation"),
+      description: t("The first start takes a little longer while the engine warms up."),
       action: "none",
-      actionLabel: "Starting…",
+      actionLabel: t("Starting…"),
       actionIcon: "spinner",
       actionDisabled: true,
-      supportLine: "Preparing the engine on this PC",
+      supportLine: t("Preparing the engine on this PC"),
       supportTone: "neutral",
     };
   }
@@ -83,14 +86,14 @@ export function deriveHomePresentation(snapshot: UiSnapshot): HomePresentation {
   if (phase === backendUnavailablePhase) {
     return {
       state: "attention",
-      statusLabel: "Backend offline",
-      title: "Start the browser backend",
-      description: "Browser mode reads the engine through the local HTTP backend.",
+      statusLabel: t("Backend offline"),
+      title: t("Start the browser backend"),
+      description: t("Browser mode reads the engine through the local HTTP backend."),
       action: "none",
-      actionLabel: "Backend unavailable",
+      actionLabel: t("Backend unavailable"),
       actionIcon: "alert",
       actionDisabled: true,
-      supportLine: "Run dev-browser.cmd to start the page with its backend",
+      supportLine: t("Run dev-browser.cmd to start the page with its backend"),
       supportTone: "danger",
     };
   }
@@ -98,14 +101,14 @@ export function deriveHomePresentation(snapshot: UiSnapshot): HomePresentation {
   if (missingPhases.has(phase)) {
     return {
       state: "notReady",
-      statusLabel: "Setup needed",
-      title: "Set up private translation",
-      description: "A guided setup downloads and tests the translation engine.",
+      statusLabel: t("Setup needed"),
+      title: t("Set up private translation"),
+      description: t("A guided setup downloads and tests the translation engine."),
       action: "setup",
-      actionLabel: "Set up translation",
+      actionLabel: t("Set up translation"),
       actionIcon: "download",
       actionDisabled: false,
-      supportLine: "Engine not installed · about 1.1 GB",
+      supportLine: t("Engine not installed · about 1.1 GB"),
       supportTone: "warning",
     };
   }
@@ -113,18 +116,18 @@ export function deriveHomePresentation(snapshot: UiSnapshot): HomePresentation {
   if (preparingPhases.has(phase)) {
     return {
       state: "checking",
-      statusLabel: phase === "busy" ? "Busy" : "Preparing",
-      title: phase === "busy" ? "Waiting for the engine" : "Warming up translation",
+      statusLabel: phase === "busy" ? t("Busy") : t("Preparing"),
+      title: phase === "busy" ? t("Waiting for the engine") : t("Warming up translation"),
       description:
         phase === "busy"
-          ? "The engine is finishing another operation. Check again when it is ready."
-          : "The engine is checking its model. You can start when it is ready.",
+          ? t("The engine is finishing another operation. Check again when it is ready.")
+          : t("The engine is checking its model. You can start when it is ready."),
       action: "none",
-      actionLabel: phase === "busy" ? "Waiting for engine…" : "Preparing engine…",
+      actionLabel: phase === "busy" ? t("Waiting for engine…") : t("Preparing engine…"),
       actionIcon: "spinner",
       actionDisabled: true,
       supportLine:
-        phase === "busy" ? "Engine operation in progress" : "Preparing the engine on this PC",
+        phase === "busy" ? t("Engine operation in progress") : t("Preparing the engine on this PC"),
       supportTone: "neutral",
     };
   }
@@ -133,14 +136,14 @@ export function deriveHomePresentation(snapshot: UiSnapshot): HomePresentation {
     const supportCode = snapshot.engine?.supportCode;
     return {
       state: "attention",
-      statusLabel: "Needs repair",
-      title: "Translation needs a repair",
-      description: "Your settings are safe. Repair checks and restores the engine.",
+      statusLabel: t("Needs repair"),
+      title: t("Translation needs a repair"),
+      description: t("Your settings are safe. Repair checks and restores the engine."),
       action: "repair",
-      actionLabel: "Repair engine",
+      actionLabel: t("Repair engine"),
       actionIcon: "wrench",
       actionDisabled: false,
-      supportLine: supportCode ? "Support code" : "Engine check failed · Repair available",
+      supportLine: supportCode ? t("Support code") : t("Engine check failed · Repair available"),
       supportCode,
       supportTone: "danger",
     };
@@ -149,25 +152,25 @@ export function deriveHomePresentation(snapshot: UiSnapshot): HomePresentation {
   if (!recognitionReady(snapshot.settings, snapshot.ocrLanguages)) {
     return {
       state: "notReady",
-      statusLabel: "Almost ready",
-      title: "Install the recognition language",
-      description: "Windows needs this language to read the original subtitles.",
+      statusLabel: t("Almost ready"),
+      title: t("Install the recognition language"),
+      description: t("Windows needs this language to read the original subtitles."),
       action: "installOcr",
-      actionLabel: "Install recognition language",
+      actionLabel: t("Install recognition language"),
       actionIcon: "text",
       actionDisabled: snapshot.busy !== "idle",
-      supportLine: "Recognition language missing",
+      supportLine: t("Recognition language missing"),
       supportTone: "warning",
     };
   }
 
   return {
     state: "ready",
-    statusLabel: "Ready",
-    title: "Let’s watch",
+    statusLabel: t("Ready"),
+    title: t("Let’s watch"),
     description: "",
     action: "start",
-    actionLabel: "Select subtitle area",
+    actionLabel: t("Select subtitle area"),
     actionIcon: "area",
     actionDisabled: snapshot.busy !== "idle",
     supportLine: "",

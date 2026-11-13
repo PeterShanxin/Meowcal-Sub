@@ -1,6 +1,8 @@
+import { LocaleController } from "../i18n/lit-controller";
+import { t } from "../i18n";
 import { LitElement, html, nothing, svg, type TemplateResult } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { catLogo } from "./icons";
+import { brandLogo } from "./icons";
 
 // Drawn on a 12px grid so the controls stay crisp at 10px.
 const GLYPH = {
@@ -26,6 +28,10 @@ function icon(glyph: TemplateResult<2>): TemplateResult<2> {
  */
 @customElement("meowcal-titlebar")
 export class MeowcalTitlebar extends LitElement {
+  constructor() {
+    super();
+    new LocaleController(this);
+  }
   @property({ type: String }) label = "Meowcal Sub";
 
   /** Fixed-size windows hide the maximise control instead of showing a dead button. */
@@ -65,7 +71,7 @@ export class MeowcalTitlebar extends LitElement {
     return html`
       <div class="titlebar" data-tauri-drag-region>
         <div class="titlebar-identity" data-tauri-drag-region>
-          ${catLogo()}
+          ${brandLogo()}
           <span data-tauri-drag-region>${this.label}${this.development ? " - Dev" : ""}</span>
         </div>
         ${window.TauriBridge?.windowControls ? this.renderControls() : nothing}
@@ -80,7 +86,7 @@ export class MeowcalTitlebar extends LitElement {
         <button
           type="button"
           class="titlebar-button"
-          aria-label="Minimize"
+          aria-label=${t("Minimize")}
           @click=${() => this.run("minimize")}
         >
           ${icon(GLYPH.minimize)}
@@ -91,7 +97,7 @@ export class MeowcalTitlebar extends LitElement {
             : html`<button
                 type="button"
                 class="titlebar-button"
-                aria-label=${this.maximized ? "Restore" : "Maximize"}
+                aria-label=${this.maximized ? t("Restore") : t("Maximize")}
                 @click=${() => this.run("toggleMaximize")}
               >
                 ${icon(this.maximized ? GLYPH.restore : GLYPH.maximize)}
@@ -100,7 +106,7 @@ export class MeowcalTitlebar extends LitElement {
         <button
           type="button"
           class="titlebar-button titlebar-close"
-          aria-label="Close"
+          aria-label=${t("Close")}
           @click=${() => this.run("close")}
         >
           ${icon(GLYPH.close)}
