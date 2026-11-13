@@ -57,6 +57,9 @@ describe("translation coverage gate", () => {
     expect(check('html`<input aria-label=${busy ? "Wait" : "Retry"}>`')).toHaveLength(2);
   });
   it("ignores comments and checks nested templates independently", () => {
+    expect(check("html`<p>Re<!-- example -->try</p>`")).toEqual([
+      'src/ui/example.ts:1: untranslated visible text "Re try"',
+    ]);
     expect(
       check("html`<!-- untranslated example --><div>${visible ? html`<p>Retry</p>` : null}</div>`"),
     ).toHaveLength(1);

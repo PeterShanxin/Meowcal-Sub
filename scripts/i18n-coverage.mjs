@@ -142,7 +142,7 @@ export function checkSource(path, source, messages) {
         markup += expressionMarker + span.literal.text;
       }
     }
-    markup = markup.replace(/<!--[\s\S]*?-->/g, "");
+    markup = markup.replace(/<!--[\s\S]*?-->/g, (comment) => comment.replace(/[^\n]/g, " "));
     for (const match of markup.matchAll(/<[^>]*>|[^<]+/g)) {
       if (!match[0].startsWith("<")) reportRaw(match[0], node);
       else
