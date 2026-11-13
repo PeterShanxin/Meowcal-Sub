@@ -4,7 +4,7 @@
 //
 // The default output is .local/site, which Git ignores.
 
-import { access, cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { access, cp, lstat, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
@@ -14,6 +14,26 @@ import { IMAGES, IMAGE_WIDTHS, imageFile, readSub1Release, renderSite } from "./
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const { values } = parseArgs({ options: { out: { type: "string", default: ".local/site" } } });
 const outputRoot = path.resolve(repositoryRoot, values.out);
+
+// Only these generated directories belong to the build. Never clean a caller's
+// source directory or follow a junction to data outside this checkout.
+const allowedOutputs = [".local/site", "_site"].map((dir) => path.resolve(repositoryRoot, dir));
+if (!allowedOutputs.includes(outputRoot)) {
+  throw new Error("Choose a designated build output: .local/site or _site.");
+}
+for (
+  let directory = outputRoot;
+  directory !== repositoryRoot;
+  directory = path.dirname(directory)
+) {
+  const entry = await lstat(directory).catch((error) => {
+    if (error.code !== "ENOENT") throw error;
+    return null;
+  });
+  if (entry && (!entry.isDirectory() || entry.isSymbolicLink())) {
+    throw new Error(`Build output must use real directories, not links: ${directory}`);
+  }
+}
 
 const STATIC_FILES = [
   ["site/styles.css", "styles.css"],

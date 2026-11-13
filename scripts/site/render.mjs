@@ -140,7 +140,10 @@ function pageContext(product, locale, release) {
     asset: (file) => root + file,
     // "./" keeps a link to the directory itself valid when root is empty.
     page: (target, targetLocale = locale) => root + pagePath(target, targetLocale) || "./",
-    href: (target) => (target.startsWith("@") ? context.page(target.slice(1)) : target),
+    href: (target) => {
+      if (target === "@issues") return `${PRODUCTS[product].repository}/issues/new/choose`;
+      return target.startsWith("@") ? context.page(target.slice(1)) : target;
+    },
     text: (text) => escapeHtml(fill(text, values)),
     rich: (text) =>
       escapeHtml(fill(text, values))
@@ -354,7 +357,7 @@ function renderHeader(context) {
 function renderFooter(context) {
   const { footer } = CONTENT[context.locale];
   const links = footer.links
-    .map((link) => `<li><a href="${link.href}">${context.text(link.label)}</a></li>`)
+    .map((link) => `<li><a href="${context.href(link.href)}">${context.text(link.label)}</a></li>`)
     .join("");
   return `<footer class="site-footer">
 <div class="wrap">

@@ -35,6 +35,8 @@ python -m http.server 4173 --bind 127.0.0.1 --directory .local/site
 
 The build fails when a page references a file or route that the site does not
 contain. `npm run test:frontend` checks the pages themselves.
+The build replaces only `.local/site` (the default) or `_site` (with
+`--out _site`). Other output paths and symbolic links or junctions are refused.
 
 ## Keeping it current
 

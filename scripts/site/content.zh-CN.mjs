@@ -20,7 +20,7 @@ export default {
       { label: "Meowcal Sub 源码", href: SUB1_REPO },
       { label: "Meowcal Sub 2 源码", href: SUB2_REPO },
       { label: "名称与图标的使用", href: `${SUB1_REPO}/blob/main/TRADEMARKS.md` },
-      { label: "反馈问题", href: `${SUB1_REPO}/issues/new/choose` },
+      { label: "反馈问题", href: "@issues" },
     ],
   },
 
@@ -330,6 +330,7 @@ export default {
               "向你启用的字幕源搜索并下载字幕",
               "可选的 TMDb 元数据和 Google Fonts",
               "安装引擎与模型",
+              "安装版应用的更新检查与下载",
             ],
           },
         ],

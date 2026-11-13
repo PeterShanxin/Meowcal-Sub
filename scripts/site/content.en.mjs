@@ -23,7 +23,7 @@ export default {
       { label: "Meowcal Sub source", href: SUB1_REPO },
       { label: "Meowcal Sub 2 source", href: SUB2_REPO },
       { label: "Name and logo use", href: `${SUB1_REPO}/blob/main/TRADEMARKS.md` },
-      { label: "Report a problem", href: `${SUB1_REPO}/issues/new/choose` },
+      { label: "Report a problem", href: "@issues" },
     ],
   },
 
@@ -352,6 +352,7 @@ export default {
               "Subtitle search and download from the providers you enable",
               "Optional TMDb metadata and Google Fonts",
               "Engine and model installation",
+              "Application update checks and downloads for installed copies",
             ],
           },
         ],

@@ -1,4 +1,9 @@
 import { describe, expect, it } from "vitest";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import { spawnSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
 import {
   CONTENT,
   SITE_URL,
@@ -20,6 +25,23 @@ const LOCALES = Object.keys(CONTENT);
 const pages = PRODUCTS.flatMap((product) =>
   LOCALES.map((locale) => ({ product, locale, html: renderPage(product, locale, release) })),
 );
+
+it("refuses to clean a directory outside the designated build outputs", () => {
+  const directory = mkdtempSync(path.join(tmpdir(), "meowcal-site-output-test-"));
+  const sentinel = path.join(directory, "keep.txt");
+  writeFileSync(sentinel, "unrelated file");
+  try {
+    const build = fileURLToPath(new URL("../../scripts/site/build.mjs", import.meta.url));
+    const result = spawnSync(process.execPath, [build, "--out", directory], {
+      encoding: "utf8",
+    });
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain("designated build output");
+    expect(readFileSync(sentinel, "utf8")).toBe("unrelated file");
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
 
 function attributes(html, pattern) {
   return [...html.matchAll(pattern)].map((match) => match[1]);
@@ -46,6 +68,13 @@ describe("the published Sub 1 release", () => {
 
 describe.each(pages)("the $product page in $locale", ({ product, locale, html }) => {
   const url = SITE_URL + pagePath(product, locale);
+
+  it("sends support requests to this product's issue tracker", () => {
+    const repository = product === "sub1" ? "Meowcal-Sub" : "Meowcal-Sub-2";
+    expect(html).toContain(
+      `href="https://github.com/PeterShanxin/${repository}/issues/new/choose"`,
+    );
+  });
 
   it("declares its language, one heading, and its own canonical URL", () => {
     expect(html).toContain(`<html lang="${locale}"`);
