@@ -113,8 +113,8 @@ describe.each(pages)("the $product page in $locale", ({ product, locale, html })
   });
 
   it("is complete without JavaScript", () => {
-    expect(attributes(html, /<script([^>]*)>/g)).toEqual([' type="application/ld+json"']);
-    expect(html).not.toMatch(/\son[a-z]+="/);
+    expect(attributes(html, /<script\b([^>]*)>/gi)).toEqual([' type="application/ld+json"']);
+    expect(html).not.toMatch(/\son[a-z]+="/i);
   });
 
   it("links only to pages and files the site contains", () => {
