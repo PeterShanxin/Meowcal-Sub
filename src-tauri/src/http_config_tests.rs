@@ -10,6 +10,9 @@ use std::sync::{Mutex, MutexGuard, OnceLock};
 
 use super::standalone_config_path_for;
 
+#[path = "http_config_language_tests.rs"]
+mod language_tests;
+
 /// Serialises the tests that save, because provenance is process-wide.
 ///
 /// Rust runs tests in parallel by default, so a test that flips provenance and

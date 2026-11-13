@@ -61,7 +61,7 @@ test("the multi-display hint is quiet, fits a compact Home and explains session 
     };
   });
   await expect(page.locator(".display-notice")).toHaveText(
-    "检测到多个显示器，将使用当前窗口所在的屏幕。",
+    "Multiple displays detected. The screen containing this window will be used.",
   );
   await page
     .getByRole("button", { name: "Select subtitle area", exact: true })
@@ -70,7 +70,9 @@ test("the multi-display hint is quiet, fits a compact Home and explains session 
     const app = document.querySelector("meowcal-app");
     app.snapshot = { ...app.snapshot, running: true };
   });
-  await expect(page.locator(".display-notice")).toHaveText("翻译期间将保持使用已选屏幕。");
+  await expect(page.locator(".display-notice")).toHaveText(
+    "The selected screen stays in use during translation.",
+  );
 });
 
 test("browser bridge reads backend health, settings, and readiness", async ({ page, request }) => {

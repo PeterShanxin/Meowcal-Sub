@@ -968,7 +968,8 @@ describe("AppController settings persistence", () => {
     expect(snapshots.at(-1)).toMatchObject({
       busy: "idle",
       engine: { phase: "ready" },
-      notice: "Sample passed · 12 ms",
+      notice: "Sample passed{latency}",
+      noticeParameters: { latency: " · 12 ms" },
     });
   });
 });
@@ -1258,7 +1259,7 @@ describe("AppController progress messages", () => {
     await vi.advanceTimersByTimeAsync(3000);
     await running;
 
-    expect(controller.current()).toMatchObject({ busy: "idle", notice: "Sample passed" });
+    expect(controller.current()).toMatchObject({ busy: "idle", notice: "Sample passed{latency}" });
     controller.dispose();
   });
 

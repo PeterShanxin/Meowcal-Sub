@@ -1,11 +1,9 @@
-import { createRequire } from "node:module";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-const require = createRequire(import.meta.url);
-const {
-  createSessionStatus,
-  setupSessionStatus,
-} = require("../../src/scripts/overlay-session-status.js");
+import "../../src/scripts/overlay-session-status.js";
+import { setUiLanguage } from "../../src/i18n/index";
+const { createSessionStatus, setupSessionStatus } = globalThis.OverlaySessionStatus;
+afterEach(() => setUiLanguage("en"));
 const payload = (displayState, captureId = 1, warnings = [], sessionId = 1) => ({
   displayState,
   captureId,
@@ -187,7 +185,7 @@ describe("overlay session status adapter", () => {
         },
       ]),
     );
-    vi.stubGlobal("document", { getElementById: (name) => elements[name] });
+    vi.stubGlobal("document", { documentElement: {}, getElementById: (name) => elements[name] });
     vi.stubGlobal("window", {
       innerWidth: 1280,
       innerHeight: 720,
@@ -208,6 +206,9 @@ describe("overlay session status adapter", () => {
     adapter.visibility(true);
     expect(elements["overlay-session-status-text"].textContent).toBe("Preparing translation…");
     expect(elements["overlay-session-status-action"].hidden).toBe(true);
+    setUiLanguage("zh-CN");
+    expect(elements["overlay-session-status-text"].textContent).toBe("正在准备翻译…");
+    setUiLanguage("en");
     listeners.get("capture-status")({
       payload: { isError: true, message: "<script>private</script>" },
     });

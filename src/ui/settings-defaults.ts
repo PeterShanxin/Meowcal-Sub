@@ -1,3 +1,4 @@
+import { normalizePreference } from "../i18n";
 import type { AppSettings, OcrConfig } from "./contracts";
 import { ensureDistinctLanguagePair } from "./languages";
 
@@ -29,6 +30,7 @@ export const recognitionPresets = {
 } satisfies Record<string, RecognitionPreset>;
 
 export const defaultSettings: AppSettings = {
+  uiLanguage: "system",
   logging: { level: "basic" },
   sourceLanguage: "zh-CN",
   targetLanguage: "en-US",
@@ -72,6 +74,7 @@ export function mergeSettings(value: Partial<AppSettings> | null): AppSettings {
   return ensureDistinctLanguagePair({
     ...structuredClone(defaultSettings),
     ...value,
+    uiLanguage: normalizePreference(value.uiLanguage),
     autoCheckUpdates: value.autoCheckUpdates !== false,
     lastUpdateCheckTimeMs:
       typeof lastCheck === "number" && Number.isFinite(lastCheck) ? lastCheck : null,

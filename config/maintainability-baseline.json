@@ -51,17 +51,22 @@
     "src/ui/settings-writer.ts",
     "src/ui/display-controller.ts",
     "src/scripts/overlay-session-status.js",
-    "src/ui/session-status-controller.ts"
+    "src/ui/session-status-controller.ts",
+    "src/i18n/index.ts",
+    "src/i18n/runtime.ts",
+    "src/i18n/overlay-messages.ts",
+    "scripts/bilingual-docs.mjs",
+    "scripts/i18n-coverage.mjs"
   ],
   "legacyFileMaxLines": {
     "src-tauri/src/capture/graphics_capture.rs": 469,
     "src-tauri/src/commands.rs": 865,
-    "src-tauri/src/config.rs": 472,
+    "src-tauri/src/config.rs": 471,
     "src-tauri/src/llm/context.rs": 620,
     "src-tauri/src/llm/foundry_local.rs": 1557,
     "src-tauri/src/llm/manager.rs": 699,
     "src-tauri/src/llm/prompt_router.rs": 471,
-    "src/scripts/overlay.js": 1027,
-    "src/scripts/selector.js": 615
+    "src/scripts/overlay.js": 1012,
+    "src/scripts/selector.js": 604
   }
 }

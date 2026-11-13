@@ -129,12 +129,13 @@
       "timestampUrl": "",
       "nsis": {
         "installerIcon": "icons/icon.ico",
+        "uninstallerIcon": "icons/icon.ico",
         "headerImage": null,
         "sidebarImage": null,
         "installMode": "currentUser",
         "installerHooks": "./windows/hooks.nsh",
-        "languages": ["English"],
-        "displayLanguageSelector": false
+        "languages": ["English", "SimpChinese"],
+        "displayLanguageSelector": true
       }
     }
   }

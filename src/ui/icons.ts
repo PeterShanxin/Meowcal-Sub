@@ -45,26 +45,26 @@ export function icon(name: IconName, className = ""): TemplateResult {
   </svg>`;
 }
 
-/** The line-art cat, lit from above — the app's mark everywhere: titlebar, taskbar, tray, and installer. */
-export function catLogo(): TemplateResult {
+/** Layered subtitle cards, shared with the application icon. */
+export function brandLogo(): TemplateResult {
   return html`<svg
     class="logo"
     viewBox="0 0 24 24"
     fill="none"
-    stroke="url(#meowcal-logo-gradient)"
-    stroke-width="1.8"
-    stroke-linejoin="round"
     aria-hidden="true"
     focusable="false"
   >
-    <defs>
-      <linearGradient id="meowcal-logo-gradient" x1="0" y1="0" x2="0" y2="1">
-        <stop offset="0" stop-color="#eef3fb" />
-        <stop offset="1" stop-color="#9fb0c8" />
-      </linearGradient>
-    </defs>
-    <path
-      d="M4.6 10V4.2l4.3 3.3c1-.33 2-.5 3.1-.5s2.1.17 3.1.5l4.3-3.3V10c.85 1.1 1.3 2.4 1.3 3.8 0 3.9-3.8 6.7-8.7 6.7s-8.7-2.8-8.7-6.7c0-1.4.45-2.7 1.3-3.8z"
+    <rect x="7.5" y="8" width="14.5" height="11" rx="2.5" fill="#b5a4e5" opacity=".8" />
+    <rect
+      x="2"
+      y="4.5"
+      width="16"
+      height="11.5"
+      rx="2.5"
+      fill="#191b21"
+      stroke="currentColor"
+      stroke-width="1.6"
     />
+    <path d="M5.5 8.5h9M5.5 12h6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" />
   </svg>`;
 }

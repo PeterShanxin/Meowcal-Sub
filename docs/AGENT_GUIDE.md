@@ -142,7 +142,21 @@ Every pull request answers the **Documentation** section of the template: it
 names each updated document, or it states why no document is affected. Review
 treats a missing or unexplained answer like a missing validation result.
 
-- Keep `README.md` and `README.zh-CN.md` equivalent in meaning.
+- Keep `README.md` / `README.zh-CN.md` and `docs/USAGE.md` /
+  `docs/USAGE.zh-CN.md` equivalent in meaning, with reciprocal language links.
+  Update both languages in the same pull request, including installation,
+  troubleshooting, and FAQ sections. Developer and legal documents do not
+  require translations.
+- Run `npm run docs:check` for section structure, link destinations, example
+  commands, language entries, and README image availability. Review translation
+  meaning and exact UI terms separately; structural parity cannot prove them.
+- Add both language messages and matching named placeholders for every new UI
+  string. Run `npm run i18n:check`. Keep UI language separate from subtitle
+  language settings and preserve technical support codes.
+- Use **Meowcal Sub** in English and **Meowcal Sub · 妙影** in Chinese.
+  Use the canonical layered-card assets in `docs/assets/`; follow their
+  [regeneration instructions](assets/README.md). Refresh affected screenshots
+  from the real app after UI changes and identify unreleased previews.
 - User documents describe the latest published release. When `main` contains
   behavior that no release has shipped, say so where the behavior is described,
   and do not present it as generally available.
@@ -434,7 +448,8 @@ required manual gate remains outstanding.
 
 - `README.md` and `README.zh-CN.md`: current user/developer entry points with
   equivalent meaning.
-- `docs/USAGE.md`: user guide and troubleshooting for the latest release.
+- `docs/USAGE.md` and `docs/USAGE.zh-CN.md`: paired user guides, installation,
+  troubleshooting, and FAQ for the latest release, with unreleased changes marked.
 - `LICENSE`, `CLA.md`, `SECURITY.md`, and `TRADEMARKS.md`: community license
   (AGPL-3.0-only), contributor grant, vulnerability reporting, and branding.
 - `CONTRIBUTING.md`, this guide, and `docs/CODING_STANDARDS.md`: normative.

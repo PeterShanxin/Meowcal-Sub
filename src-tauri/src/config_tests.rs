@@ -1,6 +1,38 @@
 use super::*;
 
 #[test]
+fn interface_language_defaults_without_changing_subtitle_languages() {
+    use crate::ui_language::UiLanguage;
+    let mut config: AppConfig =
+        serde_json::from_str(r#"{"sourceLanguage":"ja-JP","targetLanguage":"en-US"}"#).unwrap();
+    assert_eq!(config.ui_language, UiLanguage::System);
+    config.ui_language = UiLanguage::SimplifiedChinese;
+    config.normalize();
+    let saved = serde_json::to_value(&config).unwrap();
+    assert_eq!(saved["uiLanguage"], "zh-CN");
+    let reloaded: AppConfig = serde_json::from_value(saved).unwrap();
+    assert_eq!(reloaded.ui_language, UiLanguage::SimplifiedChinese);
+    assert_eq!(reloaded.source_language, "ja-JP");
+    assert_eq!(reloaded.target_language, "en-US");
+    assert!(!reloaded.unmodelled.contains_key("uiLanguage"));
+}
+
+#[test]
+fn interface_language_accepts_only_supported_preferences() {
+    use crate::ui_language::UiLanguage;
+    for (value, expected) in [
+        ("system", UiLanguage::System),
+        ("en", UiLanguage::English),
+        ("zh-CN", UiLanguage::SimplifiedChinese),
+    ] {
+        let config: AppConfig =
+            serde_json::from_value(serde_json::json!({"uiLanguage":value})).unwrap();
+        assert_eq!(config.ui_language, expected);
+    }
+    assert!(serde_json::from_value::<AppConfig>(serde_json::json!({"uiLanguage":"fr"})).is_err());
+}
+
+#[test]
 fn test_default_config() {
     let config = AppConfig::default();
     assert_eq!(config.source_language, "en-US");

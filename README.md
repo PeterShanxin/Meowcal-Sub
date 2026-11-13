@@ -1,7 +1,3 @@
-<p align="center">
-  <img src="docs/assets/logo.png" width="96" alt="Meowcal Sub cat icon">
-</p>
-
 <h1 align="center">Meowcal Sub</h1>
 
 <p align="center">
@@ -23,8 +19,10 @@
 </p>
 
 <p align="center">
-  <img src="docs/assets/screenshot-home.png" width="640" alt="Meowcal Sub Home window, ready to translate English subtitles into Chinese (Simplified), with a Start translation button.">
+  <img src="docs/assets/hero.png" width="1200" alt="Meowcal Sub: translate on-screen subtitles locally. A real screenshot of the current development Home interface appears on the right.">
 </p>
+
+> **Development preview:** The new branding, bilingual interface, and Home shown above are not yet released. Download links below still point to v0.9.1.
 
 Draw a box around the original subtitles in your video. Meowcal Sub reads that
 area, translates the text locally, and puts the translation in a floating
@@ -64,6 +62,12 @@ SHA-256 with the release checksums; do not disable Windows security globally.
 [Installation and checksum help →](docs/USAGE.md#installation)
 
 ## Quick start
+
+**Bilingual interface, not yet released:** In **Settings → App language**, choose
+**System default**, **English**, or **简体中文**. The choice applies immediately
+and is saved independently of subtitle languages. Current development builds use
+**Select subtitle area** on Home and offer **Start with saved area**. The steps
+below use the English labels in the published download. See [App language](docs/USAGE.md#app-language).
 
 1. **Set up translation.** Open the app and complete the guided setup. Choose
    the original subtitle language and the language you want to read; let setup
@@ -130,7 +134,7 @@ from Windows publisher signing; it does not remove the installer warning above.
 
 ## More Meow tools
 
-Small tools for watching, understanding, and building. Same cats, different jobs.
+Small tools for watching, understanding, and building, each with a focused task.
 
 | Project | Choose it for |
 | --- | --- |
@@ -158,7 +162,7 @@ specific test conditions, not a universal end-to-end subtitle latency guarantee.
 
 | Document | Read it for |
 | --- | --- |
-| [User guide](docs/USAGE.md) | Settings, what the app is doing, troubleshooting, logs, and safe problem reports |
+| [User guide](docs/USAGE.md) · [Installation](docs/USAGE.md#installation) · [FAQ](docs/USAGE.md#frequently-asked-questions) · [Troubleshooting](docs/USAGE.md#when-something-does-not-look-right) | Settings, what the app is doing, troubleshooting, logs, and safe problem reports |
 | [Release notes](docs/releases/) | What each published version changed |
 | [Architecture](docs/ARCHITECTURE.md) | Data flow, subtitle queue and timing, recovery, and storage |
 | [Contributing](CONTRIBUTING.md) | Building, testing, and proposing changes |
@@ -166,9 +170,9 @@ specific test conditions, not a universal end-to-end subtitle latency guarantee.
 | [Evaluation](evals/README.md) | Validation layers and measurement method |
 | [Meowcal Core](core/README.md) | Core's API and storage contract |
 
-This README and the user guide describe the latest release, v0.9.1. The
-architecture, contributor, and evaluation documents follow the `main` branch,
-which can include changes that no release has shipped yet.
+This README and the user guide cover the latest release, v0.9.1, and explicitly
+mark unreleased features. Architecture, contributor, and evaluation documents
+follow the `main` branch.
 
 ## Help and contribute
 

@@ -21,6 +21,7 @@ pub mod app_profile;
 pub mod app_logging;
 pub mod diagnostic_artifacts;
 pub mod logging_settings;
+pub mod ui_language;
 
 /// Screen capture functionality - takes screenshots of selected areas
 pub mod capture;

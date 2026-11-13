@@ -1,3 +1,5 @@
+import { describeError } from "./error-copy";
+import { t } from "../i18n";
 /**
  * What the Settings screen shows about updates, and how a download's progress
  * events turn into a number.
@@ -79,7 +81,9 @@ export function downloadPercent(progress: DownloadProgress): number | null {
 }
 
 function installedLine(currentVersion: string | null): string {
-  return currentVersion ? `Installed version ${currentVersion}` : "Installed version unknown";
+  return currentVersion
+    ? t("Installed version {version}", { version: currentVersion })
+    : t("Installed version unknown");
 }
 
 export function deriveUpdatePresentation(
@@ -89,86 +93,89 @@ export function deriveUpdatePresentation(
   switch (status.kind) {
     case "store":
       return {
-        headline: "Microsoft Store updates",
-        detail: `${installedLine(currentVersion)}. Get updates from the Microsoft Store Library.`,
+        headline: t("Microsoft Store updates"),
+        detail: t("{installed}. Get updates from the Microsoft Store Library.", {
+          installed: installedLine(currentVersion),
+        }),
         action: "none",
-        actionLabel: "Managed by Microsoft Store",
+        actionLabel: t("Managed by Microsoft Store"),
         actionDisabled: true,
         notes: null,
       };
     case "unsupported":
       return {
-        headline: "Updates",
-        detail: "Updating is handled by the installed app, not the browser preview.",
+        headline: t("Updates"),
+        detail: t("Updating is handled by the installed app, not the browser preview."),
         action: "none",
-        actionLabel: "Unavailable here",
+        actionLabel: t("Unavailable here"),
         actionDisabled: true,
         notes: null,
       };
     case "checking":
       return {
-        headline: "Checking for updates…",
+        headline: t("Checking for updates…"),
         detail: installedLine(currentVersion),
         action: "none",
-        actionLabel: "Checking…",
+        actionLabel: t("Checking…"),
         actionDisabled: true,
         notes: null,
       };
     case "upToDate":
       return {
-        headline: "Meowcal Sub is up to date",
+        headline: t("Meowcal Sub is up to date"),
         detail: installedLine(currentVersion),
         action: "check",
-        actionLabel: "Check again",
+        actionLabel: t("Check again"),
         actionDisabled: false,
         notes: null,
       };
     case "available":
       return {
-        headline: `Version ${status.version} is available`,
-        detail:
+        headline: t("Version {version} is available", { version: status.version }),
+        detail: t(
           "Installing closes Meowcal Sub, replaces it, and reopens it. Your settings and engine stay.",
+        ),
         action: "install",
-        actionLabel: "Download and install",
+        actionLabel: t("Download and install"),
         actionDisabled: false,
         notes: status.notes,
       };
     case "downloading":
       return {
-        headline: `Downloading ${status.version}…`,
+        headline: t("Downloading {version}…", { version: status.version }),
         detail:
           status.percent === null
-            ? "Download size unknown; this may take a moment."
-            : `${status.percent}% downloaded`,
+            ? t("Download size unknown; this may take a moment.")
+            : t("{percent}% downloaded", { percent: status.percent }),
         action: "none",
-        actionLabel: "Downloading…",
+        actionLabel: t("Downloading…"),
         actionDisabled: true,
         notes: null,
       };
     case "installing":
       return {
-        headline: `Installing ${status.version}…`,
-        detail: "Meowcal Sub will close and reopen on its own.",
+        headline: t("Installing {version}…", { version: status.version }),
+        detail: t("Meowcal Sub will close and reopen on its own."),
         action: "none",
-        actionLabel: "Installing…",
+        actionLabel: t("Installing…"),
         actionDisabled: true,
         notes: null,
       };
     case "error":
       return {
-        headline: "Update check failed",
-        detail: status.message,
+        headline: t("Update check failed"),
+        detail: describeError(status.message).text,
         action: "check",
-        actionLabel: "Try again",
+        actionLabel: t("Try again"),
         actionDisabled: false,
         notes: null,
       };
     case "idle":
       return {
-        headline: "Updates",
+        headline: t("Updates"),
         detail: installedLine(currentVersion),
         action: "check",
-        actionLabel: "Check for updates",
+        actionLabel: t("Check for updates"),
         actionDisabled: false,
         notes: null,
       };

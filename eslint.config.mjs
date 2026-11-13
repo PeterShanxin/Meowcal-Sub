@@ -45,6 +45,17 @@ export default [
     },
   },
   {
+    files: [
+      "src/scripts/overlay-i18n.js",
+      "src/scripts/overlay-diagnostics.js",
+      "src/scripts/overlay-session-status.js",
+      "src/scripts/overlay-toolbar.js",
+      "src/scripts/overlay.js",
+      "src/scripts/selector.js",
+    ],
+    languageOptions: { sourceType: "module" },
+  },
+  {
     files: ["frontend-tests/**/*.{js,mjs}", "scripts/**/*.mjs", "*.config.mjs"],
     languageOptions: {
       ecmaVersion: "latest",

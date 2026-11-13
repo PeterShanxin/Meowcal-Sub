@@ -20,7 +20,11 @@ pub fn get_or_create(app: &AppHandle, label: &str) -> Result<WebviewWindow, Stri
         .find(|config| config.label == label)
         .ok_or_else(|| format!("No window named {label} in tauri.conf.json"))?;
     WebviewWindowBuilder::from_config(app, config)
-        .and_then(|builder| builder.build())
+        .and_then(|builder| {
+            builder
+                .title(crate::ui_language::current(app).window_title(label))
+                .build()
+        })
         // A second open that raced this one may have built the window first.
         .or_else(|error| {
             app.get_webview_window(label)

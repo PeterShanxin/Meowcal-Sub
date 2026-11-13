@@ -1,9 +1,14 @@
+import { t, subscribeLocale } from "../i18n/index";
+
 function setupOverlayToolbar({ frame, onInteraction, onGeometryChange }) {
   const toolbar = document.getElementById("overlay-toolbar");
   const exitButton = document.getElementById("exit-translation-button");
   const error = document.getElementById("overlay-toolbar-error");
+  exitButton.removeAttribute("data-i18n-title");
+  exitButton.title = t("overlay.exitHome");
   let exiting = false;
   let measuredSize;
+  let exitErrorKey = null;
 
   const sync = () => {
     const inactive =
@@ -53,19 +58,24 @@ function setupOverlayToolbar({ frame, onInteraction, onGeometryChange }) {
     exiting = true;
     exitButton.disabled = true;
     toolbar.setAttribute("aria-busy", "true");
-    exitButton.title = "Exiting translation…";
+    exitButton.title = t("overlay.exiting");
+    exitErrorKey = null;
     error.hidden = true;
     sync();
     try {
       await window.TauriBridge.invoke("exit_translation");
     } catch (reason) {
-      error.textContent = `Couldn’t exit translation. Try again. ${reason instanceof Error ? reason.message : String(reason)}`;
+      console.error("Failed to exit translation:", reason);
+      exitErrorKey = String(reason).includes("Capture is still stopping")
+        ? "overlay.captureStopping"
+        : "overlay.exitFailed";
+      error.textContent = t(exitErrorKey);
       error.hidden = false;
     } finally {
       exiting = false;
       exitButton.disabled = false;
       toolbar.setAttribute("aria-busy", "false");
-      exitButton.title = "Exit translation and return to Home";
+      exitButton.title = t("overlay.exitHome");
       sync();
     }
   });
@@ -80,6 +90,13 @@ function setupOverlayToolbar({ frame, onInteraction, onGeometryChange }) {
   observer.observe(frame);
   frame.addEventListener("transitionend", sync);
   window.addEventListener("resize", sync);
+  const unsubscribeLocale = subscribeLocale(() => {
+    exitButton.title = t(exiting ? "overlay.exiting" : "overlay.exitHome");
+    if (exitErrorKey) error.textContent = t(exitErrorKey);
+    measuredSize = undefined;
+    sync();
+  });
+  window.addEventListener("pagehide", unsubscribeLocale, { once: true });
   sync();
 }
 

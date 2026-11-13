@@ -1,3 +1,4 @@
+import { t } from "../i18n";
 import { html, type TemplateResult } from "lit";
 import type { OverlayConfig } from "./contracts";
 
@@ -19,23 +20,23 @@ export function renderAppearance(
     <main class="screen" aria-labelledby="appearance-title">
       <div class="page">
         <header class="page-head">
-          <h1 id="appearance-title" tabindex="-1">Subtitle style</h1>
-          <p>Changes apply to live subtitles right away.</p>
+          <h1 id="appearance-title" tabindex="-1">${t("Subtitle style")}</h1>
+          <p>${t("Changes apply to live subtitles right away.")}</p>
         </header>
 
-        <section class="subtitle-preview" aria-label="Subtitle preview">
-          <span class="preview-tag">Preview</span>
+        <section class="subtitle-preview" aria-label=${t("Subtitle preview")}>
+          <span class="preview-tag">${t("Preview")}</span>
           <span
             class=${light ? "subtitle-plate light" : "subtitle-plate"}
             style=${`font-size:${fontSize}px`}
           >
-            Let’s not talk about the clock tower for now.
+            ${t("Let’s not talk about the clock tower for now.")}
           </span>
         </section>
 
-        <section class="list" aria-label="Subtitle appearance">
+        <section class="list" aria-label=${t("Subtitle appearance")}>
           <label class="list-row">
-            <strong>Text size</strong>
+            <strong>${t("Text size")}</strong>
             <span class="slider-control">
               <input
                 class="slider"
@@ -52,21 +53,24 @@ export function renderAppearance(
             </span>
           </label>
           <div class="list-row">
-            <span><strong>Background</strong><small>Light suits bright scenes</small></span>
-            <div class="segmented" role="group" aria-label="Subtitle background">
+            <span
+              ><strong>${t("Background")}</strong
+              ><small>${t("Light suits bright scenes")}</small></span
+            >
+            <div class="segmented" role="group" aria-label=${t("Subtitle background")}>
               <button
                 type="button"
                 aria-pressed=${String(!light)}
                 @click=${() => actions.onLightBackground(false)}
               >
-                Dark
+                ${t("Dark")}
               </button>
               <button
                 type="button"
                 aria-pressed=${String(light)}
                 @click=${() => actions.onLightBackground(true)}
               >
-                Light
+                ${t("Light")}
               </button>
             </div>
           </div>

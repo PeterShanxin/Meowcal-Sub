@@ -74,6 +74,12 @@ still run on cache hits. Both Tauri build commands pass `--locked` to Cargo.
 
 ## What a release run produces
 
+NSIS installers and uninstallers offer English and Simplified Chinese and use
+the application icon. MSI remains an `en-US` package: adding a second MSI
+language would produce another artifact per architecture and requires a change
+to the release asset contract below. Installer language does not set the app's
+interface or subtitle languages.
+
 Release and preflight also call `store-package.yml` for native x64 and ARM64
 unsigned MSIX packages. Supply `store_package_name`, `store_publisher`,
 `store_publisher_display_name` and `store_package_version` at dispatch. The

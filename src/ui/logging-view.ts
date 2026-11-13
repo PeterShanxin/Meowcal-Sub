@@ -1,3 +1,4 @@
+import { t } from "../i18n";
 import { html, type TemplateResult } from "lit";
 import type { LogLevel } from "./contracts";
 
@@ -13,23 +14,23 @@ export function renderLogging(
   onChange: (level: LogLevel) => void,
 ): TemplateResult {
   return html`
-    <h2 class="group-label">Local logs</h2>
+    <h2 class="group-label">${t("Local logs")}</h2>
     <div class="list">
       <label class="list-row">
-        <span><strong>Log level</strong></span>
+        <span><strong>${t("Log level")}</strong></span>
         <select
           class="select compact"
-          aria-label="Log level"
+          aria-label=${t("Log level")}
           aria-describedby="logging-privacy"
           .value=${level}
           @change=${(event: Event) => onChange((event.target as HTMLSelectElement).value as LogLevel)}
         >
-          <option value="off">Off</option>
-          <option value="basic">Basic</option>
-          <option value="verbose">Verbose</option>
+          <option value="off">${t("Off")}</option>
+          <option value="basic">${t("Basic")}</option>
+          <option value="verbose">${t("Verbose")}</option>
         </select>
       </label>
-      <p class="logging-privacy" id="logging-privacy">${descriptions[level]}</p>
+      <p class="logging-privacy" id="logging-privacy">${t(descriptions[level])}</p>
     </div>
   `;
 }

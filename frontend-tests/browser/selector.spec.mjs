@@ -1,8 +1,8 @@
 import { expect, test } from "@playwright/test";
 
-async function openSelector(page, scale = 2, correlated = false) {
+async function openSelector(page, scale = 2, correlated = false, uiLanguage = "en") {
   await page.addInitScript(
-    ({ dpi, correlated }) => {
+    ({ dpi, correlated, uiLanguage }) => {
       const listeners = new Map();
       window.selectorTest = {
         calls: [],
@@ -21,6 +21,7 @@ async function openSelector(page, scale = 2, correlated = false) {
             if (command === "get_selector_snapshot")
               return { selectionId: 17, width: 3120, height: 2080, dataUrl: "" };
             if (command === "get_capture_region") return null;
+            if (command === "get_settings") return { uiLanguage };
             if (command === "get_area_selection_request") return window.selectorTest.request;
             if (
               ["set_capture_region", "complete_area_selection"].includes(command) &&
@@ -46,7 +47,7 @@ async function openSelector(page, scale = 2, correlated = false) {
         },
       };
     },
-    { dpi: scale, correlated },
+    { dpi: scale, correlated, uiLanguage },
   );
   await page.goto("/selector.html");
   await expect.poll(() => page.locator("body").getAttribute("tabindex")).toBe("-1");
@@ -218,4 +219,27 @@ test("selector actions fit a narrow screen", async ({ page }) => {
   for (const name of ["Confirm and start", "Redraw", "Save and exit", "Exit"]) {
     await expect(buttons.getByRole("button", { name, exact: true })).toBeVisible();
   }
+});
+
+test("Chinese selector switches copy immediately without changing the selected area", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 600, height: 500 });
+  await openSelector(page, 1, true, "zh-CN");
+  await expect(page.locator("html")).toHaveAttribute("lang", "zh-CN");
+  await expect(page.locator(".hint-draw")).toContainText("拖动框选一行字幕");
+  await page.keyboard.press("Enter");
+  await expect(page.getByRole("button", { name: "确认并开始" })).toBeFocused();
+  const before = await page.locator("#selection-box").getAttribute("style");
+  await page.evaluate(() => {
+    window.selectorTest.failure = "The display changed. Select the subtitle area again.";
+  });
+  await page.keyboard.press("Enter");
+  await expect(page.locator("#selector-error")).toHaveText("显示器已变更，请重新选择字幕区域。");
+  await page.evaluate(() => window.selectorTest.emit("ui-language-changed", "en"));
+  await expect(page.getByRole("button", { name: "Confirm and start" })).toBeFocused();
+  await expect(page.locator("#selector-error")).toHaveText(
+    "The display changed. Select the subtitle area again.",
+  );
+  await expect(page.locator("#selection-box")).toHaveAttribute("style", before);
 });

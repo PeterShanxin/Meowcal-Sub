@@ -1,3 +1,5 @@
+import { LocaleController } from "../i18n/lit-controller";
+import { t } from "../i18n";
 import { LitElement, html, nothing } from "lit";
 import { customElement, state } from "lit/decorators.js";
 import { AppController } from "./app-controller";
@@ -8,11 +10,16 @@ import { deriveHomePresentation } from "./home-state";
 import { renderHome } from "./home-view";
 import { icon } from "./icons";
 import { profiles } from "./recognition";
-import { renderAbout, renderSettings } from "./settings-view";
+import { renderSettings } from "./settings-view";
+import { renderAbout } from "./about-view";
 import "./meowcal-titlebar";
 
 @customElement("meowcal-app")
 export class MeowcalApp extends LitElement {
+  constructor() {
+    super();
+    new LocaleController(this);
+  }
   @state() private snapshot!: UiSnapshot;
   @state() private aboutOpen = false;
   private controller = new AppController((snapshot) => {
@@ -84,6 +91,7 @@ export class MeowcalApp extends LitElement {
     if (snapshot.screen === "settings") {
       if (this.aboutOpen) return renderAbout(snapshot.appVersion, () => (this.aboutOpen = false));
       return renderSettings(snapshot, {
+        onUiLanguage: (value) => void this.controller.setUiLanguage(value),
         onAbout: () => (this.aboutOpen = true),
         onLogLevel: (level) => void this.controller.setLogLevel(level),
         onRecognition: (value) => void this.controller.setRecognitionPreset(value),
@@ -127,7 +135,11 @@ export class MeowcalApp extends LitElement {
         ${icon(glyph)}<span>${label}</span>
         ${
           hasIndicator
-            ? html`<span class="nav-indicator" role="status" aria-label="Update available"></span>`
+            ? html`<span
+                class="nav-indicator"
+                role="status"
+                aria-label=${t("Update available")}
+              ></span>`
             : nothing
         }
       </button>
@@ -143,10 +155,10 @@ export class MeowcalApp extends LitElement {
       ? describeError(error)
       : {
           text: unsaved
-            ? "Changes aren’t saved. Retry to keep your settings."
+            ? t("Changes aren’t saved. Retry to keep your settings.")
             : saving
-              ? "Saving settings…"
-              : (notice ?? ""),
+              ? t("Saving settings…")
+              : t(notice ?? "", this.snapshot.noticeParameters),
           action: null,
         };
     // A notice published while work is still running describes that work.
@@ -156,16 +168,16 @@ export class MeowcalApp extends LitElement {
     return html`
       <div class=${failed ? "toast error" : "toast notice"} role=${failed ? "alert" : "status"}>
         ${glyph}
-        <span class="toast-message">${message.text}</span>
+        <span class="toast-message">${t(message.text)}</span>
         ${
           unsaved
             ? html`<button
                 type="button"
                 class="secondary-button"
-                title=${settingsSave.kind === "error" ? settingsSave.message : nothing}
+                title=${settingsSave.kind === "error" ? describeError(settingsSave.message).text : nothing}
                 @click=${() => void this.controller.saveSettings()}
               >
-                Retry save
+                ${t("Retry save")}
               </button>`
             : nothing
         }
@@ -176,7 +188,7 @@ export class MeowcalApp extends LitElement {
                 class="link-button"
                 @click=${() => this.runMessageAction(message.action!.kind)}
               >
-                ${message.action.label}
+                ${t(message.action.label)}
               </button>`
             : nothing
         }
@@ -185,7 +197,7 @@ export class MeowcalApp extends LitElement {
             ? html`<button
                 type="button"
                 class="toast-dismiss"
-                aria-label="Dismiss"
+                aria-label=${t("Dismiss")}
                 @click=${() => this.controller.dismissMessage()}
               >
                 ${icon("close")}
@@ -200,13 +212,13 @@ export class MeowcalApp extends LitElement {
     if (!this.snapshot) return nothing;
     return html`
       <div class="app-frame">
-        <meowcal-titlebar label="Meowcal Sub"></meowcal-titlebar>
+        <meowcal-titlebar label=${t("Meowcal Sub")}></meowcal-titlebar>
         ${this.renderScreen()}
 
-        <nav class="app-nav" aria-label="Main navigation">
-          ${this.navButton("home", "Home", "home")}
-          ${this.navButton("appearance", "Subtitle style", "subtitles")}
-          ${this.navButton("settings", "Settings", "gear", this.snapshot.update.kind === "available")}
+        <nav class="app-nav" aria-label=${t("Main navigation")}>
+          ${this.navButton("home", t("Home"), "home")}
+          ${this.navButton("appearance", t("Subtitle style"), "subtitles")}
+          ${this.navButton("settings", t("Settings"), "gear", this.snapshot.update.kind === "available")}
         </nav>
 
         ${this.renderMessage()}

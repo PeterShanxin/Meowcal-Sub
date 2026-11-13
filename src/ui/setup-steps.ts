@@ -1,3 +1,5 @@
+import { describeError } from "./error-copy";
+import { t } from "../i18n";
 import { html, nothing, type TemplateResult } from "lit";
 import type { AppSettings } from "./contracts";
 import { icon } from "./icons";
@@ -48,13 +50,15 @@ function heading(title: string, lead: string): TemplateResult {
 
 function errorNote(view: SetupView): TemplateResult | typeof nothing {
   return view.error
-    ? html`<div class="error-box" role="alert">${icon("alert")}<span>${view.error}</span></div>`
+    ? html`<div class="error-box" role="alert">
+        ${icon("alert")}<span>${describeError(view.error).text}</span>
+      </div>`
     : nothing;
 }
 
 function welcome(view: SetupView): TemplateResult {
   return html`<section class="wizard-content">
-    <h1 tabindex="-1">Welcome to Meowcal Sub</h1>
+    <h1 tabindex="-1">${t("Welcome to Meowcal Sub")}</h1>
     <div class="wizard-body">${errorNote(view)}</div>
   </section>`;
 }
@@ -62,11 +66,11 @@ function welcome(view: SetupView): TemplateResult {
 function modelTerms(view: SetupView, actions: SetupActions): TemplateResult {
   if (!view.settings) {
     return html`<section class="wizard-content">
-      <p class="wizard-loading">Loading settings…</p>
+      <p class="wizard-loading">${t("Loading settings…")}</p>
     </section>`;
   }
   return html`<section class="wizard-content">
-    ${heading("Set up the translation model", "Review the model terms before downloading.")}
+    ${heading(t("Set up the translation model"), t("Review the model terms before downloading."))}
     <div class="wizard-body">
       <label class="model-consent">
         <input
@@ -75,7 +79,7 @@ function modelTerms(view: SetupView, actions: SetupActions): TemplateResult {
           @change=${(event: Event) =>
             actions.acceptModelTerms((event.target as HTMLInputElement).checked)}
         />
-        <span>I agree to the model license and usage terms.</span>
+        <span>${t("I agree to the model license and usage terms.")}</span>
       </label>
       <div class="model-disclosure">${renderProvider()} ${renderModelLicense()}</div>
       ${errorNote(view)}
@@ -86,7 +90,7 @@ function modelTerms(view: SetupView, actions: SetupActions): TemplateResult {
 function preparation(view: SetupView, actions: SetupActions): TemplateResult {
   const failed = Boolean(view.error) && !view.working;
   return html`<section class="wizard-content">
-    <h1 tabindex="-1">Setting up the app</h1>
+    <h1 tabindex="-1">${t("Setting up the app")}</h1>
     <div class="wizard-body">
       ${
         failed
@@ -98,13 +102,13 @@ function preparation(view: SetupView, actions: SetupActions): TemplateResult {
       ${
         failed
           ? html`<div class="error-box" role="alert">
-              ${icon("alert")}<span>${view.error}</span>
+              ${icon("alert")}<span>${describeError(view.error ?? "").text}</span>
               <div class="error-actions">
                 <button class="primary-button compact" type="button" @click=${actions.prepare}>
-                  ${icon("redo")}Try again
+                  ${icon("redo")}${t("Try again")}
                 </button>
                 <button class="secondary-button" type="button" @click=${actions.copyDetails}>
-                  ${icon(view.copyState === "copied" ? "check" : "copy")}${copyLabels[view.copyState]}
+                  ${icon(view.copyState === "copied" ? "check" : "copy")}${t(copyLabels[view.copyState])}
                 </button>
                 ${view.supportCode ? html`<span class="support-code">${view.supportCode}</span>` : nothing}
               </div>
@@ -121,12 +125,12 @@ function finish(view: SetupView): TemplateResult {
     ${icon("check-circle", "finish-mark")}
     ${
       view.existingEngine
-        ? html`<h1 tabindex="-1">Existing setup detected</h1>`
+        ? html`<h1 tabindex="-1">${t("Existing setup detected")}</h1>`
         : heading(
-            "Ready to watch",
+            t("Ready to watch"),
             latency
-              ? `A sample translation ran on this PC in ${latency} ms.`
-              : "A sample translation ran on this PC.",
+              ? t("A sample translation ran on this PC in {latency} ms.", { latency })
+              : t("A sample translation ran on this PC."),
           )
     }
     <div class="wizard-body">
@@ -154,9 +158,11 @@ export function renderStep(view: SetupView, actions: SetupActions): TemplateResu
 function quietAction(view: SetupView, actions: SetupActions): TemplateResult {
   if (view.step === 4) return html`<span></span>`;
   if (view.step === 2) {
-    return html`<button class="quiet-button" type="button" @click=${actions.back}>Back</button>`;
+    return html`<button class="quiet-button" type="button" @click=${actions.back}>
+      ${t("Back")}
+    </button>`;
   }
-  const label = view.step === 3 && !view.working ? "Cancel setup" : "Cancel";
+  const label = view.step === 3 && !view.working ? t("Cancel setup") : t("Cancel");
   return html`<button
     class="quiet-button"
     type="button"
@@ -175,7 +181,7 @@ function primaryAction(view: SetupView, actions: SetupActions): TemplateResult {
       ?disabled=${view.loading}
       @click=${view.settings ? actions.next : actions.retryLoad}
     >
-      ${view.loading ? "Checking this PC…" : view.settings ? "Continue" : "Try again"}
+      ${view.loading ? t("Checking this PC…") : view.settings ? t("Continue") : t("Try again")}
       ${icon(view.loading ? "spinner" : view.settings ? "arrow-right" : "redo", view.loading ? "spin" : "")}
     </button>`;
   }
@@ -186,29 +192,32 @@ function primaryAction(view: SetupView, actions: SetupActions): TemplateResult {
       @click=${actions.prepare}
       ?disabled=${!view.settings || !view.modelTermsAccepted}
     >
-      Set up ${icon("arrow-right")}
+      ${t("Set up")} ${icon("arrow-right")}
     </button>`;
   }
   if (view.step === 3) {
     return view.working
       ? html`<button class="primary-button compact" type="button" disabled>
-          ${icon("spinner", "spin")}Setting up…
+          ${icon("spinner", "spin")}${t("Setting up…")}
         </button>`
       : html`<span></span>`;
   }
   return html`<button class="primary-button compact" type="button" @click=${actions.close}>
-    Open app ${icon("arrow-right")}
+    ${t("Open app")} ${icon("arrow-right")}
   </button>`;
 }
 
 export function renderFooter(view: SetupView, actions: SetupActions): TemplateResult {
-  return html`<footer class="wizard-footer" aria-label=${`Step ${view.step} of 4`}>
+  return html`<footer
+    class="wizard-footer"
+    aria-label=${t("Step {step} of 4", { step: view.step })}
+  >
     ${quietAction(view, actions)}
     ${
       view.existingEngine
         ? nothing
         : html`<div class="step-indicator">
-            <span>Step ${view.step} of 4</span>
+            <span>${t("Step {step} of 4", { step: view.step })}</span>
             <span class="step-dots" aria-hidden="true">
               ${[1, 2, 3, 4].map(
                 (value) =>

@@ -1,3 +1,5 @@
+import { t, subscribeLocale } from "../i18n/index";
+
 // Wait for Tauri to be ready
 document.addEventListener('DOMContentLoaded', () => {
     console.log('🎬 Overlay loaded!');
@@ -7,6 +9,7 @@ document.addEventListener('DOMContentLoaded', () => {
 const { getTranslationPresentation } = window.TranslationDisplay;
 const { setupSessionStatus } = window.OverlaySessionStatus;
 let sessionStatus;
+let lastDiagnostics = null;
 const { appendClipSurface } = window.OverlayWindowClip;
 const { resolveSubtitleSurface } = window.OverlaySubtitleSurface;
 const { setupSettingsMenu } = window.OverlaySettingsMenu;
@@ -33,9 +36,7 @@ const CLICK_THROUGH_POLL_MS = 150;
 const CLICK_THROUGH_STALL_MS = 2000;
 const FRAME_FADE_DELAY_MS = 4000;
 
-// =============================================================================
 // GLOBAL STATE
-// =============================================================================
 
 const overlayState = {
     region: null,           // { x, y, width, height }
@@ -77,9 +78,7 @@ function syncFrameScaleTokens(scaleFactor) {
     document.documentElement.style.setProperty('--frame-radius', `${radiusCss}px`);
 }
 
-// =============================================================================
 // INTERACTION MANAGEMENT (Smart click-through)
-// =============================================================================
 
 function setOverlayActive(active) {
     overlayState.isOverlayActive = active;
@@ -234,9 +233,7 @@ function stopClickThroughMonitor() {
     overlayTimers.cancel(CLICK_THROUGH_TIMER);
 }
 
-// =============================================================================
 // CAPTURE FRAME FADE MANAGEMENT
-// =============================================================================
 
 function scheduleFadeOut() {
     overlayTimers.cancel(FRAME_FADE_TIMER);
@@ -266,9 +263,7 @@ function showCaptureFrame() {
     }
 }
 
-// =============================================================================
 // INITIALIZATION
-// =============================================================================
 
 async function initOverlay() {
     console.log('🔧 Initializing overlay...');
@@ -299,7 +294,7 @@ async function initOverlay() {
     const settingsButton = document.getElementById('settings-button');
     const settingsMenu = document.getElementById('settings-menu');
 
-    if (debugStatus) debugStatus.textContent = 'Status: setting up...';
+    if (debugStatus) { debugStatus.dataset.i18n = 'overlay.settingUp'; debugStatus.textContent = t('overlay.settingUp'); }
 
     await refreshScaleFactor();
 
@@ -331,19 +326,23 @@ async function initOverlay() {
             updateCaptureFrame(captureFrame, region);
             updateSubtitlePosition(subtitleContainer, region);
             if (debugRegion) {
-                debugRegion.textContent = `Region: (${region.x}, ${region.y}) ${region.width}x${region.height}`;
+                debugRegion.removeAttribute('data-i18n');
+                debugRegion.textContent = t('overlay.region', region);
             }
         }
     } catch (e) {
         console.error('Failed to get initial region:', e);
     }
 
-    if (debugStatus) debugStatus.textContent = 'Status: ready';
+    if (debugStatus) { debugStatus.dataset.i18n = 'overlay.ready'; debugStatus.textContent = t('overlay.ready'); }
+    const unsubscribeLocale = subscribeLocale(() => {
+        if (debugRegion && overlayState.region) debugRegion.textContent = t('overlay.region', overlayState.region);
+        if (debugStatus && lastDiagnostics) debugStatus.textContent = buildDiagnosticsText(lastDiagnostics);
+    });
+    window.addEventListener('pagehide', unsubscribeLocale, { once: true });
 }
 
-// =============================================================================
 // HOVER DETECTION - Controls click-through and fade
-// =============================================================================
 
 function setupHoverDetection(captureFrame, subtitleContainer) {
     // Track when user is hovering over interactive elements
@@ -381,9 +380,7 @@ function setupHoverDetection(captureFrame, subtitleContainer) {
     // 3. This ensures clean enter/leave detection without false triggers
 }
 
-// =============================================================================
 // RESIZE HANDLES
-// =============================================================================
 
 function setupResizeHandles(captureFrame) {
     if (!captureFrame) return;
@@ -456,9 +453,7 @@ async function handleResizeEnd() {
     scheduleFadeOut();
 }
 
-// =============================================================================
 // DRAG TO REPOSITION
-// =============================================================================
 
 function setupDragToReposition(captureFrame) {
     if (!captureFrame) return;
@@ -515,9 +510,7 @@ async function handleDragEnd() {
     scheduleFadeOut();
 }
 
-// =============================================================================
 // SAVE REGION TO BACKEND
-// =============================================================================
 
 async function saveRegionToBackend() {
     if (!overlayState.region) return;
@@ -536,9 +529,7 @@ async function saveRegionToBackend() {
     }
 }
 
-// =============================================================================
 // EVENT LISTENERS
-// =============================================================================
 
 async function setupEventListeners(elements) {
     const {
@@ -596,11 +587,13 @@ async function setupEventListeners(elements) {
                 }
             });
             if (debugStatus) {
-                debugStatus.textContent = buildDiagnosticsText({
+                debugStatus.removeAttribute('data-i18n');
+                lastDiagnostics = {
                     state: presentation.state, backendUsed, warnings,
                     modelMs: event.payload.modelMs, totalMs: event.payload.totalMs,
                     source: original, now: new Date(timestamp).toLocaleTimeString(),
-                });
+                };
+                debugStatus.textContent = buildDiagnosticsText(lastDiagnostics);
             }
         });
 
@@ -714,9 +707,7 @@ async function setupEventListeners(elements) {
     }
 }
 
-// =============================================================================
 // UPDATE FUNCTIONS
-// =============================================================================
 
 function updateCaptureFrame(frame, region) {
     if (!region || !frame) return;
@@ -770,8 +761,8 @@ function applyRegionToOverlay(region) {
 
     const debugRegion = document.getElementById('debug-region');
     if (debugRegion) {
-        debugRegion.textContent =
-            `Region: (${region.x}, ${region.y}) ${region.width}x${region.height}`;
+        debugRegion.removeAttribute('data-i18n');
+        debugRegion.textContent = t('overlay.region', region);
     }
 }
 
@@ -799,9 +790,7 @@ function updateSubtitleText(textElement, newText, container) {
     setSubtitleContainerVisible(container, true);
 }
 
-// =============================================================================
 // WINDOW REGION CLIPPING (Windows transparency workaround)
-// =============================================================================
 
 // Restrict the overlay to visible UI so WebView2 opacity regressions cannot cover the screen.
 let clipUpdateLoopRunning = false;
@@ -909,9 +898,7 @@ async function runWindowClipUpdateLoop() {
     }
 }
 
-// =============================================================================
 // SETTINGS FUNCTIONS
-// =============================================================================
 
 async function loadOverlaySettings() {
     try {
@@ -1018,9 +1005,7 @@ function setupSettingsButton(button, menu, subtitleText, subtitleContainer) {
     });
 }
 
-// =============================================================================
 // EXPORTS
-// =============================================================================
 
 window.OverlayController = {
     state: overlayState,

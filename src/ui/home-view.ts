@@ -1,3 +1,4 @@
+import { t } from "../i18n";
 import { html, nothing, type TemplateResult } from "lit";
 import type { HomePresentation, UiSnapshot } from "./contracts";
 import { icon } from "./icons";
@@ -31,7 +32,7 @@ function languageSelect(
         ${languages.map(
           (language) => html`
             <option value=${language.value} ?selected=${language.value === value}>
-              ${language.label}
+              ${t(language.label)}
             </option>
           `,
         )}
@@ -71,19 +72,19 @@ export function renderHome(
           }
         </div>
 
-        <section class="session-panel" aria-label="Subtitle session">
+        <section class="session-panel" aria-label=${t("Subtitle session")}>
           <div class="language-pair">
             ${languageSelect(
-              "Original subtitles",
-              "Original subtitle language",
+              t("Original subtitles"),
+              t("Original subtitle language"),
               snapshot.settings.sourceLanguage,
               locked,
               actions.onSource,
             )}
             ${icon("arrow-right", "language-arrow")}
             ${languageSelect(
-              "Translate into",
-              "Translation language",
+              t("Translate into"),
+              t("Translation language"),
               snapshot.settings.targetLanguage,
               locked,
               actions.onTarget,
@@ -100,7 +101,7 @@ export function renderHome(
             ${icon(presentation.actionIcon, busy ? "spin" : "")}
             <span>${presentation.actionLabel}</span>
           </button>
-          ${hasSavedArea ? html`<button class="primary-button home-saved-action" type="button" @click=${actions.onStartSaved} ?disabled=${presentation.actionDisabled}>${icon("play")}<span>Start with saved area</span></button>` : nothing}
+          ${hasSavedArea ? html`<button class="primary-button home-saved-action" type="button" @click=${actions.onStartSaved} ?disabled=${presentation.actionDisabled}>${icon("play")}<span>${t("Start with saved area")}</span></button>` : nothing}
         </div>
         ${
           presentation.supportLine || presentation.supportCode
@@ -114,7 +115,7 @@ export function renderHome(
               </p>`
             : nothing
         }
-        ${snapshot.multipleDisplays ? html`<p class="display-notice" lang="zh-CN" role="status">${snapshot.running ? "翻译期间将保持使用已选屏幕。" : "检测到多个显示器，将使用当前窗口所在的屏幕。"}</p>` : nothing}
+        ${snapshot.multipleDisplays ? html`<p class="display-notice" role="status">${snapshot.running ? t("The selected screen stays in use during translation.") : t("Multiple displays detected. The screen containing this window will be used.")}</p>` : nothing}
       </div>
     </main>
   `;

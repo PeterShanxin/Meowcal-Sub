@@ -24,6 +24,7 @@ pub async fn current(state: &AppState) -> Result<AppConfig, String> {
 /// Apply submitted settings to the running app and persist them.
 pub async fn save(app: AppHandle, state: &AppState, settings: AppConfig) -> Result<(), String> {
     state.startup_gate.wait_until_ready().await?;
+    let _save = state.settings_save.lock().await;
     info!("Saving settings...");
 
     // Through the same path the window events use, rather than reading the
@@ -66,6 +67,30 @@ pub async fn save(app: AppHandle, state: &AppState, settings: AppConfig) -> Resu
     crate::core_client::select_cpu_only(updated.translation.foundry_local.cpu_only)
 }
 
+/// A locale edit changes only its own field. Whole-settings snapshots from
+/// another window may predate the edit and must not overwrite it.
+pub async fn save_language(
+    app: AppHandle,
+    state: &AppState,
+    language: crate::ui_language::UiLanguage,
+) -> Result<(), String> {
+    state.startup_gate.wait_until_ready().await?;
+    let _save = state.settings_save.lock().await;
+    let app_handle = app.clone();
+    let updated = async_runtime::spawn_blocking(move || {
+        let state = app_handle.state::<AppState>();
+        crate::config_save::update_live(
+            &state.config,
+            |config| config.ui_language = language,
+            |config| save_config(&app_handle, config),
+        )
+    })
+    .await
+    .map_err(|error| format!("Failed to run language save: {error}"))??;
+    crate::ui_language::apply(&app, updated.ui_language);
+    Ok(())
+}
+
 /// Fold app-owned state back into the settings the UI submitted.
 ///
 /// `window_preferences` is `None` when there is no main window to measure, in
@@ -77,6 +102,7 @@ fn merge_app_owned_state(
     live: &AppConfig,
 ) -> AppConfig {
     let mut updated = submitted;
+    updated.ui_language = live.ui_language;
 
     updated.last_capture_region = selection.map(|s| s.region);
     updated.last_capture_scale_factor = selection.map(|s| s.monitor.scale_factor);

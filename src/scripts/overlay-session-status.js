@@ -1,3 +1,5 @@
+import { t, subscribeLocale } from "../i18n/index";
+
 /* global module */
 
 (function exposeOverlaySessionStatus(root, factory) {
@@ -63,10 +65,10 @@
       view() {
         if (!visible) return null;
         if (captureFailed || sessionInterrupted)
-          return { text: "Translation is interrupted.", error: true };
-        if (engineFailed) return { text: "Translation engine stopped.", error: true };
-        if (waiting) return { text: "Waiting for subtitles…", error: false };
-        if (preparing) return { text: "Preparing translation…", error: false };
+          return { text: t("overlay.interrupted"), error: true };
+        if (engineFailed) return { text: t("overlay.engineStopped"), error: true };
+        if (waiting) return { text: t("overlay.waiting"), error: false };
+        if (preparing) return { text: t("overlay.preparing"), error: false };
         return null;
       },
     };
@@ -156,6 +158,8 @@
     geometry.observe(document.getElementById("overlay-toolbar"));
     geometry.observe(document.getElementById("subtitle-container"));
     window.addEventListener("resize", position);
+    const unsubscribeLocale = subscribeLocale(render);
+    window.addEventListener("pagehide", unsubscribeLocale, { once: true });
     render();
     return {
       reposition: position,

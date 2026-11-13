@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Translation controls</title>
+    <title data-i18n="overlay.controls">Translation controls</title>
     <link rel="stylesheet" href="styles/tokens.css">
     <link rel="stylesheet" href="styles/controls.css">
     <link rel="stylesheet" href="styles/overlay.css">
@@ -37,16 +37,16 @@
         <div class="resize-handle" data-position="se"></div>
     </div>
 
-    <div id="overlay-toolbar" class="overlay-toolbar" role="group" aria-label="Translation controls" hidden>
+    <div id="overlay-toolbar" class="overlay-toolbar" role="group" aria-label="Translation controls" data-i18n-aria-label="overlay.controls" hidden>
         <div class="overlay-toolbar-actions">
-            <button id="settings-button" class="overlay-tool-button" type="button" title="Subtitle style" aria-label="Subtitle style" aria-expanded="false" aria-controls="settings-menu" aria-haspopup="dialog">
+            <button id="settings-button" class="overlay-tool-button" type="button" title="Subtitle style" data-i18n-title="overlay.style" aria-label="Subtitle style" data-i18n-aria-label="overlay.style" aria-expanded="false" aria-controls="settings-menu" aria-haspopup="dialog">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                     <circle cx="12" cy="12" r="3"/>
                     <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
                 </svg>
             </button>
             <span class="overlay-toolbar-divider" aria-hidden="true"></span>
-            <button id="exit-translation-button" class="overlay-tool-button overlay-exit-button" type="button" title="Exit translation and return to Home" aria-label="Exit translation">
+            <button id="exit-translation-button" class="overlay-tool-button overlay-exit-button" type="button" title="Exit translation and return to Home" data-i18n-title="overlay.exitHome" aria-label="Exit translation" data-i18n-aria-label="overlay.exit">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                     <path d="m16 17 5-5-5-5M21 12H9M9 5H5a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h4"/>
                 </svg>
@@ -62,38 +62,38 @@
 
     <div id="overlay-session-status" class="overlay-session-status" role="status" aria-live="polite" hidden>
         <span id="overlay-session-status-text"></span>
-        <button id="overlay-session-status-action" type="button" hidden>Exit to Home</button>
+        <button id="overlay-session-status-action" type="button" hidden data-i18n="overlay.home">Exit to Home</button>
     </div>
 
     <!-- Quick subtitle style popup -->
-    <div id="settings-menu" class="settings-menu hidden" role="dialog" aria-label="Subtitle style">
+    <div id="settings-menu" class="settings-menu hidden" role="dialog" aria-label="Subtitle style" data-i18n-aria-label="overlay.style">
         <div class="settings-menu-title">
-            <span>Subtitle style</span>
-            <button id="settings-close" class="settings-close" type="button" aria-label="Close subtitle style">
+            <span data-i18n="overlay.style">Subtitle style</span>
+            <button id="settings-close" class="settings-close" type="button" aria-label="Close subtitle style" data-i18n-aria-label="overlay.closeStyle">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
             </button>
         </div>
         <div class="settings-item">
             <div class="settings-label-row">
-                <label for="font-size-slider">Text size</label>
+                <label for="font-size-slider" data-i18n="overlay.textSize">Text size</label>
                 <span id="font-size-display" class="settings-value"></span>
             </div>
             <input type="range" id="font-size-slider" class="slider" step="1">
         </div>
         <div class="settings-item">
-            <span id="plate-label" class="settings-label">Background</span>
+            <span id="plate-label" class="settings-label" data-i18n="overlay.background">Background</span>
             <div class="plate-choice" role="radiogroup" aria-labelledby="plate-label">
-                <label><input type="radio" name="subtitle-plate" value="dark"><span>Dark</span></label>
-                <label><input type="radio" name="subtitle-plate" value="light"><span>Light</span></label>
+                <label><input type="radio" name="subtitle-plate" value="dark"><span data-i18n="overlay.dark">Dark</span></label>
+                <label><input type="radio" name="subtitle-plate" value="light"><span data-i18n="overlay.light">Light</span></label>
             </div>
         </div>
     </div>
 
     <!-- Diagnostics panel (bottom-right, turned on from Developer options) -->
     <div id="debug-info" class="debug-info hidden">
-        <span>OVERLAY LOADED</span>
-        <span id="debug-region">Region: waiting...</span>
-        <span id="debug-status">Status: initializing...</span>
+        <span data-i18n="overlay.loaded">OVERLAY LOADED</span>
+        <span id="debug-region" data-i18n="overlay.regionWaiting">Region: waiting...</span>
+        <span id="debug-status" data-i18n="overlay.initializing">Status: initializing...</span>
     </div>
 
     <script type="module" src="./entries/overlay.ts"></script>

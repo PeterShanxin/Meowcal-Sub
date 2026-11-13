@@ -26,6 +26,43 @@ fn registered() -> AppConfig {
 }
 
 #[test]
+fn interface_language_survives_durable_save_and_backup() {
+    use crate::ui_language::UiLanguage;
+    let dir = temp_dir("ui-language");
+    let path = dir.join("config.json");
+    let config = AppConfig {
+        ui_language: UiLanguage::SimplifiedChinese,
+        source_language: "ja-JP".into(),
+        target_language: "en-US".into(),
+        ..AppConfig::default()
+    };
+    save_to(&path, &config, Provenance::Authoritative).unwrap();
+    let LoadOutcome::Loaded(saved) = read_from(&path) else {
+        panic!("saved config should load");
+    };
+    assert_eq!(saved.ui_language, UiLanguage::SimplifiedChinese);
+    let LoadOutcome::Loaded(backup) = read_from(&backup_path(&path)) else {
+        panic!("backup should retain the selected language");
+    };
+    assert_eq!(backup.ui_language, UiLanguage::SimplifiedChinese);
+    assert_eq!(backup.source_language, "ja-JP");
+    assert_eq!(backup.target_language, "en-US");
+}
+
+#[test]
+fn failed_save_does_not_publish_an_interface_language_change() {
+    use crate::ui_language::UiLanguage;
+    let live = std::sync::Mutex::new(AppConfig::default());
+    let result = update_live(
+        &live,
+        |config| config.ui_language = UiLanguage::SimplifiedChinese,
+        |_| Err("disk unavailable".into()),
+    );
+    assert!(result.is_err());
+    assert_eq!(live.lock().unwrap().ui_language, UiLanguage::System);
+}
+
+#[test]
 fn saving_keeps_the_backup_current() {
     let dir = temp_dir("backup-current");
     let path = dir.join("config.json");
