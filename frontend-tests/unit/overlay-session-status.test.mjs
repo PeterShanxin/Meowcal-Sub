@@ -185,7 +185,11 @@ describe("overlay session status adapter", () => {
         },
       ]),
     );
-    vi.stubGlobal("document", { documentElement: {}, getElementById: (name) => elements[name] });
+    vi.stubGlobal("document", {
+      documentElement: {},
+      querySelector: () => null,
+      getElementById: (name) => elements[name],
+    });
     vi.stubGlobal("window", {
       innerWidth: 1280,
       innerHeight: 720,
