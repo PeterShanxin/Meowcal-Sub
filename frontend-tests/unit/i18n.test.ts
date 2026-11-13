@@ -59,13 +59,16 @@ it("uses English for unsupported or absent system languages and migrates old pre
 });
 
 it("switches subscribers, document metadata and interpolated copy without mutating parameters", () => {
-  const document = { documentElement: { lang: "" }, title: "" };
+  const document = { documentElement: { lang: "" }, title: "", querySelector: () => null };
   vi.stubGlobal("document", document);
   const changed = vi.fn();
   const stop = subscribeLocale(changed);
   setUiLanguage("zh-CN");
   expect(getLocale()).toBe("zh-CN");
-  expect(document).toEqual({ documentElement: { lang: "zh-CN" }, title: "Meowcal Sub · 妙影" });
+  expect(document).toMatchObject({
+    documentElement: { lang: "zh-CN" },
+    title: "Meowcal Sub · 妙影",
+  });
   expect(t("Version {version} is available", { version: "<b>2.0</b>" })).toBe(
     "有新版本 <b>2.0</b>",
   );
@@ -77,6 +80,19 @@ it("switches subscribers, document metadata and interpolated copy without mutati
   setUiLanguage("en");
   expect(changed).toHaveBeenCalledTimes(1);
   expect(document.title).toBe("Meowcal Sub");
+});
+
+it("preserves each surface's translated document title across language changes", () => {
+  const document = {
+    documentElement: { lang: "" },
+    title: "",
+    querySelector: () => ({ dataset: { i18n: "Set up Meowcal Sub" } }),
+  };
+  vi.stubGlobal("document", document);
+  setUiLanguage("zh-CN");
+  expect(document.title).toBe("设置 Meowcal Sub · 妙影");
+  setUiLanguage("en");
+  expect(document.title).toBe("Set up Meowcal Sub");
 });
 
 it("translates update progress and errors without losing support details", () => {

@@ -235,6 +235,7 @@
   "Engine status changed. Try again.": "引擎状态已变化，请重试。",
   "The local translation engine is not ready yet.": "本地翻译引擎尚未就绪，请稍后重试。",
   "Unknown": "未知",
+  "Set up Meowcal Sub": "设置 Meowcal Sub · 妙影",
   "Text recognition is not responding. Return to Home and restart translation.": "文字识别没有响应，请返回首页并重新开始翻译。",
   "Text recognition could not start. Try the Compatibility profile in Settings. Technical details: {details}": "文字识别无法启动，请在设置中尝试兼容模式。技术详情：{details}",
   "Browser preview": "浏览器预览",

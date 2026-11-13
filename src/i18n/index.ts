@@ -64,7 +64,8 @@ export function setUiLanguage(value: UiLanguage, languages = systemLanguages): v
   locale = next;
   if (typeof document !== "undefined") {
     document.documentElement.lang = locale;
-    document.title = t("Meowcal Sub");
+    const titleKey = document.querySelector<HTMLTitleElement>("title[data-i18n]")?.dataset.i18n;
+    document.title = t(titleKey ?? "Meowcal Sub");
   }
   if (changed) listeners.forEach((listener) => listener());
 }

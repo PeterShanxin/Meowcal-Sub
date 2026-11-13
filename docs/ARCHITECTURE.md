@@ -211,6 +211,10 @@ Ordinary `save_settings` calls preserve the live language preference, so a stale
 setup or overlay snapshot cannot undo a newer language choice. Failed writes
 do not publish a saved preference.
 
+`SettingsWriter` queues settings and language edits separately. Only explicit
+Retry repeats unrelated failed writes; their unsaved errors remain visible
+after another field saves successfully.
+
 `src/i18n/index.ts` owns locale resolution, named-parameter formatting, and
 subscriptions. `en-zh.json` pairs English source messages with Chinese text;
 `overlay-messages.ts` supplies namespaced selector and overlay messages.

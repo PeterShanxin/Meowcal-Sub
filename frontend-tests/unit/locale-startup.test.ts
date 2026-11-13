@@ -41,6 +41,7 @@ it("localizes the browser badge created after initialization and on live switche
   let attached = false;
   vi.stubGlobal("document", {
     documentElement: { lang: "en" },
+    querySelector: () => null,
     title: "",
     getElementById: () => (attached ? indicator : null),
   });
