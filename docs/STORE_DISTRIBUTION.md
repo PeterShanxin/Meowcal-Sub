@@ -9,6 +9,9 @@ Store publication still requires a reserved application identity and certificati
 Post-publication [editorial corrections](RELEASE_NOTES.md#editorial-corrections-after-publication)
 to GitHub notes do not update a Store submission.
 
+Maintain Store descriptions and localized screenshots through the
+[listing sources and publication instructions](store-listing/README.md).
+
 ## Build
 
 Use the repository's Windows Rust/Node prerequisites and Windows SDK MakeAppx.

@@ -1,0 +1,19 @@
+{
+  "appVersion": "0.10.0",
+  "viewport": [
+    1280,
+    720
+  ],
+  "scale": 2,
+  "appViewport": [
+    680,
+    500
+  ],
+  "languages": [
+    "en",
+    "zh-CN"
+  ],
+  "source": "The sea is quiet. We still have time.",
+  "translation": "海面很平静，我们还有时间。",
+  "method": "Actual frontend with deterministic sample state; original demonstration film background."
+}
