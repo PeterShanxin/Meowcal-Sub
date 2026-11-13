@@ -19,7 +19,7 @@
 </p>
 
 <p align="center">
-  <img src="docs/assets/hero.png" width="1200" alt="Meowcal Sub: translate on-screen subtitles locally, privately and for free. The current English Home interface appears on the right.">
+  <img src="docs/assets/hero.png" width="1200" alt="Meowcal Sub: fully local subtitle translation, privacy and zero cost. The current English Home interface appears on the right.">
 </p>
 
 > **Development preview:** The new branding, bilingual interface, and Home shown above are not yet released. Download links below still point to v0.9.1.

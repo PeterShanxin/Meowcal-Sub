@@ -101,7 +101,7 @@ try {
         <div class="copy"><img class="logo" src="${logo}" alt="">
           <h1>${chinese ? "Meowcal Sub · 妙影" : "Meowcal Sub"}</h1>
           <p>${chinese ? "把屏幕上的字幕，<br>翻译成你想读的语言。" : "Translate the subtitles<br>already on your screen."}</p>
-          <p class="privacy">${chinese ? "全本地运行 · 保护隐私 · 免费使用" : "Fully local. Private. Free to use."}</p>
+          <p class="privacy">${chinese ? "全本地运行 · 保护隐私 · 零成本" : "Fully local. Private. Zero cost."}</p>
         </div>
         <img class="app" src="${screenshot}" alt="${chinese ? "当前应用界面" : "Current app interface"}">
       </main></html>`);

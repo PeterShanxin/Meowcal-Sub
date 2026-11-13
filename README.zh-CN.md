@@ -19,7 +19,7 @@
 </p>
 
 <p align="center">
-  <img src="docs/assets/hero.zh-CN.png" width="1200" alt="Meowcal Sub · 妙影：全本地运行，保护隐私，免费使用。右侧为当前中文主界面。">
+  <img src="docs/assets/hero.zh-CN.png" width="1200" alt="Meowcal Sub · 妙影：全本地运行，保护隐私，零成本。右侧为当前中文主界面。">
 </p>
 
 > **开发版预览：** 新品牌、双语界面及图中的最新首页尚未发布。下方下载链接仍指向 v0.9.1。
