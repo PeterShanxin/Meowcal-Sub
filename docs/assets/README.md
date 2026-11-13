@@ -38,3 +38,6 @@ friendly character. Keep adequate clear space; do not place other text within
 half a card's height of the mark.
 
 The [name and logo usage terms](../../TRADEMARKS.md) apply to these assets.
+
+The Microsoft Store uses [paired listing copy and screenshots](../store-listing/README.md).
+Regenerate its localized screenshots when the published UI changes.
