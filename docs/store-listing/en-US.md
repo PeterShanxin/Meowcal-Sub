@@ -52,3 +52,7 @@ https://huggingface.co/tencent/HY-MT1.5-1.8B-GGUF/blob/265b2e615a7dc9b06c435dc87
 3. Frame the original subtitles, then confirm and start.
 4. Adjust text size and background with a live subtitle preview.
 5. Choose the app language separately from your subtitle languages.
+
+## Additional license terms
+
+The separately downloaded HY-MT1.5 model and its outputs are governed by the Tencent HY Community License Agreement, including its Acceptable Use Policy and sections 5(a) and 5(b). You must comply with applicable laws and that policy, and must not use the model or its outputs to improve other AI models except Tencent HY or its derivatives. Use of the model and outputs in the EU, UK or South Korea is excluded. These model terms do not replace or restrict the AGPL-3.0-only license on the application source. Full agreement: https://huggingface.co/tencent/HY-MT1.5-1.8B-GGUF/blob/265b2e615a7dc9b06c435dc878829ad99a512ba2/License.txt
