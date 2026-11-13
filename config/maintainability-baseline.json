@@ -56,7 +56,10 @@
     "src/i18n/runtime.ts",
     "src/i18n/overlay-messages.ts",
     "scripts/bilingual-docs.mjs",
-    "scripts/i18n-coverage.mjs"
+    "scripts/i18n-coverage.mjs",
+    "scripts/site/render.mjs",
+    "scripts/site/content.en.mjs",
+    "scripts/site/content.zh-CN.mjs"
   ],
   "legacyFileMaxLines": {
     "src-tauri/src/capture/graphics_capture.rs": 469,

@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" fill="none">
+  <title>Meowcal Sub 2</title>
+  <defs>
+    <linearGradient id="tile" x1="64" y1="20" x2="420" y2="512" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#25272D"/><stop offset=".5" stop-color="#111216"/><stop offset="1" stop-color="#090A0D"/>
+    </linearGradient>
+    <linearGradient id="gold" x1="140" y1="115" x2="340" y2="400" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFF0CC"/><stop offset=".35" stop-color="#EBC58B"/><stop offset="1" stop-color="#857565"/>
+    </linearGradient>
+    <linearGradient id="edge" x1="30" y1="30" x2="470" y2="490" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#777B85"/><stop offset=".5" stop-color="#EBC58B"/><stop offset="1" stop-color="#34363E"/>
+    </linearGradient>
+  </defs>
+  <rect x="8" y="8" width="496" height="496" rx="104" fill="url(#tile)" stroke="url(#edge)" stroke-width="2"/>
+  <path d="M108 213L127 127Q131 109 146 122L215 187M297 187L366 122Q381 109 385 127L404 213" fill="#24211D" stroke="url(#gold)" stroke-width="10" stroke-linejoin="round"/>
+  <rect x="90" y="181" width="332" height="215" rx="61" fill="#101114" stroke="url(#gold)" stroke-width="10"/>
+  <rect x="143" y="251" width="226" height="26" rx="13" fill="url(#gold)"/>
+  <rect x="143" y="302" width="151" height="26" rx="13" fill="url(#gold)"/>
+</svg>
