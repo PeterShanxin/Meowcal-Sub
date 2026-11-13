@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { chromium, expect } from "@playwright/test";
 import { createServer } from "vite";
+import { writeHeroSvg } from "./readme-hero-svg.mjs";
 
 const config = JSON.parse(await readFile("src-tauri/tauri.conf.json", "utf8"));
 const { width, height } = config.app.windows.find((window) => window.label === "main");
@@ -108,6 +109,18 @@ try {
     await page.evaluate("document.fonts.ready");
     await page.locator(".app").evaluate((element) => element.decode());
     await page.screenshot({ path: `docs/assets/hero${suffix}.png` });
+    const svg = await writeHeroSvg(
+      page,
+      await readFile("docs/assets/logo.svg", "utf8"),
+      `docs/assets/screenshot-home${suffix}.png`,
+      `docs/assets/hero${suffix}.svg`,
+    );
+    await page.setContent(
+      `<style>body{margin:0}</style><img src="data:image/svg+xml;base64,${Buffer.from(svg).toString("base64")}">`,
+    );
+    await page.locator("img").evaluate((element) => element.decode());
+    await page.evaluate("document.fonts.ready");
+    await page.screenshot({ path: `.local/hero${suffix}-svg.png` });
     await page.close();
   }
 } finally {

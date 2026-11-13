@@ -13,14 +13,19 @@ Keep the existing neutral dark UI; lavender is a small brand accent.
   `logo.svg`. Run `node scripts/generate-brand-assets.mjs` at the repository root
   after `npm ci`. This uses the repository's pinned Tauri CLI. The social preview
   uses Chrome; set `MEOWCAL_BROWSER_CHANNEL=msedge` to use Edge.
-- `hero.png` and `hero.zh-CN.png` pair the English and Chinese frontend with
+- `hero.svg` and `hero.zh-CN.svg` pair the English and Chinese frontend with
   matching brand copy. Run `node scripts/generate-readme-hero.mjs` to regenerate
   both heroes and `screenshot-home.png` / `screenshot-home.zh-CN.png`. It serves
   the current app components and styles through Vite, with an in-memory ready
   state and the production window title. It does not redraw the UI or edit pixels.
   Home is captured at the configured 680 × 500 viewport with 3× pixel density;
-  each 1600 × 720 hero is exported at 2× (3200 × 1440). Use Windows with Segoe UI
-  and Microsoft YaHei; set `MEOWCAL_BROWSER_CHANNEL=msedge` to use Edge.
+  each 1600 × 720 hero has a 2× PNG export (3200 × 1440) for sharing. The READMEs
+  load the smaller SVG: vector background, logo and copy, with a self-contained
+  lossless WebP screenshot. The generator verifies that screenshot compression
+  preserves every pixel. SVG text positions come from the browser layout;
+  `.local/hero*-svg.png` previews verify rendering in an image element.
+  Use Windows with Segoe UI and Microsoft YaHei; set
+  `MEOWCAL_BROWSER_CHANNEL=msedge` to use Edge.
 
 Keep source screenshots at their captured aspect ratio. These browser-rendered
 images document the frontend, not native behavior. Native validation still needs
