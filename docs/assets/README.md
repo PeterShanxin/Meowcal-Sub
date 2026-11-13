@@ -40,4 +40,5 @@ half a card's height of the mark.
 The [name and logo usage terms](../../TRADEMARKS.md) apply to these assets.
 
 The Microsoft Store uses [paired listing copy and screenshots](../store-listing/README.md).
-Regenerate its localized screenshots when the published UI changes.
+Regenerate its localized screenshots when the published UI changes. The
+[product site](../../site/README.md) builds its Sub 1 images from those screenshots.

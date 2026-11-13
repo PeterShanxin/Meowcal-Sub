@@ -14,6 +14,7 @@
 <p align="center">
   <a href="#download"><strong>Download for Windows</strong></a>
   &nbsp;·&nbsp; <a href="#quick-start">Quick start</a>
+  &nbsp;·&nbsp; <a href="https://petershanxin.github.io/Meowcal-Sub/">Website</a>
   &nbsp;·&nbsp; <a href="README.zh-CN.md">简体中文</a>
   &nbsp;·&nbsp; <a href="https://github.com/PeterShanxin/Meowcal-Sub/issues/new/choose">Report a problem</a>
 </p>
@@ -21,6 +22,9 @@
 <p align="center">
   <img src="docs/assets/hero.svg" width="1200" alt="Meowcal Sub: fully local subtitle translation, privacy and zero cost. The current English Home interface appears on the right.">
 </p>
+
+**Meowcal Sub** (妙影 in Chinese, sometimes written MeowcalSub) is a free,
+open-source Windows 11 app that translates on-screen subtitles on your PC.
 
 Draw a box around the original subtitles in your video. Meowcal Sub reads that
 area, translates the text locally, and puts the translation in a floating

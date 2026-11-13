@@ -9,7 +9,8 @@ function destinations(text) {
     ...new Set(
       [...markdown, ...html]
         .filter((target) => !target.startsWith("#"))
-        .map((target) => target.split("#")[0].replaceAll(".zh-CN", "")),
+        // A Chinese counterpart is a `.zh-CN` file or a `/zh-CN/` page of the site.
+        .map((target) => target.split("#")[0].replaceAll(".zh-CN", "").replaceAll("/zh-CN/", "/")),
     ),
   ].sort();
 }
