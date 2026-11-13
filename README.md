@@ -22,8 +22,6 @@
   <img src="docs/assets/hero.svg" width="1200" alt="Meowcal Sub: fully local subtitle translation, privacy and zero cost. The current English Home interface appears on the right.">
 </p>
 
-> **Development preview:** The new branding, bilingual interface, and Home shown above are not yet released. Download links below still point to v0.9.1.
-
 Draw a box around the original subtitles in your video. Meowcal Sub reads that
 area, translates the text locally, and puts the translation in a floating
 overlay. No subtitle file, cloud account, or API key is needed for normal use.
@@ -35,12 +33,12 @@ https://github.com/user-attachments/assets/58fbac67-9032-42e2-8d4d-8e4df6c01e59
 
 ## Download
 
-**Windows 11 public beta · v0.9.1** — [release notes and all files](https://github.com/PeterShanxin/Meowcal-Sub/releases/tag/v0.9.1).
+**Windows 11 public beta · v0.10.0** — [release notes and all files](https://github.com/PeterShanxin/Meowcal-Sub/releases/tag/v0.10.0).
 
 | Your PC | Installer |
 | --- | --- |
-| Intel or AMD Windows PC | **[Download x64 (.exe)](https://github.com/PeterShanxin/Meowcal-Sub/releases/download/v0.9.1/Meowcal.Sub_0.9.1_x64-setup.exe)** |
-| Snapdragon or other Windows on ARM PC | **[Download ARM64 (.exe)](https://github.com/PeterShanxin/Meowcal-Sub/releases/download/v0.9.1/Meowcal.Sub_0.9.1_arm64-setup.exe)** |
+| Intel or AMD Windows PC | **[Download x64 (.exe)](https://github.com/PeterShanxin/Meowcal-Sub/releases/download/v0.10.0/Meowcal.Sub_0.10.0_x64-setup.exe)** |
+| Snapdragon or other Windows on ARM PC | **[Download ARM64 (.exe)](https://github.com/PeterShanxin/Meowcal-Sub/releases/download/v0.10.0/Meowcal.Sub_0.10.0_arm64-setup.exe)** |
 
 MSI installers and `SHA256SUMS.txt` are on the release page. For newer versions,
 use [the latest application release](https://github.com/PeterShanxin/Meowcal-Sub/releases/latest).
@@ -63,17 +61,16 @@ SHA-256 with the release checksums; do not disable Windows security globally.
 
 ## Quick start
 
-**Bilingual interface, not yet released:** In **Settings → App language**, choose
+**App language:** In **Settings → App language**, choose
 **System default**, **English**, or **简体中文**. The choice applies immediately
-and is saved independently of subtitle languages. Current development builds use
-**Select subtitle area** on Home and offer **Start with saved area**. The steps
-below use the English labels in the published download. See [App language](docs/USAGE.md#app-language).
+and is saved independently of subtitle languages. The steps below use the English
+interface. See [App language](docs/USAGE.md#app-language).
 
 1. **Set up translation.** Open the app and complete the guided setup. Choose
-   the original subtitle language and the language you want to read; let setup
-   install and test the engine.
+   the original subtitle language and the language you want to read on Home after
+   setup installs and tests the engine.
 2. **Start translation.** Move the app window onto the screen playing the
-   video and choose **Start translation**. Draw a box around the original
+   video and choose **Select subtitle area**. Draw a box around the original
    subtitles, not the whole video, and choose **Confirm and start**. Reselect
    the area when the video moves or changes size.
 3. **Watch.** Read the floating translation overlay. Use **Subtitle style** for
@@ -122,7 +119,7 @@ architecture, choose **Settings → Profile → Compatibility**.
 
 In normal mode, **captured and translated subtitle text is not uploaded**.
 Production logs record support codes, timings, and counts, not subtitle text by default.
-The unreleased Local logs setting can opt into Verbose capture images, OCR text,
+The Local logs setting can opt into Verbose capture images, OCR text,
 and translations stored only on this PC, capped at 256 MiB. Treat those files as private.
 Once the engine and recognition language are installed, OCR and translation
 can run offline; online video playback may still need its own connection.
@@ -170,9 +167,8 @@ specific test conditions, not a universal end-to-end subtitle latency guarantee.
 | [Evaluation](evals/README.md) | Validation layers and measurement method |
 | [Meowcal Core](core/README.md) | Core's API and storage contract |
 
-This README and the user guide cover the latest release, v0.9.1, and explicitly
-mark unreleased features. Architecture, contributor, and evaluation documents
-follow the `main` branch.
+This README and the user guide cover v0.10.0. Architecture, contributor, and
+evaluation documents follow the `main` branch.
 
 ## Help and contribute
 

@@ -22,8 +22,6 @@
   <img src="docs/assets/hero.zh-CN.svg" width="1200" alt="Meowcal Sub · 妙影：全本地运行，保护隐私，无付费。右侧为当前中文主界面。">
 </p>
 
-> **开发版预览：** 新品牌、双语界面及图中的最新首页尚未发布。下方下载链接仍指向 v0.9.1。
-
 圈出视频中的原字幕区域。Meowcal Sub 会识别这块区域的文字，在本机翻译，
 再用悬浮字幕显示译文。正常使用不需要另外寻找字幕文件、注册云服务账号或填写 API key。
 
@@ -34,12 +32,12 @@ https://github.com/user-attachments/assets/58fbac67-9032-42e2-8d4d-8e4df6c01e59
 
 ## 下载
 
-**Windows 11 公开测试版 · v0.9.1** — [更新说明与全部安装文件](https://github.com/PeterShanxin/Meowcal-Sub/releases/tag/v0.9.1)。
+**Windows 11 公开测试版 · v0.10.0** — [更新说明与全部安装文件](https://github.com/PeterShanxin/Meowcal-Sub/releases/tag/v0.10.0)。
 
 | 你的电脑 | 安装包 |
 | --- | --- |
-| Intel / AMD Windows 电脑 | **[下载 x64（.exe）](https://github.com/PeterShanxin/Meowcal-Sub/releases/download/v0.9.1/Meowcal.Sub_0.9.1_x64-setup.exe)** |
-| 骁龙或其他 Windows on ARM 电脑 | **[下载 ARM64（.exe）](https://github.com/PeterShanxin/Meowcal-Sub/releases/download/v0.9.1/Meowcal.Sub_0.9.1_arm64-setup.exe)** |
+| Intel / AMD Windows 电脑 | **[下载 x64（.exe）](https://github.com/PeterShanxin/Meowcal-Sub/releases/download/v0.10.0/Meowcal.Sub_0.10.0_x64-setup.exe)** |
+| 骁龙或其他 Windows on ARM 电脑 | **[下载 ARM64（.exe）](https://github.com/PeterShanxin/Meowcal-Sub/releases/download/v0.10.0/Meowcal.Sub_0.10.0_arm64-setup.exe)** |
 
 MSI 安装包和 `SHA256SUMS.txt` 校验文件也在该发布页。
 更新版本请看[最新应用发布页](https://github.com/PeterShanxin/Meowcal-Sub/releases/latest)。
@@ -60,18 +58,17 @@ MSI 安装包和 `SHA256SUMS.txt` 校验文件也在该发布页。
 
 ## 开始使用
 
-**尚未发布的双语界面：** 在 **设置 → 界面语言** 中选择 **跟随系统**、
+**界面语言：** 在 **设置 → 界面语言** 中选择 **跟随系统**、
 **English** 或 **简体中文**，立即生效并保存。界面语言不影响原字幕和目标语言。
-最新开发版在首页使用 **选择字幕区域**，并支持 **使用已保存区域开始**。
-以下步骤中的英文按钮名称对应当前下载版本。详见[使用指南](docs/USAGE.zh-CN.md#界面语言)。
+以下步骤使用中文界面。详见[使用指南](docs/USAGE.zh-CN.md#界面语言)。
 
-1. **设置翻译。** 打开应用并完成设置向导。选择原字幕语言和目标语言，
-   让向导安装并测试翻译引擎。
-2. **开始翻译。** 将应用主窗口移到播放视频的屏幕，点击 **Start translation**。
-   圈住原字幕，而不是整个视频，再点击 **Confirm and start**。
+1. **设置翻译。** 打开应用，让设置向导安装并测试翻译引擎。
+   完成后，在首页选择原字幕语言和目标语言。
+2. **开始翻译。** 将应用主窗口移到播放视频的屏幕，点击 **选择字幕区域**。
+   圈住原字幕，而不是整个视频，再点击 **确认并开始**。
    移动视频或改变画面大小后，重新圈选。
-3. **观看。** 通过悬浮字幕阅读译文。在 **Subtitle style** 调整字号和深色／浅色底板；
-   结束后点击 **Exit translation** 或 **Stop translation**。
+3. **观看。** 通过悬浮字幕阅读译文。在 **字幕样式** 调整字号和深色／浅色底板；
+   结束后点击 **退出翻译** 或 **停止翻译**。
 
 ![流程示意图：圈选已有字幕，在本机识别文字，在本机通过 HY-MT 翻译，再显示悬浮字幕。](docs/assets/architecture.zh-CN.svg)
 
@@ -111,7 +108,7 @@ GPU 就绪检查超时后可尝试 CPU 回退。x64 版只在有独立显卡时�
 
 正常模式下，**识别的字幕文字与译文不会上传**。
 生产日志默认记录支持代码、耗时和计数，不记录字幕文字。
-尚未发布的 Local logs 设置可主动开启 Verbose，在本机保留截图、OCR 文本和翻译结果，
+本地日志设置可主动开启“详细”级别，在本机保留截图、OCR 文本和翻译结果，
 总量上限 256 MiB。这些文件可能包含隐私内容，不会自动上传。
 安装好引擎和识别语言后，OCR 与翻译可以离线运行；在线视频本身仍可能需要联网。
 
@@ -157,7 +154,7 @@ Core 是底层运行环境，不是用户需要额外手动安装的应用。
 | [评估说明](evals/README.md) | 各层验证方法与测量方法 |
 | [Meowcal Core](core/README.md) | Core 的 API 与存储约定 |
 
-本页和使用指南以最新发布版本 v0.9.1 为基础，并明确标记尚未发布的功能。
+本页和使用指南适用于 v0.10.0。
 架构、贡献和评估文档跟随 `main` 分支。
 
 ## 反馈与参与

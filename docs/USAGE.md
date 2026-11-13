@@ -6,8 +6,7 @@ Meowcal Sub translates **visible text in a selected screen region**, not audio.
 Start with a video that already displays subtitles in Chinese, Japanese,
 Korean, English, Spanish, French, or German.
 
-This guide covers the latest published application release, v0.9.1, and marks
-unreleased changes where they differ. For each version, see its notes under
+This guide covers Meowcal Sub v0.10.0. For each version, see its notes under
 [`releases/`](releases/).
 
 ## Installation
@@ -34,7 +33,7 @@ Download the installer and `SHA256SUMS.txt` from the **same application release*
 In PowerShell, compute the hash of the file you downloaded, for example:
 
 ```powershell
-Get-FileHash -Algorithm SHA256 -LiteralPath ".\Meowcal.Sub_0.9.1_x64-setup.exe"
+Get-FileHash -Algorithm SHA256 -LiteralPath ".\Meowcal.Sub_0.10.0_x64-setup.exe"
 ```
 
 Use your actual filename for another version or architecture. Compare the full
@@ -50,8 +49,8 @@ not constitute Windows publisher signing.
 
 ## First translation
 
-On `main` (not yet released), first-time setup asks for agreement to the model
-terms before preparing the engine. Choose languages on Home after setup. Setup
+First-time setup asks for agreement to the model terms before preparing the
+engine. Choose languages on Home after setup. Setup
 shows the current operation and download progress reported by Core. A previously
 configured installation shows a completion screen; Core still verifies assets
 when starting the engine. After the model terms are accepted, Core can reuse eligible
@@ -61,14 +60,15 @@ local assets. Cancelling initial setup exits the app.
    setup download and test the local engine.
 2. On Home, choose **Original subtitles** and **Translate into**.
 3. Move the Home window onto the screen that plays the video.
-4. Choose **Start translation**. The subtitle-area selector opens.
+4. Choose **Select subtitle area**. The subtitle-area selector opens.
 5. Drag across the original subtitles, or press <kbd>Enter</kbd> to place a
-   suggested box in the lower part of the screen. When the video shows two-line
-   subtitles, include both lines. Avoid player controls, unrelated text, and
+   suggested box in the lower part of the screen. Drag the box or its handles to
+   move or resize it. When the video shows two-line subtitles, include both
+   lines. Avoid player controls, unrelated text, and
    the place where the translation will appear.
-6. Choose **Confirm and start**, or press <kbd>Enter</kbd>. Arrow keys move the
-   box; <kbd>Shift</kbd> + arrow keys resize it. **Redraw** starts the box
-   again, and **Cancel** (<kbd>Esc</kbd>) returns to Home without starting.
+6. Choose **Confirm and start**, or press <kbd>Enter</kbd>. **Redraw** starts the
+   box again. **Exit** or <kbd>Esc</kbd> returns to Home without starting; before
+   a box is drawn, use **Cancel**.
 
 The first start takes longer while the model warms up. Translations appear in a
 floating overlay near the selected area. The overlay has two controls; when
@@ -77,8 +77,8 @@ they have faded, point at the overlay or switch to it with
 Light plate, and **Exit translation** stops and returns to Home. **Stop translation** on Home
 also ends the session.
 
-In the unreleased development build, Home shows readiness through the primary
-button: preparation disables it and shows a spinner; **Select subtitle area**
+Home shows readiness through the primary button: preparation disables it and
+shows a spinner; **Select subtitle area**
 opens the selector when ready. The selector offers **Confirm and start**,
 **Redraw**, **Save and exit**, and **Exit**. The mouse can move or resize a
 selection; arrow-key movement and resizing are not available. Home shows
@@ -86,10 +86,8 @@ selection; arrow-key movement and resizing are not available. Home shows
 **Start with saved area** starts without reopening the selector. Repair instructions
 and other actionable messages remain visible when needed.
 
-In the latest release, to choose or adjust the area without starting, use the
-subtitle-area row on Home (**Select** or **Change**) and choose **Use this area**.
-In the unreleased development build, choose **Select subtitle area**, then
-**Save and exit**. To reuse it directly, choose **Start with saved area**.
+To choose or adjust the area without starting, choose **Select subtitle area**,
+then **Save and exit**. To reuse it directly, choose **Start with saved area**.
 
 The area is a fixed screen region, not an object tracker. When the video moves,
 changes size, or switches between window and full screen, select the area again.
@@ -110,7 +108,7 @@ Home is on that screen.
 
 ## App language
 
-**Not yet released:** In **Settings → App language**, choose **System default**,
+In **Settings → App language**, choose **System default**,
 **English**, or **简体中文**. System default uses Simplified Chinese for a Chinese
 system language, and English for other system languages. Changes apply immediately
 and the preference is saved for the next launch. The Chinese interface shows
@@ -123,7 +121,7 @@ and captured or translated text unchanged.
 
 ## Settings
 
-On `main` (not yet released), **Settings → About** shows the app version,
+**Settings → About** shows the app version,
 provider, project link, and model license and usage terms. The first-time setup
 still presents the provider disclosure and requires agreement to the model terms.
 Settings changes save automatically, with a four-second success notice.
@@ -154,18 +152,18 @@ for translation; with GPU translation it uses up to four.
 
 | Status | Meaning | What to do |
 | --- | --- | --- |
-| **Checking** | The app checks the engine, recognition, and saved area. | Wait. |
-| **Setup needed** | The engine is not installed. | Choose **Set up translation**. |
-| **Preparing** | The engine is loading or checking its model. | Wait; you can start when it is ready. |
-| **Busy** | The engine is finishing another operation, such as an install or repair. | Wait, then try again. |
-| **Needs repair** | The engine check failed. Your settings are kept. | Choose **Repair engine**. Keep the support code if repair fails. |
-| **Almost ready** | Windows OCR needs the recognition language, or no subtitle area exists yet. | Choose **Install recognition language** or **Start translation**. |
-| **Select area** | The selector is open. | Confirm or cancel in the selector. |
-| **Starting** | The engine warms up for the session. | Wait. |
-| **Running** | Subtitles are live. | Choose **Stop translation** to end. |
+| **Getting things ready** | The app checks the engine, recognition, and saved area. | Wait. |
+| **Set up private translation** | The engine is not installed. | Choose **Set up translation**. |
+| **Warming up translation** | The engine is loading or checking its model. | Wait; you can start when it is ready. |
+| **Waiting for the engine** | The engine is finishing another operation, such as an install or repair. | Wait, then try again. |
+| **Translation needs a repair** | The engine check failed. Your settings are kept. | Choose **Repair engine**. Keep the support code if repair fails. |
+| **Install the recognition language** | Windows OCR needs the recognition language. | Choose **Install recognition language**. |
+| **Confirm in the selector…** | The selector is open. | Confirm or cancel in the selector. |
+| **Starting translation** | The engine warms up for the session. | Wait. |
+| **Subtitles are live** | Subtitles are live. | Choose **Stop translation** to end. |
 
 If a session ends on its own, Home shows **Translation stopped unexpectedly.
-Start translation again.** If recognition fails three times in a row, Home shows
+Select the subtitle area to start again.** If recognition fails three times in a row, Home shows
 **Text recognition is not responding. Return to Home and restart translation.**
 
 ### Overlay
@@ -175,8 +173,8 @@ Start translation again.** If recognition fails three times in a row, Home shows
 | A translated line | The latest subtitle that finished translating. | Nothing. |
 | **Preparing translation…** | The engine is still warming up or recovering. | Wait. |
 | **Waiting for subtitles…** | Recognition works, but the area has shown no text for 15 seconds. | Check that subtitles are visible inside the area. The notice clears when text returns. |
-| **Translation engine stopped.** | Engine recovery failed. The app tries again after 30, 60, 120, and then every 300 seconds while subtitles need translation. | Wait, or choose **Exit to Home** and use **Repair engine**. |
-| **Translation is interrupted.** | Capture or recognition stopped working, or the session ended. | Choose **Exit to Home**, then start again. |
+| **Translation engine stopped.** | Engine recovery failed. The app tries again after 30, 60, 120, and then every 300 seconds while subtitles need translation. | Wait, or choose **Exit translation** and use **Repair engine**. |
+| **Translation is interrupted.** | Capture or recognition stopped working, or the session ended. | Choose **Exit translation**, then start again. |
 
 When one translation takes too long or the engine briefly fails, the current
 line stays on screen and the app retries that subtitle while it is still
@@ -225,16 +223,15 @@ For update checks, open **Settings → Engine and updates → Check for updates*
 Automatic checks occur at startup at most once per day. Checking does not
 itself download an application update; **Download and install** does.
 
-**Not yet released:** Available updates show up to three formatted highlights
+Available updates show up to three formatted highlights
 under **What's new**, without a separate scroll box. **Full release notes ↗**
 opens that version's complete GitHub release in your browser. The link remains
 available when the update has no summary.
 
 ## Logs and diagnostics
 
-The latest release writes one session log per launch and removes `.log` files
-older than seven days at startup. The changes below are on `main` and have not
-shipped in a release yet.
+With logging enabled, the app writes one session log per launch and removes
+`.log` files older than seven days at startup.
 
 **Settings > Local logs** offers three levels:
 
@@ -274,7 +271,7 @@ investigation:
 
 ## Report a problem safely
 
-1. Note the app version (**Settings → Engine and updates**), Windows build
+1. Note the app version (**Settings → About**), Windows build
    (`winver`), and whether the PC is x64 or ARM64.
 2. Note the source and target languages, the **Profile**, and the
    **Text recognition** engine.

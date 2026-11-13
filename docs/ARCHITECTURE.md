@@ -183,7 +183,7 @@ semaphore remains owned by each blocking write even if its caller is cancelled,
 so repeated Stop/Start cannot create an unbounded queue of detached disk tasks. Only owned
 record directories containing known regular files are pruned. Unexpected files
 are preserved and stop the write. Oversized records are skipped. Disabling
-Verbose does not delete existing evidence. This feature is not yet released.
+Verbose does not delete existing evidence.
 
 Ordinary `.log` files have no size-based rotation.
 
