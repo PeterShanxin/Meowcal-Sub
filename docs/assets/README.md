@@ -30,7 +30,7 @@ Keep the existing neutral dark UI; lavender is a small brand accent.
 Keep source screenshots at their captured aspect ratio. These browser-rendered
 images document the frontend, not native behavior. Native validation still needs
 separate Windows app evidence with its commit and capture conditions recorded
-in the PR. The README identifies the unreleased interface as a development preview.
+in the PR. Mark future unreleased interface previews explicitly in the README.
 
 Do not use a cat outline, whiskers, ears, or a face as the application mark.
 The offset cards, rounded corners, and restrained lavender accent carry its
