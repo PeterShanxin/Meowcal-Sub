@@ -6,6 +6,8 @@ For the opt-in release sync, manual draft preparation, and account setup, see
 The Store channel uses MSIX. It is separate from the GitHub MSI/NSIS channel;
 Store packages do not contribute to `latest.json` or use the Tauri updater key.
 Store publication still requires a reserved application identity and certification.
+Post-publication [editorial corrections](RELEASE_NOTES.md#editorial-corrections-after-publication)
+to GitHub notes do not update a Store submission.
 
 ## Build
 
