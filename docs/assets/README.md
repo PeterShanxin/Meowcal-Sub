@@ -13,16 +13,19 @@ Keep the existing neutral dark UI; lavender is a small brand accent.
   `logo.svg`. Run `node scripts/generate-brand-assets.mjs` at the repository root
   after `npm ci`. This uses the repository's pinned Tauri CLI. The social preview
   uses Chrome; set `MEOWCAL_BROWSER_CHANNEL=msedge` to use Edge.
-- `hero.png` and `hero.zh-CN.png` place real application screenshots beside the
-  brand copy. Run `node scripts/generate-readme-hero.mjs` after updating
-  `screenshot-home.png` and `screenshot-home.zh-CN.png`. The generator composes
-  the images without recreating or changing the application controls.
+- `hero.png` and `hero.zh-CN.png` pair the English and Chinese frontend with
+  matching brand copy. Run `node scripts/generate-readme-hero.mjs` to regenerate
+  both heroes and `screenshot-home.png` / `screenshot-home.zh-CN.png`. It serves
+  the current app components and styles through Vite, with an in-memory ready
+  state and the production window title. It does not redraw the UI or edit pixels.
+  Home is captured at the configured 680 × 500 viewport with 3× pixel density;
+  each 1600 × 720 hero is exported at 2× (3200 × 1440). Use Windows with Segoe UI
+  and Microsoft YaHei; set `MEOWCAL_BROWSER_CHANNEL=msedge` to use Edge.
 
-Keep source screenshots at their captured aspect ratio. Capture the current
-native development app in each language, using non-private example inputs.
-Record the commit and capture conditions with the PR's native evidence. A
-browser screenshot can document the frontend, but cannot prove native behavior.
-The README identifies unreleased interface screenshots as development previews.
+Keep source screenshots at their captured aspect ratio. These browser-rendered
+images document the frontend, not native behavior. Native validation still needs
+separate Windows app evidence with its commit and capture conditions recorded
+in the PR. The README identifies the unreleased interface as a development preview.
 
 Do not use a cat outline, whiskers, ears, or a face as the application mark.
 The offset cards, rounded corners, and restrained lavender accent carry its
