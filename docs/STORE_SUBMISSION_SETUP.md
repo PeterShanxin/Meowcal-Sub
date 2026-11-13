@@ -23,6 +23,9 @@ checking assets. A release published by another workflow with the repository
 `GITHUB_TOKEN` does not trigger `release.published`; use an independently
 authorized GitHub App token if release publication itself later becomes fully
 automated. The sync workflow does not create tags or releases.
+After a successful sync, [editorial corrections](RELEASE_NOTES.md#editorial-corrections-after-publication)
+may update GitHub notes. The verifier still compares against the tagged body;
+do not rerun submission for those corrections.
 
 The [Prepare Store Submission Draft](../.github/workflows/store-submission-draft.yml)
 workflow is limited to Meowcal Sub product `9NNK2X23VLWT`. Its default run checks

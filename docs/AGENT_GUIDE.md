@@ -165,6 +165,9 @@ treats a missing or unexplained answer like a missing validation result.
 
 ## Release and update contract
 
+- Follow [Release notes](RELEASE_NOTES.md) for user-facing copy and reviewed
+  editorial corrections after publication. Preserve release tags and assets.
+
 - Store builds use `scripts/build-store.ps1` and the `store` Cargo feature.
   Draft release and preflight prepare both Store architectures through
   `store-package.yml`, with explicit Partner Center identity and an independent

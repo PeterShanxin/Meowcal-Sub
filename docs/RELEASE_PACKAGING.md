@@ -103,7 +103,9 @@ can still be dispatched independently. See [Store distribution](STORE_DISTRIBUTI
 
 Release notes follow [the release notes standard](RELEASE_NOTES.md).
 The manifest contains a three-bullet summary; the complete notes remain the
-GitHub release body. Both come from the same versioned Markdown file.
+GitHub release body. Both initially come from the tagged Markdown file.
+Reviewed [editorial corrections](RELEASE_NOTES.md#editorial-corrections-after-publication)
+can update the GitHub body without changing the tag or published assets.
 
 The `.sig` files are not published. The updater reads the signature text out of
 `latest.json` and never fetches a separate file.
