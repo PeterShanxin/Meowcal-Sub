@@ -11,6 +11,8 @@ export default {
   navLabel: "产品",
   languageLabel: "语言",
   source: "GitHub",
+  downloadLabel: "下载 Windows 版",
+  howLabel: "了解使用方法",
   footer: {
     name: "Meowcal Sub 的中文名是“妙影”，也有人连写为 MeowcalSub。",
     provider:

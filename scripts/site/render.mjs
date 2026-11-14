@@ -381,17 +381,24 @@ ${renderHead(page, context, release)}
 <a class="skip" href="#main">${context.text(copy.skipLink)}</a>
 ${renderHeader(context)}
 <main id="main">
-<section class="wrap hero">
-<img class="hero-mark" src="${context.asset(PRODUCTS[product].mark)}" width="72" height="72" alt="">
-<h1>${context.text(page.name)}</h1>
-<p class="tagline">${context.text(page.tagline)}</p>
+<section class="hero">
+<div class="wrap hero-copy">
+<h1>${context.text(page.name)}<span class="tagline">${context.text(page.tagline)}</span></h1>
 <p class="promise">${context.text(page.promise)}</p>
-<p class="lead">${context.rich(page.lead)}</p>
-${renderActions(page, context, release)}
-<figure>
+<div class="hero-actions">
+<a class="button primary" href="#download">${context.text(copy.downloadLabel)}</a>
+<a class="button" href="#how-it-works">${context.text(copy.howLabel)}</a>
+</div>
+</div>
+<figure class="wrap showcase">
 ${image(context, page.figure.image, page.figure.alt, { sizes: "(min-width: 72rem) 70rem, 100vw", eager: true })}
 <figcaption>${context.text(page.figure.caption)}</figcaption>
 </figure>
+</section>
+<section class="wrap section download" id="download">
+<div><h2>${context.text(copy.downloadLabel)}</h2>
+<p class="lead">${context.rich(page.lead)}</p></div>
+<div>${renderActions(page, context, release)}</div>
 </section>
 ${page.sections.map((section) => renderSection(section, context)).join("\n")}
 </main>

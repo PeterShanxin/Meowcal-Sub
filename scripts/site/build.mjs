@@ -37,6 +37,7 @@ for (
 
 const STATIC_FILES = [
   ["site/styles.css", "styles.css"],
+  ["site/assets/cinema-light.webp", "assets/cinema-light.webp"],
   // Proves ownership of the site to Google Search Console. Removing it ends the verification.
   ["site/google4bfbcf53cdd665f4.html", "google4bfbcf53cdd665f4.html"],
   ["site/assets/sub2-icon.svg", "assets/sub2-icon.svg"],

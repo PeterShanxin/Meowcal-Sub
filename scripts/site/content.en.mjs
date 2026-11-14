@@ -14,6 +14,8 @@ export default {
   navLabel: "Products",
   languageLabel: "Language",
   source: "GitHub",
+  downloadLabel: "Download for Windows",
+  howLabel: "See how it works",
   footer: {
     name: "Meowcal Sub is sometimes written MeowcalSub. Its Chinese name is 妙影.",
     provider:

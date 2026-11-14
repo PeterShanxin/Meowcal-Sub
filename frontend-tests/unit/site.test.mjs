@@ -117,6 +117,15 @@ describe.each(pages)("the $product page in $locale", ({ product, locale, html })
     expect(html).not.toMatch(/\son[a-z]+="/i);
   });
 
+  it("offers working in-page download and setup navigation", () => {
+    const anchors = attributes(html, /href="#([^"]+)"/g);
+    expect(anchors).toEqual(expect.arrayContaining(["download", "how-it-works"]));
+    for (const anchor of anchors) {
+      expect(html).toContain(`id="${anchor}"`);
+    }
+    expect(html).toContain('fetchpriority="high"');
+  });
+
   it("links only to pages and files the site contains", () => {
     const directory = pagePath(product, locale);
     const siteFiles = new Set(renderSite(release).map((file) => file.path));
