@@ -17,10 +17,6 @@ export default {
   downloadLabel: "Download for Windows",
   howLabel: "See how it works",
   footer: {
-    name: "Meowcal Sub is sometimes written MeowcalSub. Its Chinese name is 妙影.",
-    provider:
-      "Meowcal Sub and Meowcal Sub 2 are provided by Shanxin Li, an individual. Tencent is not affiliated with, sponsoring, or endorsing either app.",
-    model: `The separately downloaded HY-MT1.5 translation model has its own [license and usage terms](${SUB1_REPO}/blob/main/LICENSE-NOTICE.md#separately-downloaded-translation-model). Those terms do not license use of the model or its outputs in the European Union, the United Kingdom, or South Korea.`,
     links: [
       { label: "Meowcal Sub source", href: SUB1_REPO },
       { label: "Meowcal Sub 2 source", href: SUB2_REPO },

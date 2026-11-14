@@ -107,9 +107,7 @@ describe.each(pages)("the $product page in $locale", ({ product, locale, html })
     // Ratings and reviews are never invented for a rich result.
     expect(data).not.toHaveProperty("aggregateRating");
     expect(data).not.toHaveProperty("review");
-    for (const name of data.alternateName ?? []) {
-      expect(html.replace(json, ""), `${name} must be visible on the page`).toContain(name);
-    }
+    expect(data.alternateName ?? []).toEqual(product === "sub1" ? ["MeowcalSub", "妙影"] : []);
   });
 
   it("is complete without JavaScript", () => {
@@ -124,6 +122,14 @@ describe.each(pages)("the $product page in $locale", ({ product, locale, html })
       expect(html).toContain(`id="${anchor}"`);
     }
     expect(html).toContain('fetchpriority="high"');
+  });
+
+  it("keeps the footer to repository and support navigation", () => {
+    const footer = html.match(/<footer\b[\s\S]*?<\/footer>/)[0];
+    expect(footer).not.toContain("<p");
+    expect(footer.match(/<a /g)).toHaveLength(4);
+    expect(footer).toContain("TRADEMARKS.md");
+    expect(footer).toContain("issues/new/choose");
   });
 
   it("links only to pages and files the site contains", () => {

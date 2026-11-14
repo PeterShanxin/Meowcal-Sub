@@ -14,10 +14,6 @@ export default {
   downloadLabel: "下载 Windows 版",
   howLabel: "了解使用方法",
   footer: {
-    name: "Meowcal Sub 的中文名是“妙影”，也有人连写为 MeowcalSub。",
-    provider:
-      "Meowcal Sub 与 Meowcal Sub 2 由个人开发者 Shanxin Li 提供。腾讯与这两款应用无关联、赞助或背书关系。",
-    model: `另行下载的 HY-MT1.5 翻译模型适用独立的[许可与使用条款](${SUB1_REPO}/blob/main/LICENSE-NOTICE.md#separately-downloaded-translation-model)。该条款未授权在欧盟、英国和韩国使用模型及其输出。`,
     links: [
       { label: "Meowcal Sub 源码", href: SUB1_REPO },
       { label: "Meowcal Sub 2 源码", href: SUB2_REPO },

@@ -45,7 +45,7 @@
   (stage-specific failure copy is covered by unit tests), and a 30-minute episode
   run.
 
-## Product site: cinematic layout
+## Product site: cinematic hero and open content layout
 
 The [Raycast homepage](https://www.raycast.com/) captured on 2026-11-14 is the
 visual reference: inset dark navigation, centered white display type, and red
@@ -64,13 +64,29 @@ optical lighting. This is a visual direction, not a clone of its content.
 - Color and assets: near-black surfaces and an original red-light WebP backdrop.
   The backdrop is darker than the reference for text contrast. Product images
   retain their proportions and are separate from the decorative background.
-- Content: original capabilities, limits, release links and model terms remain.
+- Content: original capabilities, limits and release links remain. Footer prose is
+  removed; licensing terms live in the repositories linked by the footer.
   Titles, canonical URLs, language alternates and structured data are retained.
 - Focused checks: x64/ARM64 installer labels, three illustrated setup steps,
   lazy-image loading after scrolling, language/product navigation, download and
   setup anchors, and the keyboard skip link. Browser warning/error logs are empty.
 
-Initial visual comparison found no actionable P0/P1/P2 issues. No visual repair
-loop was required. No native app behavior is covered by this website check.
+The content layout uses typography, alignment and whitespace rather than cards.
+Setup screenshots alternate with the copy on desktop and follow the copy on
+mobile. Privacy and requirements use open text columns. The callout, related
+products and footer have no enclosing panels or decorative heading rules.
+
+- Compared the Chinese setup section at parent commit `9932f80` with the new
+  [desktop setup layout](docs/design/product-site/steps-desktop.png) in one input,
+  both captured at 1265 × 712 image pixels in the default browser viewport.
+- Reviewed [privacy and requirements](docs/design/product-site/details-desktop.png),
+  the English privacy layout, the unillustrated Sub 2 steps, and the link-only footer.
+- Reviewed [mobile setup](docs/design/product-site/steps-mobile.png) at 390 × 844
+  CSS pixels; all four routes also pass overflow checks at 320 and 768 CSS pixels.
+- All four rendered footers contain four links and no prose paragraphs. Existing
+  title, description, canonical, language alternates, H1 and JSON-LD checks pass.
+
+No actionable P0/P1/P2 visual issues remain in the inspected views. No native app
+behavior is covered by this website check.
 
 final result: passed
