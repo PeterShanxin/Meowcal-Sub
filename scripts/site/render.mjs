@@ -179,9 +179,11 @@ const SECTION_RENDERERS = {
     const items = section.items
       .map((item) => {
         const picture = item.image
-          ? image(context, item.image, item.alt, { sizes: "(min-width: 60rem) 22rem, 100vw" })
+          ? image(context, item.image, item.alt, {
+              sizes: "(min-width: 72rem) 34rem, (min-width: 40rem) 50vw, 100vw",
+            })
           : "";
-        return `<li><h3>${context.text(item.title)}</h3><p>${context.rich(item.body)}</p>${picture}</li>`;
+        return `<li><div class="step-copy"><h3>${context.text(item.title)}</h3><p>${context.rich(item.body)}</p></div>${picture}</li>`;
       })
       .join("\n");
     return `<h2>${context.text(section.heading)}</h2>\n<ol class="steps">\n${items}\n</ol>`;
@@ -240,7 +242,7 @@ const SECTION_RENDERERS = {
 
 function renderSection(section, context) {
   const id = section.id ? ` id="${section.id}"` : "";
-  return `<section${id} class="wrap section">\n${SECTION_RENDERERS[section.type](section, context)}\n</section>`;
+  return `<section${id} class="wrap section section-${section.type}">\n${SECTION_RENDERERS[section.type](section, context)}\n</section>`;
 }
 
 function renderActions(page, context, release) {
@@ -361,9 +363,6 @@ function renderFooter(context) {
     .join("");
   return `<footer class="site-footer">
 <div class="wrap">
-<p class="name">${context.text(footer.name)}</p>
-<p>${context.text(footer.provider)}</p>
-<p>${context.rich(footer.model)}</p>
 <ul class="links">${links}</ul>
 </div>
 </footer>`;

@@ -24,6 +24,10 @@ structured data; `sitemap.xml` lists the four pages.
   decorative background. Product screenshots remain separate, unaltered images.
   The shared layout puts the product preview before the installer choices and
   works without client-side scripts or motion.
+- Setup steps use alternating text and screenshots. Privacy, requirements and
+  related products use open text columns without card backgrounds or borders.
+  The footer contains repository and support links; license terms remain in
+  the repositories.
 - Sub 1 screenshots are the Store screenshots in
   [`docs/assets/store/`](../docs/assets/store/). The build converts them, so
   regenerating those screenshots updates the site.
