@@ -20,6 +20,10 @@ structured data; `sitemap.xml` lists the four pages.
 - [`scripts/site/render.mjs`](../scripts/site/render.mjs) owns the markup, the
   URLs, and the structured data.
 - [`styles.css`](styles.css) owns the presentation.
+- CSS motion adds a single settling light effect to the hero, scroll-linked
+  text and image entrances, and a brief highlight on buttons. Reduced-motion
+  preferences disable these effects and smooth scrolling. Browsers without
+  view-timeline support show the content normally; no script is required.
 - The cinematic hero uses `assets/cinema-light.webp`, an original generated
   decorative background. Product screenshots remain separate, unaltered images.
   The shared layout puts the product preview before the installer choices and
