@@ -132,7 +132,7 @@ makes it inaccurate. A later documentation pull request is not a substitute.
 
 | When a change affects | Update |
 | --- | --- |
-| User-visible behavior, settings, UI labels, or user workflows | [`docs/USAGE.md`](USAGE.md); [`README.md`](../README.md) and [`README.zh-CN.md`](../README.zh-CN.md) when their summary, quick start, limits, or privacy statement changes |
+| User-visible behavior, settings, UI labels, or user workflows | [`docs/USAGE.md`](USAGE.md); [`README.md`](../README.md), [`README.zh-CN.md`](../README.zh-CN.md), and the [product site](../site/README.md) copy when their summary, quick start, limits, or privacy statement changes |
 | Defaults, configuration, storage locations, interfaces, events, states, timeouts, cancellation, retries, or recovery | [`docs/ARCHITECTURE.md`](ARCHITECTURE.md); [`core/README.md`](../core/README.md) for the Core API or Core storage |
 | Evaluation methods, datasets, metrics, budgets, or acceptance criteria | [`evals/README.md`](../evals/README.md), the affected benchmark README, [`docs/CORE_PERFORMANCE.md`](CORE_PERFORMANCE.md), or [`docs/evidence/README.md`](evidence/README.md) |
 | Release, update, Store, migration, or rollback procedures | the release and update contract in this guide, [`docs/RELEASE_PACKAGING.md`](RELEASE_PACKAGING.md), [`docs/STORE_DISTRIBUTION.md`](STORE_DISTRIBUTION.md), and the release notes under `docs/releases/` when a release ships |
@@ -410,6 +410,9 @@ DPI/window behavior.
   misnamed commit in seconds without occupying the hosted Windows gate.
 - Superseded pull request runs cancel; `main` runs do not, because a cancelled
   post-merge run leaves `main` unverified.
+- `.github/workflows/pages.yml` builds the [product site](../site/README.md) for
+  pull requests that touch it and publishes it to GitHub Pages from `main`. Only
+  its deploy job holds `pages: write`. It is not a required check.
 
 ## Real-device validation is not a CI job
 
@@ -464,6 +467,8 @@ required manual gate remains outstanding.
   methods, budgets, and privacy-safe recorded evidence.
 - `docs/releases/`: per-release notes; `docs/STORE_DISTRIBUTION.md`: the Store
   channel.
+- `site/README.md`: the product site for Sub 1 and Sub 2, its build, and what a
+  release of either app must update.
 - `docs/MAINTAINABILITY_BASELINE.md`: enforced ceilings and ratchet procedure.
 - `docs/RELEASE_PACKAGING.md`: the hosted runner policy, native per-architecture
   packaging, the release and preflight asset contract, and who may run a

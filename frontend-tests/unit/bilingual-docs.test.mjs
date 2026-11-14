@@ -8,6 +8,14 @@ describe("bilingual user documentation", () => {
   it("accepts translated labels, anchors, and paired filenames", () => {
     expect(compareBilingualDocs(english, chinese)).toEqual([]);
   });
+  it("accepts the paired language pages of the product site", () => {
+    expect(
+      compareBilingualDocs(
+        '<a href="https://example.com/app/">Website</a>',
+        '<a href="https://example.com/app/zh-CN/">官网</a>',
+      ),
+    ).toEqual([]);
+  });
   it("rejects a missing section", () => {
     expect(compareBilingualDocs(english, chinese.replace("## 安装", "安装"))).toContain(
       "section structure differ between English and Simplified Chinese",

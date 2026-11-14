@@ -14,6 +14,7 @@
 <p align="center">
   <a href="#下载"><strong>下载 Windows 版</strong></a>
   &nbsp;·&nbsp; <a href="#开始使用">开始使用</a>
+  &nbsp;·&nbsp; <a href="https://petershanxin.github.io/Meowcal-Sub/zh-CN/">官网</a>
   &nbsp;·&nbsp; <a href="README.md">English</a>
   &nbsp;·&nbsp; <a href="https://github.com/PeterShanxin/Meowcal-Sub/issues/new/choose">反馈问题</a>
 </p>
@@ -21,6 +22,9 @@
 <p align="center">
   <img src="docs/assets/hero.zh-CN.svg" width="1200" alt="Meowcal Sub · 妙影：全本地运行，保护隐私，无付费。右侧为当前中文主界面。">
 </p>
+
+**Meowcal Sub · 妙影**（也有人连写为 MeowcalSub）是一款免费开源的 Windows 11 应用，
+在你的电脑上翻译屏幕上已有的字幕。
 
 圈出视频中的原字幕区域。Meowcal Sub 会识别这块区域的文字，在本机翻译，
 再用悬浮字幕显示译文。正常使用不需要另外寻找字幕文件、注册云服务账号或填写 API key。

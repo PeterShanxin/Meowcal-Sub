@@ -42,6 +42,11 @@ These additions retain the existing coverage floors. Catalog key and placeholder
 coverage is checked separately by `npm run i18n:check`; browser tests cover
 rendering and live language changes.
 
+The product site's renderer, language copy, and build script are also in scope.
+The build's CLI safety test runs in a child process; those executions are not
+instrumented, so the coverage report does not credit them. The existing floors
+remain unchanged.
+
 Deliberately outside the scope, and why:
 
 | Not measured                                                              | Reason                                                  |

@@ -277,6 +277,12 @@ treat this repository going public as completing that gate.
 
 ## Continuous integration
 
+The [product site](site/README.md) is built separately by
+`.github/workflows/pages.yml`. Its pull request job builds the static pages;
+only a push or manual run on `main` can deploy to GitHub Pages. Run
+`node scripts/site/build.mjs` and `npm run test:frontend` when changing the
+site. These checks supplement the application gate below.
+
 Every pull request, including forks and Dependabot, is classified first.
 Runtime, build, and workflow changes get the hosted Windows verify gate:
 `windows-11-arm` runs the ARM64 lint, tests, and frontend/browser stage, and
