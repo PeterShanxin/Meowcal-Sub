@@ -20,6 +20,10 @@ structured data; `sitemap.xml` lists the four pages.
 - [`scripts/site/render.mjs`](../scripts/site/render.mjs) owns the markup, the
   URLs, and the structured data.
 - [`styles.css`](styles.css) owns the presentation.
+- The cinematic hero uses `assets/cinema-light.webp`, an original generated
+  decorative background. Product screenshots remain separate, unaltered images.
+  The shared layout puts the product preview before the installer choices and
+  works without client-side scripts or motion.
 - Sub 1 screenshots are the Store screenshots in
   [`docs/assets/store/`](../docs/assets/store/). The build converts them, so
   regenerating those screenshots updates the site.
