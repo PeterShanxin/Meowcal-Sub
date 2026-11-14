@@ -89,4 +89,26 @@ products and footer have no enclosing panels or decorative heading rules.
 No actionable P0/P1/P2 visual issues remain in the inspected views. No native app
 behavior is covered by this website check.
 
+### Motion
+
+- The hero light settles once in 4.5 seconds; title movement ends in 900 ms.
+  Buttons have a 650 ms light pass on pointer hover or keyboard focus. Nothing
+  loops while the page is idle.
+- Scroll-linked entrances use only opacity and transforms. Text starts at 80%
+  opacity; screenshots rise by at most 24 px and scale from 0.985 to 1.
+- In the Windows in-app browser, observed an entering screenshot at opacity
+  0.751 and a 17.1 px offset, then opacity 1 and a zero offset once in view.
+  The [settled desktop view](docs/design/product-site/motion-desktop.png) and
+  390 px mobile view retain the open layout without clipping.
+- Keyboard focus reaches the download action, keeps a solid outline and triggers
+  the light pass. All four routes fit at 320 px; browser warnings/errors are empty.
+- CSSOM inspection confirms every animation and transition rule is inside
+  `prefers-reduced-motion: no-preference`. The existing reduced-motion rule
+  disables smooth scrolling. This checks the stylesheet gates; it does not
+  change the user's OS preference. Browsers without view timelines use the
+  static layout through the feature query.
+- Motion follows the platform's [view timeline](https://developer.mozilla.org/en-US/docs/Web/CSS/Reference/Properties/animation-timeline/view)
+  and [reduced-motion preference](https://developer.mozilla.org/en-US/docs/Web/CSS/Reference/At-rules/@media/prefers-reduced-motion).
+  Page content, metadata, downloads and the no-JavaScript contract are unchanged.
+
 final result: passed
