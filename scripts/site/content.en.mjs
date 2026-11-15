@@ -32,9 +32,9 @@ export default {
       "Meowcal Sub reads the subtitles already on your screen and translates them on your PC. Free, open-source OCR and AI translation for Windows 11 on x64 and ARM64.",
     name: "Meowcal Sub",
     navName: "Meowcal Sub",
-    tagline: "Translate the subtitles already on your screen.",
+    tagline: "Your go-to for on-screen subtitle translation.",
     promise: "Local translation. No account. No API key.",
-    lead: "Draw a box around the original subtitles in your video. Meowcal Sub reads that area, translates the text on your PC, and shows the translation in a floating overlay. Translate visible or burned-in subtitles without a separate subtitle file, account, or API key.",
+    lead: "Meowcal Sub is a versatile choice for everyday watching on Windows. Draw a box around the subtitles and read the translation in a floating overlay. It works with visible or burned-in text, translates on your PC, and needs no separate subtitle file, account, or API key.",
     actions: {
       x64: { label: "Download for x64", hint: "Intel or AMD PC" },
       arm64: { label: "Download for ARM64", hint: "Snapdragon or other Windows on ARM PC" },
@@ -209,7 +209,7 @@ export default {
           },
           {
             name: "Meowcal Sub or Sub 2?",
-            body: "Choose between screen translation and prepared subtitle tracks.",
+            body: "An easy everyday translator, or existing subtitles synced to your video.",
             href: "@compare",
           },
         ],
@@ -222,7 +222,7 @@ export default {
         items: [
           {
             name: "Meowcal Sub 2",
-            body: "Search subtitle providers, prepare translations, and match subtitle files to playback.",
+            body: "Use existing translations made for your film or series, automatically aligned to playback.",
             href: "@sub2",
           },
           {
@@ -236,14 +236,14 @@ export default {
   },
 
   sub2: {
-    title: "Meowcal Sub 2 – Find, sync, and translate subtitles on Windows",
+    title: "Meowcal Sub 2 – Automatically sync existing subtitles on Windows",
     description:
-      "Meowcal Sub 2 is a Windows subtitle studio. Search OpenSubtitles, SubDL, and ASSRT, follow playback with screen OCR, and fill missing lines with on-device translation.",
+      "Watch with existing subtitles on Windows. Meowcal Sub 2 finds subtitle files and automatically aligns them to playback, so you can enjoy a translation made for your film or series.",
     name: "Meowcal Sub 2",
     navName: "Meowcal Sub 2",
-    tagline: "Subtitles, in your language.",
-    promise: "Find. Sync. Translate on device.",
-    lead: "Meowcal Sub 2 is a Windows desktop subtitle studio. It reads the subtitle area of your screen, follows playback against subtitle files, and shows the target language in an always-on-top strip. When a matching translation is unavailable, it can translate on your PC.",
+    tagline: "Great subtitles. In sync with your video.",
+    promise: "Find subtitles. Let them follow the film.",
+    lead: "Found a good subtitle translation for your film or series? Meowcal Sub 2 automatically lines it up with what you are watching. Enjoy the wording, tone, and context a subtitle creator has worked on, with the right line appearing at the right moment.",
     actions: {
       latest: {
         label: "Download the latest release",
@@ -274,18 +274,18 @@ export default {
         detailLabel: "What Meowcal Sub 2 does",
         items: [
           {
-            term: "Find subtitles",
-            detail: "Searches OpenSubtitles, SubDL, and ASSRT from one studio.",
+            term: "Find a translation made for your film",
+            detail:
+              "Search OpenSubtitles, SubDL, and ASSRT for existing subtitles in your language.",
           },
           {
-            term: "Follow playback",
+            term: "Automatically align subtitles to playback",
             detail:
-              "Uses OCR to match the subtitles visible in your player and anchor the playback position.",
+              "Recognizes where you are in the film from its visible subtitles and lines up your chosen track.",
           },
           {
-            term: "Show the target language",
-            detail:
-              "Presents a target-language subtitle file with its own timings, overlaps, and silent gaps. Carried translations or local inference cover the cues the file does not answer.",
+            term: "Keep the translation you chose",
+            detail: "Shows the subtitle translation you chose in a floating strip as you watch.",
           },
           {
             term: "Prepare before you watch",
@@ -380,12 +380,12 @@ export default {
         items: [
           {
             name: "Meowcal Sub",
-            body: "Translate visible screen subtitles directly with local OCR and translation. Normal use needs no subtitle file or provider key.",
+            body: "Your versatile everyday subtitle translator. Select the words on screen and read the translation, without finding a subtitle file.",
             href: "@sub1",
           },
           {
             name: "Meowcal Sub 2",
-            body: "Search subtitle providers, follow playback against subtitle files, and show the target file's lines. Local translation fills the missing ones.",
+            body: "Use a translation made for your film or series and automatically align it to playback.",
             current: "This page",
           },
           {

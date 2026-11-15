@@ -25,9 +25,9 @@ export default {
             detail: "打开已有的外语字幕，圈住字幕所在的位置，就可以翻译。",
           },
           {
-            term: "已经找到与视频匹配的字幕文件",
+            term: "已经找到一份喜欢的字幕译文",
             detail:
-              "可以用 [Meowcal Sub 2](@compare) 对照画面中的文字跟随播放进度，显示目标语言的字幕，缺少的译文由本地翻译补上。",
+              "用 [Meowcal Sub 2](@compare) 把现成字幕自动对齐到视频。保留字幕创作者打磨好的译文，让台词跟上播放进度。",
           },
           {
             term: "画面上完全没有字幕",
@@ -74,7 +74,7 @@ export default {
           {
             term: "译文跟不上播放",
             detail:
-              "可以短暂暂停，留出阅读时间。如果找得到匹配的字幕文件，也可以用 [Sub 2](@compare) 在播放前准备译文。",
+              "可以短暂暂停，留出阅读时间。如果已有喜欢的字幕译文，也可以用 [Sub 2](@compare) 直接显示现成字幕，自动对齐视频。",
           },
           {
             term: "捕获到的视频画面是空白的",
@@ -111,7 +111,7 @@ export default {
           },
           {
             name: "Sub1、Sub2 怎么选",
-            body: "直接翻译画面字幕，还是提前准备字幕文件。",
+            body: "日常观看的省心之选，或让现成好字幕自动跟上视频。",
             href: "@compare",
           },
           {
@@ -126,9 +126,9 @@ export default {
   compare: {
     title: "Meowcal Sub 和 Sub 2 有什么区别？字幕翻译工具怎么选",
     description:
-      "直接翻译视频画面里的字幕，选 Meowcal Sub · 妙影；想搜索字幕文件、提前准备译文并跟随播放进度，选 Sub 2。比较两款 Windows 字幕工具的用途和准备步骤。",
+      "Meowcal Sub · 妙影是省心百搭的日常字幕翻译工具。电影、剧集已有喜欢的字幕译文时，用 Sub 2 自动对齐播放进度。看看哪款适合你。",
     name: "Meowcal Sub 和 Sub 2，怎么选？",
-    lead: "想直接翻译画面里的字幕，选 Meowcal Sub · 妙影。想找字幕文件、提前准备译文，并让字幕跟随播放进度，选 Meowcal Sub 2。两款应用都在 Windows 上独立运行，文字识别和翻译在本机完成。",
+    lead: "Meowcal Sub · 妙影是日常看视频的省心之选：圈出画面里的字幕，直接看译文，简单百搭。电影、剧集已经有字幕组等创作者做好的翻译时，Sub 2 帮你自动对齐播放进度，让你看上精心制作的字幕。",
     sections: [
       {
         type: "pairs",
@@ -138,19 +138,19 @@ export default {
         detailLabel: "推荐选择",
         items: [
           {
-            term: "看懂画面上的外语字幕，不想找字幕文件",
+            term: "想省心看懂各种视频里的外语字幕",
             detail:
-              "选 [Meowcal Sub · 妙影](@sub1)。圈出字幕，直接看悬浮译文，无需字幕源账号或 API key。",
+              "选 [Meowcal Sub · 妙影](@sub1)。日常观看的百搭选择，圈出画面文字就能翻译，无需字幕文件、账号或 API key。",
           },
           {
-            term: "为电影或剧集找一份字幕",
+            term: "电影、剧集已有别人做好的优质字幕",
             detail:
-              "选 [Meowcal Sub 2](@sub2)。在 Settings 中配置密钥或令牌后，搜索 OpenSubtitles、SubDL 或 ASSRT。",
+              "选 [Meowcal Sub 2](@sub2)。找到喜欢的字幕版本，让应用自动对齐播放进度，读字幕作者打磨好的译文。热门或字幕资源齐全的影视作品尤其适合。",
           },
           {
-            term: "使用现成译文，让字幕跟上视频",
+            term: "喜欢的字幕和视频对不上时间",
             detail:
-              "选 [Meowcal Sub 2](@sub2)。它把画面中的字幕与原文字幕文件匹配，确定播放位置，再显示目标字幕。也可以调整时间、在观看前准备译文。",
+              "选 [Meowcal Sub 2](@sub2)。它根据画面里的原字幕找到当前播放位置，把你选好的译文对齐到对应的台词。",
           },
           {
             term: "和另一个人同步看视频",
@@ -160,41 +160,17 @@ export default {
         ],
       },
       {
-        type: "columns",
-        id: "prepare",
-        heading: "各自需要准备什么",
-        columns: [
-          {
-            title: "Meowcal Sub · 妙影",
-            items: [
-              "Windows 11，x64 或 ARM64。",
-              "画面中有可见字幕，字幕区域可以被应用捕获。",
-              "按向导安装本地翻译引擎。识别韩语或使用 Windows OCR 时，还需安装原字幕语言的 Windows 识别组件。",
-            ],
-          },
-          {
-            title: "Meowcal Sub 2",
-            items: [
-              "Windows，x64 或 ARM64，并安装 Microsoft WebView2。",
-              "用于搜索的字幕源密钥或令牌，以及与画面文字匹配的原文字幕文件。",
-              "画面文字对应的 Windows OCR 语言包。需要提前翻译或补译缺失内容时，再安装本地翻译模型。",
-            ],
-          },
-        ],
-        body: "Sub 2 可以直接使用已经准备好的目标语言字幕，无需翻译模型；没有译文的空缺会保持空白。",
-      },
-      {
         type: "faq",
         id: "questions",
         heading: "几个常见选择",
         items: [
           {
             q: "用了 Sub1，还要升级到 Sub2 吗？",
-            a: "按用途选一款就可以。Sub2 独立运行，两款应用都随附 Meowcal Core 运行环境。",
+            a: "两款应用都可以独立使用。日常随看随译用 Sub1，想欣赏现成字幕的译文时用 Sub2。",
           },
           {
             q: "第一次用，推荐哪个？",
-            a: "视频有外语字幕，但找不到合适的中文译文，先试 [妙影](@hardcoded)。想用现成字幕，或在观看前准备好译文，先试 Sub2。",
+            a: "拿不准选哪个，就从 [妙影](@hardcoded) 开始：圈出画面字幕，直接看译文。电影、剧集已经有你喜欢的字幕翻译时，再用 Sub2 让它跟上视频。",
           },
           {
             q: "视频画面没有字幕，Sub2 还能自动同步吗？",
@@ -213,7 +189,7 @@ export default {
         intro: "产品页提供下载入口和设置步骤。",
         items: [
           { name: "Meowcal Sub · 妙影", body: "直接翻译屏幕上已有的字幕。", href: "@sub1" },
-          { name: "Meowcal Sub 2", body: "搜索、准备并同步字幕文件。", href: "@sub2" },
+          { name: "Meowcal Sub 2", body: "用现成的好字幕，自动对齐播放进度。", href: "@sub2" },
         ],
       },
     ],

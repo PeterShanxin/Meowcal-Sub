@@ -26,9 +26,9 @@ export default {
               "Keep that track visible and select its text. Screen translation works from the displayed words, regardless of where the track came from.",
           },
           {
-            term: "You have a matching subtitle file",
+            term: "You have found a good subtitle translation",
             detail:
-              "[Meowcal Sub 2](@compare) can use subtitle files and match visible text to the playback position. It can show a target-language track and translate missing lines locally.",
+              "[Meowcal Sub 2](@compare) automatically aligns existing subtitles to your video. You keep the translation its creator worked on, with the lines following playback.",
           },
           {
             term: "There are no words on screen",
@@ -76,7 +76,7 @@ export default {
           {
             term: "The translation falls behind",
             detail:
-              "A short pause gives you time to read. For a video with matching subtitle files, consider [Sub 2](@compare), which can prepare translations before playback.",
+              "A short pause gives you time to read. If a good subtitle translation is available, [Sub 2](@compare) can show those existing lines in sync with the video.",
           },
           {
             term: "Capture shows a blank video",
@@ -113,7 +113,7 @@ export default {
           },
           {
             name: "Compare Sub and Sub 2",
-            body: "Screen translation or a prepared subtitle track.",
+            body: "Your everyday translator, or existing subtitles synced to the film.",
             href: "@compare",
           },
           {
@@ -128,9 +128,9 @@ export default {
   compare: {
     title: "Meowcal Sub vs Sub 2: which subtitle tool should you use?",
     description:
-      "Choose Meowcal Sub for translating visible subtitles without subtitle files. Choose Sub 2 for subtitle search, playback matching, and prepared translations on Windows.",
+      "Meowcal Sub is your go-to for on-screen subtitle translation. Sub 2 automatically syncs existing translations made for your film or series. Compare both Windows apps.",
     name: "Meowcal Sub or Sub 2: which should you use?",
-    lead: "Choose Meowcal Sub to translate the subtitles already on screen. Choose Meowcal Sub 2 to find subtitle files, match them to playback, and use a prepared translation. Both are independent Windows apps with local OCR and translation.",
+    lead: "Meowcal Sub is the versatile, easy choice for everyday watching: select the subtitles on screen and read the translation. When a film or series already has a good subtitle translation, Sub 2 automatically aligns it to playback so you can enjoy the work its creator put into it.",
     sections: [
       {
         type: "pairs",
@@ -140,19 +140,19 @@ export default {
         detailLabel: "Start here",
         items: [
           {
-            term: "Translate visible subtitles without hunting for a file",
+            term: "An easy subtitle translator for everyday watching",
             detail:
-              "[Meowcal Sub](@sub1). Select the text on screen and read the floating translation. No subtitle-provider account or API key is needed.",
+              "[Meowcal Sub](@sub1). A versatile starting point: select the words on screen and read the translation. No subtitle file, account, or API key needed.",
           },
           {
-            term: "Find a subtitle track for a film or episode",
+            term: "Watch a film or series with good subtitles already available",
             detail:
-              "[Meowcal Sub 2](@sub2). Search OpenSubtitles, SubDL, or ASSRT after adding a provider key or token in Settings.",
+              "[Meowcal Sub 2](@sub2). Choose an existing translation made for the title and let the app align it to playback. A good fit for films and series with an established subtitle community.",
           },
           {
-            term: "Use a translated track and keep it aligned",
+            term: "The subtitles you want are out of sync",
             detail:
-              "[Meowcal Sub 2](@sub2). Match visible subtitles against the source track to follow playback, then display the target track. You can adjust timing and prepare translations before watching.",
+              "[Meowcal Sub 2](@sub2). Its matching system uses the original subtitles visible in the video to find the playback position and line up your chosen translation.",
           },
           {
             term: "Watch together on two computers",
@@ -162,41 +162,17 @@ export default {
         ],
       },
       {
-        type: "columns",
-        id: "prepare",
-        heading: "What to prepare",
-        columns: [
-          {
-            title: "Meowcal Sub",
-            items: [
-              "Windows 11 on x64 or ARM64.",
-              "A video with visible subtitles and an area the app can capture.",
-              "Complete the local translation engine setup. Korean or Windows OCR also needs the original language's Windows OCR component.",
-            ],
-          },
-          {
-            title: "Meowcal Sub 2",
-            items: [
-              "Windows on x64 or ARM64, with Microsoft WebView2.",
-              "A subtitle-provider credential for search, plus source subtitles that match the words visible in the video.",
-              "The Windows OCR language pack for the text on screen. Install the local translation model if you want to prepare translations or fill missing lines.",
-            ],
-          },
-        ],
-        body: "A prepared target-language track in Sub 2 can be used without the translation model; any untranslated gaps remain empty.",
-      },
-      {
         type: "faq",
         id: "questions",
         heading: "Common choices",
         items: [
           {
             q: "Is Sub 2 an upgrade I need to install?",
-            a: "Pick either app for its workflow. Sub 2 runs independently, and both apps include their Meowcal Core runtime.",
+            a: "Both apps run independently. Keep Sub 1 as your everyday translator and choose Sub 2 when you want to watch with an existing subtitle translation.",
           },
           {
             q: "Which one should I try first?",
-            a: "For a video with foreign-language subtitles and no suitable translated track, start with [Meowcal Sub](@hardcoded). If you want to use an existing translation or prepare one before watching, start with Sub 2.",
+            a: "Not sure where to start? Try [Meowcal Sub](@hardcoded): select the subtitles on screen and read the translation. If your film or series already has a translation you like, choose Sub 2 to watch with those subtitles.",
           },
           {
             q: "Can Sub 2 follow a video with no visible subtitles?",
@@ -221,7 +197,7 @@ export default {
           },
           {
             name: "Meowcal Sub 2",
-            body: "Find, prepare, and sync subtitle tracks.",
+            body: "Watch with existing translations, automatically synced to playback.",
             href: "@sub2",
           },
         ],
