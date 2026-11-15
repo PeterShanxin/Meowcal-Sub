@@ -229,7 +229,7 @@ export default {
       "电影、剧集已经有字幕组做好的翻译？Meowcal Sub 2 帮你搜索现成字幕，自动对齐视频播放进度，在 Windows 上看上精心制作的字幕。",
     name: "Meowcal Sub 2",
     navName: "Meowcal Sub 2",
-    tagline: "让精心制作的字幕，跟上你的视频。",
+    tagline: "让好字幕，跟上你的视频。",
     promise: "找到好字幕 · 自动对齐 · 开始观看",
     lead: "喜欢的电影或剧集，已经有字幕组等创作者做好的翻译？Meowcal Sub 2 帮你把这份字幕自动对齐到当前播放位置。保留创作者打磨过的措辞、语气和上下文，在合适的时刻看到对应的台词。",
     actions: {
