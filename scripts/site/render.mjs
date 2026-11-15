@@ -1,4 +1,4 @@
-// Renders the product site as static HTML: one page per product and language,
+// Renders product pages and guides as static HTML in each language,
 // plus the sitemap. Pure functions over the copy in content.*.mjs, so the pages
 // can be checked without building images or touching the network.
 //
@@ -8,9 +8,11 @@
 
 import en from "./content.en.mjs";
 import zhCN from "./content.zh-CN.mjs";
+import guidesEn from "./guides.en.mjs";
+import guidesZhCN from "./guides.zh-CN.mjs";
 
 export const SITE_URL = "https://petershanxin.github.io/Meowcal-Sub/";
-export const CONTENT = { en, "zh-CN": zhCN };
+export const CONTENT = { en: { ...en, ...guidesEn }, "zh-CN": { ...zhCN, ...guidesZhCN } };
 export const IMAGE_WIDTHS = [800, 1600];
 
 const SUB1_REPO = "https://github.com/PeterShanxin/Meowcal-Sub";
@@ -20,7 +22,12 @@ const STORE_URL = "https://apps.microsoft.com/detail/9NNK2X23VLWT";
 const SUB2_VERSION = "0.2.2";
 
 const LOCALE_PATHS = { en: "", "zh-CN": "zh-CN/" };
-const PRODUCT_PATHS = { sub1: "", sub2: "sub-2/" };
+export const PAGE_PATHS = {
+  sub1: "",
+  sub2: "sub-2/",
+  hardcoded: "guides/translate-hardcoded-subtitles/",
+  compare: "compare/meowcal-sub-vs-sub-2/",
+};
 const DEFAULT_LOCALE = "en";
 
 // A source per language where the screenshot shows localized UI, one otherwise.
@@ -74,7 +81,7 @@ function storeScreenshot(name, crop) {
 }
 
 export function pagePath(product, locale) {
-  return LOCALE_PATHS[locale] + PRODUCT_PATHS[product];
+  return LOCALE_PATHS[locale] + PAGE_PATHS[product];
 }
 
 export function imageFile(id, locale, width) {
@@ -124,8 +131,9 @@ function fill(text, values) {
   return text.replace(/\{(\w+)\}/g, (placeholder, key) => values[key] ?? placeholder);
 }
 
-function pageContext(product, locale, release) {
-  const path = pagePath(product, locale);
+function pageContext(pageId, locale, release) {
+  const product = pageId === "sub2" ? "sub2" : "sub1";
+  const path = pagePath(pageId, locale);
   const root = "../".repeat(path.split("/").length - 1);
   const values =
     product === "sub1"
@@ -134,6 +142,7 @@ function pageContext(product, locale, release) {
 
   const context = {
     product,
+    pageId,
     locale,
     root,
     url: SITE_URL + path,
@@ -142,7 +151,9 @@ function pageContext(product, locale, release) {
     page: (target, targetLocale = locale) => root + pagePath(target, targetLocale) || "./",
     href: (target) => {
       if (target === "@issues") return `${PRODUCTS[product].repository}/issues/new/choose`;
-      return target.startsWith("@") ? context.page(target.slice(1)) : target;
+      if (!target.startsWith("@")) return target;
+      const [page, anchor] = target.slice(1).split("#");
+      return context.page(page) + (anchor ? `#${anchor}` : "");
     },
     text: (text) => escapeHtml(fill(text, values)),
     rich: (text) =>
@@ -272,6 +283,16 @@ function renderActions(page, context, release) {
 
 function structuredData(page, context, release) {
   const product = PRODUCTS[context.product];
+  if (!PRODUCTS[context.pageId]) {
+    return JSON.stringify({
+      "@context": "https://schema.org",
+      "@type": "WebPage",
+      name: page.name,
+      description: page.description,
+      url: context.url,
+      inLanguage: context.locale,
+    }).replaceAll("<", "\\u003c");
+  }
   const data = {
     "@context": "https://schema.org",
     "@type": "SoftwareApplication",
@@ -302,7 +323,7 @@ function renderHead(page, context, release) {
   const alternates = Object.keys(CONTENT)
     .map(
       (locale) =>
-        `<link rel="alternate" hreflang="${locale}" href="${SITE_URL + pagePath(context.product, locale)}">`,
+        `<link rel="alternate" hreflang="${locale}" href="${SITE_URL + pagePath(context.pageId, locale)}">`,
     )
     .join("\n");
   const otherLocales = Object.keys(CONTENT)
@@ -317,7 +338,7 @@ function renderHead(page, context, release) {
 <meta name="description" content="${context.text(page.description)}">
 <link rel="canonical" href="${context.url}">
 ${alternates}
-<link rel="alternate" hreflang="x-default" href="${SITE_URL + pagePath(context.product, DEFAULT_LOCALE)}">
+<link rel="alternate" hreflang="x-default" href="${SITE_URL + pagePath(context.pageId, DEFAULT_LOCALE)}">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="Meowcal Sub">
 <meta property="og:title" content="${context.text(page.title)}">
@@ -340,7 +361,7 @@ ${structuredData(page, context, release)}
 
 function renderHeader(context) {
   const copy = CONTENT[context.locale];
-  const current = (product) => (product === context.product ? ' aria-current="page"' : "");
+  const current = (product) => (product === context.pageId ? ' aria-current="page"' : "");
   const [otherLocale] = Object.keys(CONTENT).filter((locale) => locale !== context.locale);
   const other = CONTENT[otherLocale];
 
@@ -350,7 +371,7 @@ function renderHeader(context) {
 <nav aria-label="${context.text(copy.navLabel)}">
 <a href="${context.page("sub2")}"${current("sub2")}>${context.text(copy.sub2.navName)}</a>
 <a href="${PRODUCTS[context.product].repository}">${context.text(copy.source)}</a>
-<a class="language" href="${context.page(context.product, otherLocale)}" lang="${other.lang}" hreflang="${other.lang}" aria-label="${context.text(copy.languageLabel)}: ${other.languageName}">${other.languageName}</a>
+<a class="language" href="${context.page(context.pageId, otherLocale)}" lang="${other.lang}" hreflang="${other.lang}" aria-label="${context.text(copy.languageLabel)}: ${other.languageName}">${other.languageName}</a>
 </nav>
 </div>
 </header>`;
@@ -372,6 +393,8 @@ export function renderPage(product, locale, release) {
   const copy = CONTENT[locale];
   const page = copy[product];
   const context = pageContext(product, locale, release);
+
+  if (!PRODUCTS[product]) return renderGuide(page, copy, context, release);
 
   return `<!doctype html>
 <html lang="${copy.lang}" data-product="${product}">
@@ -407,8 +430,33 @@ ${renderFooter(context)}
 `;
 }
 
+function renderGuide(page, copy, context, release) {
+  const contents = page.sections
+    .map((section) => `<li><a href="#${section.id}">${context.text(section.heading)}</a></li>`)
+    .join("\n");
+  return `<!doctype html>
+<html lang="${copy.lang}" data-product="${context.product}">
+${renderHead(page, context, release)}
+<body>
+<a class="skip" href="#main">${context.text(copy.skipLink)}</a>
+${renderHeader(context)}
+<main id="main" class="guide">
+<header class="wrap guide-header">
+<p><a href="${context.page("sub1")}">${context.text(copy.sub1.navName)}</a></p>
+<h1>${context.text(page.name)}</h1>
+<p class="lead">${context.rich(page.lead)}</p>
+<nav aria-label="${context.text(copy.contentsLabel)}"><ul class="links">${contents}</ul></nav>
+</header>
+${page.sections.map((section) => renderSection(section, context)).join("\n")}
+</main>
+${renderFooter(context)}
+</body>
+</html>
+`;
+}
+
 export function renderSitemap() {
-  const entries = Object.keys(PRODUCT_PATHS).flatMap((product) =>
+  const entries = Object.keys(PAGE_PATHS).flatMap((product) =>
     Object.keys(CONTENT).map((locale) => {
       const alternates = Object.keys(CONTENT)
         .map(
@@ -428,7 +476,7 @@ ${entries.join("\n")}
 
 /** Every text file of the site, as `{ path, contents }` relative to its root. */
 export function renderSite(release) {
-  const pages = Object.keys(PRODUCT_PATHS).flatMap((product) =>
+  const pages = Object.keys(PAGE_PATHS).flatMap((product) =>
     Object.keys(CONTENT).map((locale) => ({
       path: `${pagePath(product, locale)}index.html`,
       contents: renderPage(product, locale, release),

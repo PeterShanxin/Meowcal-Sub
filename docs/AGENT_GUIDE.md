@@ -411,8 +411,9 @@ DPI/window behavior.
 - Superseded pull request runs cancel; `main` runs do not, because a cancelled
   post-merge run leaves `main` unverified.
 - `.github/workflows/pages.yml` builds the [product site](../site/README.md) for
-  pull requests that touch it and publishes it to GitHub Pages from `main`. Only
-  its deploy job holds `pages: write`. It is not a required check.
+  pull requests that touch it, checks desktop/mobile layouts without JavaScript,
+  and publishes it to GitHub Pages from `main`. The build uploads browser
+  screenshots. Only its deploy job holds `pages: write`. It is not a required check.
 
 ## Real-device validation is not a CI job
 

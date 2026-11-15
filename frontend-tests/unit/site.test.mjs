@@ -6,6 +6,7 @@ import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import {
   CONTENT,
+  PAGE_PATHS,
   SITE_URL,
   pagePath,
   readSub1Release,
@@ -21,8 +22,9 @@ const readme = (x64 = "1.2.3", arm64 = x64) =>
 
 const release = readSub1Release(readme());
 const PRODUCTS = ["sub1", "sub2"];
+const PAGE_IDS = Object.keys(PAGE_PATHS);
 const LOCALES = Object.keys(CONTENT);
-const pages = PRODUCTS.flatMap((product) =>
+const pages = PAGE_IDS.flatMap((product) =>
   LOCALES.map((locale) => ({ product, locale, html: renderPage(product, locale, release) })),
 );
 
@@ -70,7 +72,7 @@ describe.each(pages)("the $product page in $locale", ({ product, locale, html })
   const url = SITE_URL + pagePath(product, locale);
 
   it("sends support requests to this product's issue tracker", () => {
-    const repository = product === "sub1" ? "Meowcal-Sub" : "Meowcal-Sub-2";
+    const repository = product === "sub2" ? "Meowcal-Sub-2" : "Meowcal-Sub";
     expect(html).toContain(
       `href="https://github.com/PeterShanxin/${repository}/issues/new/choose"`,
     );
@@ -99,6 +101,15 @@ describe.each(pages)("the $product page in $locale", ({ product, locale, html })
     const data = JSON.parse(json);
     const page = CONTENT[locale][product];
 
+    if (!PRODUCTS.includes(product)) {
+      expect(data["@type"]).toBe("WebPage");
+      expect(data.inLanguage).toBe(locale);
+      expect(data.name).toBe(page.name);
+      expect(data.description).toBe(page.description);
+      expect(data.url).toBe(url);
+      expect(data).not.toHaveProperty("offers");
+      return;
+    }
     expect(data["@type"]).toBe("SoftwareApplication");
     expect(html).toContain(`<h1>${data.name}`);
     expect(data.description).toBe(page.description);
@@ -117,11 +128,18 @@ describe.each(pages)("the $product page in $locale", ({ product, locale, html })
 
   it("offers working in-page download and setup navigation", () => {
     const anchors = attributes(html, /href="#([^"]+)"/g);
-    expect(anchors).toEqual(expect.arrayContaining(["download", "how-it-works"]));
+    if (PRODUCTS.includes(product)) {
+      expect(anchors).toEqual(expect.arrayContaining(["download", "how-it-works"]));
+      expect(html).toContain('fetchpriority="high"');
+    } else {
+      expect(anchors).toContain("next");
+      expect(html).toContain(
+        `href="${"../".repeat(pagePath(product, locale).split("/").length - 1)}${pagePath(product, locale === "en" ? "zh-CN" : "en")}" lang=`,
+      );
+    }
     for (const anchor of anchors) {
       expect(html).toContain(`id="${anchor}"`);
     }
-    expect(html).toContain('fetchpriority="high"');
   });
 
   it("keeps the footer to repository and support navigation", () => {
@@ -141,8 +159,13 @@ describe.each(pages)("the $product page in $locale", ({ product, locale, html })
 
     expect(local.length).toBeGreaterThan(0);
     for (const href of local) {
-      const target = new URL(href, `https://site.test/${directory}`).pathname.slice(1);
-      expect(siteFiles, `${href} from ${directory || "/"}`).toContain(`${target}index.html`);
+      const targetUrl = new URL(href, `https://site.test/${directory}`);
+      const target = targetUrl.pathname.slice(1) + "index.html";
+      expect(siteFiles, `${href} from ${directory || "/"}`).toContain(target);
+      if (targetUrl.hash) {
+        const targetHtml = renderSite(release).find((file) => file.path === target).contents;
+        expect(targetHtml).toContain(`id="${targetUrl.hash.slice(1)}"`);
+      }
     }
   });
 
@@ -182,7 +205,7 @@ describe("the two languages", () => {
   });
 
   it("use the same section order and anchors", () => {
-    for (const product of PRODUCTS) {
+    for (const product of PAGE_IDS) {
       const outline = (locale) =>
         CONTENT[locale][product].sections.map(({ type, id }) => `${type}#${id}`);
       expect(outline("zh-CN")).toEqual(outline("en"));
@@ -193,7 +216,7 @@ describe("the two languages", () => {
 describe("the sitemap", () => {
   it("lists every page once, each with all language versions", () => {
     const sitemap = renderSitemap();
-    const expected = PRODUCTS.flatMap((product) =>
+    const expected = PAGE_IDS.flatMap((product) =>
       LOCALES.map((locale) => SITE_URL + pagePath(product, locale)),
     );
 
@@ -203,4 +226,14 @@ describe("the sitemap", () => {
     );
     expect(sitemap).not.toContain("<lastmod>");
   });
+});
+
+it("makes every guide reachable from a product page in the same language", () => {
+  for (const locale of LOCALES) {
+    const html = renderPage("sub1", locale, release);
+    for (const guide of ["hardcoded", "compare"]) {
+      const root = locale === "en" ? "" : "../";
+      expect(html).toContain(`href="${root + pagePath(guide, locale)}"`);
+    }
+  }
 });

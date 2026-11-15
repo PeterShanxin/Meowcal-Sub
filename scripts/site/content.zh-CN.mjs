@@ -12,6 +12,7 @@ export default {
   languageLabel: "语言",
   source: "GitHub",
   downloadLabel: "下载 Windows 版",
+  contentsLabel: "本页内容",
   howLabel: "了解使用方法",
   footer: {
     links: [
@@ -29,14 +30,18 @@ export default {
     name: "Meowcal Sub · 妙影",
     navName: "Meowcal Sub · 妙影",
     tagline: "把屏幕上已有的字幕，翻译成你想读的语言。",
-    promise: "全本地运行 · 保护隐私 · 无付费",
-    lead: "圈出视频中的原字幕区域。Meowcal Sub 会识别这块区域的文字，在本机翻译，再用悬浮字幕显示译文。正常使用不需要另找字幕文件、注册云服务账号或填写 API 密钥。",
+    promise: "本地翻译 · 无需账号 · 无需 API key",
+    lead: "圈出视频中的原字幕区域。Meowcal Sub 会识别这块区域的文字，在本机翻译，再用悬浮字幕显示译文。无需另找字幕文件、注册账号或填写 API key。",
     actions: {
       x64: { label: "下载 x64 版", hint: "Intel / AMD 电脑" },
       arm64: { label: "下载 ARM64 版", hint: "骁龙或其他 Windows on ARM 电脑" },
       store: { label: "从 Microsoft Store 获取" },
       meta: "版本 {version} · Windows 11 公开测试版 · 以 AGPL-3.0-only 协议免费开源",
       links: [
+        {
+          label: "翻译模型使用条款",
+          href: `${SUB1_REPO}/blob/main/LICENSE-NOTICE.md#separately-downloaded-translation-model`,
+        },
         { label: "更新说明与全部安装文件", href: "{notes}" },
         { label: "使用指南", href: `${SUB1_REPO}/blob/main/docs/USAGE.zh-CN.md` },
         { label: "源代码", href: `${SUB1_REPO}/blob/main/README.zh-CN.md` },
@@ -48,11 +53,6 @@ export default {
       caption: "截图展示应用界面，其中的字幕为编写的示例。",
     },
     sections: [
-      {
-        type: "callout",
-        title: "识别画面文字，不识别语音。",
-        body: "视频需要有可见字幕。Meowcal Sub 不会听取音频，也不会为完全没有画面文字的视频生成字幕。",
-      },
       {
         type: "steps",
         id: "how-it-works",
@@ -115,7 +115,7 @@ export default {
       {
         type: "columns",
         id: "privacy",
-        heading: "隐私与联网",
+        heading: "离线翻译与隐私",
         columns: [
           {
             title: "留在你的电脑上",
@@ -130,29 +130,28 @@ export default {
             ],
           },
         ],
-        body: "正常模式下，识别的字幕文字与译文不会上传。安装好引擎和识别语言后，OCR 与翻译可以离线运行。在线视频本身仍可能需要联网。",
+        body: "完成设置后，文字识别和翻译在本机运行，无需上传视频或字幕。想断网观看，视频也需要提前下载。默认日志记录耗时和支持代码；主动开启“详细”日志后，还会在本机保存截图和字幕文字。",
       },
       {
         type: "columns",
         id: "requirements",
-        heading: "系统要求与边界",
+        heading: "使用要求",
         columns: [
           {
             title: "你需要准备",
             items: [
               "Windows 11，x64 或 ARM64。",
-              "Windows 报告的系统内存至少 8 GiB，引擎安装所在磁盘至少有 3 GiB 空闲空间。这是设置时的检查门槛，不是流畅运行的保证。",
+              "Windows 报告的系统内存至少 8 GiB，引擎安装所在磁盘至少有 3 GiB 空闲空间。翻译速度取决于电脑性能和文本。",
               "首次设置需要联网，下载本地翻译运行环境与模型，约 1.1 GB。",
               "识别韩语字幕，或选择 Windows OCR 时：需要为原字幕语言安装对应的 Windows 识别语言。内置的 PP-OCRv6 不需要 Windows 语言组件。",
             ],
           },
           {
-            title: "也有边界",
+            title: "观看时注意",
             items: [
               "每次只翻译一个屏幕，以圈选字幕区域时应用所在的屏幕为准。",
               "字幕区域是固定的屏幕区域。移动视频或改变画面大小后，需要重新圈选。",
               "识别效果取决于原文语言、文字清晰度，以及屏幕捕获实际能看到什么。艺术字体、快速变化的文字或受保护的视频，可能造成漏识别或错误。",
-              "翻译并非瞬时完成，也不保证完全准确。速度取决于电脑和文本。",
             ],
           },
         ],
@@ -165,11 +164,11 @@ export default {
         items: [
           {
             q: "Meowcal Sub 能为没有字幕的视频生成字幕吗？",
-            a: "不能。Meowcal Sub 用 OCR 读取画面文字，不转录语音。需要搜索字幕文件，或让字幕跟随播放进度时，可了解独立应用 [Meowcal Sub 2](@sub2)。",
+            a: "妙影翻译画面中已有的文字。视频完全没有字幕时，需要先用语音转文字工具生成字幕。也可以查看[字幕工具选择指南](@compare)。",
           },
           {
             q: "可以离线使用吗？",
-            a: "安装好本地引擎后，OCR 和翻译可以离线运行；使用 Windows OCR 时，还需要先安装识别语言。设置、修复下载、缺少的 Windows 语言组件以及更新检查需要联网。视频服务有自己的联网要求。",
+            a: "可以。先完成引擎设置，并装好所需的 Windows OCR 语言组件。之后识别和翻译在本机完成；在线视频播放和应用更新仍需要联网。",
           },
           {
             q: "是免费的吗？",
@@ -187,13 +186,31 @@ export default {
       },
       {
         type: "products",
+        id: "guides",
+        heading: "从你想解决的问题开始",
+        intro: "按视频里已有的字幕，选择观看方式。",
+        items: [
+          {
+            name: "视频只有外语字幕，怎么看中文？",
+            body: "直接翻译画面中的字幕，不用再找 SRT 文件。",
+            href: "@hardcoded",
+          },
+          {
+            name: "Sub1、Sub2 怎么选？",
+            body: "直接翻译屏幕字幕，还是提前准备字幕文件。",
+            href: "@compare",
+          },
+        ],
+      },
+      {
+        type: "products",
         id: "more",
-        heading: "More Meow tools",
+        heading: "其他 Meow 工具",
         intro: "面向观看的小工具，各自专注一个任务。",
         items: [
           {
             name: "Meowcal Sub 2",
-            body: "搜索字幕源，并让字幕文件跟随视频播放进度。这是另一种工作流，不是必须升级到的版本。",
+            body: "搜索字幕、提前准备译文，让字幕文件跟随视频播放进度。",
             href: "@sub2",
           },
           {
@@ -291,7 +308,7 @@ export default {
       {
         type: "columns",
         id: "requirements",
-        heading: "系统要求与边界",
+        heading: "使用要求",
         columns: [
           {
             title: "你需要准备",
@@ -303,10 +320,9 @@ export default {
             ],
           },
           {
-            title: "也有边界",
+            title: "观看时注意",
             items: [
               "OCR 与匹配效果取决于视频、字幕版本、语言和圈选区域。",
-              "这是早期版本，不保证每个播放器或每部影片都能匹配。",
               "受保护的视频画面可能无法捕获。",
             ],
           },
@@ -338,7 +354,7 @@ export default {
         type: "products",
         id: "more",
         heading: "该选哪款 Meowcal 应用？",
-        intro: "Meowcal Sub 2 是另一种工作流，不是必须升级到的版本。",
+        intro: "查看 [Sub1、Sub2 选择指南](@compare)，按用途选择。",
         items: [
           {
             name: "Meowcal Sub · 妙影",
