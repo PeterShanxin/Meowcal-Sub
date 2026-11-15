@@ -22,6 +22,7 @@ on:
       - package.json
       - package-lock.json
       - .github/workflows/pages.yml
+      - frontend-tests/unit/site.test.mjs
   push:
     branches: [main]
     paths:
@@ -32,6 +33,7 @@ on:
       - package.json
       - package-lock.json
       - .github/workflows/pages.yml
+      - frontend-tests/unit/site.test.mjs
   workflow_dispatch:
 
 permissions:
@@ -56,7 +58,16 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci --ignore-scripts
+      - run: npm exec -- vitest run frontend-tests/unit/site.test.mjs
       - run: node scripts/site/build.mjs --out _site
+      - run: npm exec -- playwright install --with-deps chromium
+      - run: node scripts/site/check-browser.mjs
+      - uses: actions/upload-artifact@v6
+        if: always()
+        with:
+          name: site-browser-screenshots
+          path: test-results/site/
+          if-no-files-found: ignore
       - uses: actions/upload-pages-artifact@v5
         with:
           path: _site

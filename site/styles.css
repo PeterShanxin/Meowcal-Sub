@@ -780,3 +780,58 @@ h3 {
     padding-top: 0;
   }
 }
+
+/* Reading layout for scenario and comparison guides. */
+.guide .wrap {
+  width: min(56rem, 100% - 2rem);
+}
+
+.guide-header {
+  padding-block: clamp(3rem, 6vw, 5rem) 1rem;
+}
+
+.guide h1 {
+  margin-top: 1.5rem;
+  font-size: clamp(2rem, 4.5vw, 3.5rem);
+  font-weight: 650;
+  line-height: 1.25;
+  letter-spacing: -0.025em;
+}
+
+.guide .lead {
+  max-width: 46rem;
+}
+
+.guide-header nav {
+  margin-top: 2rem;
+}
+
+.guide .section {
+  padding-block: 2.5rem;
+}
+
+.guide .section-columns {
+  display: block;
+}
+
+.guide .columns {
+  margin-top: 2rem;
+}
+
+.guide .section-columns .note {
+  margin-top: 1.5rem;
+}
+
+.guide .steps {
+  gap: 2.5rem;
+  margin-top: 2rem;
+}
+
+.guide .steps p {
+  max-width: 42rem;
+}
+
+.guide .step-copy::before {
+  font-size: 1.5rem;
+  margin-bottom: 0.75rem;
+}

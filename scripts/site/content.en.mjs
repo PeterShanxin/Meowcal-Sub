@@ -15,6 +15,7 @@ export default {
   languageLabel: "Language",
   source: "GitHub",
   downloadLabel: "Download for Windows",
+  contentsLabel: "On this page",
   howLabel: "See how it works",
   footer: {
     links: [
@@ -32,14 +33,18 @@ export default {
     name: "Meowcal Sub",
     navName: "Meowcal Sub",
     tagline: "Translate the subtitles already on your screen.",
-    promise: "Fully local. Private. Zero cost.",
-    lead: "Draw a box around the original subtitles in your video. Meowcal Sub reads that area, translates the text on your PC, and shows the translation in a floating overlay. Normal use needs no subtitle file, cloud account, or API key.",
+    promise: "Local translation. No account. No API key.",
+    lead: "Draw a box around the original subtitles in your video. Meowcal Sub reads that area, translates the text on your PC, and shows the translation in a floating overlay. Translate visible or burned-in subtitles without a separate subtitle file, account, or API key.",
     actions: {
       x64: { label: "Download for x64", hint: "Intel or AMD PC" },
       arm64: { label: "Download for ARM64", hint: "Snapdragon or other Windows on ARM PC" },
       store: { label: "Get it from Microsoft Store" },
       meta: "Version {version} · Windows 11 public beta · Free and open source under AGPL-3.0-only",
       links: [
+        {
+          label: "Translation model terms",
+          href: `${SUB1_REPO}/blob/main/LICENSE-NOTICE.md#separately-downloaded-translation-model`,
+        },
         { label: "Release notes and all files", href: "{notes}" },
         { label: "User guide", href: `${SUB1_REPO}/blob/main/docs/USAGE.md` },
         { label: "Source code", href: SUB1_REPO },
@@ -51,11 +56,6 @@ export default {
       caption: "Screenshots show the app interface with an authored sample subtitle.",
     },
     sections: [
-      {
-        type: "callout",
-        title: "Screen text, not speech.",
-        body: "The video needs visible subtitles. Meowcal Sub does not listen to audio or generate captions for a video without on-screen text.",
-      },
       {
         type: "steps",
         id: "how-it-works",
@@ -122,7 +122,7 @@ export default {
       {
         type: "columns",
         id: "privacy",
-        heading: "Privacy, without the fine-print surprise",
+        heading: "Offline translation and privacy",
         columns: [
           {
             title: "Stays on your PC",
@@ -142,7 +142,7 @@ export default {
             ],
           },
         ],
-        body: "In normal mode, captured and translated subtitle text is not uploaded. Once the engine and recognition language are installed, OCR and translation can run offline. Online video playback may still need its own connection.",
+        body: "After setup, OCR and translation run on your PC without uploading the video or subtitle text. For offline viewing, download the video too. Default logs contain timings and support codes; the optional Verbose setting also saves captures and subtitle text locally.",
       },
       {
         type: "columns",
@@ -153,18 +153,17 @@ export default {
             title: "What you need",
             items: [
               "Windows 11 on x64 or ARM64.",
-              "At least 8 GiB of system RAM reported by Windows, and 3 GiB free on the engine installation drive. These are setup checks, not a guarantee of smooth performance.",
+              "At least 8 GiB of system RAM reported by Windows, and 3 GiB free on the engine installation drive. Translation speed depends on your PC and the text.",
               "An internet connection for first-time setup, which downloads the local translation runtime and model, about 1.1 GB.",
               "For Korean subtitles, or when you choose Windows OCR: the Windows recognition language for the original subtitles. The built-in PP-OCRv6 recognizer needs no Windows language.",
             ],
           },
           {
-            title: "Know the limits",
+            title: "During playback",
             items: [
               "Each session translates one screen: the screen that contains the app when you select the subtitle area.",
               "The subtitle area is a fixed screen region. Select it again when the video moves or changes size.",
               "Recognition depends on the source language, text clarity, and what screen capture can see. Stylized fonts, fast-changing text, and protected video can cause missing or incorrect results.",
-              "Translation is not instant or error-free. Speed depends on your PC and the text.",
             ],
           },
         ],
@@ -177,11 +176,11 @@ export default {
         items: [
           {
             q: "Can Meowcal Sub create subtitles for a video that has none?",
-            a: "No. Meowcal Sub reads screen text with OCR; it does not transcribe audio. For subtitle-file search and playback-aligned sessions, see [Meowcal Sub 2](@sub2), a separate app.",
+            a: "Meowcal Sub translates visible text. For a video without captions, use a speech-to-text tool first. [Choose a subtitle workflow](@compare).",
           },
           {
             q: "Does it work offline?",
-            a: "OCR and translation can run offline after the local engine is installed, and after the Windows recognition language is installed when Windows OCR is used. Setup, repair downloads, missing Windows language components, and update checks use the network. Your video service has its own connectivity requirements.",
+            a: "Yes. Complete engine setup and install any needed Windows OCR language component first. OCR and translation then run locally; online video playback and application updates still use the network.",
           },
           {
             q: "Is it free?",
@@ -199,13 +198,31 @@ export default {
       },
       {
         type: "products",
+        id: "guides",
+        heading: "Find the right subtitle workflow",
+        intro: "Start with the subtitles your video already has.",
+        items: [
+          {
+            name: "Translate hardcoded subtitles",
+            body: "Read burned-in or on-screen subtitles in your language, without an SRT file.",
+            href: "@hardcoded",
+          },
+          {
+            name: "Meowcal Sub or Sub 2?",
+            body: "Choose between screen translation and prepared subtitle tracks.",
+            href: "@compare",
+          },
+        ],
+      },
+      {
+        type: "products",
         id: "more",
         heading: "More Meow tools",
         intro: "Small tools for watching, each with a focused task.",
         items: [
           {
             name: "Meowcal Sub 2",
-            body: "Search subtitle providers and follow playback against subtitle files. A separate workflow, not a required upgrade.",
+            body: "Search subtitle providers, prepare translations, and match subtitle files to playback.",
             href: "@sub2",
           },
           {
@@ -321,10 +338,9 @@ export default {
             ],
           },
           {
-            title: "Know the limits",
+            title: "During playback",
             items: [
               "OCR and matching depend on the video, the subtitle release, the language, and the selected region.",
-              "This is an early release. It does not guarantee a match for every player or title.",
               "Protected video surfaces can prevent screen capture.",
             ],
           },
@@ -360,7 +376,7 @@ export default {
         type: "products",
         id: "more",
         heading: "Which Meowcal app?",
-        intro: "Meowcal Sub 2 is a separate workflow, not a required upgrade.",
+        intro: "[Compare Sub and Sub 2](@compare) to choose a subtitle workflow.",
         items: [
           {
             name: "Meowcal Sub",

@@ -60,7 +60,9 @@
     "scripts/site/build.mjs",
     "scripts/site/render.mjs",
     "scripts/site/content.en.mjs",
-    "scripts/site/content.zh-CN.mjs"
+    "scripts/site/content.zh-CN.mjs",
+    "scripts/site/guides.en.mjs",
+    "scripts/site/guides.zh-CN.mjs"
   ],
   "legacyFileMaxLines": {
     "src-tauri/src/capture/graphics_capture.rs": 469,
