@@ -29,9 +29,9 @@ export default {
       "Meowcal Sub · 妙影识别屏幕上已有的字幕，在你的电脑上完成 AI 翻译，并悬浮显示译文。免费开源，支持 Windows 11 x64 与 ARM64，无需账号或 API 密钥。",
     name: "Meowcal Sub · 妙影",
     navName: "Meowcal Sub · 妙影",
-    tagline: "把屏幕上已有的字幕，翻译成你想读的语言。",
+    tagline: "日常看视频的省心之选。",
     promise: "本地翻译 · 无需账号 · 无需 API key",
-    lead: "圈出视频中的原字幕区域。Meowcal Sub 会识别这块区域的文字，在本机翻译，再用悬浮字幕显示译文。无需另找字幕文件、注册账号或填写 API key。",
+    lead: "日常看视频，妙影是省心、百搭的字幕翻译工具。圈出画面中的字幕，就能在悬浮窗口里看译文。翻译在本机完成，无需另找字幕文件、注册账号或填写 API key。",
     actions: {
       x64: { label: "下载 x64 版", hint: "Intel / AMD 电脑" },
       arm64: { label: "下载 ARM64 版", hint: "骁龙或其他 Windows on ARM 电脑" },
@@ -197,7 +197,7 @@ export default {
           },
           {
             name: "Sub1、Sub2 怎么选？",
-            body: "直接翻译屏幕字幕，还是提前准备字幕文件。",
+            body: "省心百搭的随看随译，或让现成好字幕自动跟上视频。",
             href: "@compare",
           },
         ],
@@ -210,7 +210,7 @@ export default {
         items: [
           {
             name: "Meowcal Sub 2",
-            body: "搜索字幕、提前准备译文，让字幕文件跟随视频播放进度。",
+            body: "用字幕组等创作者做好的字幕，自动对齐视频播放进度。",
             href: "@sub2",
           },
           {
@@ -224,14 +224,14 @@ export default {
   },
 
   sub2: {
-    title: "Meowcal Sub 2 – Windows 字幕搜索、同步与本地翻译",
+    title: "Meowcal Sub 2 – 搜索现成字幕，自动对齐视频",
     description:
-      "Meowcal Sub 2 是 Windows 桌面字幕工作台：搜索 OpenSubtitles、SubDL 和 ASSRT，用屏幕 OCR 跟随播放进度，缺少的译文由本地翻译补上。免费开源。",
+      "电影、剧集已经有字幕组做好的翻译？Meowcal Sub 2 帮你搜索现成字幕，自动对齐视频播放进度，在 Windows 上看上精心制作的字幕。",
     name: "Meowcal Sub 2",
     navName: "Meowcal Sub 2",
-    tagline: "字幕，用你想读的语言。",
-    promise: "搜索 · 同步 · 本地翻译",
-    lead: "Meowcal Sub 2 是一款 Windows 桌面字幕工作台。它读取屏幕上的字幕区域，对照字幕文件跟随播放进度，并在始终置顶的字幕条中显示目标语言。找不到匹配的译文时，可以在你的电脑上翻译。",
+    tagline: "让精心制作的字幕，跟上你的视频。",
+    promise: "找到好字幕 · 自动对齐 · 开始观看",
+    lead: "喜欢的电影或剧集，已经有字幕组等创作者做好的翻译？Meowcal Sub 2 帮你把这份字幕自动对齐到当前播放位置。保留创作者打磨过的措辞、语气和上下文，在合适的时刻看到对应的台词。",
     actions: {
       latest: { label: "下载最新版本", hint: "安装版或便携版，x64 与 ARM64" },
       meta: "本页介绍版本 {version} · Windows x64 与 ARM64 · 以 AGPL-3.0-only 协议免费开源",
@@ -259,17 +259,16 @@ export default {
         detailLabel: "Meowcal Sub 2 怎么做",
         items: [
           {
-            term: "找字幕",
-            detail: "在同一个工作台中搜索 OpenSubtitles、SubDL 和 ASSRT。",
+            term: "找到为这部影片做好的翻译",
+            detail: "从 OpenSubtitles、SubDL 和 ASSRT 搜索你想看的语言，挑选现成字幕。",
           },
           {
-            term: "跟随播放",
-            detail: "用 OCR 匹配播放器中可见的字幕，确定当前播放位置。",
+            term: "自动对齐播放进度",
+            detail: "根据画面里的原字幕识别播放位置，让选好的字幕跟上视频。",
           },
           {
-            term: "显示目标语言",
-            detail:
-              "按目标语言字幕文件自身的时间轴显示，包括重叠和静默间隔。文件没有覆盖的字幕，由已有译文或本地推理补上。",
+            term: "读你选好的译文",
+            detail: "观看时，在悬浮字幕条中显示你选好的译文。",
           },
           {
             term: "播放前先准备",
@@ -358,12 +357,12 @@ export default {
         items: [
           {
             name: "Meowcal Sub · 妙影",
-            body: "直接识别屏幕上的字幕并在本地翻译。正常使用不需要字幕文件或字幕源密钥。",
+            body: "省心百搭的日常字幕翻译。圈出画面里的文字，直接看译文，无需另找字幕文件。",
             href: "@sub1",
           },
           {
             name: "Meowcal Sub 2",
-            body: "搜索字幕源，对照字幕文件跟随播放进度，并显示目标字幕文件中的字幕。缺少的部分由本地翻译补上。",
+            body: "用为电影或剧集精心制作的字幕，自动对齐播放进度。",
             current: "当前页面",
           },
           {
