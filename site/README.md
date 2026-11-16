@@ -78,7 +78,8 @@ published release.
   that table, and merging it redeploys the site. Update the copy when the release
   changes what the page says.
 - **Sub 2 release.** Update `SUB2_VERSION` in `render.mjs` and the Sub 2 copy.
-  When the studio looks different, replace `assets/sub2-studio.png`: in a
+  When the studio looks different, replace `assets/sub2-studio.png` and
+  `assets/sub2-studio.zh-CN.png`: in a
   checkout of the released tag, run that repository's
   `docs/audit-20260926/ui/demo_server.py`, prepare the sample session, and
   capture the page at 1440 × 960 with a device scale factor of 2. The demo

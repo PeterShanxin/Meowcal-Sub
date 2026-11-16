@@ -258,7 +258,8 @@ export default {
     figure: {
       image: "sub2-studio",
       alt: "The Meowcal Sub 2 studio with a prepared session for the sample title Paper Lanterns. The source and target subtitle files are chosen, every line is answered, and the Start OCR and sync button is ready.",
-      caption: "The studio in version {version}, with invented sample titles.",
+      caption:
+        "The studio in version {version}, with invented sample titles. Choose English or Simplified Chinese in Settings.",
     },
     sections: [
       {
@@ -332,7 +333,7 @@ export default {
             title: "What you need",
             items: [
               "Windows on x64 or ARM64, with Microsoft WebView2.",
-              "The Windows OCR language pack for the language on screen.",
+              "For Windows OCR: the language pack for the language on screen. PP-OCRv6 supports English, Chinese, Japanese, Spanish, French and German without Windows OCR language packs.",
               "At least one subtitle provider credential for search.",
               "For local translation: a one-time download of about 1.1 GB, plus the runtime. A prepared target subtitle works without it, but untranslated gaps then stay empty.",
             ],

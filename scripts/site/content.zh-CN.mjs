@@ -227,7 +227,7 @@ export default {
     title: "Meowcal Sub 2 – 搜索现成字幕，自动对齐视频",
     description:
       "电影、剧集已经有字幕组做好的翻译？Meowcal Sub 2 帮你搜索现成字幕，自动对齐视频播放进度，在 Windows 上看上精心制作的字幕。",
-    name: "Meowcal Sub 2",
+    name: "Meowcal Sub 2 · 妙影2",
     navName: "Meowcal Sub 2",
     tagline: "让好字幕，跟上你的视频。",
     promise: "找到好字幕 · 自动对齐 · 开始观看",
@@ -236,14 +236,14 @@ export default {
       latest: { label: "下载最新版本", hint: "安装版或便携版，x64 与 ARM64" },
       meta: "本页介绍版本 {version} · Windows x64 与 ARM64 · 以 AGPL-3.0-only 协议免费开源",
       links: [
-        { label: "使用指南（英文）", href: `${SUB2_REPO}/blob/main/docs/user-guide.md` },
+        { label: "使用指南", href: `${SUB2_REPO}/blob/main/docs/user-guide.zh-CN.md` },
         { label: "源代码", href: SUB2_REPO },
       ],
     },
     figure: {
       image: "sub2-studio",
-      alt: "Meowcal Sub 2 工作台：示例影片 Paper Lanterns 的会话已准备好，源字幕和目标字幕已选定，每一行都有译文，“Start OCR and sync” 按钮可用。",
-      caption: "版本 {version} 的工作台，其中的片名为虚构示例。应用界面目前为英文。",
+      alt: "Meowcal Sub 2 工作台：示例影片 Paper Lanterns 的会话已准备好，源字幕和目标字幕已选定，每一行都有译文，“开始识别并同步”按钮可用。",
+      caption: "版本 {version} 的工作台，其中的片名为虚构示例。可在设置中切换英语和简体中文界面。",
     },
     sections: [
       {
@@ -292,7 +292,7 @@ export default {
         items: [
           {
             title: "配置",
-            body: "打开 **Settings**，启用至少一个字幕源，并选择语言组合。",
+            body: "打开**设置**，启用至少一个字幕源，并选择语言组合。",
           },
           {
             title: "搜索并选择",
@@ -313,7 +313,7 @@ export default {
             title: "你需要准备",
             items: [
               "Windows，x64 或 ARM64，并安装 Microsoft WebView2。",
-              "与画面文字语言对应的 Windows OCR 语言包。",
+              "使用 Windows OCR 时，需要与画面文字对应的语言包。PP-OCRv6 无需 Windows OCR 语言包，即可识别英语、中文、日语、西班牙语、法语和德语。",
               "至少一项字幕源凭据，用于搜索。",
               "使用本地翻译时：一次性下载约 1.1 GB 的模型，另加运行环境。已准备好的目标字幕无需该模型即可使用，但未翻译的空缺会保持空白。",
             ],
