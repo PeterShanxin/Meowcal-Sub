@@ -19,7 +19,7 @@ const SUB1_REPO = "https://github.com/PeterShanxin/Meowcal-Sub";
 const SUB2_REPO = "https://github.com/PeterShanxin/Meowcal-Sub-2";
 const STORE_URL = "https://apps.microsoft.com/detail/9NNK2X23VLWT";
 // The Sub 2 release that the Sub 2 copy and screenshot describe.
-const SUB2_VERSION = "0.2.2";
+const SUB2_VERSION = "0.3.0";
 
 const LOCALE_PATHS = { en: "", "zh-CN": "zh-CN/" };
 export const PAGE_PATHS = {
@@ -44,7 +44,14 @@ export const IMAGES = {
     height: 1440,
   }),
   "sub1-style": storeScreenshot("04-style", APP_WINDOW),
-  "sub2-studio": { width: 2880, height: 1920, sources: { en: "site/assets/sub2-studio.png" } },
+  "sub2-studio": {
+    width: 2880,
+    height: 1920,
+    sources: {
+      en: "site/assets/sub2-studio.png",
+      "zh-CN": "site/assets/sub2-studio.zh-CN.png",
+    },
+  },
 };
 
 const PRODUCTS = {
@@ -63,8 +70,8 @@ const PRODUCTS = {
     socialImage: { file: "assets/sub2-social-preview.png", width: 1280, height: 640 },
     repository: SUB2_REPO,
     operatingSystem: "Windows",
-    interfaceLanguages: ["en"],
-    alternateNames: [],
+    interfaceLanguages: ["en", "zh-CN"],
+    alternateNames: ["妙影2"],
   },
 };
 

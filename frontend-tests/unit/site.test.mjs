@@ -118,7 +118,9 @@ describe.each(pages)("the $product page in $locale", ({ product, locale, html })
     // Ratings and reviews are never invented for a rich result.
     expect(data).not.toHaveProperty("aggregateRating");
     expect(data).not.toHaveProperty("review");
-    expect(data.alternateName ?? []).toEqual(product === "sub1" ? ["MeowcalSub", "妙影"] : []);
+    expect(data.alternateName ?? []).toEqual(
+      product === "sub1" ? ["MeowcalSub", "妙影"] : ["妙影2"],
+    );
   });
 
   it("is complete without JavaScript", () => {
