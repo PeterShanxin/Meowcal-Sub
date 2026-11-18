@@ -37,6 +37,8 @@ https://github.com/user-attachments/assets/58fbac67-9032-42e2-8d4d-8e4df6c01e59
 
 ## Download
 
+**[Install from Microsoft Store](https://apps.microsoft.com/detail/9NNK2X23VLWT)** for x64 or ARM64 and get updates through the Store. For standalone GitHub installers, choose your PC below.
+
 **Windows 11 public beta · v0.10.0** — [release notes and all files](https://github.com/PeterShanxin/Meowcal-Sub/releases/tag/v0.10.0).
 
 | Your PC | Installer |
@@ -58,7 +60,7 @@ built-in PP-OCRv6 recognizer needs no Windows language. Windows OCR, used for
 Korean subtitles or when you choose it, needs the Windows recognition language
 for your original subtitles.
 
-**Windows may show an unknown-publisher warning.** Installers are not
+**Windows may show an unknown-publisher warning.** The standalone GitHub installers are not
 Authenticode-signed. Download only from this repository and compare the file's
 SHA-256 with the release checksums; do not disable Windows security globally.
 [Installation and checksum help →](docs/USAGE.md#installation)
