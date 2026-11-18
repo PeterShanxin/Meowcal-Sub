@@ -61,7 +61,7 @@ if [[ "$stage" == all || "$stage" == frontend ]]; then
   done
   run npm exec -- playwright install chromium
   run npm run test:browser:linux
-  run npm audit --audit-level=high
+  run npm run audit:check
 fi
 
 printf '\nLinux %s verification passed. Windows native validation remains separate.\n' "$stage"

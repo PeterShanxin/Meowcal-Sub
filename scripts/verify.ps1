@@ -315,7 +315,7 @@ if ($Stage -in @("All", "Frontend")) {
         Invoke-NpmStep "Maintainability ratchets" @("run", "maintainability")
         Invoke-NpmStep "Frontend unit tests" @("run", "test:frontend")
         Invoke-NpmStep "Browser bridge smoke" @("run", "test:browser")
-        Invoke-NpmStep "Frontend dependency audit" @("audit", "--audit-level=high")
+        Invoke-NpmStep "Frontend dependency audit" @("run", "audit:check")
     } finally {
         Pop-Location
     }
