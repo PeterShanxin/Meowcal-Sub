@@ -36,6 +36,8 @@ https://github.com/user-attachments/assets/58fbac67-9032-42e2-8d4d-8e4df6c01e59
 
 ## 下载
 
+**[从 Microsoft Store 安装](https://apps.microsoft.com/detail/9NNK2X23VLWT)**，支持 x64 和 ARM64，由商店提供更新。也可选择下方的 GitHub 安装包。
+
 **Windows 11 公开测试版 · v0.10.0** — [更新说明与全部安装文件](https://github.com/PeterShanxin/Meowcal-Sub/releases/tag/v0.10.0)。
 
 | 你的电脑 | 安装包 |
@@ -56,7 +58,7 @@ MSI 安装包和 `SHA256SUMS.txt` 校验文件也在该发布页。
 内置的 PP-OCRv6 不需要 Windows 语言组件。识别韩语字幕或你选择 Windows OCR 时，
 需要为原字幕语言安装对应的 Windows 识别语言。
 
-**Windows 可能提示“未知发布者”。** 安装包尚未使用 Authenticode 签名。
+**Windows 可能提示“未知发布者”。** GitHub 独立安装包尚未使用 Authenticode 签名。
 请只从本仓库下载，并将文件的 SHA-256 与发布页校验文件比对；不要全局关闭 Windows 安全防护。
 [安装与校验帮助 →](docs/USAGE.zh-CN.md#安装)
 

@@ -112,13 +112,13 @@ async function desktopCard(capture, path) {
   await page.close();
 }
 
-async function film(source) {
+async function film(source, fontSize = 28) {
   const page = await browser.newPage({
     viewport: { width: 1280, height: 720 },
     deviceScaleFactor: 2,
   });
   await page.setContent(
-    `<style>body{margin:0;background:#090d15;width:1280px;height:720px;font-family:'Segoe UI',sans-serif}img{width:1280px;height:720px;object-fit:cover}p{position:absolute;top:409px;left:0;width:100%;text-align:center;margin:0;color:white;font-size:28px;font-weight:500;text-shadow:0 2px 4px #000,0 0 12px #000}</style><img src="${scene}" alt=""><p>${source}</p>`,
+    `<style>body{margin:0;background:#090d15;width:1280px;height:720px;font-family:'Segoe UI',sans-serif}img{width:1280px;height:720px;object-fit:cover}p{position:absolute;top:409px;left:0;width:100%;text-align:center;margin:0;color:white;font-size:${fontSize}px;font-weight:500;text-shadow:0 2px 4px #000,0 0 12px #000}</style><img src="${scene}" alt=""><p>${source}</p>`,
   );
   await page.locator("img").evaluate((image) => image.decode());
   await page.evaluate(() => globalThis.document.fonts.ready);
@@ -171,7 +171,11 @@ try {
     await save(selector.page, `${output}/${language}-03-selection.png`, selector.errors);
     await selector.page.close();
 
-    const overlay = await openApp(settings, "/overlay.html", true);
+    const overlay = await openApp(
+      { ...settings, overlay: { ...settings.overlay, fontSize: 42 } },
+      "/overlay.html",
+      true,
+    );
     await overlay.page.waitForFunction(() =>
       globalThis.window.captureListeners.has("overlay-settings-updated"),
     );
@@ -196,8 +200,14 @@ try {
       animations: "disabled",
     });
     if (overlay.errors.length) throw new Error(overlay.errors.join("\n"));
-    await sharp(filmPng)
+    const hero = await sharp(await film(source, 40))
       .composite([{ input: overlayPng }])
+      .png()
+      .toBuffer();
+    // Frame the subtitle pair for the small Store search card.
+    await sharp(hero)
+      .extract({ left: 384, top: 360, width: 1792, height: 1008 })
+      .resize(2560, 1440)
       .png({ compressionLevel: 9 })
       .toFile(`${output}/${language}-01-overlay.png`);
     await overlay.page.close();

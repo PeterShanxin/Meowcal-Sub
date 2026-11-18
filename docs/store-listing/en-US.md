@@ -2,11 +2,15 @@
 
 ## Short description
 
-Translate subtitles already on your screen. Local text recognition and AI translation, with a floating subtitle overlay. No account, API key, or subscription.
+Translate on-screen subtitles in videos and games with local OCR. Read the translation in a floating overlay, even offline after setup.
+
+## Search terms
+
+on-screen subtitle translator; game subtitle translation; offline OCR; floating subtitles; screen text translation; video subtitle overlay
 
 ## Description
 
-Watch with subtitles you can read. Meowcal Sub translates visible subtitles in videos, games, and desktop apps, and displays the translation in a floating overlay.
+Meowcal Sub reads subtitles already visible in videos, games, and desktop apps, then displays the translation alongside them. You can translate subtitles without a subtitle file.
 
 Choose the original and translation languages, select the subtitle area, and start watching. Next time, start with your saved area. Move the overlay and adjust its text size and background to suit what you are watching.
 
