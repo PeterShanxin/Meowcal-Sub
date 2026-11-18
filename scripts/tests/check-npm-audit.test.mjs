@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { matchesException } from "../check-npm-audit.mjs";
+import { matchesException } from "../npm-audit-policy.mjs";
 
 function fixture() {
   const cause = {
