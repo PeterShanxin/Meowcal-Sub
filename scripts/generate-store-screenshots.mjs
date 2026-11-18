@@ -171,7 +171,11 @@ try {
     await save(selector.page, `${output}/${language}-03-selection.png`, selector.errors);
     await selector.page.close();
 
-    const overlay = await openApp({ ...settings, overlay: { ...settings.overlay, fontSize: 42 } }, "/overlay.html", true);
+    const overlay = await openApp(
+      { ...settings, overlay: { ...settings.overlay, fontSize: 42 } },
+      "/overlay.html",
+      true,
+    );
     await overlay.page.waitForFunction(() =>
       globalThis.window.captureListeners.has("overlay-settings-updated"),
     );
@@ -196,7 +200,10 @@ try {
       animations: "disabled",
     });
     if (overlay.errors.length) throw new Error(overlay.errors.join("\n"));
-    const hero = await sharp(await film(source, 40)).composite([{ input: overlayPng }]).png().toBuffer();
+    const hero = await sharp(await film(source, 40))
+      .composite([{ input: overlayPng }])
+      .png()
+      .toBuffer();
     // Frame the subtitle pair for the small Store search card.
     await sharp(hero)
       .extract({ left: 384, top: 360, width: 1792, height: 1008 })
