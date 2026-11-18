@@ -255,6 +255,9 @@ The default `All` stage is required before a Windows handoff. It runs its own co
 tests, prepares validation resources, uses the tracked Cargo and npm lockfiles,
 and includes the real browser-to-Rust bridge smoke.
 
+Both frontend gates run `npm run audit:check` against the full lockfile.
+[CONTRIBUTING.md](../CONTRIBUTING.md) records the scope and expiry of the current picomatch exception.
+
 The Test stage runs named cargo targets, not the whole suite: `--lib`,
 `--test integration_ipc`, and `--test command_contracts`. A new integration
 test target is invisible to the gate until it is added to `verify.ps1` and to

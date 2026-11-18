@@ -218,7 +218,7 @@ exit /b 0
         "run maintainability",
         "run test:frontend",
         "run test:browser",
-        "audit --audit-level=high"
+        "run audit:check"
     ) $frontend.NpmCommands "Frontend stage"
 
     $all = Invoke-VerifyUnderTest -Stage All
@@ -245,7 +245,7 @@ exit /b 0
         "run maintainability",
         "run test:frontend",
         "run test:browser",
-        "audit --audit-level=high"
+        "run audit:check"
     ) $all.NpmCommands "All stage npm"
 
     # A named target is how one machine covers both shipped architectures. These

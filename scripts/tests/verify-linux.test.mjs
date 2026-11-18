@@ -63,7 +63,7 @@ test("full Linux gate runs backend and frontend checks from outside the checkout
     "npm run i18n:check",
     "npm run test:frontend",
     "npm run test:browser:linux",
-    "npm audit --audit-level=high",
+    "npm run audit:check",
   ]) {
     assert.ok(result.calls.includes(command), `Missing ${command}`);
   }
@@ -80,7 +80,7 @@ for (const failure of [
   "npm run test:frontend",
   "npm exec -- playwright install",
   "npm run test:browser:linux",
-  "npm audit",
+  "npm run audit:check",
 ]) {
   test(`Linux gate fails closed when ${failure} fails`, () => {
     const result = gate("all", failure);
