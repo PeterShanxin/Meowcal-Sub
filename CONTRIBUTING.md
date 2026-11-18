@@ -213,6 +213,13 @@ dependencies for high-severity vulnerabilities. It also enforces production
 file ceilings, the frontend warning budget, and explicitly scoped coverage
 floors.
 
+Run `npm run audit:check` to check the full npm lockfile. Until 2026-12-03
+00:00 UTC, the gate reports [GHSA-fc5q-39xc-vjpf](https://github.com/advisories/GHSA-fc5q-39xc-vjpf)
+as a warning for the reviewed development-tool paths to picomatch 4.0.7.
+[Issue #338](https://github.com/PeterShanxin/Meowcal-Sub/issues/338) tracks removal.
+When a patched release is available, update the lockfile, remove the exception,
+and verify that the plain high-severity npm audit passes on both platforms.
+
 Rust dependency resolution is locked by `src-tauri/Cargo.lock`; verification
 uses `--locked`. Frontend dependency resolution is locked by
 `package-lock.json`; verification uses `npm ci`.
