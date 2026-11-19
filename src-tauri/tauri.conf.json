@@ -101,7 +101,7 @@
     "publisher": "PeterShanxin",
     "copyright": "Copyright (c) 2026 PeterShanxin",
     "shortDescription": "On-device subtitle capture and translation for Windows",
-    "longDescription": "Meowcal Sub captures subtitles from the screen and translates them locally on Windows. No subtitle text leaves the machine.",
+    "longDescription": "Meowcal Sub captures and translates subtitles locally on Windows. You can choose which details to include in an encrypted feedback report.",
     "homepage": "https://github.com/PeterShanxin/Meowcal-Sub",
     "icon": [
       "icons/32x32.png",

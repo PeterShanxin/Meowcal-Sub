@@ -175,7 +175,7 @@ and OCR records share session/capture identifiers; translation records include
 those identifiers plus cue ID. It saves original capture PNGs, actual OCR input
 PNGs with raw OCR output, and final translation text. It never serializes engine
 request headers, credentials, or prompts. Artifacts can contain private screen
-content and are not uploaded. `logs/verbose` has a 256 MiB total payload budget,
+content. Feedback can include individual, previewed samples. `logs/verbose` has a 256 MiB total payload budget,
 pruned oldest-first before every write, not only startup. An OS file lock
 serializes writers in the same directory on blocking worker threads, with a
 two-second lock wait limit. A two-slot
@@ -186,6 +186,14 @@ are preserved and stop the write. Oversized records are skipped. Disabling
 Verbose does not delete existing evidence.
 
 Ordinary `.log` files have no size-based rotation.
+
+The desktop feedback form previews a local snapshot. The main webview may
+submit the snapshot ID and selected material IDs. Rust resolves these IDs
+against the frozen preview, writes a ZIP in memory, and encrypts it to the
+build's age recipient before sending it to the configured HTTPS origin. The
+browser development server does not expose these commands. Public issue metadata
+is restricted to category, product version, and report identifier. See
+[ADR-0008](adr/0008-encrypted-feedback.md) for the reader and transport boundaries.
 
 The browser backend reads `%APPDATA%\<log identifier>\config.json` through
 `http_config.rs`. `src-tauri/src/bin/subtitle-eval.rs` reads

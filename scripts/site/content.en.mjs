@@ -139,6 +139,7 @@ export default {
               "Engine and model downloads for setup or repair",
               "Windows recognition-language installation when needed",
               "Application update checks and downloads",
+              "Sending encrypted feedback in the unreleased desktop build",
             ],
           },
         ],

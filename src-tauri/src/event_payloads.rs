@@ -133,6 +133,10 @@ pub(crate) struct CaptureStatusPayload {
     pub using_fallback: bool,
     pub message: String,
     pub is_error: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub fault_code: Option<&'static str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub feedback_token: Option<String>,
 }
 
 #[derive(Clone, Serialize)]

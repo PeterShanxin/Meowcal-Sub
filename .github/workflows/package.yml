@@ -156,6 +156,8 @@ jobs:
       - name: Build Windows packages
         shell: pwsh
         env:
+          MEOWCAL_FEEDBACK_URL: ${{ vars.MEOWCAL_FEEDBACK_URL }}
+          MEOWCAL_FEEDBACK_RECIPIENT: ${{ vars.MEOWCAL_FEEDBACK_RECIPIENT }}
           PACKAGE_ARCHITECTURE: ${{ steps.package.outputs.architecture }}
           # Signs the installers for the in-app updater.
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}

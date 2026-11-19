@@ -271,6 +271,18 @@ investigation:
 
 ## Report a problem safely
 
+**Unreleased:** Open **Feedback** in the main title bar or **Report error** beside
+an error. Choose a type and enter a description. The error entry includes the
+available diagnostics for the fault. A suggestion only needs a description.
+Review the basic diagnostics and select any additional evidence you want the
+maintainers to see. A selected screenshot or subtitle can reveal what you watched.
+Logging Off still allows a written report. Opening the form does not change your log level.
+
+Choose **Send** to encrypt and submit the description, diagnostics, and selected
+materials. The public GitHub issue shows the type, version, and report number.
+Authorized maintainers can open the encrypted contents. If sending fails, the
+form keeps your draft for another attempt.
+
 1. Note the app version (**Settings → About**), Windows build
    (`winver`), and whether the PC is x64 or ARM64.
 2. Note the source and target languages, the **Profile**, and the

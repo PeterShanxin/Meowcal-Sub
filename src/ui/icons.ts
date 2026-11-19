@@ -7,6 +7,7 @@ const glyphs: Record<IconName, SVGTemplateResult> = {
   "arrow-right": svg`<path d="M4.5 12h15M13.5 6l6 6-6 6" />`,
   "chevron-right": svg`<path d="M9.5 6l6 6-6 6" />`,
   area: svg`<rect x="3.5" y="6.5" width="17" height="11" rx="1.5" stroke-dasharray="3 2.4" />`,
+  feedback: svg`<path d="M5 4.5h14a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-8l-5.5 3v-3H5a2 2 0 0 1-2-2v-9a2 2 0 0 1 2-2Z"/><path d="M7.5 9h9M7.5 13h5"/>`,
   play: svg`<path d="M8 5.2v13.6L19 12z" fill="currentColor" stroke="none" />`,
   stop: svg`<rect x="6.5" y="6.5" width="11" height="11" rx="1.6" fill="currentColor" stroke="none" />`,
   home: svg`<path d="M4 11l8-6.5 8 6.5M6 9.8v9.7h12V9.8M10 19.5v-5h4v5" />`,

@@ -1,0 +1,23 @@
+name = "meowcal-feedback"
+main = "worker.mjs"
+compatibility_date = "2026-05-01"
+
+[observability]
+enabled = false
+
+[[r2_buckets]]
+binding = "ARCHIVES"
+bucket_name = "meowcal-feedback-archives"
+
+[[durable_objects.bindings]]
+name = "REPORTS"
+class_name = "ReportLedger"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["ReportLedger"]
+
+[[ratelimits]]
+name = "INTAKE_LIMIT"
+namespace_id = "340"
+simple = { limit = 6, period = 60 }

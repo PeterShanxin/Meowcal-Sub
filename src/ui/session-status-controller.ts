@@ -25,10 +25,30 @@ export class SessionStatusController {
         this.activity(payload);
       }),
       window.TauriBridge.event.listen("capture-status", ({ payload }) => {
-        const status = payload as { isError?: boolean; message?: string } | null;
+        const status = payload as {
+          isError?: boolean;
+          message?: string;
+          faultCode?: string;
+          feedbackToken?: string;
+        } | null;
         if (status?.isError) {
           this.captureError = status.message ?? "Screen capture failed";
-          this.publish({ error: this.captureError });
+          const faultCode = [
+            "CAPTURE_FAILED",
+            "OCR_FAILED",
+            "OCR_INIT_FAILED",
+            "DISPLAY_CHANGED",
+          ].includes(status.faultCode ?? "")
+            ? status.faultCode
+            : "APP_ERROR";
+          this.publish({
+            error: this.captureError,
+            captureFault: {
+              message: this.captureError,
+              code: faultCode ?? "APP_ERROR",
+              token: status.feedbackToken,
+            },
+          });
         } else if (status?.message) {
           this.publish({ captureWarning: status.message });
         }

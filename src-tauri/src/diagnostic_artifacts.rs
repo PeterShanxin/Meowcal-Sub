@@ -11,7 +11,9 @@ const MAX_FRAME_BYTES: usize = 64 * 1024 * 1024;
 static NEXT: AtomicU64 = AtomicU64::new(0);
 tokio::task_local! { static FRAME: (u64, u64); }
 
-pub async fn capture<F: std::future::Future>(
+type Recognition = Result<crate::ocr::OcrResult, (crate::ocr::OcrError, &'static str)>;
+
+pub async fn capture<F: std::future::Future<Output = Recognition>>(
     session_id: u64,
     capture_id: u64,
     frame: &crate::capture::CaptureResult,
@@ -27,7 +29,28 @@ pub async fn capture<F: std::future::Future>(
                 )
                 .await;
             }
-            operation.await
+            let token = crate::pipeline_session::PipelineToken {
+                session_id,
+                capture_id,
+            };
+            let started = std::time::Instant::now();
+            crate::feedback::trace::observe(token, "ocr", "running", None, None);
+            let result = operation.await;
+            let (status, code) = match &result {
+                Ok(result) => {
+                    crate::feedback::trace::ocr_text(token, &result.text);
+                    (if result.is_empty() { "empty" } else { "ok" }, None)
+                }
+                Err(_) => ("failed", Some("OCR_FAILED")),
+            };
+            crate::feedback::trace::observe(
+                token,
+                "ocr",
+                status,
+                Some(started.elapsed().as_millis() as u64),
+                code,
+            );
+            result
         })
         .await
 }
@@ -62,7 +85,17 @@ pub async fn record(
             png.as_deref(),
             MAX_BYTES,
             logging_settings::verbose,
-        )
+        )?;
+        if let ("capture", Some((session_id, capture_id)), Some(png)) = (kind, identity, png) {
+            crate::feedback::trace::screenshot(
+                crate::pipeline_session::PipelineToken {
+                    session_id,
+                    capture_id,
+                },
+                &png,
+            );
+        }
+        Ok(())
     })
     .await;
     if !success {

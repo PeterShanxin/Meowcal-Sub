@@ -262,10 +262,9 @@ pub async fn close_area_selector(app: AppHandle, state: State<'_, AppState>) -> 
 // TRANSLATION COMMANDS
 // =============================================================================
 
-/// Check if translation is currently running
-///
-/// Called from JavaScript: `const running = await invoke('is_translation_running');`
-/// This allows the frontend to sync button state with backend on page load/reload.
+/// Read the live translation flag that the main window uses to restore its controls
+/// when a webview loads during an active session.
+/// Returned from the same state that starts and stops the capture task.
 #[tauri::command]
 pub fn is_translation_running(state: State<'_, AppState>) -> bool {
     let is_running = lock_or_recover(&state.is_running);
@@ -541,6 +540,7 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
             let capture_started = Instant::now();
             let captured_at = std::time::SystemTime::now();
             let capture_result = match try_capture(
+                token,
                 &current_capture_region,
                 &selection.monitor,
                 &mut capture_state,
@@ -595,7 +595,7 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
                 Ok(result) => result,
                 Err((error, what)) => {
                     warn!("⚠️ {}: {}", what, error);
-                    activity.recognition_failed();
+                    activity.recognition_failed(token);
                     sleep_until_stopped(pacer.remaining_for(frame_started), &mut stop_rx).await;
                     continue;
                 }

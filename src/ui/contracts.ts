@@ -18,6 +18,7 @@ export type IconName =
   | "close"
   | "copy"
   | "download"
+  | "feedback"
   | "gear"
   | "home"
   | "info"
@@ -119,6 +120,7 @@ export interface UiSnapshot {
   ocrLanguages: ReadonlySet<string>;
   running: boolean;
   error: string | null;
+  captureFault?: { message: string; code: string; token?: string };
   notice: string | null;
   noticeParameters?: Record<string, string | number>;
   /** The latest non-fatal capture report for this session; capture keeps running. */

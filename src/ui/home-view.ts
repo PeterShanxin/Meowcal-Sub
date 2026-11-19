@@ -10,6 +10,7 @@ interface HomeActions {
   onTarget(value: string): void;
   onPrimary(): void;
   onStartSaved(): void;
+  onReport(): void;
 }
 
 function languageSelect(
@@ -112,6 +113,7 @@ export function renderHome(
                     ? html`<span class="support-code">${presentation.supportCode}</span>`
                     : nothing
                 }
+                ${presentation.action === "repair" || snapshot.captureWarning ? html`<button type="button" class="link-button feedback-error" @click=${actions.onReport}>${t("Report error")}</button>` : nothing}
               </p>`
             : nothing
         }

@@ -79,6 +79,7 @@ exist for anyone who did not write it.
 | [0005](0005-client-partitioned-core-storage.md)      | Accepted | Client-partitioned Core storage sharing one model by hard link |
 | [0006](0006-store-distribution-channel.md)           | Accepted | Independent Store updates, package identity and default data   |
 | [0007](0007-embedded-pp-ocr-recognizer.md)           | Accepted | PP-OCRv6 embedded in Core, to become Sub's default recognizer   |
+| [0008](0008-encrypted-feedback.md)                   | Proposed | Encrypted user-selected evidence and public issue tracking     |
 
 ## Superseded direction
 

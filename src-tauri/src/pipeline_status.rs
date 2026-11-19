@@ -27,6 +27,7 @@ impl SessionStatus {
         stopped: watch::Receiver<bool>,
         interval: Duration,
     ) -> Self {
+        crate::feedback::trace::begin_session(session_id);
         let _ = app.emit(
             "subtitle-activity",
             SubtitleActivityPayload::new(
@@ -64,12 +65,14 @@ impl SessionStatus {
         self.activity.interrupt();
     }
 
-    pub(crate) fn recognition_failed(&mut self) {
+    pub(crate) fn recognition_failed(&mut self, token: PipelineToken) {
         if self.activity.recognition_failed() {
             let _ = self.app.emit("capture-status", CaptureStatusPayload {
                 using_fallback: false,
                 message: "Text recognition is not responding. Return to Home and restart translation.".to_string(),
                 is_error: true,
+                fault_code: Some("OCR_FAILED"),
+                feedback_token: Some(format!("{}/{}",token.session_id,token.capture_id)),
             });
         }
     }

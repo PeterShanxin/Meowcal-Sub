@@ -68,6 +68,7 @@ pub fn init(http_only_mode: bool, identifier: &str) {
         .open(&log_path)
         .expect("Failed to open log file");
 
+    crate::feedback::session_log::register(&log_path);
     let (non_blocking, guard) = tracing_appender::non_blocking(file);
 
     let filter = resolve_log_filter();

@@ -29,6 +29,8 @@ pub(crate) fn open(app: &AppHandle, engine: Engine, source_language: &str) -> Op
                              Try the Compatibility profile in Settings."
                         ),
                         is_error: true,
+                        fault_code: Some("OCR_INIT_FAILED"),
+                        feedback_token: None,
                     },
                 );
                 None
@@ -55,6 +57,8 @@ pub(crate) fn open(app: &AppHandle, engine: Engine, source_language: &str) -> Op
                         source_language
                     ),
                     is_error: false,
+                    fault_code: None,
+                    feedback_token: None,
                 },
             );
             CoreOcr::new()

@@ -119,7 +119,31 @@ impl Translator {
                             translated,
                             "pipeline_frame_complete"
                         );
-                        if let Err(error) = self.app.emit("translation-update", result) {
+                        if translated {
+                            crate::feedback::trace::observe(
+                                job.frame.token,
+                                "overlay",
+                                "running",
+                                None,
+                                None,
+                            );
+                        }
+                        let outcome = self.app.emit("translation-update", result);
+                        if translated {
+                            let (status, code) = if outcome.is_ok() {
+                                ("sent", None)
+                            } else {
+                                ("failed", Some("OVERLAY_SEND_FAILED"))
+                            };
+                            crate::feedback::trace::observe(
+                                job.frame.token,
+                                "overlay",
+                                status,
+                                None,
+                                code,
+                            );
+                        }
+                        if let Err(error) = outcome {
                             warn!(%error, "Failed to emit subtitle");
                         }
                         ipc

@@ -110,6 +110,8 @@ jobs:
       - name: Build unsigned Store package
         shell: pwsh
         env:
+          MEOWCAL_FEEDBACK_URL: ${{ vars.MEOWCAL_FEEDBACK_URL }}
+          MEOWCAL_FEEDBACK_RECIPIENT: ${{ vars.MEOWCAL_FEEDBACK_RECIPIENT }}
           PACKAGE_ARCHITECTURE: ${{ inputs.architecture }}
           STORE_PACKAGE_NAME: ${{ inputs.package_name }}
           STORE_PUBLISHER: ${{ inputs.publisher }}

@@ -64,6 +64,8 @@ meowcal-core = { path = "../core", default-features = false }
 # --- Small Utilities ---
 # Used for the selector window screenshot workaround (data:image/png;base64,...)
 base64 = "0.23"
+age = { version = "0.11", default-features = false }
+zip = { version = "9.3", default-features = false }
 png = "0.18"
 scopeguard = "1.2"          # RAII guards for panic-safe cleanup
 
