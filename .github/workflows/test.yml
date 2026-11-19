@@ -243,7 +243,22 @@ jobs:
       # drives browser mode against the host-native Rust backend. The hosted
       # image provides the system Google Chrome channel the smoke uses.
       - name: Run frontend and browser verification
+        env:
+          # The browser smoke builds the executable that the native smoke reuses.
+          TAURI_CONFIG: '{"identifier":"com.meowcal.sub.feedback-smoke.dev"}'
         run: ./scripts/verify.ps1 -Stage Frontend
+
+      - name: Verify the native feedback window
+        timeout-minutes: 5
+        run: node scripts/tests/feedback-native-smoke.mjs
+
+      - name: Keep native feedback screenshots
+        uses: actions/upload-artifact@v7
+        with:
+          name: feedback-native-windows-arm64
+          path: test-results/feedback-native/
+          if-no-files-found: error
+          retention-days: 7
 
   lint:
     name: Lint & Format
