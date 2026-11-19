@@ -1,6 +1,6 @@
 import { createIssue, findIssue, installationToken, validType } from "./github.mjs";
 
-export const MAX_BYTES = 16 * 1024 * 1024;
+const MAX_BYTES = 16 * 1024 * 1024;
 const DAILY_REPORTS = 120;
 const AGE_HEADER = new TextEncoder().encode("age-encryption.org/v1\n");
 const UUID = /^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/;
@@ -12,7 +12,7 @@ const reply = (status, fields = {}) =>
     headers: { "Cache-Control": "no-store", ...(status === 503 ? { "Retry-After": "30" } : {}) },
   });
 
-export function metadata(request) {
+function metadata(request) {
   const id = request.headers.get("X-Report-Id");
   const type = request.headers.get("X-Report-Type");
   const version = request.headers.get("X-App-Version");

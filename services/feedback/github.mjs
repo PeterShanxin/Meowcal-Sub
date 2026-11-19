@@ -35,7 +35,7 @@ function segment(json) {
 async function githubRequest(path, token, options = {}) {
   return fetch(API + path, {
     ...options,
-    redirect: "error",
+    redirect: "manual",
     signal: AbortSignal.timeout(10000),
     headers: {
       "User-Agent": "Meowcal-Sub-feedback",

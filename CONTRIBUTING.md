@@ -312,6 +312,10 @@ The **Change Contract** check stays on hosted Ubuntu.
 `ubuntu-24.04` for every PR and push to `main`, including forks. It uses read-only
 permissions and supplements the Windows merge gates.
 
+The Linux job also runs the feedback receiver in workerd with local R2 and SQLite.
+The hosted Windows frontend job exercises the feedback form in the native WebView2
+window and stores its screenshots in the `feedback-native-windows-arm64` artifact.
+
 `scripts/verify.ps1` is your local equivalent of the hosted gate. Windows contributors run it before
 opening a pull request; Linux contributors run `scripts/verify-linux.sh` and rely
 on the hosted Windows gate for the full application checks. See

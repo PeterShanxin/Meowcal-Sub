@@ -40,6 +40,11 @@ jobs:
           save-if: ${{ github.ref == 'refs/heads/main' }}
       - name: Verify the Linux development target
         run: bash scripts/verify-linux.sh
+      - name: Check encrypted feedback on workerd
+        working-directory: services/feedback
+        run: |
+          npm ci --ignore-scripts
+          npm test
       - name: Preserve browser failure evidence
         if: failure()
         uses: actions/upload-artifact@v7

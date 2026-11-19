@@ -34,3 +34,5 @@ The ledger reserves issuance before calling GitHub. If GitHub confirms rejection
 The private `GET /v1/issues/{number}/archive` route requires the archive-read bearer credential. Knowledge of the issue number or feedback reference alone does not authorize a download. If the bucket lifecycle has removed the archive, the public issue remains accessible.
 
 Run `node --test services/feedback/worker.test.mjs` from the repository root for the intake, privacy, authorization, concurrency and retry tests. With Wrangler 4.165.0, `wrangler deploy --dry-run` from this directory verifies the bundle and binding declarations locally.
+
+On Linux, run `npm ci --ignore-scripts` followed by `npm test` in this directory to also exercise the Worker in workerd. The test uses real local R2 and Durable Object bindings and substitutes a local response for GitHub. It checks the public issue fields, repeat delivery, and authenticated retrieval of the exact ciphertext.

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { timingSafeEqual } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
 import test from "node:test";
-import worker, { MAX_BYTES, ReportLedger } from "./worker.mjs";
+import worker, { ReportLedger } from "./worker.mjs";
 import { installationToken } from "./github.mjs";
 
 const privateSample = "synthetic-subtitle-only-for-tests";
@@ -154,7 +154,7 @@ test("malformed reports, oversized or unencrypted bodies and quota failures crea
     [{ type: "__proto__" }, 400],
     [{ version: "0.1.0-private-text" }, 400],
     [{ body: privateSample.repeat(5) }, 400],
-    [{ headers: { "Content-Length": String(MAX_BYTES + 1) } }, 413],
+    [{ headers: { "Content-Length": String(16 * 1024 * 1024 + 1) } }, 413],
     [{ headers: { "Content-Length": "101" } }, 400],
   ];
   for (const [params, status] of cases)
