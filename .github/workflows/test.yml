@@ -243,16 +243,30 @@ jobs:
       # drives browser mode against the host-native Rust backend. The hosted
       # image provides the system Google Chrome channel the smoke uses.
       - name: Run frontend and browser verification
-        env:
-          # The browser smoke builds the executable that the native smoke reuses.
-          TAURI_CONFIG: '{"identifier":"com.meowcal.sub.feedback-smoke.dev"}'
-        run: ./scripts/verify.ps1 -Stage Frontend
+        run: |
+          $socket = [Net.Sockets.TcpListener]::new([Net.IPAddress]::Loopback, 0)
+          $socket.Start()
+          try { $port = $socket.LocalEndpoint.Port } finally { $socket.Stop() }
+          $config = Get-Content -Raw src-tauri/tauri.conf.json | ConvertFrom-Json -AsHashtable
+          # Elevated WebView2 hosts take debugging switches from the creation
+          # API. Tauri maps additionalBrowserArgs to that API for each window.
+          foreach ($window in $config.app.windows) {
+            $window.additionalBrowserArgs = "--remote-debugging-port=$port --remote-debugging-address=127.0.0.1"
+          }
+          $env:TAURI_CONFIG = @{
+            identifier = 'com.meowcal.sub.feedback-smoke.dev'
+            app = @{ windows = $config.app.windows }
+          } | ConvertTo-Json -Depth 16 -Compress
+          "MEOWCAL_FEEDBACK_SMOKE_PORT=$port" >> $env:GITHUB_ENV
+          ./scripts/verify.ps1 -Stage Frontend
 
       - name: Verify the native feedback window
+        id: feedback_native
         timeout-minutes: 5
         run: node scripts/tests/feedback-native-smoke.mjs
 
       - name: Keep native feedback screenshots
+        if: ${{ !cancelled() && steps.feedback_native.outcome != 'skipped' }}
         uses: actions/upload-artifact@v7
         with:
           name: feedback-native-windows-arm64
