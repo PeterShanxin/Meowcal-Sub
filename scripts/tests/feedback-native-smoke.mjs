@@ -15,7 +15,7 @@ import { arch, release } from "node:os";
 import { join, resolve } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { chromium, expect } from "@playwright/test";
-import { createServer } from "vite";
+import { preview } from "vite";
 
 // Tauri uses Windows known folders for app data. A process-local APPDATA override
 // alone cannot isolate those paths, hence the separate compiled application ID.
@@ -72,6 +72,58 @@ async function waitFor(get, description, app) {
   throw Error("Timed out waiting for " + description);
 }
 
+function observeWebView(page, events) {
+  const record = (kind, detail) => {
+    if (!page.url().startsWith(origin + "/") || events.length >= 80) return;
+    events.push({ path: new URL(page.url()).pathname, kind, detail: String(detail).slice(0, 500) });
+  };
+  page.on("pageerror", (error) => record("pageerror", error.message));
+  page.on("console", (message) => {
+    if (["warning", "error"].includes(message.type())) record(message.type(), message.text());
+  });
+  page.on("requestfailed", (req) => {
+    if (req.url().startsWith(origin + "/"))
+      record("requestfailed", new URL(req.url()).pathname + " " + req.failure()?.errorText);
+  });
+  page.on("response", (res) => {
+    if (res.status() >= 400 && res.url().startsWith(origin + "/"))
+      record("response", new URL(res.url()).pathname + " " + res.status());
+  });
+}
+
+async function describeWebView(page) {
+  const path = new URL(page.url()).pathname;
+  try {
+    const state = await Promise.race([
+      page.evaluate(() => {
+        const doc = globalThis.document;
+        const names = (selector) =>
+          [...doc.querySelectorAll(selector)]
+            .slice(0, 20)
+            .map((el) =>
+              (el.getAttribute("aria-label") || el.textContent || "").trim().slice(0, 80),
+            );
+        return {
+          title: doc.title,
+          lang: doc.documentElement.lang,
+          ready: doc.readyState,
+          body: [...doc.body.children].map((el) => el.localName),
+          nativeWindow: globalThis.__TAURI__?.window?.getCurrentWindow().label,
+          appRegistered: Boolean(globalThis.customElements.get("meowcal-app")),
+          acknowledged: globalThis.localStorage.getItem("meowcal.setupAcknowledged"),
+          headers: names("h1, h2, [role=heading]"),
+          buttons: names("button"),
+          dialogs: names("dialog[open] h2"),
+        };
+      }),
+      delay(3000, { inspection: "timed out" }),
+    ]);
+    return { path, ...state };
+  } catch (error) {
+    return { path, inspection: String(error) };
+  }
+}
+
 async function captureViews(page, configFile) {
   const version = await page.evaluate(async () => {
     const bridge = globalThis.TauriBridge;
@@ -84,6 +136,8 @@ async function captureViews(page, configFile) {
   const settings = page.getByRole("button", { name: "设置", exact: true });
   const screenshot = (name) =>
     page.screenshot({ path: join(output, name), animations: "disabled" });
+  await expect(page.locator("meowcal-titlebar .feedback-entry")).toBeAttached({ timeout: 30000 });
+  await expect(page.locator("html")).toHaveAttribute("lang", "zh-CN", { timeout: 30000 });
   await expect(entry).toBeVisible();
   await expect(page.locator("#browser-mode-indicator")).toHaveCount(0);
   await expect
@@ -100,6 +154,9 @@ async function captureViews(page, configFile) {
   await dialog.getByLabel("反馈类型").selectOption("suggestion");
   await dialog.getByRole("textbox").fill("希望可以调整字幕的停留时间。");
   await expect(dialog.getByRole("button", { name: "发送", exact: true })).toBeEnabled();
+  const diagnostics = dialog.locator(".feedback-diagnostics");
+  if ((await diagnostics.getAttribute("open")) === null)
+    await diagnostics.locator("summary").click();
   await expect(dialog.getByText(version, { exact: true })).toBeVisible();
   await screenshot("03-feedback.png");
   await dialog.getByRole("button", { name: "关闭", exact: true }).click();
@@ -157,24 +214,26 @@ async function main() {
     Number.isInteger(port) && port >= 1 && port <= 65535,
     "Missing debugger port from the frontend build step",
   );
-  const server = await createServer({
+  // Load the same build verified by the frontend gate. A one-document bootstrap
+  // lets us seed the disposable webview profile and attach error listeners
+  // before executing the actual app bundle. All screenshot pages are unmodified.
+  await access(resolve("dist/index.html"));
+  let loadApp = false;
+  const server = await preview({
     clearScreen: false,
-    server: { host: "127.0.0.1", port: 1420, strictPort: true, hmr: false },
+    preview: { host: "127.0.0.1", port: 1420, strictPort: true },
     plugins: [
       {
         name: "feedback-smoke-setup",
-        transformIndexHtml: {
-          order: "pre",
-          handler(_html, ctx) {
-            if (ctx.path !== "/" && ctx.path !== "/index.html") return [];
-            return [
-              {
-                tag: "script",
-                children: 'localStorage.setItem("meowcal.setupAcknowledged","true")',
-                injectTo: "head-prepend",
-              },
-            ];
-          },
+        configurePreviewServer({ middlewares }) {
+          middlewares.use((request, response, next) => {
+            if (loadApp || request.url !== "/") return next();
+            response.writeHead(200, {
+              "Content-Type": "text/html; charset=utf-8",
+              "Cache-Control": "no-store",
+            });
+            response.end("<!doctype html><title>Feedback smoke setup</title>");
+          });
         },
       },
     ],
@@ -182,8 +241,8 @@ async function main() {
   let app;
   let browser;
   let page;
+  const events = [];
   try {
-    await server.listen();
     app = spawn(executable, [], {
       env: {
         ...process.env,
@@ -208,6 +267,10 @@ async function main() {
       app,
     );
     browser = await chromium.connectOverCDP(endpoint, { timeout: 20000 });
+    for (const context of browser.contexts()) {
+      for (const view of context.pages()) observeWebView(view, events);
+      context.on("page", (view) => observeWebView(view, events));
+    }
     page = await waitFor(
       () =>
         browser
@@ -217,13 +280,30 @@ async function main() {
       "the main WebView",
       app,
     );
-    await page.waitForFunction(() => typeof globalThis.TauriBridge?.appIdentifier === "function");
-    assert.equal(await page.evaluate(() => globalThis.TauriBridge.appIdentifier()), identifier);
+    await page.waitForFunction(() => Boolean(globalThis.__TAURI__?.app), null, { polling: 200 });
+    assert.equal(await page.evaluate(() => globalThis.__TAURI__.app.getIdentifier()), identifier);
+    assert.equal(
+      await page.evaluate(() => globalThis.__TAURI__.window.getCurrentWindow().label),
+      "main",
+    );
     const appDirectory = resolve(await page.evaluate(() => globalThis.__TAURI__.path.appDataDir()));
     assert.ok(
       configFolders.some((path) => resolve(path).toLowerCase() === appDirectory.toLowerCase()),
       "Unexpected native config directory",
     );
+    const effectiveLocale = await page.evaluate(async () => {
+      const invoke = globalThis.__TAURI__.core.invoke;
+      globalThis.localStorage.setItem("meowcal.setupAcknowledged", "true");
+      if ((await invoke("get_settings")).uiLanguage !== "zh-CN")
+        await invoke("set_ui_language", { language: "zh-CN" });
+      return (await invoke("get_settings")).uiLanguage;
+    });
+    assert.equal(effectiveLocale, "zh-CN");
+    loadApp = true;
+    await page.reload({ waitUntil: "load" });
+    await page
+      .screenshot({ path: join(output, "00-startup.png"), timeout: 5000 })
+      .catch((error) => events.push({ kind: "startup-screenshot", detail: String(error) }));
     const version = await captureViews(page, join(appDirectory, "config.json"));
     const enginePhase = await page.evaluate(
       async () => (await globalThis.TauriBridge.invoke("get_engine_status")).phase,
@@ -271,7 +351,17 @@ async function main() {
       port,
       error: String(error),
       markers,
+      events,
+      views: await Promise.all(
+        (browser?.contexts().flatMap((context) => context.pages()) ?? [])
+          .filter((view) => view.url().startsWith(origin + "/"))
+          .map(describeWebView),
+      ),
     };
+    if (loadApp && page && !page.isClosed())
+      await page
+        .screenshot({ path: join(output, "native-failure.png"), timeout: 5000 })
+        .catch(() => {});
     if (app?.pid) {
       const inspect = `
         $root = Get-Process -Id ${app.pid} -ErrorAction SilentlyContinue
@@ -297,7 +387,7 @@ async function main() {
     if (page && !page.isClosed()) {
       await page
         .evaluate(() => {
-          void globalThis.TauriBridge.invoke("quit_initial_setup");
+          void globalThis.__TAURI__.core.invoke("quit_initial_setup");
         })
         .catch(() => {});
     }
