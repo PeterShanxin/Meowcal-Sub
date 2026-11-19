@@ -650,7 +650,12 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
             );
 
             if ocr_result.is_empty() {
-                debug!("[FILTER: {}] skipping", band_filter.skip_reason());
+                debug!(
+                    session_id,
+                    capture_id = token.capture_id,
+                    reason = band_filter.skip_reason(),
+                    "Subtitle band skipped"
+                );
                 let held = band_filter.held_lines();
                 let busy = translator.is_busy();
                 if let Some(quiet) = notices.quiet_region(session_id, token.capture_id, held, busy)
@@ -665,12 +670,7 @@ pub async fn start_translation(app: AppHandle, state: State<'_, AppState>) -> Re
             notices.saw_text();
 
             if let Some(rejection) = rejection {
-                debug!(
-                    "[FILTER: {}] OCR text ({} chars, minimum {})",
-                    rejection.as_str(),
-                    current_text.chars().count(),
-                    min_chars
-                );
+                crate::pipeline_ocr::log_rejection(token, rejection, &current_text, min_chars);
                 let busy = translator.is_busy();
                 if let Some(notice) =
                     notices.unreadable_source(session_id, token.capture_id, rejection, busy)

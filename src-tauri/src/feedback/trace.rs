@@ -18,6 +18,7 @@ pub(super) struct Stage {
 #[derive(Clone)]
 pub(super) struct Frame {
     pub(super) token: PipelineToken,
+    pub(super) verbose: bool,
     pub(super) stages: Vec<Stage>,
     pub(super) image: Option<Arc<[u8]>>,
     pub(super) recognized: Option<String>,
@@ -29,6 +30,7 @@ impl Frame {
     fn new(token: PipelineToken) -> Self {
         Self {
             token,
+            verbose: crate::logging_settings::verbose(),
             stages: Vec::new(),
             image: None,
             recognized: None,
@@ -216,6 +218,8 @@ pub(crate) fn observe(
         tracing::warn!(
             session_id = token.session_id,
             capture_id = token.capture_id,
+            stage,
+            code,
             "pipeline_feedback_fault"
         );
         history.fault = Some(frame.clone());

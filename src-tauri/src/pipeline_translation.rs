@@ -313,6 +313,7 @@ impl Translator {
                     warn!(
                         session_id = self.session_id,
                         cue_id = job.cue_id,
+                        capture_id = job.frame.token.capture_id,
                         waited_ms,
                         "Translation missed its deadline"
                     );

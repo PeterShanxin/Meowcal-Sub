@@ -6,6 +6,22 @@ use meowcal_core::ocr::Engine;
 use tauri::{AppHandle, Emitter};
 use tracing::{info, warn};
 
+pub(crate) fn log_rejection(
+    token: crate::pipeline_session::PipelineToken,
+    reason: crate::ocr_gate::OcrRejection,
+    text: &str,
+    min_chars: usize,
+) {
+    tracing::debug!(
+        session_id = token.session_id,
+        capture_id = token.capture_id,
+        reason = reason.as_str(),
+        source_chars = text.chars().count(),
+        min_chars,
+        "OCR text rejected"
+    );
+}
+
 /// The session's OCR client, or `None` when no recognizer could start; the UI
 /// is told why either way.
 ///

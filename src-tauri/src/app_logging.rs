@@ -219,7 +219,7 @@ fn label_for_identifier(identifier: &str) -> &'static str {
     }
 }
 
-struct ProfileTimer;
+pub(crate) struct ProfileTimer;
 impl tracing_subscriber::fmt::time::FormatTime for ProfileTimer {
     fn format_time(
         &self,
