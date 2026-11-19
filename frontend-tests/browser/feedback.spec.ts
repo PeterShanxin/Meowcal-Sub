@@ -127,6 +127,9 @@ test("turning attachments off removes every selection from the sent draft", asyn
   await page.getByRole("button", { name: "Feedback", exact: true }).click();
   const dialog = page.getByRole("dialog");
   await dialog.getByLabel("Feedback type").selectOption("ocr");
+  await expect(
+    dialog.getByText(/To include the captured region and recognized text/),
+  ).toBeVisible();
   await dialog.getByRole("textbox").fill("Fixture");
   const toggle = dialog.getByRole("switch");
   await toggle.check();

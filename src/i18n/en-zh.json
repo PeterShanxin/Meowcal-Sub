@@ -276,6 +276,8 @@
   "Session log path": "会话日志路径",
   "Attach troubleshooting materials": "附上排查材料",
   "The original line and its translation help us check the wording.": "原文和译文能帮助我们判断这句字幕哪里翻错了。",
+  "To include the original line and translation, choose Verbose logging in Settings and reproduce the issue. You can also send this report now.": "想附上原文和译文？在设置中把日志调到「详细」，再重现一次问题。现在也可以直接发送这份反馈。",
+  "To include the captured region and recognized text, choose Verbose logging in Settings and reproduce the issue. You can also send this report now.": "想附上捕获画面和识别文字？在设置中把日志调到「详细」，再重现一次问题。现在也可以直接发送这份反馈。",
   "The captured region and recognized text help us check which characters were missed.": "对照捕获区域和识别文字，能帮助我们找出漏字或错字。",
   "Logs near the missing subtitle can help locate the interruption.": "字幕消失前后的日志可以帮助我们找到中断的位置。",
   "Logs from the time of the error can help locate the failure.": "出错前后的日志可以帮助我们找到原因。",

@@ -227,10 +227,10 @@ export class FeedbackDialog extends LitElement {
                                         }
                                       }}
                                   /></label>
-                                  ${materialAdvice(preview.materials, this.type)}
+                                  ${materialAdvice(preview.materials, this.type, this.logLevel)}
                                   ${this.expanded ? renderMaterials(preview.materials, this.type, this.selected, (id, checked) => this.selectMaterial(id, checked)) : nothing}
                                 </div>`
-                              : nothing
+                              : materialAdvice(preview.materials, this.type, this.logLevel)
                           }
                         </section>`
                       : html`<p role="status" class="feedback-muted">

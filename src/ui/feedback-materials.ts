@@ -59,14 +59,21 @@ export function renderDiagnostics(preview: FeedbackPreview, fault: boolean, logL
   </details>`;
 }
 
-export function materialAdvice(materials: FeedbackMaterial[], type: FeedbackType | "") {
-  if (
-    !type ||
-    !advice[type] ||
-    !materials.some((item) => recommendations[type]?.includes(item.kind))
-  )
-    return nothing;
-  return html`<p class="feedback-advice">${t(advice[type]!)}</p>`;
+export function materialAdvice(
+  materials: FeedbackMaterial[],
+  type: FeedbackType | "",
+  logLevel: string,
+) {
+  if (!type) return nothing;
+  let message = advice[type];
+  if (!materials.some((item) => recommendations[type]?.includes(item.kind))) {
+    if (logLevel === "verbose" || (type !== "translation" && type !== "ocr")) return nothing;
+    message =
+      type === "translation"
+        ? "To include the original line and translation, choose Verbose logging in Settings and reproduce the issue. You can also send this report now."
+        : "To include the captured region and recognized text, choose Verbose logging in Settings and reproduce the issue. You can also send this report now.";
+  }
+  return message ? html`<p class="feedback-advice">${t(message)}</p>` : nothing;
 }
 
 export function renderMaterials(
