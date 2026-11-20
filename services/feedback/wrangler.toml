@@ -1,6 +1,11 @@
 name = "meowcal-feedback"
 main = "worker.mjs"
+workers_dev = true
+preview_urls = false
 compatibility_date = "2026-05-01"
+
+[triggers]
+crons = ["*/5 * * * *"]
 
 [observability]
 enabled = false

@@ -1,4 +1,5 @@
 import { createIssue, findIssue, installationToken, validType } from "./github.mjs";
+import { ARCHIVE_GRACE, ArchiveRetention, migrateRetention } from "./retention.mjs";
 
 const MAX_BYTES = 16 * 1024 * 1024;
 const DAILY_REPORTS = 120;
@@ -56,6 +57,13 @@ async function mayDownload(request, env) {
 }
 
 export default {
+  async scheduled(_event, env) {
+    const response = await env.REPORTS.get(env.REPORTS.idFromName("repository")).fetch(
+      "https://ledger.internal/sweep",
+      { method: "POST" },
+    );
+    if (!response.ok) throw new Error("Archive sweep incomplete");
+  },
   async fetch(request, env) {
     try {
       const { pathname, search, protocol } = new URL(request.url);
@@ -89,12 +97,14 @@ export class ReportLedger {
   constructor(ctx, env) {
     this.sql = ctx.storage.sql;
     this.env = env;
-    this.activeUploads = 0;
+    this.uploading = new Set();
     this.sql.exec(`CREATE TABLE IF NOT EXISTS reports (
       id TEXT PRIMARY KEY, type TEXT NOT NULL, version TEXT NOT NULL, created INTEGER NOT NULL,
       attempted INTEGER, issue INTEGER UNIQUE
     )`);
     this.sql.exec("CREATE INDEX IF NOT EXISTS report_day ON reports(created)");
+    migrateRetention(this.sql);
+    this.retention = new ArchiveRetention(this);
   }
 
   one(query, ...args) {
@@ -102,14 +112,23 @@ export class ReportLedger {
   }
 
   async fetch(request) {
+    if (request.method === "POST" && request.url === "https://ledger.internal/sweep") {
+      await this.retention.sweep();
+      return reply(200);
+    }
     if (request.method === "GET") {
       const number = Number(new URL(request.url).pathname.split("/")[3]);
-      const row = this.one(
-        "SELECT id FROM reports WHERE issue=? AND created>?",
-        number,
-        Date.now() - 30 * 86400000,
-      );
-      const object = row && (await this.env.ARCHIVES.get("reports/" + row.id));
+      const row = this.one("SELECT * FROM reports WHERE issue=?", number);
+      if (!row) return reply(404);
+      let token;
+      const getToken = () => (token ??= this.token());
+      let status;
+      for (let page = 0; page < 8; page++) {
+        status = await this.retention.review(row, getToken);
+        if (status !== "pending" || this.uploading.has(row.id)) break;
+      }
+      if (status !== "available") return reply(status === "gone" ? 404 : 503);
+      const object = await this.env.ARCHIVES.get("reports/" + row.id);
       return object
         ? new Response(object.body, {
             headers: { "Content-Type": "application/octet-stream", "Cache-Control": "no-store" },
@@ -123,18 +142,25 @@ export class ReportLedger {
     if (existing) {
       if (existing.version !== version || existing.type !== type) return reply(409);
       if (existing.issue) return reply(200, { issueNumber: existing.issue });
-      if (existing.attempted) {
-        if (Date.now() - existing.attempted < 30000) return reply(503);
-        return this.reconcile(report);
+      if (existing.archive_state || Date.now() >= existing.created + ARCHIVE_GRACE) {
+        await this.retention.review(existing, () => this.token());
+        const resolved = this.one("SELECT issue,archive_state FROM reports WHERE id=?", id);
+        if (resolved.issue) return reply(200, { issueNumber: resolved.issue });
+        return reply(resolved.archive_state ? 410 : 503);
       }
     }
     // One isolate also serves downloads. Keep aggregate buffered upload memory bounded.
-    if (this.activeUploads >= 2) return reply(503);
-    this.activeUploads++;
+    if (this.uploading.size >= 2 || this.uploading.has(id) || this.retention.active.has(id))
+      return reply(503);
+    this.uploading.add(id);
     try {
+      if (existing?.attempted) {
+        if (Date.now() - existing.attempted < 30000) return reply(503);
+        return this.receipt(id, await this.lookup(report, await this.token()));
+      }
       return await this.submit(request, report);
     } finally {
-      this.activeUploads--;
+      this.uploading.delete(id);
     }
   }
 
@@ -145,12 +171,13 @@ export class ReportLedger {
     const now = Date.now();
     const today = now - (now % 86400000);
     this.sql.exec(
-      `INSERT OR IGNORE INTO reports (id,type,version,created)
-      SELECT ?,?,?,? WHERE (SELECT COUNT(*) FROM reports WHERE created>=?)<?`,
+      `INSERT OR IGNORE INTO reports (id,type,version,created,next_check)
+      SELECT ?,?,?,?,? WHERE (SELECT COUNT(*) FROM reports WHERE created>=?)<?`,
       id,
       type,
       version,
       now,
+      now + ARCHIVE_GRACE,
       today,
       DAILY_REPORTS,
     );
@@ -189,15 +216,18 @@ export class ReportLedger {
     return createIssue(report, token);
   }
 
-  async reconcile(report) {
-    const token = await this.token();
-    const issue = await findIssue(report, token, this.env.GITHUB_APP_ID);
-    return this.receipt(report.id, issue);
+  lookup(report, token) {
+    return findIssue(report, token, this.env.GITHUB_APP_ID);
   }
 
   receipt(id, number) {
     if (!Number.isSafeInteger(number) || number < 1) return reply(503);
-    this.sql.exec("UPDATE reports SET issue=? WHERE id=?", number, id);
+    this.sql.exec(
+      "UPDATE reports SET issue=?,next_check=? WHERE id=? AND archive_state=0",
+      number,
+      Date.now(),
+      id,
+    );
     return reply(200, { issueNumber: number });
   }
 }

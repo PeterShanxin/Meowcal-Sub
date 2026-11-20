@@ -66,7 +66,8 @@ jobs:
           cd "$RUNNER_TEMP"
           [[ "$SERVICE" =~ ^https://[A-Za-z0-9.-]+/?$ ]]
           [[ -n "$READ_TOKEN" && -n "$TEAM_IDENTITY" ]]
-          curl --proto '=https' --fail --silent --show-error --max-time 45 --max-filesize 16777216 \
+          curl --proto '=https' --fail --silent --show-error --retry 3 --retry-max-time 90 \
+            --max-time 45 --max-filesize 16777216 \
             -H "Authorization: Bearer $READ_TOKEN" "${SERVICE%/}/v1/issues/$REPORT/archive" -o incoming.age
           key_file=$(mktemp)
           trap 'rm -f -- "$key_file" incoming.age' EXIT

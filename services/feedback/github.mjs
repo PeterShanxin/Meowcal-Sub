@@ -88,16 +88,81 @@ export function createIssue(report, token) {
 export async function findIssue(report, token, appId) {
   const q = "repo:" + REPOSITORY + ' is:issue in:body "' + report.id + '"';
   const search = await githubRequest("/search/issues?q=" + encodeURIComponent(q), token);
-  if (!search.ok) return null;
-  const match = publicIssue(report);
-  const { items } = await search.json();
-  for (const item of items.slice(0, 10)) {
-    if (item.body !== match.body || !Number.isSafeInteger(item.number)) continue;
+  if (!search.ok) throw new Error("Issue search unavailable");
+  const reference = "Feedback reference: `" + report.id + "`";
+  const { items, incomplete_results: incomplete, total_count: total } = await search.json();
+  if (!Array.isArray(items) || incomplete !== false || total !== items.length)
+    throw new Error("Incomplete issue search");
+  const candidates = items.filter(
+    (item) => item.body?.includes(reference) && Number.isSafeInteger(item.number),
+  );
+  // Ambiguous matches require a later retry or operator investigation. Bound
+  // per-upload lookup work even when someone copies a reference into issues.
+  if (candidates.length > 2) throw new Error("Ambiguous issue search");
+  for (const item of candidates) {
     const full = await githubRequest("/repos/" + REPOSITORY + "/issues/" + item.number, token);
-    if (!full.ok) continue;
+    if (!full.ok) throw new Error("Issue metadata unavailable");
     const issue = await full.json();
-    if (String(issue.performed_via_github_app?.id) === String(appId) && issue.body === match.body)
+    if (
+      String(issue.performed_via_github_app?.id) === String(appId) &&
+      issue.body?.includes(reference)
+    )
       return issue.number;
   }
   return null;
+}
+
+// Filter at GitHub so comments, labels and attachments never enter the Worker.
+const HISTORY_QUERY = `query FeedbackState($issue:Int!, $after:String) {
+  repository(owner:"PeterShanxin", name:"Meowcal-Sub") {
+    issue(number:$issue) {
+      number state closedAt
+      timelineItems(first:50, after:$after, itemTypes:[CLOSED_EVENT,REOPENED_EVENT]) {
+        nodes { __typename ... on ClosedEvent { createdAt } ... on ReopenedEvent { createdAt } }
+        pageInfo { hasNextPage endCursor }
+      }
+    }
+  }
+}`;
+
+function timestamp(value) {
+  const time = typeof value === "string" ? Date.parse(value) : NaN;
+  if (!Number.isFinite(time)) throw new Error("Invalid issue timestamp");
+  return time;
+}
+
+export async function issueHistory(number, cursor, token) {
+  const response = await githubRequest("/graphql", token, {
+    method: "POST",
+    body: JSON.stringify({ query: HISTORY_QUERY, variables: { issue: number, after: cursor } }),
+  });
+  if (!response.ok) throw new Error("Issue state unavailable");
+  const result = await response.json();
+  const issue = result.data?.repository?.issue;
+  const items = issue?.timelineItems;
+  const info = items?.pageInfo;
+  if (
+    result.errors?.length ||
+    issue?.number !== number ||
+    !["OPEN", "CLOSED"].includes(issue.state) ||
+    (issue.state === "OPEN" && issue.closedAt !== null) ||
+    !Array.isArray(items?.nodes) ||
+    typeof info?.hasNextPage !== "boolean" ||
+    (items.nodes.length &&
+      (typeof info.endCursor !== "string" || !info.endCursor || info.endCursor === cursor)) ||
+    (!items.nodes.length && info.hasNextPage)
+  )
+    throw new Error("Incomplete issue timeline");
+  const events = items.nodes.map((node) => {
+    if (!["ClosedEvent", "ReopenedEvent"].includes(node?.__typename))
+      throw new Error("Unknown issue transition");
+    return { type: node.__typename, time: timestamp(node.createdAt) };
+  });
+  return {
+    state: issue.state,
+    closedAt: issue.state === "CLOSED" ? timestamp(issue.closedAt) : null,
+    events,
+    cursor: info.endCursor,
+    more: info.hasNextPage,
+  };
 }

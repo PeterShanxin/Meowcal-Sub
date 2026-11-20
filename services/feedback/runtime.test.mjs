@@ -11,9 +11,10 @@ test("workerd persists one private archive and publishes only issue metadata", a
   const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
   const token = randomBytes(32).toString("hex");
   const issues = [];
+  const events = [];
   const runtime = new Miniflare(
     convertV4MiniflareOptions({
-      modules: ["worker.mjs", "github.mjs"].map((name) => ({
+      modules: ["worker.mjs", "github.mjs", "retention.mjs"].map((name) => ({
         type: "ESModule",
         path: join(root, name),
       })),
@@ -33,9 +34,34 @@ test("workerd persists one private archive and publishes only issue metadata", a
         assert.equal(url.origin, "https://api.github.com");
         if (url.pathname === "/app/installations/456/access_tokens")
           return Response.json({ token: "local-test" });
+        if (url.pathname === "/graphql") {
+          const { variables } = await request.json();
+          const offset = Number(variables.after ?? 0);
+          const nodes = events.slice(offset);
+          const last = events.at(-1);
+          const closed = last?.__typename === "ClosedEvent";
+          return Response.json({
+            data: {
+              repository: {
+                issue: {
+                  number: variables.issue,
+                  state: closed ? "CLOSED" : "OPEN",
+                  closedAt: closed ? last.createdAt : null,
+                  timelineItems: {
+                    nodes,
+                    pageInfo: {
+                      hasNextPage: false,
+                      endCursor: nodes.length ? String(events.length) : null,
+                    },
+                  },
+                },
+              },
+            },
+          });
+        }
         assert.equal(url.pathname, "/repos/PeterShanxin/Meowcal-Sub/issues");
         issues.push(await request.json());
-        return Response.json({ number: 184 }, { status: 201 });
+        return Response.json({ number: 183 + issues.length }, { status: 201 });
       },
     }),
   );
@@ -50,10 +76,10 @@ test("workerd persists one private archive and publishes only issue metadata", a
     "Content-Type": "application/octet-stream",
     "Content-Length": String(bytes.length),
   };
-  const send = () =>
+  const send = (reportId = id) =>
     runtime.dispatchFetch("https://feedback.test/v1/reports", {
       method: "POST",
-      headers,
+      headers: { ...headers, "X-Report-Id": reportId },
       body: bytes,
     });
   const receipt = await send();
@@ -74,4 +100,21 @@ test("workerd persists one private archive and publishes only issue metadata", a
   });
   assert.equal(archive.status, 200);
   assert.deepEqual(Buffer.from(await archive.arrayBuffer()), bytes);
+  const second = randomUUID();
+  assert.deepEqual(await (await send(second)).json(), { issueNumber: 185 });
+  events.push(
+    { __typename: "ClosedEvent", createdAt: new Date(Date.now() - 40 * 86400000).toISOString() },
+    { __typename: "ReopenedEvent", createdAt: new Date(Date.now() - 5 * 86400000).toISOString() },
+  );
+  const expired = await runtime.dispatchFetch(url, {
+    headers: { Authorization: "Bearer " + token },
+  });
+  assert.equal(expired.status, 404);
+  const bucket = await runtime.getR2Bucket("ARCHIVES");
+  assert.equal(await bucket.get("reports/" + id), null);
+  assert.equal((await send()).status, 200);
+  assert.equal(await bucket.get("reports/" + id), null);
+  const entry = await runtime.getWorker();
+  await entry.scheduled();
+  assert.equal(await bucket.get("reports/" + second), null);
 });
