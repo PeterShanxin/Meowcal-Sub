@@ -99,16 +99,20 @@ test("exit is keyboard accessible, ignores repeat activation and resets for the 
 });
 
 test("failed exit stays usable with an error and a working retry", async ({ page }) => {
-  await openOverlay(page);
+  await openOverlay(page, { x: 0, y: 0, width: 50, height: 50 });
+  const toolbar = page.getByRole("group", { name: "Translation controls" });
+  const alert = page.getByRole("alert");
   await page.evaluate(() => (window.overlayTest.exitFailure = "Capture is still stopping."));
   const exit = page.getByRole("button", { name: "Exit translation", exact: true });
   await exit.click();
-  await expect(page.getByRole("alert")).toContainText("Capture is still stopping.");
+  await expect(alert).toContainText("Capture is still stopping.");
+  await expect(toolbar).toBeInViewport({ ratio: 1 });
+  await expect(alert).toBeInViewport({ ratio: 1 });
   await expect(exit).toBeEnabled();
   await expect(page.locator("#capture-frame")).not.toHaveClass(/dragging/);
   await page.evaluate(() => (window.overlayTest.exitFailure = null));
   await exit.click();
-  await expect(page.getByRole("alert")).toBeHidden();
+  await expect(alert).toBeHidden();
   await expect(exit).toBeDisabled();
 });
 
@@ -126,7 +130,7 @@ test("native close requests use the same guarded exit action", async ({ page }) 
   ).toBe(1);
 });
 
-for (const scale of [1, 1.25, 2]) {
+for (const scale of [1, 1.25, 1.5, 2]) {
   test.describe(`Overlay at ${scale}x scale`, () => {
     test.use({ deviceScaleFactor: scale });
     test("style controls retain stable geometry, clear resize handles and belong to the native clip", async ({
@@ -149,6 +153,11 @@ for (const scale of [1, 1.25, 2]) {
           y: Math.round(rect.y),
           width: Math.round(rect.width),
           height: Math.round(rect.height),
+          radius: Math.min(
+            parseFloat(getComputedStyle(element).borderTopLeftRadius),
+            rect.width / 2,
+            rect.height / 2,
+          ),
           transform: getComputedStyle(frame).transform,
           filter: getComputedStyle(frame).filter,
           buttons: [...element.querySelectorAll("button")].map(
@@ -159,17 +168,22 @@ for (const scale of [1, 1.25, 2]) {
       expect(geometry.transform).toBe("none");
       expect(geometry.filter).toBe("none");
       expect(geometry.buttons.every((width) => width >= 32)).toBe(true);
+      expect(geometry.radius).toBe(geometry.height / 2);
       await expect
         .poll(() =>
           page.evaluate(({ x, y, width, height }) => {
             const clips = window.overlayTest.calls.filter(
               (c) => c.command === "set_overlay_window_clip",
             );
-            return clips
-              .at(-1)
-              ?.args.handleBounds?.some(
-                (b) => b.x === x && b.y === y && b.width === width && b.height === height,
-              );
+            const clip = clips.at(-1)?.args;
+            return clip?.handleBounds?.some(
+              (b, index) =>
+                b.x === x &&
+                b.y === y &&
+                b.width === width &&
+                b.height === height &&
+                Math.min(clip.controlRadii?.[index], width / 2, height / 2) === height / 2,
+            );
           }, geometry),
         )
         .toBe(true);

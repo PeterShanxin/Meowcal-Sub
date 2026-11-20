@@ -1,11 +1,11 @@
 /* The opaque toolbar is clipped as one surface, including its focus rings. */
 .overlay-toolbar {
   position: fixed;
-  padding: 4px;
+  padding: 5px 10px;
   color: var(--text-1);
   background: var(--surface-menu);
   border: 1px solid var(--line-control);
-  border-radius: 10px;
+  border-radius: 999px;
   box-shadow: var(--inset-highlight);
   pointer-events: auto;
   cursor: default;
@@ -15,6 +15,10 @@
 .overlay-toolbar[hidden],
 .overlay-toolbar-error[hidden] {
   display: none;
+}
+
+.overlay-toolbar:has(.overlay-toolbar-error:not([hidden])) {
+  border-radius: var(--radius-lg);
 }
 
 .overlay-toolbar-actions {
@@ -33,7 +37,7 @@
   color: var(--text-1);
   background: transparent;
   border: 0;
-  border-radius: 6px;
+  border-radius: 50%;
   cursor: pointer;
   transition:
     background 0.15s ease,
