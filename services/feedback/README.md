@@ -35,7 +35,7 @@ The private `GET /v1/issues/{number}/archive` route requires the archive-read be
 
 ## Archive retention
 
-A report linked to an open issue is available to maintainers regardless of its upload date. Closing the issue starts a 30-day countdown. Reopening it before the deadline cancels that countdown, and closing it again starts a fresh 30 days. Once the issue has spent 30 consecutive days closed, access expires permanently. Reopening it later cannot restore the archive. Its public issue and delivery receipt are preserved. Expiry applies to the service's copy. Maintainers manage any ZIP they have already downloaded.
+The receiver deletes its copy of the encrypted report and attachments once the linked issue has been closed for 30 days. The public issue and delivery receipt remain available. Maintainers manage any ZIP they have already downloaded.
 
 Deploy the scheduled trigger in the checked-in Wrangler configuration along with the Worker. It reviews up to eight due reports every five minutes. The cleanup job and the download route verify issue history with the existing GitHub App installation. If GitHub is unavailable, retry the download later. The service defers deletion until it can verify expiry. The ledger migrates existing rows automatically and applies the same policy to older linked reports.
 

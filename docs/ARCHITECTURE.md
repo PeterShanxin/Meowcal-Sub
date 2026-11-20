@@ -193,9 +193,7 @@ against the frozen preview, writes a ZIP in memory, and encrypts it to the
 build's age recipient before sending it to the configured HTTPS origin. The
 browser development server does not expose these commands. Public issue metadata
 is restricted to category, product version, and report identifier. The receiver
-keeps an open issue's encrypted archive available to maintainers. It expires
-after 30 consecutive days closed. Reopening before expiry clears that deadline,
-and the next close starts a new 30-day period. See
+deletes the encrypted archive when its linked issue has been closed for 30 days. See
 [ADR-0008](adr/0008-encrypted-feedback.md) for the reader and transport boundaries.
 
 The browser backend reads `%APPDATA%\<log identifier>\config.json` through
