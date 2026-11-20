@@ -1,3 +1,15 @@
+!macro MEOWCAL_RETRY_APP_DATA_CLEANUP dataDir
+  Push $R8
+  ${For} $R8 1 4
+    ${IfNot} ${FileExists} "${dataDir}\*.*"
+      ${ExitFor}
+    ${EndIf}
+    Sleep 250
+    RmDir /r "${dataDir}"
+  ${Next}
+  Pop $R8
+!macroend
+
 ; Meowcal Core keeps the translation engine outside this app's identifier
 ; folders, so "Delete the application data" does not reach it on its own.
 !macro NSIS_HOOK_POSTUNINSTALL
@@ -15,5 +27,8 @@
     ${EndIf}
     RmDir "$LOCALAPPDATA\Meowcal\Core"
     RmDir "$LOCALAPPDATA\Meowcal"
+    ; Tauri's first cleanup pass can miss files with open handles.
+    !insertmacro MEOWCAL_RETRY_APP_DATA_CLEANUP "$APPDATA\${BUNDLEID}"
+    !insertmacro MEOWCAL_RETRY_APP_DATA_CLEANUP "$LOCALAPPDATA\${BUNDLEID}"
   ${EndIf}
 !macroend
