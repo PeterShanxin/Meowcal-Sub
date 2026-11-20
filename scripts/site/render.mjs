@@ -19,7 +19,7 @@ const SUB1_REPO = "https://github.com/PeterShanxin/Meowcal-Sub";
 const SUB2_REPO = "https://github.com/PeterShanxin/Meowcal-Sub-2";
 const STORE_URL = "https://apps.microsoft.com/detail/9NNK2X23VLWT";
 // The Sub 2 release that the Sub 2 copy and screenshot describe.
-const SUB2_VERSION = "0.3.0";
+const SUB2_VERSION = "0.4.0";
 
 const LOCALE_PATHS = { en: "", "zh-CN": "zh-CN/" };
 export const PAGE_PATHS = {
