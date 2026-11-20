@@ -243,9 +243,11 @@ export class FeedbackDialog extends LitElement {
                 ${this.message ? html`<p class="feedback-error-text" role="alert">${t(this.message)}</p>` : nothing}
                 <div class="feedback-footer-row">
                   <p>
-                    ${icon("shield")}<span
-                      >${t("Only the team maintaining the app can see your report and attachments. We automatically delete them 30 days after we close your feedback.")}</span
-                    >
+                    ${icon("shield")}
+                    <span>
+                      ${t("Only the team maintaining the app can see your report and attachments.")}<br />
+                      ${t("We automatically delete them 30 days after we close your feedback.")}
+                    </span>
                   </p>
                   <button
                     class="primary-button compact feedback-send"
