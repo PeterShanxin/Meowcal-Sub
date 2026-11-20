@@ -6,7 +6,7 @@ Meowcal Sub translates **visible text in a selected screen region**, not audio.
 Start with a video that already displays subtitles in Chinese, Japanese,
 Korean, English, Spanish, French, or German.
 
-This guide covers Meowcal Sub v0.10.0. For each version, see its notes under
+This guide covers Meowcal Sub v0.11.0. For each version, see its notes under
 [`releases/`](releases/).
 
 ## Installation
@@ -33,7 +33,7 @@ Download the installer and `SHA256SUMS.txt` from the **same application release*
 In PowerShell, compute the hash of the file you downloaded, for example:
 
 ```powershell
-Get-FileHash -Algorithm SHA256 -LiteralPath ".\Meowcal.Sub_0.10.0_x64-setup.exe"
+Get-FileHash -Algorithm SHA256 -LiteralPath ".\Meowcal.Sub_0.11.0_x64-setup.exe"
 ```
 
 Use your actual filename for another version or architecture. Compare the full
@@ -271,7 +271,7 @@ investigation:
 
 ## Report a problem safely
 
-**Unreleased:** Open **Feedback** in the main title bar or **Report error** beside
+Open **Feedback** in the main title bar or **Report error** beside
 an error. Choose a type and enter a description. The error entry includes the
 available diagnostics for the fault. A suggestion only needs a description.
 Review the basic diagnostics and select any additional evidence you want the

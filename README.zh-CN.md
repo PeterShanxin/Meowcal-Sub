@@ -38,12 +38,12 @@ https://github.com/user-attachments/assets/58fbac67-9032-42e2-8d4d-8e4df6c01e59
 
 **[从 Microsoft Store 安装](https://apps.microsoft.com/detail/9NNK2X23VLWT)**，支持 x64 和 ARM64，由商店提供更新。也可选择下方的 GitHub 安装包。
 
-**Windows 11 公开测试版 · v0.10.0** — [更新说明与全部安装文件](https://github.com/PeterShanxin/Meowcal-Sub/releases/tag/v0.10.0)。
+**Windows 11 公开测试版 · v0.11.0** — [更新说明与全部安装文件](https://github.com/PeterShanxin/Meowcal-Sub/releases/tag/v0.11.0)。
 
 | 你的电脑 | 安装包 |
 | --- | --- |
-| Intel / AMD Windows 电脑 | **[下载 x64（.exe）](https://github.com/PeterShanxin/Meowcal-Sub/releases/download/v0.10.0/Meowcal.Sub_0.10.0_x64-setup.exe)** |
-| 骁龙或其他 Windows on ARM 电脑 | **[下载 ARM64（.exe）](https://github.com/PeterShanxin/Meowcal-Sub/releases/download/v0.10.0/Meowcal.Sub_0.10.0_arm64-setup.exe)** |
+| Intel / AMD Windows 电脑 | **[下载 x64（.exe）](https://github.com/PeterShanxin/Meowcal-Sub/releases/download/v0.11.0/Meowcal.Sub_0.11.0_x64-setup.exe)** |
+| 骁龙或其他 Windows on ARM 电脑 | **[下载 ARM64（.exe）](https://github.com/PeterShanxin/Meowcal-Sub/releases/download/v0.11.0/Meowcal.Sub_0.11.0_arm64-setup.exe)** |
 
 MSI 安装包和 `SHA256SUMS.txt` 校验文件也在该发布页。
 更新版本请看[最新应用发布页](https://github.com/PeterShanxin/Meowcal-Sub/releases/latest)。
@@ -112,7 +112,7 @@ GPU 就绪检查超时后可尝试 CPU 回退。x64 版只在有独立显卡时�
 | --- | --- |
 | 圈选区域的画面捕获、文字识别、翻译推理和悬浮显示 | 引擎／模型安装或修复下载、必要的 Windows 识别语言安装，以及应用更新检查与下载 |
 
-捕获、识别和翻译在本机运行。开发版的反馈窗口可预览并逐项选择字幕或截图。
+捕获、识别和翻译在本机运行。反馈窗口可预览并逐项选择字幕或截图。
 点「发送」后，应用才会发送加密报告。公开 Issue 仅显示问题类型、应用版本和反馈编号。
 只有维护团队能看到你的报告和附件。反馈处理完 30 天后，系统会自动删除它们。
 生产日志默认记录支持代码、耗时和计数，不记录字幕文字。
@@ -162,7 +162,7 @@ Core 是底层运行环境，不是用户需要额外手动安装的应用。
 | [评估说明](evals/README.md) | 各层验证方法与测量方法 |
 | [Meowcal Core](core/README.md) | Core 的 API 与存储约定 |
 
-本页和使用指南适用于 v0.10.0。
+本页和使用指南适用于 v0.11.0。
 架构、贡献和评估文档跟随 `main` 分支。
 
 ## 反馈与参与
