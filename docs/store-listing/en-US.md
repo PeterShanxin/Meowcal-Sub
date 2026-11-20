@@ -6,7 +6,7 @@ Translate on-screen subtitles in videos and games with local OCR. Read the trans
 
 ## Search terms
 
-on-screen subtitle translator; game subtitle translation; offline OCR; floating subtitles; screen text translation; video subtitle overlay
+Meowcal; on-screen subtitle translator; game subtitle translation; offline OCR; floating subtitles; screen text translation; video subtitle overlay
 
 ## Description
 
