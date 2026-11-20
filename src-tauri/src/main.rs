@@ -87,6 +87,9 @@ fn main() {
     let app = builder
         // Register our custom commands (functions that JavaScript can call)
         .invoke_handler(tauri::generate_handler![
+            meowcal_sub::feedback::feedback_preview,
+            meowcal_sub::feedback::feedback_overlay_received,
+            meowcal_sub::feedback_send::feedback_send,
             commands::get_settings,
             commands::save_settings,
             meowcal_sub::ui_language::get_system_ui_language,

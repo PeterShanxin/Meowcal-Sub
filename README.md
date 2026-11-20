@@ -2,7 +2,7 @@
 
 <p align="center">
   <strong>Translate the subtitles already on your screen.</strong><br>
-  Local OCR and AI translation for Windows 11. Your subtitle text stays on your PC.
+  On-device OCR and AI translation for Windows 11.
 </p>
 
 <p align="center">
@@ -123,7 +123,12 @@ architecture, choose **Settings → Profile → Compatibility**.
 | --- | --- |
 | Capture of the selected region, OCR, translation inference, and the overlay | Engine/model setup or repair downloads, Windows recognition-language installation when needed, and application update checks/downloads |
 
-In normal mode, **captured and translated subtitle text is not uploaded**.
+Capture, recognition, and translation run locally. In the unreleased feedback
+form, pressing **Send** shares an encrypted report. You can preview and select
+individual subtitle samples or images. The public issue contains only the type,
+app version, and report identifier. Maintainers can download the encrypted report
+while the issue is open. The service deletes it after 30 consecutive days closed.
+Reopening before then starts the count over at the next close.
 Production logs record support codes, timings, and counts, not subtitle text by default.
 The Local logs setting can opt into Verbose capture images, OCR text,
 and translations stored only on this PC, capped at 256 MiB. Treat those files as private.

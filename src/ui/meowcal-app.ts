@@ -13,6 +13,9 @@ import { profiles } from "./recognition";
 import { renderSettings } from "./settings-view";
 import { renderAbout } from "./about-view";
 import "./meowcal-titlebar";
+import "./feedback-dialog";
+import type { FeedbackDialog } from "./feedback-dialog";
+import { currentFault, requestPreview, type PreviewResult } from "./feedback-model";
 
 @customElement("meowcal-app")
 export class MeowcalApp extends LitElement {
@@ -22,8 +25,23 @@ export class MeowcalApp extends LitElement {
   }
   @state() private snapshot!: UiSnapshot;
   @state() private aboutOpen = false;
+  private editingFeedback = false;
+  private fault: {
+    code: string;
+    identity: string;
+    token?: string;
+    preview: PreviewResult | null;
+  } | null = null;
   private controller = new AppController((snapshot) => {
     this.snapshot = snapshot;
+    const next = currentFault(snapshot);
+    if (!next) this.fault = null;
+    else if (next.identity !== this.fault?.identity || next.code !== this.fault.code) {
+      this.fault = {
+        ...next,
+        preview: this.editingFeedback ? null : requestPreview(next.code, next.token),
+      };
+    }
   });
   private focusRefresh = () => void this.controller.refresh();
 
@@ -117,6 +135,7 @@ export class MeowcalApp extends LitElement {
       onTarget: (value) => void this.controller.setLanguage("target", value),
       onPrimary: () => void this.runPrimary(presentation),
       onStartSaved: () => void this.controller.start(true),
+      onReport: () => this.showFeedback(true),
     });
   }
 
@@ -146,6 +165,23 @@ export class MeowcalApp extends LitElement {
     `;
   }
 
+  private showFeedback(reportError: boolean): void {
+    this.editingFeedback = true;
+    const fault = reportError ? this.fault : null;
+    const code = reportError ? (fault?.code ?? "APP_ERROR") : null;
+    void this.querySelector<FeedbackDialog>("meowcal-feedback")?.open(
+      code,
+      fault?.preview ?? requestPreview(code, fault?.token),
+    );
+  }
+
+  private feedbackClosed(): void {
+    this.editingFeedback = false;
+    // Keep the snapshot being edited usable while newer faults arrive.
+    if (this.fault && !this.fault.preview)
+      this.fault.preview = requestPreview(this.fault.code, this.fault.token);
+  }
+
   private renderMessage() {
     const { error, notice, settingsSave } = this.snapshot;
     const unsaved = !error && settingsSave.kind === "error";
@@ -169,6 +205,7 @@ export class MeowcalApp extends LitElement {
       <div class=${failed ? "toast error" : "toast notice"} role=${failed ? "alert" : "status"}>
         ${glyph}
         <span class="toast-message">${t(message.text)}</span>
+        ${failed ? html`<button type="button" class="link-button feedback-error" @click=${() => this.showFeedback(true)}>${t("Report error")}</button>` : nothing}
         ${
           unsaved
             ? html`<button
@@ -212,7 +249,10 @@ export class MeowcalApp extends LitElement {
     if (!this.snapshot) return nothing;
     return html`
       <div class="app-frame">
-        <meowcal-titlebar label=${t("Meowcal Sub")}></meowcal-titlebar>
+        <meowcal-titlebar
+          label=${t("Meowcal Sub")}
+          .onFeedback=${() => this.showFeedback(false)}
+        ></meowcal-titlebar>
         ${this.renderScreen()}
 
         <nav class="app-nav" aria-label=${t("Main navigation")}>
@@ -223,6 +263,10 @@ export class MeowcalApp extends LitElement {
 
         ${this.renderMessage()}
       </div>
+      <meowcal-feedback
+        .logLevel=${this.snapshot.settings.logging.level}
+        @feedback-closed=${this.feedbackClosed}
+      ></meowcal-feedback>
     `;
   }
 }

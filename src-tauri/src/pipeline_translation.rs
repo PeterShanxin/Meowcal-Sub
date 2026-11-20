@@ -210,6 +210,7 @@ impl Translator {
             {
                 continue;
             }
+            let observation = crate::feedback::trace::inference(&job.frame);
             let worker = self.clone();
             let task_job = job.clone();
             let task_stop = stop.clone();
@@ -235,6 +236,27 @@ impl Translator {
             let Some(payload) = payload else {
                 continue;
             };
+            observation.finished();
+            let (status, code) = match payload.display_state {
+                TranslationDisplayState::Translated => ("ok", None),
+                TranslationDisplayState::EngineSlow => ("failed", Some("TRANSLATION_TIMEOUT")),
+                TranslationDisplayState::Warming => ("skipped", Some("ENGINE_WARMING")),
+                _ => ("failed", Some("TRANSLATION_FAILED")),
+            };
+            if status == "ok" {
+                crate::feedback::trace::translated_text(
+                    job.frame.token,
+                    &payload.original,
+                    &payload.translated,
+                );
+            }
+            crate::feedback::trace::observe(
+                job.frame.token,
+                "translation",
+                status,
+                Some(payload.model_ms),
+                code,
+            );
             let presentation = match payload.display_state {
                 TranslationDisplayState::Translated => Presentation::Translated,
                 TranslationDisplayState::SourceOnly
@@ -291,6 +313,7 @@ impl Translator {
                     warn!(
                         session_id = self.session_id,
                         cue_id = job.cue_id,
+                        capture_id = job.frame.token.capture_id,
                         waited_ms,
                         "Translation missed its deadline"
                     );

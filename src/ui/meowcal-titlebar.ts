@@ -2,7 +2,7 @@ import { LocaleController } from "../i18n/lit-controller";
 import { t } from "../i18n";
 import { LitElement, html, nothing, svg, type TemplateResult } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { brandLogo } from "./icons";
+import { brandLogo, icon as appIcon } from "./icons";
 
 // Drawn on a 12px grid so the controls stay crisp at 10px.
 const GLYPH = {
@@ -33,6 +33,7 @@ export class MeowcalTitlebar extends LitElement {
     new LocaleController(this);
   }
   @property({ type: String }) label = "Meowcal Sub";
+  @property({ attribute: false }) onFeedback?: () => void;
 
   /** Fixed-size windows hide the maximise control instead of showing a dead button. */
   @property({ type: Boolean, attribute: "no-maximize" }) noMaximize = false;
@@ -74,7 +75,10 @@ export class MeowcalTitlebar extends LitElement {
           ${brandLogo()}
           <span data-tauri-drag-region>${this.label}${this.development ? " - Dev" : ""}</span>
         </div>
-        ${window.TauriBridge?.windowControls ? this.renderControls() : nothing}
+        <div class="titlebar-controls">
+          ${this.onFeedback ? html`<button class="titlebar-button feedback-entry" type="button" aria-label=${t("Feedback")} title=${t("Feedback")} @click=${this.onFeedback}>${appIcon("feedback")}</button>` : nothing}
+          ${window.TauriBridge?.windowControls ? this.renderControls() : nothing}
+        </div>
       </div>
     `;
   }

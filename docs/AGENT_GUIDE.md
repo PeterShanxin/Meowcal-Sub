@@ -227,6 +227,11 @@ then `bash scripts/verify-linux.sh` on a Linux agent VM. The default `all` run
 is required for the Linux handoff; report Windows CI and any native/manual gap
 separately. Do not describe Linux success as a full application or Windows pass.
 
+For feedback changes, check the Linux workerd test and the Windows frontend
+job's `feedback-native-windows-arm64` screenshot artifact. The screenshots cover
+both entry points. The receiver's local test commands are in its
+[operations guide](../services/feedback/README.md).
+
 Run the authoritative Windows gate from the repository root:
 
 ```powershell

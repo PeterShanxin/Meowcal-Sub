@@ -1,0 +1,86 @@
+name: Open encrypted feedback
+run-name: Open feedback issue ${{ inputs.issue }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      issue:
+        description: Feedback issue number
+        type: string
+        required: true
+      recipient:
+        description: Temporary age public key from open-feedback.ps1
+        type: string
+        required: true
+
+permissions: {}
+
+jobs:
+  authorize:
+    if: github.repository == 'PeterShanxin/Meowcal-Sub' && github.ref == 'refs/heads/main' && github.run_attempt == '1' && github.actor == github.triggering_actor
+    runs-on: ubuntu-24.04
+    timeout-minutes: 2
+    permissions:
+      contents: read
+    steps:
+      - name: Check current repository access and inputs
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPORT: ${{ inputs.issue }}
+          RECIPIENT: ${{ inputs.recipient }}
+        shell: bash
+        run: |
+          set -eu
+          [[ "$REPORT" =~ ^[1-9][0-9]{0,9}$ ]]
+          [[ "$RECIPIENT" =~ ^age1[ac-hj-np-z02-9]{58}$ ]]
+          role=$(gh api "repos/$GITHUB_REPOSITORY/collaborators/$GITHUB_ACTOR/permission" --jq .permission)
+          [[ "$role" == admin || "$role" == write || "$role" == maintain ]]
+
+  open:
+    needs: authorize
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    environment: feedback-access
+    steps:
+      - name: Install verified age CLI
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP"
+          curl --proto '=https' --fail --silent --show-error --location --max-time 45 \
+            'https://github.com/FiloSottile/age/releases/download/v1.3.1/age-v1.3.1-linux-amd64.tar.gz' -o age.tar.gz
+          echo 'bdc69c09cbdd6cf8b1f333d372a1f58247b3a33146406333e30c0f26e8f51377  age.tar.gz' | sha256sum --check --status
+          tar -xzf age.tar.gz age/age
+
+      - name: Return one archive to the requesting session
+        shell: bash
+        env:
+          REPORT: ${{ inputs.issue }}
+          RECIPIENT: ${{ inputs.recipient }}
+          SERVICE: ${{ vars.MEOWCAL_FEEDBACK_URL }}
+          READ_TOKEN: ${{ secrets.FEEDBACK_ARCHIVE_READ_TOKEN }}
+          TEAM_IDENTITY: ${{ secrets.FEEDBACK_AGE_IDENTITY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          cd "$RUNNER_TEMP"
+          [[ "$SERVICE" =~ ^https://[A-Za-z0-9.-]+/?$ ]]
+          [[ -n "$READ_TOKEN" && -n "$TEAM_IDENTITY" ]]
+          curl --proto '=https' --fail --silent --show-error --retry 3 --retry-max-time 90 \
+            --max-time 45 --max-filesize 16777216 \
+            -H "Authorization: Bearer $READ_TOKEN" "${SERVICE%/}/v1/issues/$REPORT/archive" -o incoming.age
+          key_file=$(mktemp)
+          trap 'rm -f -- "$key_file" incoming.age' EXIT
+          printf '%s\n' "$TEAM_IDENTITY" > "$key_file"
+          unset TEAM_IDENTITY READ_TOKEN
+          ./age/age --decrypt -i "$key_file" incoming.age 2>/dev/null | \
+            ./age/age -r "$RECIPIENT" -o report.zip.age
+
+      - name: Publish the re-encrypted archive
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          path: ${{ runner.temp }}/report.zip.age
+          name: feedback-for-requester
+          compression-level: 0
+          retention-days: 1
+          if-no-files-found: error

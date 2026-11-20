@@ -20,6 +20,8 @@ pub mod app_profile;
 /// Where session logs go, and how old ones are retired
 pub mod app_logging;
 pub mod diagnostic_artifacts;
+pub mod feedback;
+pub mod feedback_send;
 pub mod logging_settings;
 pub mod ui_language;
 

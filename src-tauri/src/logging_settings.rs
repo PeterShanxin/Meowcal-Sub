@@ -22,7 +22,10 @@ pub struct LoggingSettings {
 static LEVEL: AtomicU8 = AtomicU8::new(LogLevel::Basic as u8);
 
 pub fn apply(level: LogLevel) {
-    LEVEL.store(level as u8, Ordering::SeqCst);
+    let previous = LEVEL.swap(level as u8, Ordering::SeqCst);
+    if level == LogLevel::Off && previous != LogLevel::Off as u8 {
+        crate::feedback::trace::stop_recording();
+    }
 }
 
 pub fn verbose() -> bool {

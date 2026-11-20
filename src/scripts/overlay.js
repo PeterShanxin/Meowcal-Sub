@@ -566,12 +566,12 @@ async function setupEventListeners(elements) {
                 overlayState.lastPipelinePosition;
             const { original, translated, timestamp, backendUsed, warnings, displayState } = event.payload;
             const presentation = getTranslationPresentation(displayState, backendUsed, warnings);
-            console.log('🌐 Translation state:', presentation.state);
 
             sessionStatus.translation(event.payload);
             const surface = resolveSubtitleSurface(presentation, translated, overlayState.currentText);
             if (surface.mode === 'text') {
                 updateSubtitleText(subtitleText, translated, subtitleContainer);
+                void window.__TAURI__.core.invoke('feedback_overlay_received', {sessionId: event.payload.sessionId, captureId: event.payload.captureId}).catch(() => {});
             } else if (surface.mode === 'clear') {
                 overlayState.currentText = '';
                 subtitleText.textContent = '';
