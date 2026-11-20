@@ -11,7 +11,7 @@ The speech bubble in the title bar opens the feedback form from any tab. An erro
 
 ![Native feedback window](windows/03-feedback.png)
 
-The hosted ARM64 machine ran the debug Tauri application with the built frontend on Windows build 26200 and WebView2 157.0.4341.46. Its disposable profile had no model installed. Making its config file read-only triggered a real Windows save failure. Both forms opened through their ordinary controls. This run covered the UI and native diagnostics preview. Sending feedback and live subtitle processing were outside this screenshot scenario. The [run record](windows/evidence.json) identifies the tested PR merge commit. [Windows CI](https://github.com/PeterShanxin/Meowcal-Sub/actions/runs/44465424753)
+The hosted ARM64 machine ran the debug Tauri application with the built frontend on Windows build 26200 and WebView2 157.0.4341.60. Its disposable profile had no model installed. Making its config file read-only triggered a real Windows save failure. Both forms opened through their ordinary controls. This run covered the UI and native diagnostics preview. Sending feedback and live subtitle processing were outside this screenshot scenario. The [run record](windows/evidence.json) identifies the tested PR merge commit. [Windows CI](https://github.com/PeterShanxin/Meowcal-Sub/actions/runs/44689752802)
 
 ## Subtitle examples, retry and receipt
 
