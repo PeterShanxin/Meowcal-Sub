@@ -216,13 +216,14 @@ body:has(#browser-mode-indicator) .feedback-entry {
 .feedback-footer-row p {
   display: flex;
   gap: 7px;
-  align-items: flex-start;
+  align-items: center;
   color: var(--text-2);
   font-size: var(--type-label);
   line-height: 1.5;
 }
 .feedback-footer-row p .icon {
-  margin-top: 1px;
+  width: 18px;
+  height: 18px;
   color: #c4b9db;
 }
 .feedback-error-text {
