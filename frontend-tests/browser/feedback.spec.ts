@@ -62,9 +62,7 @@ test("feedback keeps optional material private and retries one immutable request
   const entry = page.getByRole("button", { name: "Feedback", exact: true });
   await entry.click();
   const dialog = page.getByRole("dialog", { name: "Feedback" });
-  await expect(
-    dialog.getByText(/We delete the report 30 days after the issue closes/),
-  ).toBeVisible();
+  await expect(dialog.getByText(/delete them 30 days after we close your feedback/)).toBeVisible();
   await dialog.getByLabel("Feedback type").selectOption("translation");
   await dialog.getByRole("textbox").fill("A fixture translation reverses the meaning.");
   await expect(dialog.getByText("Fixture line", { exact: false })).toHaveCount(0);

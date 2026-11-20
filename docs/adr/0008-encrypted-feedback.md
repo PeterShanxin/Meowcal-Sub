@@ -19,11 +19,8 @@ individual materials by snapshot-scoped ID. The desktop app encrypts the
 entire ZIP, including the description and filenames, to a build-time public key.
 The receiver stores ciphertext and creates a public issue with fixed metadata.
 
-Use the linked issue's state to determine how long the receiver keeps the archive.
-Maintainers can retrieve it for as long as the issue is open. Deletion becomes
-due after the issue has been continuously closed for 30 days. Reopening before
-that deadline cancels it. A later close starts a fresh 30-day period. Expiry
-leaves the public issue and delivery receipt in place.
+Delete the archive when its linked issue has been closed for 30 days. Keep the
+public issue and delivery receipt.
 
 A protected GitHub Actions job may use the team's age identity after checking
 the requesting maintainer's repository permission. It returns a package

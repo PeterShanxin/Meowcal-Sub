@@ -244,7 +244,7 @@ export class FeedbackDialog extends LitElement {
                 <div class="feedback-footer-row">
                   <p>
                     ${icon("shield")}<span
-                      >${t("GitHub shows only the feedback type, app version and reference number. Only maintainers can read your encrypted report. We delete the report 30 days after the issue closes. If the issue reopens before then, the 30 days start again the next time it closes.")}</span
+                      >${t("Only the team maintaining the app can see your report and attachments. We automatically delete them 30 days after we close your feedback.")}</span
                     >
                   </p>
                   <button

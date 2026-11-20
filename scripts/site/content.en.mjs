@@ -139,7 +139,7 @@ export default {
               "Engine and model downloads for setup or repair",
               "Windows recognition-language installation when needed",
               "Application update checks and downloads",
-              "Sending an encrypted report to maintainers in the unreleased feedback form. We delete the report 30 days after the GitHub issue closes. If the issue reopens before then, the 30 days start again the next time it closes.",
+              "Sending encrypted feedback in the development version. Only the team maintaining the app can see your report and attachments. We automatically delete them 30 days after we close your feedback.",
             ],
           },
         ],

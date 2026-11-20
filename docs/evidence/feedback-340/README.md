@@ -22,7 +22,7 @@ The hosted ARM64 machine ran the debug Tauri application with the built frontend
 
 ![Translation feedback with one optional subtitle pair selected](03-selected-material.png)
 
-The user can review the exact subtitle text before selecting it. The footer explains what appears on GitHub, who can read the report, and when it is deleted. A failed send preserves the description and selections for another attempt. A successful send returns an issue number.
+The user can review the exact subtitle text before selecting it. The footer explains who can read the report and when it is deleted. A failed send preserves the description and selections for another attempt. A successful send returns an issue number.
 
 - [Retry with the draft preserved](06-retry.png)
 - [Delivery receipt](07-sent.png)
