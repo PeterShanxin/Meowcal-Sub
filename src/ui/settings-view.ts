@@ -4,7 +4,7 @@ import type { LogLevel, OcrEngine, UiSnapshot } from "./contracts";
 import { icon } from "./icons";
 import { backendUnavailablePhase } from "./home-state";
 import { deriveUpdatePresentation } from "./update-state";
-import { summarizeUpdateNotes } from "./update-notes";
+import { renderUpdateNotes } from "./update-notes-view";
 import { renderLogging } from "./logging-view";
 import { profileOf, type Profile } from "./recognition";
 
@@ -169,30 +169,6 @@ function renderEngineAndUpdates(snapshot: UiSnapshot, actions: SettingsActions):
       </div>
     </div>
     ${snapshot.update.kind === "available" ? renderUpdateNotes(snapshot.update.version, update.notes) : nothing}
-  `;
-}
-
-function renderUpdateNotes(version: string, notes: string | null): TemplateResult {
-  const highlights = summarizeUpdateNotes(notes);
-  return html`
-    <section class="update-notes" aria-label=${t("What's new")}>
-      ${
-        highlights.length
-          ? html`
-              <h3>${t("What's new")}</h3>
-              <ul>
-                ${highlights.map(({ title, detail }) => html`<li>${title ? html`<strong>${title}</strong> ` : nothing}${detail}</li>`)}
-              </ul>
-            `
-          : nothing
-      }
-      <a
-        href=${`https://github.com/PeterShanxin/Meowcal-Sub/releases/tag/v${encodeURIComponent(version)}`}
-        target="_blank"
-        rel="noopener noreferrer"
-        >${t("Full release notes ↗")}</a
-      >
-    </section>
   `;
 }
 

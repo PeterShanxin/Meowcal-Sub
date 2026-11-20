@@ -102,8 +102,9 @@ immediate publication if certified; it does not bypass certification. The artifa
 can still be dispatched independently. See [Store distribution](STORE_DISTRIBUTION.md).
 
 Release notes follow [the release notes standard](RELEASE_NOTES.md).
-The manifest contains a three-bullet summary; the complete notes remain the
-GitHub release body. Both initially come from the tagged Markdown file.
+The manifest notes string contains the user-facing Highlights and Fixes
+sections. The complete notes remain the GitHub release body. Both initially
+come from the tagged Markdown file.
 Reviewed [editorial corrections](RELEASE_NOTES.md#editorial-corrections-after-publication)
 can update the GitHub body without changing the tag or published assets.
 

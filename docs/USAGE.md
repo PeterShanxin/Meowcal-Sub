@@ -228,6 +228,10 @@ under **What's new**, without a separate scroll box. **Full release notes ↗**
 opens that version's complete GitHub release in your browser. The link remains
 available when the update has no summary.
 
+Unreleased: **More about this update** opens additional highlights or fixes
+when the update includes them. Inline emphasis and code are formatted in the
+app. The Download and install action is unchanged.
+
 ## Logs and diagnostics
 
 With logging enabled, the app writes one session log per launch and removes

@@ -3,46 +3,100 @@ export interface UpdateHighlight {
   detail: string;
 }
 
-function firstSentence(text: string): string {
-  const sentence = text.match(/^.*?(?:[.!?](?=\s|$)|$)/)?.[0] ?? "";
-  if (sentence.length <= 220) return sentence;
-  const clipped = sentence.slice(0, 219);
-  const boundary = clipped.lastIndexOf(" ");
-  return `${clipped.slice(0, boundary > 0 ? boundary : clipped.length)}…`;
+interface UpdateSections {
+  highlights: UpdateHighlight[];
+  fixes: UpdateHighlight[];
 }
 
-/** Shared by release packaging and the UI, including clients reading older full notes. */
-export function summarizeUpdateNotes(notes: string | null): UpdateHighlight[] {
-  if (!notes?.trim()) return [];
-  const sections = notes.split(/^##\s+/m);
-  const section =
-    sections.find((part) => /^(?:✨\s*)?Highlights\s*\r?\n/.test(part)) ??
-    sections.find((part) => /^Fixes and improvements\s*\r?\n/.test(part));
-  const content = section
-    ? section.slice(section.indexOf("\n") + 1)
-    : sections.length === 1
-      ? notes
-      : "";
+function firstSentence(text: string): string {
+  // Match through inline formatting, so punctuation inside a code span or
+  // emphasis does not end the preview halfway through that span.
+  const sentence =
+    text.match(
+      /^(?:`[^`\n]+`|\*\*[^*\n]+\*\*|[^。！？.!?]|[.!?](?!\s|$))*(?:[。！？.!?]|$)/,
+    )?.[0] ?? text;
+  if (sentence.length <= 220) return sentence;
+  const clipped = Array.from(sentence.replace(/\*\*|`/g, ""))
+    .slice(0, 219)
+    .join("");
+  const boundary = clipped.lastIndexOf(" ");
+  return `${clipped.slice(0, boundary > 160 ? boundary : clipped.length)}…`;
+}
+
+function readBullets(content: string, allowPlainText = false): UpdateHighlight[] {
   const bullets: string[] = [];
   for (const line of content.split(/\r?\n/)) {
     if (line.startsWith("- ")) bullets.push(line.slice(2));
-    else if (/^\s+\S/.test(line) && bullets.length)
+    else if (/^\s+\S/.test(line) && bullets.length) {
       bullets[bullets.length - 1] += ` ${line.trim()}`;
+    }
   }
-  if (!bullets.length && content.trim() && !/^\s*[#<|]/.test(content)) {
+  if (allowPlainText && !bullets.length && content.trim() && !/^\s*[#<|]/.test(content)) {
     bullets.push(content.split(/\r?\n\s*\r?\n/)[0]);
   }
-  return bullets.slice(0, 3).map((bullet) => {
+  return bullets.flatMap((bullet) => {
     const text = bullet
+      .replace(/\s*\[#\d+\]\([^)]*\)/g, "")
       .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
       .replace(/\s*\(#\d+(?:,?\s*#\d+)*\)/g, "")
-      .replace(/`/g, "")
-      .replace(/^[^\p{L}\p{N}*<]+/u, "")
+      .replace(/^[^\p{L}\p{N}*`<]+/u, "")
       .replace(/\s+/g, " ")
       .trim();
-    const bold = text.match(/^\*\*(.+?)\*\*\s*(.*)$/);
-    return bold
-      ? { title: firstSentence(bold[1]), detail: firstSentence(bold[2]) }
-      : { title: "", detail: firstSentence(text.replace(/\*\*/g, "")) };
+    if (!text) return [];
+    const bold = text.match(/^\*\*(.+?)\*\*(?:\s+(.*)|$)/);
+    return [{ title: bold?.[1] ?? "", detail: bold ? (bold[2] ?? "") : text }];
   });
+}
+
+function readUpdateSections(notes: string | null): UpdateSections {
+  if (!notes?.trim()) return { highlights: [], fixes: [] };
+  const sections = notes.split(/^##\s+/m);
+  const readSection = (heading: RegExp) => {
+    const section = sections.slice(1).find((part) => heading.test(part));
+    return section ? readBullets(section.slice(section.indexOf("\n") + 1)) : [];
+  };
+  return {
+    highlights:
+      sections.length === 1
+        ? readBullets(notes, true)
+        : readSection(/^(?:(?:✨\s*)?Highlights|主要更新)\s*\r?\n/),
+    fixes: readSection(/^(?:Fixes and improvements|修复与改进)\s*\r?\n/),
+  };
+}
+
+export function getUpdateNotes(notes: string | null): {
+  preview: UpdateHighlight[];
+  more: UpdateHighlight[];
+  fixes: UpdateHighlight[];
+} {
+  const { highlights, fixes } = readUpdateSections(notes);
+  const primary = highlights.length ? highlights : fixes;
+  const preview = primary.slice(0, 3).map(({ title, detail }) => ({
+    title: firstSentence(title),
+    detail: firstSentence(detail),
+  }));
+  const more = primary.flatMap((item, index) => {
+    const shown = preview[index];
+    if (!shown) return [item];
+    if (shown.title === item.title && shown.detail === item.detail) return [];
+    if (shown.title === item.title && item.detail.startsWith(shown.detail)) {
+      return [{ title: item.title, detail: item.detail.slice(shown.detail.length).trimStart() }];
+    }
+    return [item];
+  });
+  return { preview, more, fixes: highlights.length ? fixes : [] };
+}
+
+/** Keep the existing string field and known headings for clients already in the field. */
+export function formatUpdateFeedNotes(notes: string): string {
+  const { highlights, fixes } = readUpdateSections(notes);
+  return [["Highlights", highlights] as const, ["Fixes and improvements", fixes] as const]
+    .filter(([, items]) => items.length)
+    .map(([heading, items]) => {
+      const list = items.map(({ title, detail }) =>
+        `- ${title ? `**${title}** ` : ""}${detail}`.trimEnd(),
+      );
+      return [`## ${heading}`, ...list].join("\n");
+    })
+    .join("\n\n");
 }
