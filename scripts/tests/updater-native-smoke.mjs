@@ -3,33 +3,57 @@ import { join } from "node:path";
 import { expect } from "@playwright/test";
 import { formatUpdateFeedNotes } from "../../src/ui/update-notes.ts";
 
+/** Intercept only update checks, before startup can start a real feed request. */
+export async function installUpdaterFixture(page) {
+  await page.addInitScript(() => {
+    const fixture = { announcement: null, delivered: 0 };
+    globalThis.__updaterSmokeFixture = fixture;
+    Object.defineProperty(globalThis, "TauriBridge", {
+      configurable: true,
+      set(bridge) {
+        Object.defineProperty(globalThis, "TauriBridge", {
+          configurable: true,
+          writable: true,
+          value: bridge,
+        });
+        if (bridge.isBrowserMode() || !bridge.updates) return;
+        bridge.updates.check = async () => {
+          if (!fixture.announcement) return null;
+          fixture.delivered += 1;
+          return {
+            ...fixture.announcement,
+            close: async () => {},
+            install: async () => {
+              throw Error("The updater smoke must not install anything");
+            },
+          };
+        };
+      },
+    });
+  });
+}
+
 /** Verify the normal Settings check path in the existing disposable native app. */
 export async function verifyNativeUpdateNotes(page, output, installedVersion) {
   const release = new URL("../../docs/releases/v0.11.0.md", import.meta.url);
   const notes = formatUpdateFeedNotes(readFileSync(release, "utf8"));
   const [major, minor, patch] = installedVersion.split(/[.+-]/, 3).map(Number);
   const version = `${major}.${minor}.${patch + 1}`;
+  const autoCheck = page.getByRole("switch", { name: /自动检查更新/ });
+  if (await autoCheck.isChecked()) await autoCheck.click();
+  await expect(autoCheck).not.toBeChecked();
+  const check = page.getByRole("button", { name: /^(检查更新|再次检查)$/ });
+  await expect(check).toBeEnabled();
   await page.evaluate(
-    ({ version, notes }) => {
-      const bridge = globalThis.TauriBridge;
-      if (bridge.isBrowserMode() || !bridge.updates) throw Error("Native updater unavailable");
-      const updates = bridge.updates;
-      const original = updates.check;
-      updates.check = async () => {
-        updates.check = original;
-        return {
-          version,
-          notes,
-          close: async () => {},
-          install: async () => {
-            throw Error("The updater smoke must not install anything");
-          },
-        };
-      };
+    (announcement) => {
+      if (globalThis.TauriBridge.isBrowserMode() || !globalThis.TauriBridge.updates)
+        throw Error("Native updater unavailable");
+      globalThis.__updaterSmokeFixture.announcement = announcement;
     },
     { version, notes },
   );
-  await page.getByRole("button", { name: "检查更新", exact: true }).click();
+  await check.click();
+  await expect.poll(() => page.evaluate(() => globalThis.__updaterSmokeFixture.delivered)).toBe(1);
   const card = page.getByRole("region", { name: "更新内容" });
   await expect(card.locator("strong").filter({ hasText: /^Send$/ })).toBeVisible();
   await expect(card).not.toContainText("**Send**");

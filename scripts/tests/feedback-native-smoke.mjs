@@ -16,7 +16,7 @@ import { join, resolve } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { chromium, expect } from "@playwright/test";
 import { preview } from "vite";
-import { verifyNativeUpdateNotes } from "./updater-native-smoke.mjs";
+import { installUpdaterFixture, verifyNativeUpdateNotes } from "./updater-native-smoke.mjs";
 
 // Tauri uses Windows known folders for app data. A process-local APPDATA override
 // alone cannot isolate those paths, hence the separate compiled application ID.
@@ -301,6 +301,7 @@ async function main() {
       return (await invoke("get_settings")).uiLanguage;
     });
     assert.equal(effectiveLocale, "zh-CN");
+    await installUpdaterFixture(page);
     loadApp = true;
     await page.reload({ waitUntil: "load" });
     await page
