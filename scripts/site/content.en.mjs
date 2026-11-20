@@ -244,7 +244,7 @@ export default {
     navName: "Meowcal Sub 2",
     tagline: "Great subtitles. In sync with your video.",
     promise: "Find subtitles. Let them follow the film.",
-    lead: "Found a good subtitle translation for your film or series? Meowcal Sub 2 automatically lines it up with what you are watching. Enjoy the wording, tone, and context a subtitle creator has worked on, with the right line appearing at the right moment.",
+    lead: "Found a translation you like for your film? Meowcal Sub 2 reads the subtitles in the picture to find your place, then shows the translation in time with the film. If you can only find the original subtitles, it can translate them on your PC while you watch.",
     actions: {
       latest: {
         label: "Download the latest release",
@@ -266,7 +266,7 @@ export default {
       {
         type: "callout",
         title: "Subtitle search needs a provider credential.",
-        body: "Add at least one: an OpenSubtitles API key, a SubDL API key, or an ASSRT token. Provider availability and download quotas apply.",
+        body: "To search for files, add an OpenSubtitles or SubDL API key, or an ASSRT token. To translate the subtitles in the picture, you can use the local translation engine without a provider account.",
       },
       {
         type: "pairs",
@@ -283,16 +283,17 @@ export default {
           {
             term: "Automatically align subtitles to playback",
             detail:
-              "Recognizes where you are in the film from its visible subtitles and lines up your chosen track.",
+              "With both files, the app matches the words in the picture to the original file and shows the translation at its scheduled time.",
           },
           {
-            term: "Keep the translation you chose",
-            detail: "Shows the subtitle translation you chose in a floating strip as you watch.",
-          },
-          {
-            term: "Prepare before you watch",
+            term: "Watch with just a translated file",
             detail:
-              "Prepares translations before playback, orders subtitle cues, and removes exact duplicates. Original files stay intact.",
+              "Translates several on-screen lines to find your place in the file. Once the lines agree, the floating strip follows the file from there.",
+          },
+          {
+            term: "Watch with just the original file",
+            detail:
+              "Translates the current dialogue first and prepares the remaining lines while you watch. Once the translation is complete, the strip follows it from your current position.",
           },
           {
             term: "Fix a subtitle file",
@@ -313,11 +314,11 @@ export default {
         items: [
           {
             title: "Configure",
-            body: "Open **Settings**. Turn on at least one subtitle source and choose the language pair.",
+            body: "Choose the language visible in the picture and the one you want to read. To search for files, enable a subtitle source in **Settings**.",
           },
           {
             title: "Search and choose",
-            body: "Search for the title. Choose a source subtitle, then a target subtitle or local translation.",
+            body: "Search for the film and choose the available subtitles. If you have no provider account or the title is missing, select **Translate on-screen subtitles**.",
           },
           {
             title: "Sync and watch",
@@ -336,7 +337,7 @@ export default {
               "Windows on x64 or ARM64, with Microsoft WebView2.",
               "For Windows OCR: the language pack for the language on screen. PP-OCRv6 supports English, Chinese, Japanese, Spanish, French and German without Windows OCR language packs.",
               "At least one subtitle provider credential for search.",
-              "For local translation: a one-time download of about 1.1 GB, plus the runtime. A prepared target subtitle works without it, but untranslated gaps then stay empty.",
+              "For local translation, download the model (about 1.1 GB) and runtime in Settings. A matched original and translated file can play without the model. A translated file on its own needs the model to locate the scene.",
             ],
           },
           {
