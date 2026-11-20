@@ -38,9 +38,15 @@ listings** to inspect the published English (United States) and Chinese
 (Simplified) listings. Start an update from that submission and apply the
 changed fields for each language. Enter each search term as a separate
 [Keywords](https://learn.microsoft.com/en-us/windows/apps/publish/publish-your-app/msix/add-additional-information#keywords)
-entry. Inspect the saved fields and listing preview before submitting. For a
-keywords-only update, retain both product names, packages, pricing, markets,
-and age ratings.
+entry. Reopen the listing to confirm the keywords were saved. If the editor
+still shows the old terms, use the
+[CSV export and import](https://learn.microsoft.com/en-us/windows/apps/publish/publish-your-app/msix/import-and-export-store-listings)
+on the product overview. Change the search-term cells and wait for all
+languages to finish saving. Compare a fresh export with the original before
+submitting, including the screenshot order and captions.
+
+For a keywords-only update, retain both product names, packages, pricing,
+markets, and age ratings. Inspect the saved fields and listing preview.
 Wait for any pending API-created submission to finish before starting the
 update. Use the [Store inventory workflow](../STORE_SUBMISSION_SETUP.md) to
 confirm package versions and certification state.
