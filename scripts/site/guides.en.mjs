@@ -176,7 +176,7 @@ export default {
           },
           {
             q: "Can Sub 2 follow a video with no visible subtitles?",
-            a: "Automatic playback matching needs visible text that corresponds to the source subtitle file. Enable the original subtitles in your player before starting OCR sync.",
+            a: "Sub 2 needs readable captions to find your place. Turn them on in your player. If you only have a translated subtitle file, the app translates several on-screen lines to locate the scene in that file.",
           },
           {
             q: "What needs the internet?",
