@@ -280,8 +280,11 @@ Logging Off still allows a written report. Opening the form does not change your
 
 Choose **Send** to encrypt and submit the description, diagnostics, and selected
 materials. The public GitHub issue shows the type, version, and report number.
-Authorized maintainers can open the encrypted contents. If sending fails, the
-form keeps your draft for another attempt.
+Only authorized maintainers can open the encrypted report. They can download it
+while the issue is open. The service deletes its copy after the issue has been
+closed for 30 consecutive days. Reopening the issue before then cancels the
+deadline. The next close starts a fresh 30 days. The public issue remains visible.
+If sending fails, the form keeps your draft for another attempt.
 
 1. Note the app version (**Settings → About**), Windows build
    (`winver`), and whether the PC is x64 or ARM64.

@@ -244,7 +244,7 @@ export class FeedbackDialog extends LitElement {
                 <div class="feedback-footer-row">
                   <p>
                     ${icon("shield")}<span
-                      >${t("GitHub shows the type, version and issue number. Only maintainers can open your encrypted description and diagnostics.")}</span
+                      >${t("GitHub shows the type, version and issue number. Only maintainers can read your description and diagnostics. We keep the encrypted report until the issue has been closed for 30 days in a row. Reopening sooner resets the timer.")}</span
                     >
                   </p>
                   <button

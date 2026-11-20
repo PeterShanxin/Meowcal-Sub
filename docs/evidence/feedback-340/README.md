@@ -22,11 +22,11 @@ The hosted ARM64 machine ran the debug Tauri application with the built frontend
 
 ![Translation feedback with one optional subtitle pair selected](03-selected-material.png)
 
-The user can review the exact subtitle text before selecting it. The footer explains what appears on GitHub. A failed send preserves the description and selections for another attempt. A successful send returns an issue number.
+The user can review the exact subtitle text before selecting it. The footer explains what appears on GitHub, who can read the report, and when it is deleted. A failed send preserves the description and selections for another attempt. A successful send returns an issue number.
 
 - [Retry with the draft preserved](06-retry.png)
 - [Delivery receipt](07-sent.png)
 
-These images show the application's Chinese UI rendered in Edge on Windows x64 build 26300.9974. The development checkout used the UI from commit `97b68d4`, with authored subtitle text, a simulated capture failure, and a local receipt. Issue #10001 is a fixture. The viewport ranges from 680 × 500 to 760 × 690 CSS pixels at a device scale factor of 1.5.
+These images show the application's Chinese UI rendered in Edge on Windows x64 build 26300.10075 with the closure-based retention notice. The examples use authored subtitle text, a simulated capture failure, and a local receipt. Issue #10001 is a fixture. The viewport ranges from 680 × 500 to 760 × 690 CSS pixels at a device scale factor of 1.5.
 
 Subsequent Windows frontend runs publish their native screenshots in the `feedback-native-windows-arm64` workflow artifact.
