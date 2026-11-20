@@ -39,12 +39,12 @@ https://github.com/user-attachments/assets/58fbac67-9032-42e2-8d4d-8e4df6c01e59
 
 **[Install from Microsoft Store](https://apps.microsoft.com/detail/9NNK2X23VLWT)** for x64 or ARM64 and get updates through the Store. For standalone GitHub installers, choose your PC below.
 
-**Windows 11 public beta · v0.10.0** — [release notes and all files](https://github.com/PeterShanxin/Meowcal-Sub/releases/tag/v0.10.0).
+**Windows 11 public beta · v0.11.0** — [release notes and all files](https://github.com/PeterShanxin/Meowcal-Sub/releases/tag/v0.11.0).
 
 | Your PC | Installer |
 | --- | --- |
-| Intel or AMD Windows PC | **[Download x64 (.exe)](https://github.com/PeterShanxin/Meowcal-Sub/releases/download/v0.10.0/Meowcal.Sub_0.10.0_x64-setup.exe)** |
-| Snapdragon or other Windows on ARM PC | **[Download ARM64 (.exe)](https://github.com/PeterShanxin/Meowcal-Sub/releases/download/v0.10.0/Meowcal.Sub_0.10.0_arm64-setup.exe)** |
+| Intel or AMD Windows PC | **[Download x64 (.exe)](https://github.com/PeterShanxin/Meowcal-Sub/releases/download/v0.11.0/Meowcal.Sub_0.11.0_x64-setup.exe)** |
+| Snapdragon or other Windows on ARM PC | **[Download ARM64 (.exe)](https://github.com/PeterShanxin/Meowcal-Sub/releases/download/v0.11.0/Meowcal.Sub_0.11.0_arm64-setup.exe)** |
 
 MSI installers and `SHA256SUMS.txt` are on the release page. For newer versions,
 use [the latest application release](https://github.com/PeterShanxin/Meowcal-Sub/releases/latest).
@@ -123,7 +123,7 @@ architecture, choose **Settings → Profile → Compatibility**.
 | --- | --- |
 | Capture of the selected region, OCR, translation inference, and the overlay | Engine/model setup or repair downloads, Windows recognition-language installation when needed, and application update checks/downloads |
 
-Capture, recognition, and translation run locally. In the unreleased feedback
+Capture, recognition, and translation run locally. In the feedback
 form, pressing **Send** shares an encrypted report. You can preview and select
 individual subtitle samples or images. The public issue contains only the type,
 app version, and report identifier. Only the team maintaining the app can see your report and attachments.
@@ -177,7 +177,7 @@ specific test conditions, not a universal end-to-end subtitle latency guarantee.
 | [Evaluation](evals/README.md) | Validation layers and measurement method |
 | [Meowcal Core](core/README.md) | Core's API and storage contract |
 
-This README and the user guide cover v0.10.0. Architecture, contributor, and
+This README and the user guide cover v0.11.0. Architecture, contributor, and
 evaluation documents follow the `main` branch.
 
 ## Help and contribute

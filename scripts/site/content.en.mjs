@@ -139,7 +139,7 @@ export default {
               "Engine and model downloads for setup or repair",
               "Windows recognition-language installation when needed",
               "Application update checks and downloads",
-              "Sending encrypted feedback in the development version. Only the team maintaining the app can see your report and attachments. We automatically delete them 30 days after we close your feedback.",
+              "Sending encrypted feedback from the app. Only the team maintaining the app can see your report and attachments. We automatically delete them 30 days after we close your feedback.",
             ],
           },
         ],
