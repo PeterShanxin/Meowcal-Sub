@@ -139,7 +139,7 @@ export default {
               "Engine and model downloads for setup or repair",
               "Windows recognition-language installation when needed",
               "Application update checks and downloads",
-              "Sending an encrypted report to maintainers in the unreleased feedback form. The archive stays available while its GitHub issue is open. The service deletes it after 30 consecutive days closed. Reopening sooner resets the clock.",
+              "Sending an encrypted report to maintainers in the unreleased feedback form. We delete the report 30 days after the GitHub issue closes. If the issue reopens before then, the 30 days start again the next time it closes.",
             ],
           },
         ],

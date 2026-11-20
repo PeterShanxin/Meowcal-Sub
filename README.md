@@ -127,8 +127,8 @@ Capture, recognition, and translation run locally. In the unreleased feedback
 form, pressing **Send** shares an encrypted report. You can preview and select
 individual subtitle samples or images. The public issue contains only the type,
 app version, and report identifier. Maintainers can download the encrypted report
-while the issue is open. The service deletes it after 30 consecutive days closed.
-Reopening before then starts the count over at the next close.
+while the issue is open. We delete the report 30 days after the issue closes.
+If the issue reopens before then, the 30 days start again the next time it closes.
 Production logs record support codes, timings, and counts, not subtitle text by default.
 The Local logs setting can opt into Verbose capture images, OCR text,
 and translations stored only on this PC, capped at 256 MiB. Treat those files as private.
