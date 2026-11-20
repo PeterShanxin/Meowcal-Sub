@@ -2,10 +2,11 @@
 
 [English copy](en-US.md) · [简体中文文案](zh-CN.md)
 
-These paired files own the Store description, features, update summary, and
-screenshot captions for product `9NNK2X23VLWT`. Keep them aligned with the latest
-published app and update both languages together. Use concise product copy;
-keep legal model notices intact and describe setup requirements once.
+These paired files own the Store description, search terms, features, update
+summary, and screenshot captions for product `9NNK2X23VLWT`. Keep them aligned
+with the latest published app and update both languages together. Use concise
+product copy, keep legal model notices intact, and describe setup requirements
+once.
 
 ## Screenshots
 
@@ -32,12 +33,31 @@ Store fields, limited to 200 characters.
 
 ## Publication
 
-In Partner Center, start a listing update from the published submission. Update
-each language's text, screenshots, and captions, then inspect the saved preview
-before submitting. Retain packages, pricing, markets, and age ratings. Do not
-edit a pending API-created draft in the browser; wait for it to finish first.
-Use the existing [Store inventory workflow](../STORE_SUBMISSION_SETUP.md) to
+In Partner Center, open **Store presence → View product details → Store
+listings** to inspect the published English (United States) and Chinese
+(Simplified) listings. Start an update from that submission and apply the
+changed fields for each language. Enter each search term as a separate
+[Keywords](https://learn.microsoft.com/en-us/windows/apps/publish/publish-your-app/msix/add-additional-information#keywords)
+entry. Reopen the listing to confirm the keywords were saved. If the editor
+still shows the old terms, use the
+[CSV export and import](https://learn.microsoft.com/en-us/windows/apps/publish/publish-your-app/msix/import-and-export-store-listings)
+on the product overview. Change the search-term cells and wait for all
+languages to finish saving. Compare a fresh export with the original before
+submitting, including the screenshot order and captions.
+
+For a keywords-only update, retain both product names, packages, pricing,
+markets, and age ratings. Inspect the saved fields and listing preview.
+Wait for any pending API-created submission to finish before starting the
+update. Use the [Store inventory workflow](../STORE_SUBMISSION_SETUP.md) to
 confirm package versions and certification state.
 
-Package release automation preserves published listing copy and screenshots.
-A listing-only edit does not need a new application version or package build.
+Package release automation carries forward published keywords, descriptions,
+and screenshots. Apply keyword edits in Partner Center even after the
+repository copy is merged. A listing-only update uses the existing app version
+and packages.
+
+After publication, check the saved keywords in the published listings. Search
+for `meowcal sub`, `meowcal`, and `妙影` in the Windows Microsoft Store using
+the China and Singapore market settings. Record the market, Store language,
+and position of product `9NNK2X23VLWT`, or how many results you checked
+without finding it.
