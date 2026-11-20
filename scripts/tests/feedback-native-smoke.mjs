@@ -16,6 +16,7 @@ import { join, resolve } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { chromium, expect } from "@playwright/test";
 import { preview } from "vite";
+import { installUpdaterFixture, verifyNativeUpdateNotes } from "./updater-native-smoke.mjs";
 
 // Tauri uses Windows known folders for app data. A process-local APPDATA override
 // alone cannot isolate those paths, hence the separate compiled application ID.
@@ -174,6 +175,7 @@ async function captureViews(page, configFile) {
     await expect(dialog.getByText("APP_ERROR", { exact: true })).toBeVisible();
     await expect(dialog.getByRole("button", { name: "发送", exact: true })).toBeEnabled();
     await screenshot("05-error-report.png");
+    await dialog.getByRole("button", { name: "关闭", exact: true }).click();
   } finally {
     await chmod(configFile, 0o600);
   }
@@ -299,12 +301,14 @@ async function main() {
       return (await invoke("get_settings")).uiLanguage;
     });
     assert.equal(effectiveLocale, "zh-CN");
+    await installUpdaterFixture(page);
     loadApp = true;
     await page.reload({ waitUntil: "load" });
     await page
       .screenshot({ path: join(output, "00-startup.png"), timeout: 5000 })
       .catch((error) => events.push({ kind: "startup-screenshot", detail: String(error) }));
     const version = await captureViews(page, join(appDirectory, "config.json"));
+    const updaterNotes = await verifyNativeUpdateNotes(page, output, version);
     const enginePhase = await page.evaluate(
       async () => (await globalThis.TauriBridge.invoke("get_engine_status")).phase,
     );
@@ -323,6 +327,7 @@ async function main() {
           language: "zh-CN",
           fault: "Windows rejected a settings save to the isolated read-only config",
           submissionAttempted: false,
+          updaterNotes,
           enginePhase,
         },
         null,

@@ -5,11 +5,10 @@ becomes the GitHub release body and the
 source of the Microsoft Store "What's new" text. Readers are users deciding
 whether to update, so the notes say what changed for them, not how it was built.
 
-The updater's `latest.json` contains at most three Highlights bullets, each
-reduced to its bold name and first explanatory sentence. Releases without
-Highlights use the first three Fixes bullets. The app displays these as a list
-with **Full release notes ↗** linking to that version's GitHub release. The
-same summary helper handles older manifests that contain the full release body.
+The updater's `latest.json` notes string keeps the Highlights and Fixes
+sections. Settings previews up to three entries from Highlights, or from Fixes
+if there are no highlights. **More about this update** shows the remaining
+changes when there are any. **Full release notes ↗** opens the GitHub release.
 Keep essential upgrade instructions in the first sentence of an early bullet.
 
 ## Rules the release tooling enforces
@@ -34,7 +33,7 @@ Keep essential upgrade instructions in the first sentence of an early bullet.
    before and after, measured the same way, with the sample named in the header.
 4. **`## ✨ Highlights`**: two to five bullets. Each starts with one icon and a
    bold name, then one or two sentences of what the user gets. Make the first
-   sentence useful on its own; the updater displays only that sentence and the
+   sentence useful on its own; the Settings preview shows that sentence and the
    name, capped at 220 characters each. Link the issue.
 5. **`## Fixes and improvements`**: one sentence per user-visible change.
 6. **`## ⚠️ Known limitations`**, only when needed: a concrete issue that affects

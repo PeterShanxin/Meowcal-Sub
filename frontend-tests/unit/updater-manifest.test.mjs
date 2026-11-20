@@ -131,7 +131,7 @@ describe("manifest assembly", () => {
     ).toThrow(/empty/);
   });
 
-  it("publishes compact highlights instead of the full GitHub release body", () => {
+  it("publishes user-facing detail without changing the updater notes field", () => {
     const manifest = buildUpdaterManifest({
       artifacts: selectUpdaterArtifacts(releaseAssets()),
       signatures: { [`${X64}.sig`]: "a", [`${ARM64}.sig`]: "b" },
@@ -140,11 +140,13 @@ describe("manifest assembly", () => {
       pubDate: "2026-11-12T00:00:00Z",
       baseUrl: "https://example.invalid/download",
     });
-    expect(manifest.notes.split("\n")).toHaveLength(3);
+    expect(typeof manifest.notes).toBe("string");
+    expect(manifest.notes).toMatch(/^## Highlights\n/);
     expect(manifest.notes).toContain(
       "- **Keep short replies and small changes.** Single Chinese characters",
     );
-    expect(manifest.notes).not.toMatch(/##|<details>|SHA256|#59|Fast dialogue is/);
+    expect(manifest.notes).toContain("## Fixes and improvements");
+    expect(manifest.notes).not.toMatch(/<details>|SHA256|#59|##.*Download|Known limitations/);
   });
 });
 

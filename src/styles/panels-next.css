@@ -195,14 +195,19 @@
 }
 
 .update-notes {
-  padding: 8px 16px;
+  margin-top: 10px;
+  padding: 12px 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface);
   color: var(--text-2);
   font-size: var(--type-body);
-  line-height: 1.6;
+  line-height: 1.55;
   overflow-wrap: anywhere;
 }
 
-.update-notes h3 {
+.update-notes h3,
+.update-notes h4 {
   margin: 0 0 8px;
   color: var(--text-1);
   font-size: var(--type-body);
@@ -219,6 +224,24 @@
 
 .update-notes strong {
   color: var(--text-1);
+}
+
+.update-note-title {
+  display: block;
+}
+
+.update-notes-more {
+  margin: 0 0 8px;
+}
+
+.update-notes-more summary {
+  width: fit-content;
+  cursor: pointer;
+  color: var(--text-1);
+}
+
+.update-notes-more[open] summary {
+  margin-bottom: 8px;
 }
 
 .update-notes a {

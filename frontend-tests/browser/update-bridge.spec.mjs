@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { fileURLToPath } from "node:url";
 import { readFileSync } from "node:fs";
+import { formatUpdateFeedNotes } from "../../src/ui/update-notes.ts";
 
 const bridgePath = fileURLToPath(new URL("../../src/scripts/tauri-bridge.js", import.meta.url));
 const releaseNotes = readFileSync(
@@ -20,7 +21,7 @@ test("Settings shows three formatted highlights and a version-specific full note
   }, releaseNotes);
   const notes = page.getByRole("region", { name: "What's new" });
   await expect(notes.getByRole("listitem")).toHaveCount(3);
-  await expect(notes.locator("strong")).toHaveText([
+  await expect(notes.locator(":scope > ul strong.update-note-title")).toHaveText([
     "Keep short replies and small changes.",
     "Steadier subtitles.",
     "Confirm the right area.",
@@ -74,6 +75,53 @@ test("Settings shows three formatted highlights and a version-specific full note
     document.querySelector("meowcal-app").controller.publish({ update: { kind: "upToDate" } });
   });
   await expect(notes).toHaveCount(0);
+});
+
+test("Settings formats inline emphasis in the shipped update and expands actual follow-on release notes", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await page.getByRole("button", { name: "Settings", exact: true }).click();
+  const raw = readFileSync(new URL("../../docs/releases/v0.11.0.md", import.meta.url), "utf8");
+  const legacy =
+    "- **Send a report from the app.** Choose a feedback type, describe what happened and select **Send**.\n" +
+    "- **Choose what to share.** For a translation that looks wrong, you can preview the original line and its translation before attaching them.";
+  async function announce(version, notes) {
+    await page.evaluate(
+      ({ version, notes }) => {
+        document
+          .querySelector("meowcal-app")
+          .controller.publish({ update: { kind: "available", version, notes } });
+      },
+      { version, notes },
+    );
+  }
+  const card = page.getByRole("region", { name: "What's new" });
+  await announce("0.11.0", legacy);
+  await expect(card.locator("strong").filter({ hasText: /^Send$/ })).toBeVisible();
+  await expect(card).not.toContainText("**Send**");
+  await expect(card.locator("summary")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Download and install" })).toBeVisible();
+
+  await announce(
+    "0.11.1",
+    formatUpdateFeedNotes(raw.replace(/^# Meowcal Sub v0.11.0/m, "# Meowcal Sub v0.11.1")),
+  );
+  const more = card.getByText("More about this update");
+  const fix = card.getByText("If a send fails, your draft stays in the form so you can try again.");
+  await expect(more).toBeVisible();
+  await expect(fix).not.toBeVisible();
+  await more.focus();
+  await expect(more).toBeFocused();
+  await page.keyboard.press("Enter");
+  await expect(fix).toBeVisible();
+  await expect(card.getByRole("heading", { name: "Fixes and improvements" })).toBeVisible();
+  await expect(card.getByRole("link", { name: "Full release notes" })).toHaveAttribute(
+    "href",
+    /v0\.11\.1$/,
+  );
+  await expect(card).not.toContainText("SHA256SUMS");
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 });
 
 test("the updater limits metadata checks while downloads keep their own lifetime", async ({
