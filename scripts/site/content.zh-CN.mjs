@@ -234,7 +234,8 @@ export default {
     promise: "找到好字幕 · 自动对齐 · 开始观看",
     lead: "找到喜欢的字幕译本了？妙影2 会读画面上的对白，认出电影播到哪里，再按影片进度显示你选的译文。如果只找到原文字幕，也可以先看，电脑会边播边译。",
     actions: {
-      latest: { label: "下载最新版本", hint: "安装版或便携版，x64 与 ARM64" },
+      store: { label: "从 Microsoft Store 获取", hint: "Windows 11 · 由商店管理更新" },
+      latest: { label: "从 GitHub 下载", hint: "安装版或便携版，x64 与 ARM64" },
       meta: "本页介绍版本 {version} · Windows x64 与 ARM64 · 以 AGPL-3.0-only 协议免费开源",
       links: [
         { label: "使用指南", href: `${SUB2_REPO}/blob/main/docs/user-guide.zh-CN.md` },
@@ -339,7 +340,7 @@ export default {
         columns: [
           {
             title: "留在你的电脑上",
-            items: ["文字识别（OCR）", "翻译推理", "配置、字幕文件和日志，保存在用户配置目录"],
+            items: ["文字识别（OCR）", "翻译推理", "配置、字幕文件和日志保存在本机"],
           },
           {
             title: "需要联网的情况",
@@ -347,7 +348,7 @@ export default {
               "向你启用的字幕源搜索并下载字幕",
               "可选的 TMDb 元数据和 Google Fonts",
               "安装引擎与模型",
-              "安装版应用的更新检查与下载",
+              "Microsoft Store 或 GitHub 安装版的应用更新",
             ],
           },
         ],

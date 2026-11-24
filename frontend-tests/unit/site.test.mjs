@@ -176,6 +176,29 @@ describe.each(pages)("the $product page in $locale", ({ product, locale, html })
   });
 });
 
+describe("product download channels", () => {
+  const sub1Store = "https://apps.microsoft.com/detail/9NNK2X23VLWT";
+  const sub2Store = "https://apps.microsoft.com/detail/9NH782JNLWJP";
+  const sub2GitHub = "https://github.com/PeterShanxin/Meowcal-Sub-2/releases/latest";
+
+  for (const locale of LOCALES) {
+    it("links each product to its own Store listing in " + locale, () => {
+      const sub1 = renderPage("sub1", locale, release);
+      const sub2 = renderPage("sub2", locale, release);
+      expect(sub1).toContain('href="' + sub1Store + '"');
+      expect(sub1).not.toContain(sub2Store);
+      expect(sub2).toContain('class="button primary" href="' + sub2Store + '"');
+      expect(sub2).not.toContain(sub1Store);
+      expect(sub2).toContain('class="button" href="' + sub2GitHub + '"');
+      const [json] = attributes(
+        sub2,
+        /<script type="application\/ld\+json">\n([\s\S]+?)\n<\/script>/g,
+      );
+      expect(JSON.parse(json).sameAs).toContain(sub2Store);
+    });
+  }
+});
+
 describe("release-specific content", () => {
   it("offers the Sub 1 installers of the published release", () => {
     for (const locale of LOCALES) {
