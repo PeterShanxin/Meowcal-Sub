@@ -17,7 +17,8 @@ export const IMAGE_WIDTHS = [800, 1600];
 
 const SUB1_REPO = "https://github.com/PeterShanxin/Meowcal-Sub";
 const SUB2_REPO = "https://github.com/PeterShanxin/Meowcal-Sub-2";
-const STORE_URL = "https://apps.microsoft.com/detail/9NNK2X23VLWT";
+const SUB1_STORE_URL = "https://apps.microsoft.com/detail/9NNK2X23VLWT";
+const SUB2_STORE_URL = "https://apps.microsoft.com/detail/9NH782JNLWJP";
 // The Sub 2 release that the Sub 2 copy and screenshot describe.
 const SUB2_VERSION = "0.4.0";
 
@@ -267,8 +268,11 @@ function renderActions(page, context, release) {
   const targets = {
     x64: { href: release.x64, primary: true },
     arm64: { href: release.arm64, primary: true },
-    store: { href: STORE_URL },
-    latest: { href: `${SUB2_REPO}/releases/latest`, primary: true },
+    store: {
+      href: context.product === "sub2" ? SUB2_STORE_URL : SUB1_STORE_URL,
+      primary: context.product === "sub2",
+    },
+    latest: { href: `${SUB2_REPO}/releases/latest` },
   };
   const buttons = Object.keys(targets)
     .filter((key) => page.actions[key])
@@ -318,7 +322,7 @@ function structuredData(page, context, release) {
     license: "https://www.gnu.org/licenses/agpl-3.0.html",
     offers: { "@type": "Offer", price: "0", priceCurrency: "USD" },
     author: { "@type": "Person", name: "Shanxin Li", url: "https://github.com/PeterShanxin" },
-    sameAs: context.product === "sub1" ? [SUB1_REPO, STORE_URL] : [SUB2_REPO],
+    sameAs: context.product === "sub1" ? [SUB1_REPO, SUB1_STORE_URL] : [SUB2_REPO, SUB2_STORE_URL],
   };
   // "<" cannot end the script element early once it is escaped.
   return JSON.stringify(data, null, 2).replaceAll("<", "\\u003c");

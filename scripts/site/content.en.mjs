@@ -246,8 +246,12 @@ export default {
     promise: "Find subtitles. Let them follow the film.",
     lead: "Found a translation you like for your film? Meowcal Sub 2 reads the subtitles in the picture to find your place, then shows the translation in time with the film. If you can only find the original subtitles, it can translate them on your PC while you watch.",
     actions: {
+      store: {
+        label: "Get it from Microsoft Store",
+        hint: "Windows 11 · Store-managed updates",
+      },
       latest: {
-        label: "Download the latest release",
+        label: "Download from GitHub",
         hint: "Installer or portable, x64 and ARM64",
       },
       meta: "This page describes version {version} · Windows x64 and ARM64 · Free and open source under AGPL-3.0-only",
@@ -360,7 +364,7 @@ export default {
             items: [
               "Text recognition (OCR)",
               "Translation inference",
-              "Configuration, subtitle files, and logs, in your user profile",
+              "Configuration, subtitle files, and logs stored locally",
             ],
           },
           {
@@ -369,7 +373,7 @@ export default {
               "Subtitle search and download from the providers you enable",
               "Optional TMDb metadata and Google Fonts",
               "Engine and model installation",
-              "Application update checks and downloads for installed copies",
+              "Application updates through Microsoft Store or the GitHub installer’s in-app updater",
             ],
           },
         ],
