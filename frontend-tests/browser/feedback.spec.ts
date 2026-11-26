@@ -146,3 +146,25 @@ test("turning attachments off removes every selection from the sent draft", asyn
   );
   expect(requests[0].materialIds).toEqual([]);
 });
+
+test("an invalid description from a closed draft does not block reporting an error", async ({
+  page,
+}) => {
+  await start(page);
+  await page.getByRole("button", { name: "Feedback", exact: true }).click();
+  const dialog = page.getByRole("dialog");
+  await dialog.getByLabel("Feedback type").selectOption("other");
+  await dialog.getByRole("textbox").fill("   ");
+  await dialog.getByRole("button", { name: "Send", exact: true }).click();
+  await expect(dialog.getByRole("textbox")).toBeFocused();
+  await dialog.getByRole("button", { name: "Close", exact: true }).click();
+  await page.evaluate(() =>
+    window.TauriBridge.event.emit("capture-status", {
+      isError: true,
+      message: "Screen capture failed",
+    }),
+  );
+  await page.getByRole("button", { name: "Report error" }).click();
+  await dialog.getByRole("button", { name: "Send", exact: true }).click();
+  await expect(dialog.getByRole("alert")).toContainText("The service did not confirm delivery");
+});

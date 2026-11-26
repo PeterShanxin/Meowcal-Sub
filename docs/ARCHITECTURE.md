@@ -224,6 +224,11 @@ do not publish a saved preference.
 Retry repeats unrelated failed writes; their unsaved errors remain visible
 after another field saves successfully.
 
+The main window locks profile edits until its initial settings read succeeds.
+Retrying a failed read restores the full profile and checks the OCR languages
+again. A normal focus refresh reads overlay changes from the other window.
+Responses that predate a local edit or a newer refresh cannot replace it.
+
 `src/i18n/index.ts` owns locale resolution, named-parameter formatting, and
 subscriptions. `en-zh.json` pairs English source messages with Chinese text;
 `overlay-messages.ts` supplies namespaced selector and overlay messages.

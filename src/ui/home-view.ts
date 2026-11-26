@@ -49,7 +49,7 @@ export function renderHome(
 ): TemplateResult {
   const selecting = snapshot.busy === "selecting";
   const busy = presentation.actionIcon === "spinner";
-  const locked = !selecting && isSessionLocked(snapshot);
+  const locked = snapshot.settingsRead !== "ready" || (!selecting && isSessionLocked(snapshot));
   const hasSavedArea = presentation.action === "start" && snapshot.region !== null;
 
   return html`
@@ -97,12 +97,12 @@ export function renderHome(
             class="primary-button home-action"
             type="button"
             @click=${actions.onPrimary}
-            ?disabled=${presentation.actionDisabled}
+            ?disabled=${presentation.actionDisabled || (snapshot.settingsRead !== "ready" && presentation.action !== "stop")}
           >
             ${icon(presentation.actionIcon, busy ? "spin" : "")}
             <span>${presentation.actionLabel}</span>
           </button>
-          ${hasSavedArea ? html`<button class="primary-button home-saved-action" type="button" @click=${actions.onStartSaved} ?disabled=${presentation.actionDisabled}>${icon("play")}<span>${t("Start with saved area")}</span></button>` : nothing}
+          ${hasSavedArea ? html`<button class="primary-button home-saved-action" type="button" @click=${actions.onStartSaved} ?disabled=${presentation.actionDisabled || snapshot.settingsRead !== "ready"}>${icon("play")}<span>${t("Start with saved area")}</span></button>` : nothing}
         </div>
         ${
           presentation.supportLine || presentation.supportCode

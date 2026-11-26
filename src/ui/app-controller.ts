@@ -1,5 +1,5 @@
 import { errorMessage } from "./error-copy";
-import { previewUiLanguage, type UiLanguage } from "../i18n";
+import { acceptSavedUiLanguage, previewUiLanguage, type UiLanguage } from "../i18n";
 import type { AppScreen, AppSettings, CaptureRegion, UiSnapshot } from "./contracts";
 import { applyRecognition, type RecognitionChoice } from "./recognition";
 import { pickSampleTranslation } from "./sample-translations";
@@ -8,7 +8,7 @@ import { backendUnavailablePhase } from "./home-state";
 import { defaultSettings, mergeSettings, recognitionPresets } from "./settings-defaults";
 import { UpdateController } from "./update-controller";
 import { SettingsWriter } from "./settings-writer";
-import { settingsSaveFeedback } from "./settings-feedback";
+import { settingsAfterRefresh, settingsSaveFeedback } from "./settings-feedback";
 import { EngineStatusController } from "./engine-status-controller";
 import { SessionStatusController } from "./session-status-controller";
 import { DisplayController } from "./display-controller";
@@ -20,13 +20,14 @@ type WizardTestResult = { translatedText?: string; latencyMs?: number };
 export class AppController {
   private unlisten: Array<() => void> = [];
   private selectionRequest: string | null = null;
+  private refreshRevision = 0;
   private overlaySaveId: number | null = null;
   private autoCheckTimer: number | null = null;
   private noticeTimer: number | null = null;
-  private settingsLoaded = false;
   private initialSetup = new InitialSetup();
   private disposed = false;
   private snapshot: UiSnapshot = {
+    settingsRead: "loading",
     settingsSave: { kind: "idle" },
     screen: "home",
     busy: "loading",
@@ -92,9 +93,9 @@ export class AppController {
       this.safeInvoke<CaptureRegion | null>("get_capture_region", null),
       browserMode ? false : this.safeInvoke<boolean>("is_translation_running", false),
     ]);
-    this.settingsLoaded = settings !== null;
     const merged = mergeSettings(settings);
     this.publish({
+      settingsRead: settings === null ? "error" : "ready",
       settings: merged,
       ocrLanguages: new Set(languages),
       region: browserMode ? (region ?? merged.lastCaptureRegion ?? null) : region,
@@ -112,7 +113,8 @@ export class AppController {
         .catch(errorMessage);
       if (error) this.publish({ error });
     }
-    this.scheduleAutomaticUpdateCheck();
+    if (this.autoCheckTimer !== null) window.clearTimeout(this.autoCheckTimer);
+    this.autoCheckTimer = window.setTimeout(() => void this.checkForUpdatesAutomatically(), 2000);
     if (!browserMode) await this.engines.finishPreparation(engine);
   }
 
@@ -233,19 +235,25 @@ export class AppController {
     }
   }
   async refresh(): Promise<void> {
+    const revision = ++this.refreshRevision;
+    const before = this.snapshot;
     const engineFallback = window.TauriBridge.isBrowserMode()
       ? { phase: backendUnavailablePhase }
       : (this.snapshot.engine ?? {});
-    const [engine, region, stored] = await Promise.all([
+    const [engine, region, stored, display, languages] = await Promise.all([
       this.engines.read("refresh_engine_status", engineFallback),
       this.safeInvoke<CaptureRegion | null>("get_capture_region", this.snapshot.region),
       this.safeInvoke<Partial<AppSettings> | null>("get_settings", null),
+      this.displays.read(),
+      before.settingsRead === "error"
+        ? this.safeInvoke<string[] | null>("get_ocr_languages", null)
+        : null,
     ]);
-    const patch: Partial<UiSnapshot> = { region, ...(await this.displays.read()) };
-    if (stored && this.overlaySaveId === null && this.snapshot.settingsSave.kind === "idle") {
-      patch.settings = { ...this.snapshot.settings, overlay: mergeSettings(stored).overlay };
-    }
-    this.publish(patch);
+    if (revision !== this.refreshRevision || this.disposed) return;
+    const patch = settingsAfterRefresh(before, this.snapshot, stored);
+    if (patch.settingsRead === "ready") acceptSavedUiLanguage(patch.settings?.uiLanguage);
+    if (languages) patch.ocrLanguages = new Set(languages);
+    this.publish({ region, ...display, ...patch });
     await this.engines.finishPreparation(engine);
   }
   async start(useSavedArea = false): Promise<void> {
@@ -283,14 +291,13 @@ export class AppController {
     }
   }
   async saveSettings(silent = false): Promise<void> {
-    try {
-      if (silent) await this.settingsWriter.save(this.snapshot.settings);
-      else await this.settingsWriter.retry();
-      this.settingsLoaded = true;
-      if (!silent) this.publish({ notice: "Settings saved" });
-    } catch (error) {
-      if (silent) throw error;
-    }
+    if (this.snapshot.settingsRead === "error")
+      throw new Error("Couldn’t load settings. Check the app connection and try again.");
+    if (silent) return this.settingsWriter.save(this.snapshot.settings);
+    await this.settingsWriter.retry().then(
+      () => this.publish({ notice: "Settings saved" }),
+      () => {}, // The writer already published the error and retained the edit.
+    );
   }
   private async editSettings(edit: (settings: AppSettings) => void): Promise<void> {
     const settings = structuredClone(this.snapshot.settings);
@@ -363,20 +370,13 @@ export class AppController {
     }
   }
 
-  private scheduleAutomaticUpdateCheck(): void {
-    if (this.autoCheckTimer !== null) window.clearTimeout(this.autoCheckTimer);
-    this.autoCheckTimer = window.setTimeout(() => {
-      this.autoCheckTimer = null;
-      void this.checkForUpdatesAutomatically();
-    }, 2000);
-  }
   async checkForUpdatesAutomatically(): Promise<void> {
     const completedAt = await this.updates.checkAutomatic(this.snapshot.settings, this.clock);
     if (completedAt === null) return;
     const settings = structuredClone(this.snapshot.settings);
     settings.lastUpdateCheckTimeMs = completedAt;
     this.publish({ settings });
-    if (!this.settingsLoaded) return;
+    if (this.snapshot.settingsRead !== "ready") return;
     await this.saveSettings(true).catch(() => {});
   }
   async checkForUpdates(): Promise<void> {

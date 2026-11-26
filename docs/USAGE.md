@@ -89,6 +89,11 @@ and other actionable messages remain visible when needed.
 To choose or adjust the area without starting, choose **Select subtitle area**,
 then **Save and exit**. To reuse it directly, choose **Start with saved area**.
 
+In the unreleased development build, short, zoomed windows place each language
+label beside its selector so the first area selection stays within reach.
+Session notices appear above the navigation and leave room for the running
+status and **Stop translation**.
+
 The area is a fixed screen region, not an object tracker. When the video moves,
 changes size, or switches between window and full screen, select the area again.
 
@@ -125,6 +130,10 @@ and captured or translated text unchanged.
 provider, project link, and model license and usage terms. The first-time setup
 still presents the provider disclosure and requires agreement to the model terms.
 Settings changes save automatically, with a four-second success notice.
+
+In the unreleased development build, settings can be edited once the saved
+profile loads. If reading fails, choose **Try again** to recover the saved
+languages, subtitle style, and other preferences before editing.
 
 | Setting | What it does | When to change it |
 | --- | --- | --- |
@@ -278,6 +287,8 @@ investigation:
 Open **Feedback** in the main title bar or **Report error** beside
 an error. Choose a type and enter a description. The error entry includes the
 available diagnostics for the fault. A suggestion only needs a description.
+In the unreleased development build, you can leave the description empty when
+using **Report error**, even if a previous draft had an invalid description.
 Review the basic diagnostics and select any additional evidence you want the
 maintainers to see. A selected screenshot or subtitle can reveal what you watched.
 Logging Off still allows a written report. Opening the form does not change your log level.

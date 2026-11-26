@@ -22,6 +22,7 @@ it("shows busy work without offering repair or claiming another model load", () 
 
 function snapshot(patch: Partial<UiSnapshot> = {}): UiSnapshot {
   return {
+    settingsRead: "ready",
     settingsSave: { kind: "idle" },
     screen: "home",
     busy: "idle",

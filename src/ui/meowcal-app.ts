@@ -25,6 +25,7 @@ export class MeowcalApp extends LitElement {
   }
   @state() private snapshot!: UiSnapshot;
   @state() private aboutOpen = false;
+  @state() private retryingSettings = false;
   private editingFeedback = false;
   private fault: {
     code: string;
@@ -100,7 +101,7 @@ export class MeowcalApp extends LitElement {
   private renderScreen() {
     const snapshot = this.snapshot;
     if (snapshot.screen === "appearance") {
-      return renderAppearance(snapshot.settings.overlay, {
+      return renderAppearance(snapshot.settings.overlay, snapshot.settingsRead !== "ready", {
         onFontSize: (fontSize) => void this.controller.updateOverlay({ fontSize }),
         onLightBackground: (lightBackground) =>
           void this.controller.updateOverlay({ lightBackground }),
@@ -182,8 +183,38 @@ export class MeowcalApp extends LitElement {
       this.fault.preview = requestPreview(this.fault.code, this.fault.token);
   }
 
+  private async retrySettings(event: Event): Promise<void> {
+    const button = event.currentTarget as HTMLButtonElement;
+    this.retryingSettings = true;
+    try {
+      await this.controller.refresh();
+    } finally {
+      this.retryingSettings = false;
+      await this.updateComplete;
+      if (document.activeElement === document.body) {
+        (button.isConnected ? button : this.querySelector<HTMLElement>("main h1"))?.focus();
+      }
+    }
+  }
+
   private renderMessage() {
-    const { error, notice, settingsSave } = this.snapshot;
+    const { error, notice, settingsRead, settingsSave } = this.snapshot;
+    if (!error && settingsRead === "error") {
+      return html`<div class="toast error" role="alert">
+        ${icon("alert")}
+        <span class="toast-message"
+          >${this.retryingSettings ? t("Loading settings…") : t("Couldn’t load settings. Check the app connection and try again.")}</span
+        >
+        <button
+          class="secondary-button"
+          type="button"
+          ?disabled=${this.retryingSettings}
+          @click=${this.retrySettings}
+        >
+          ${t("Try again")}
+        </button>
+      </div>`;
+    }
     const unsaved = !error && settingsSave.kind === "error";
     const saving = !error && settingsSave.kind === "saving";
     if (!error && !notice && !unsaved && !saving) return nothing;

@@ -9,6 +9,7 @@ interface SubtitleStyleActions {
 
 export function renderAppearance(
   config: OverlayConfig,
+  disabled: boolean,
   actions: SubtitleStyleActions,
 ): TemplateResult {
   const { FONT_SIZE_MIN, FONT_SIZE_MAX, clampFontSize } = window.OverlayAppearance;
@@ -34,7 +35,7 @@ export function renderAppearance(
           </span>
         </section>
 
-        <section class="list" aria-label=${t("Subtitle appearance")}>
+        <fieldset class="list" ?disabled=${disabled} aria-label=${t("Subtitle appearance")}>
           <label class="list-row">
             <strong>${t("Text size")}</strong>
             <span class="slider-control">
@@ -74,7 +75,7 @@ export function renderAppearance(
               </button>
             </div>
           </div>
-        </section>
+        </fieldset>
       </div>
     </main>
   `;

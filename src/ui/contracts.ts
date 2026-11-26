@@ -110,6 +110,7 @@ export interface EngineStatus {
 }
 
 export interface UiSnapshot {
+  settingsRead: "loading" | "ready" | "error";
   settingsSave: import("./settings-writer").SettingsSaveState;
   screen: AppScreen;
   busy: BusyState;
@@ -172,6 +173,7 @@ export interface UpdatesApi {
 export interface TauriBridgeApi {
   invoke<T = unknown>(command: string, args?: Record<string, unknown>): Promise<T>;
   isBrowserMode(): boolean;
+  showBrowserModeIndicator?(container: HTMLElement): void;
   /** The identifier from Tauri's merged config; browser mode returns null. */
   appIdentifier?(): Promise<string | null>;
   appVersion?(): Promise<string | null>;

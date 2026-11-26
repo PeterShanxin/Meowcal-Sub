@@ -139,6 +139,9 @@
         const mapping = COMMAND_TO_ENDPOINT[command];
 
         if (!mapping) {
+            if (TAURI_ONLY_COMMANDS.includes(command)) {
+                throw new Error('Capture, translation, and native windows require the Windows app.');
+            }
             console.warn(`[TauriBridge] Unknown command: ${command}`);
             throw new Error(`Unknown command: ${command}`);
         }
@@ -260,16 +263,20 @@
     /**
      * Show browser mode indicator in the UI
      */
-    function showBrowserModeIndicator() {
+    function showBrowserModeIndicator(container) {
         if (!isBrowserMode()) return;
 
-        if (document.getElementById('browser-mode-indicator')) return;
+        const existing = document.getElementById('browser-mode-indicator');
+        if (existing) {
+            if (container) container.appendChild(existing);
+            return;
+        }
         const indicator = document.createElement('div');
         indicator.id = 'browser-mode-indicator';
         indicator.textContent = 'Browser preview';
         indicator.title = 'Capture, translation, and native windows require the Windows app.';
         indicator.style.cssText = `
-            position: fixed;
+            position: var(--browser-preview-position, fixed);
             top: 4px;
             right: 10px;
             color: var(--text-2, #bcc5d5);
@@ -283,8 +290,8 @@
         `;
 
         // Add to page when DOM is ready
-        if (document.body) {
-            document.body.appendChild(indicator);
+        if (container || document.body) {
+            (container || document.body).appendChild(indicator);
         } else {
             document.addEventListener('DOMContentLoaded', () => {
                 document.body.appendChild(indicator);
@@ -368,7 +375,7 @@
     // Auto-show browser mode indicator
     if (isBrowserMode()) {
         if (document.readyState === 'loading') {
-            document.addEventListener('DOMContentLoaded', showBrowserModeIndicator);
+            document.addEventListener('DOMContentLoaded', () => showBrowserModeIndicator());
         } else {
             showBrowserModeIndicator();
         }
