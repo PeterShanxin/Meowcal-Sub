@@ -99,7 +99,8 @@
   }
 }
 
-@media (max-width: 559px) and (max-height: 400px) {
+/* The minimum 560x430 window leaves about 546x422 for the page after its resize borders. */
+@media (max-width: 559px) and (max-height: 440px) {
   .home-screen {
     padding: 10px 16px 16px;
   }
