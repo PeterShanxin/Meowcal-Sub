@@ -41,12 +41,20 @@ export default {
           }
           if (mode === "offline") return json(res, 503, { error: "Backend unavailable" });
           const route = path.replace("/__ui-audit/api", "");
-          if (route === "/settings") {
+          if (route === "/settings" || (route === "/ui-language" && req.method === "POST")) {
             if (mode === "slow") await new Promise((resolve) => setTimeout(resolve, 1500));
             if (req.method === "POST") {
               if (mode === "save-error")
                 return json(res, 503, { error: "Settings could not be saved" });
-              settings = JSON.parse(body);
+              const edit = JSON.parse(body);
+              if (route === "/ui-language") {
+                if (!["en", "zh-CN", "system"].includes(edit.language))
+                  return json(res, 422, { error: "Unsupported app language" });
+                settings.uiLanguage = edit.language;
+              } else {
+                settings = { ...edit, uiLanguage: settings.uiLanguage };
+              }
+              return json(res, 200, { success: true });
             }
             return json(res, 200, settings);
           }

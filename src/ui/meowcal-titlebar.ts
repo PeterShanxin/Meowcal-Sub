@@ -45,6 +45,10 @@ export class MeowcalTitlebar extends LitElement {
     return this;
   }
 
+  protected firstUpdated(): void {
+    window.TauriBridge?.showBrowserModeIndicator?.(this.querySelector(".titlebar-controls")!);
+  }
+
   connectedCallback(): void {
     super.connectedCallback();
     void this.syncMaximized();

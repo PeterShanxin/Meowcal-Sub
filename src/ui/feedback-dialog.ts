@@ -59,6 +59,7 @@ export class FeedbackDialog extends LitElement {
     await this.updateComplete;
     if (generation !== this.generation) return;
     const dialog = this.querySelector("dialog")!;
+    dialog.querySelector("textarea")?.setCustomValidity("");
     if (!dialog.open) dialog.showModal();
     const result = await preview;
     if (generation !== this.generation) return;

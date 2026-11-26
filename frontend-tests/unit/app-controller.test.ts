@@ -867,6 +867,24 @@ describe("AppController settings persistence", () => {
     });
   });
 
+  it("preserves a saved appearance edit when an earlier focus refresh finishes", async () => {
+    vi.useFakeTimers();
+    let finishRead!: (settings: unknown) => void;
+    const reading = new Promise((resolve) => (finishRead = resolve));
+    const invoke = vi.fn(async (command: string) =>
+      command === "get_settings" ? reading : undefined,
+    );
+    const { controller } = createController(invoke as TauriBridgeApi["invoke"]);
+    const refresh = controller.refresh();
+    await controller.updateOverlay({ fontSize: 40 });
+    await vi.advanceTimersByTimeAsync(250);
+    expect(controller.current().settingsSave.kind).toBe("idle");
+    finishRead({ overlay: { fontSize: 28 } });
+    await refresh;
+    expect(controller.current().settings.overlay.fontSize).toBe(40);
+    controller.dispose();
+  });
+
   it("keeps an unsaved appearance edit from this window over the stored one", async () => {
     vi.useFakeTimers();
     const invoke = vi.fn(async (command: string) =>

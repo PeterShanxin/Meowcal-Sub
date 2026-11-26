@@ -3,7 +3,7 @@
   flex-direction: column;
   align-items: center;
   justify-content: flex-start;
-  padding: clamp(24px, 15vh, 100px) clamp(24px, 9vw, 64px) 90px;
+  padding: clamp(24px, 15vh, 100px) clamp(24px, 9vw, 64px) 16px;
   text-align: left;
 }
 
@@ -74,6 +74,13 @@
   padding-inline: 12px;
 }
 
+@media (min-width: 560px) {
+  .home-screen {
+    /* Give enlarged language names room before spending space on side margins. */
+    padding-inline: clamp(16px, 50% - 24ch, min(9vw, 64px));
+  }
+}
+
 @media (max-width: 559px) {
   .home-title {
     min-height: 76px;
@@ -83,6 +90,32 @@
   }
   .home-actions.has-saved-area {
     grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-height: 470px) {
+  .home-screen {
+    padding-top: 24px;
+  }
+}
+
+@media (max-width: 559px) and (max-height: 400px) {
+  .home-screen {
+    padding: 10px 16px 16px;
+  }
+
+  .home-title,
+  .home-description-slot {
+    min-height: 0;
+  }
+
+  .language-pair .field {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.7fr);
+    align-items: center;
+  }
+
+  .home-actions {
+    margin-top: 10px;
   }
 }
 

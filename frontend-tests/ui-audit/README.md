@@ -7,7 +7,8 @@ npm run dev:ui-audit
 
 Open the printed local address with `/audit` appended. This runs the actual
 frontend against an in-memory HTTP fixture. The fixture can simulate successful,
-failed, slow, and unavailable settings storage. It never downloads a model,
+failed, slow, and unavailable settings storage. App language and subtitle
+settings survive page reloads. It never downloads a model,
 captures the screen, or performs OCR or translation. Restarting the server resets
 its settings.
 

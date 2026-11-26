@@ -303,48 +303,52 @@ export function renderSettings(snapshot: UiSnapshot, actions: SettingsActions): 
           <h1 id="settings-title" tabindex="-1">${t("Settings")}</h1>
         </header>
 
-        <div class="list">
-          <label class="list-row">
-            <span
-              ><strong>${t("App language")}</strong
-              ><small>${t("Applies immediately. Subtitle languages stay unchanged.")}</small></span
-            >
-            <select
-              class="select compact"
-              aria-label=${t("App language")}
-              ?disabled=${snapshot.busy === "loading"}
-              .value=${getUiLanguage()}
-              @change=${(event: Event) => actions.onUiLanguage((event.target as HTMLSelectElement).value as UiLanguage)}
-            >
-              <option value="system" ?selected=${getUiLanguage() === "system"}>
-                ${t("System default")}
-              </option>
-              <option value="en" lang="en" ?selected=${getUiLanguage() === "en"}>English</option>
-              <option value="zh-CN" lang="zh-CN" ?selected=${getUiLanguage() === "zh-CN"}>
-                简体中文
-              </option>
-            </select>
-          </label>
-        </div>
-        <h2 class="group-label">${t("Translation")}</h2>
-        <div class="list">
-          ${switchRow(
-            t("Translate any text"),
-            t("Pages, apps, and games, not just subtitles"),
-            snapshot.settings.translation.translateAllOcrText,
-            actions.onTranslateAllOcrText,
-          )}
-          ${switchRow(
-            t("Keep names consistent"),
-            t("Remembers names and terms across nearby lines"),
-            snapshot.settings.translation.enableContextAware,
-            actions.onContinuity,
-          )}
-          ${renderProfile(snapshot, actions)}
-        </div>
-        ${renderAdvanced(snapshot, actions)} ${renderEngineAndUpdates(snapshot, actions)}
-        ${renderLogging(snapshot.settings.logging.level, actions.onLogLevel)}
-        ${renderDeveloper(snapshot, actions)}
+        <fieldset class="settings-controls" ?disabled=${snapshot.settingsRead !== "ready"}>
+          <div class="list">
+            <label class="list-row">
+              <span
+                ><strong>${t("App language")}</strong
+                ><small
+                  >${t("Applies immediately. Subtitle languages stay unchanged.")}</small
+                ></span
+              >
+              <select
+                class="select compact"
+                aria-label=${t("App language")}
+                ?disabled=${snapshot.busy === "loading"}
+                .value=${getUiLanguage()}
+                @change=${(event: Event) => actions.onUiLanguage((event.target as HTMLSelectElement).value as UiLanguage)}
+              >
+                <option value="system" ?selected=${getUiLanguage() === "system"}>
+                  ${t("System default")}
+                </option>
+                <option value="en" lang="en" ?selected=${getUiLanguage() === "en"}>English</option>
+                <option value="zh-CN" lang="zh-CN" ?selected=${getUiLanguage() === "zh-CN"}>
+                  简体中文
+                </option>
+              </select>
+            </label>
+          </div>
+          <h2 class="group-label">${t("Translation")}</h2>
+          <div class="list">
+            ${switchRow(
+              t("Translate any text"),
+              t("Pages, apps, and games, not just subtitles"),
+              snapshot.settings.translation.translateAllOcrText,
+              actions.onTranslateAllOcrText,
+            )}
+            ${switchRow(
+              t("Keep names consistent"),
+              t("Remembers names and terms across nearby lines"),
+              snapshot.settings.translation.enableContextAware,
+              actions.onContinuity,
+            )}
+            ${renderProfile(snapshot, actions)}
+          </div>
+          ${renderAdvanced(snapshot, actions)} ${renderEngineAndUpdates(snapshot, actions)}
+          ${renderLogging(snapshot.settings.logging.level, actions.onLogLevel)}
+          ${renderDeveloper(snapshot, actions)}
+        </fieldset>
         <div class="list">
           <button class="list-row about-entry" type="button" @click=${actions.onAbout}>
             <strong>${t("About")}</strong>${icon("chevron-right")}

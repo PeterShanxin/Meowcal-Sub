@@ -108,6 +108,20 @@ test("saved area can start directly while selecting remains available", async ({
   ).toBe(false);
 });
 
+test("the first area selection fits the zoomed minimum window", async ({ page }) => {
+  await page.setViewportSize({ width: 373, height: 287 });
+  await openMain(page, null);
+  await expect(page.getByRole("combobox", { name: "Original subtitle language" })).toBeInViewport({
+    ratio: 1,
+  });
+  await expect(page.getByRole("combobox", { name: "Translation language" })).toBeInViewport({
+    ratio: 1,
+  });
+  await expect(page.getByRole("button", { name: "Select subtitle area" })).toBeInViewport({
+    ratio: 1,
+  });
+});
+
 for (const width of [320, 900]) {
   test(`saved area actions fit at ${width}px`, async ({ page }) => {
     await page.setViewportSize({ width, height: 700 });
@@ -189,8 +203,12 @@ test("a notification leaves the running controls clear in a short window", async
       .controller.publish({ running: true, notice: "Translation started" }),
   );
   const action = await page.getByRole("button", { name: "Stop translation" }).boundingBox();
+  const status = page.locator(".support-line");
+  await expect(status).toBeInViewport({ ratio: 1 });
+  const line = await status.boundingBox();
   const toast = await page.locator(".toast").boundingBox();
   expect(action.y + action.height).toBeLessThanOrEqual(toast.y);
+  expect(line.y + line.height).toBeLessThanOrEqual(toast.y);
 });
 
 test("cached crop needs explicit confirmation on every start, even after a long selection", async ({

@@ -2,9 +2,6 @@
   width: 40px;
   margin-inline-end: 3px;
 }
-body:has(#browser-mode-indicator) .feedback-entry {
-  margin-inline-end: 124px;
-}
 .feedback-entry .icon {
   width: 17px;
   height: 17px;
