@@ -235,6 +235,12 @@ export class UpdateController {
     this.pending = update;
   }
 
+  async saveAutomaticCheckTime(completedAtMs: number): Promise<void> {
+    await window.TauriBridge.invoke("record_automatic_update_check", { completedAtMs }).catch(
+      () => {},
+    );
+  }
+
   dispose(): void {
     this.disposed = true;
     this.inFlightCheck?.cancel();

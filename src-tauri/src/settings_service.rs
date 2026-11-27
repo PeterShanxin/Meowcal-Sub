@@ -5,7 +5,7 @@
 //! app, not by the settings form, so they are folded back in before anything
 //! is written. `config_save` owns durability from there.
 
-use tauri::{async_runtime, AppHandle, Manager};
+use tauri::{async_runtime, AppHandle, Manager, State};
 use tracing::{info, warn};
 
 use crate::app_state::AppState;
@@ -95,10 +95,11 @@ pub async fn save_language(
 
 /// Persist only the update clock. A completed background check must not reapply
 /// a stale webview settings snapshot or reconfigure a live translation engine.
-pub async fn save_update_check_time(
-    app: AppHandle,
-    state: &AppState,
+#[tauri::command]
+pub async fn record_automatic_update_check(
     completed_at_ms: u64,
+    state: State<'_, AppState>,
+    app: AppHandle,
 ) -> Result<(), String> {
     state.startup_gate.wait_until_ready().await?;
     let _save = state.settings_save.lock().await;

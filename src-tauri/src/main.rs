@@ -137,7 +137,7 @@ fn main() {
             // In-app update
             meowcal_sub::update_handoff::prepare_for_update,
             meowcal_sub::update_diagnostics::record_update_check,
-            commands::record_automatic_update_check,
+            meowcal_sub::settings_service::record_automatic_update_check,
             meowcal_sub::store_updates::check_store_update,
             meowcal_sub::store_updates::open_store_listing,
             meowcal_sub::portable_updates::check_portable_update,

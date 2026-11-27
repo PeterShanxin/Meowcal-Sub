@@ -377,9 +377,7 @@ export class AppController {
     settings.lastUpdateCheckTimeMs = completedAt;
     this.publish({ settings });
     if (this.snapshot.settingsRead !== "ready") return;
-    await window.TauriBridge.invoke("record_automatic_update_check", {
-      completedAtMs: completedAt,
-    }).catch(() => {});
+    await this.updates.saveAutomaticCheckTime(completedAt);
   }
   async checkForUpdates(): Promise<void> {
     await this.updates.check("manual");
