@@ -377,7 +377,7 @@ export class AppController {
     settings.lastUpdateCheckTimeMs = completedAt;
     this.publish({ settings });
     if (this.snapshot.settingsRead !== "ready") return;
-    await this.saveSettings(true).catch(() => {});
+    await this.updates.saveAutomaticCheckTime(completedAt);
   }
   async checkForUpdates(): Promise<void> {
     await this.updates.check("manual");

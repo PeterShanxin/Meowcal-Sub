@@ -1031,11 +1031,7 @@ describe("AppController automatic update checks", () => {
     await vi.advanceTimersByTimeAsync(2000);
 
     expect(check).toHaveBeenCalledTimes(1);
-    expect(invoke).toHaveBeenCalledWith("save_settings", {
-      settings: expect.objectContaining({
-        lastUpdateCheckTimeMs: now,
-      }),
-    });
+    expect(invoke).toHaveBeenCalledWith("record_automatic_update_check", { completedAtMs: now });
   });
 
   it("does not check automatically if autoCheckUpdates is false", async () => {
@@ -1206,12 +1202,8 @@ describe("AppController automatic update checks", () => {
     await vi.advanceTimersByTimeAsync(2000);
 
     expect(check).toHaveBeenCalledTimes(1);
-    expect(invoke).toHaveBeenCalledWith("save_settings", {
-      settings: expect.objectContaining({
-        sourceLanguage: "ja-JP",
-        lastUpdateCheckTimeMs: now,
-      }),
-    });
+    expect(invoke).toHaveBeenCalledWith("record_automatic_update_check", { completedAtMs: now });
+    expect(invoke).not.toHaveBeenCalledWith("save_settings", expect.anything());
   });
 
   it("suppresses background persistence on automatic check when get_settings failed", async () => {
@@ -1240,6 +1232,7 @@ describe("AppController automatic update checks", () => {
 
     expect(check).toHaveBeenCalledTimes(1);
     expect(snapshots.at(-1)?.settings.lastUpdateCheckTimeMs).toBe(now);
+    expect(invoke).not.toHaveBeenCalledWith("record_automatic_update_check", expect.anything());
     expect(invoke).not.toHaveBeenCalledWith("save_settings", expect.anything());
   });
 });

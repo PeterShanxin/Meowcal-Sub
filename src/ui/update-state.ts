@@ -10,6 +10,8 @@ import { t } from "../i18n";
 
 export type UpdateStatus =
   | { kind: "store" }
+  | { kind: "storeAvailable" }
+  | { kind: "portableAvailable"; version: string }
   | { kind: "unsupported" }
   | { kind: "idle" }
   | { kind: "checking" }
@@ -94,12 +96,28 @@ export function deriveUpdatePresentation(
     case "store":
       return {
         headline: t("Microsoft Store updates"),
-        detail: t("{installed}. Get updates from the Microsoft Store Library.", {
-          installed: installedLine(currentVersion),
-        }),
-        action: "none",
-        actionLabel: t("Managed by Microsoft Store"),
-        actionDisabled: true,
+        detail: installedLine(currentVersion),
+        action: "check",
+        actionLabel: t("Check for updates"),
+        actionDisabled: false,
+        notes: null,
+      };
+    case "portableAvailable":
+      return {
+        headline: t("Version {version} is available", { version: status.version }),
+        detail: t("Download the ZIP, extract it to a new folder, and open Meowcal Sub from there."),
+        action: "install",
+        actionLabel: t("Download portable ZIP"),
+        actionDisabled: false,
+        notes: null,
+      };
+    case "storeAvailable":
+      return {
+        headline: t("An update is available"),
+        detail: t("Install the update from Microsoft Store."),
+        action: "install",
+        actionLabel: t("Open Microsoft Store"),
+        actionDisabled: false,
         notes: null,
       };
     case "unsupported":

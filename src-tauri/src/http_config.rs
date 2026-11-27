@@ -45,6 +45,7 @@ fn standalone_config_path_for(profile: AppProfile, appdata: Option<&str>) -> Pat
         AppProfile::Production => PathBuf::from("config.json"),
         AppProfile::Development => PathBuf::from("config.dev.json"),
         AppProfile::Store => PathBuf::from("config.store.json"),
+        AppProfile::Portable => PathBuf::from("config.portable.json"),
         AppProfile::StoreDevelopment => PathBuf::from("config.store.dev.json"),
     }
 }

@@ -31,6 +31,7 @@ if ($StorePackageVersion) {
 # failure belongs before the release exists.
 $required = @(
     @{ Kind = "MSI"; Pattern = "*.msi" },
+    @{ Kind = "portable ZIP"; Pattern = "*-portable.zip" },
     @{ Kind = "NSIS setup"; Pattern = "*-setup.exe" },
     @{ Kind = "updater signature"; Pattern = "*-setup.exe.sig" }
 )
@@ -46,7 +47,7 @@ foreach ($architecture in @("x64", "arm64")) {
 }
 
 $installers = @($files |
-    Where-Object { $_.Extension -eq ".msi" -or $_.Name -like "*-setup.exe" -or
+    Where-Object { $_.Extension -eq ".msi" -or $_.Name -like "*-setup.exe" -or $_.Name -like "*-portable.zip" -or
         ($StorePackageVersion -and $_.Extension -eq '.msix') })
 $checksumLines = $installers |
     Sort-Object Name |

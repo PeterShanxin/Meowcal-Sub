@@ -123,6 +123,8 @@ pub mod sync_utils;
 /// What this machine can do, reported to the setup UI
 pub mod system_info;
 
+pub mod portable_updates;
+pub mod store_updates;
 pub mod update_diagnostics;
 /// Quiescing the app so an update installer can replace its files
 pub mod update_handoff;

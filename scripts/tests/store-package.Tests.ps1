@@ -52,7 +52,7 @@ $assetRoot = Join-Path ([IO.Path]::GetTempPath()) ('meowcal-release-assets-' + [
 New-Item -ItemType Directory -Path $assetRoot | Out-Null
 try {
     foreach ($architecture in @('x64', 'arm64')) {
-        foreach ($name in @("App-$architecture.msi", "App-$architecture-setup.exe", "App-$architecture-setup.exe.sig", "MeowcalSub-1.2.3.0-$architecture-Release.msix")) {
+        foreach ($name in @("App-$architecture.msi", "App-$architecture-setup.exe", "App-$architecture-setup.exe.sig", "Meowcal.Sub_1.2.3_${architecture}-portable.zip", "MeowcalSub-1.2.3.0-$architecture-Release.msix")) {
             [IO.File]::WriteAllText((Join-Path $assetRoot $name), "fixture $name")
         }
     }
@@ -60,7 +60,7 @@ try {
     $verify = Join-Path $PSScriptRoot '..\verify-release-assets.ps1'
     & $verify -Directory $assetRoot -ChecksumPath $checksum -StorePackageVersion '1.2.3.0'
     $lines = @(Get-Content -LiteralPath $checksum)
-    if ($lines.Count -ne 6) { throw 'Release checksums must cover four direct installers and two MSIX packages.' }
+    if ($lines.Count -ne 8) { throw 'Release checksums must cover four direct installers, two portable ZIPs and two MSIX packages.' }
     foreach ($architecture in @('x64', 'arm64')) {
         $name = "MeowcalSub-1.2.3.0-$architecture-Release.msix"
         $hash = (Get-FileHash -LiteralPath (Join-Path $assetRoot $name) -Algorithm SHA256).Hash.ToLowerInvariant()
@@ -75,7 +75,7 @@ try {
     Assert-Throws { & $verify -Directory $assetRoot -ChecksumPath $checksum -StorePackageVersion '1.2.3.0' } 'exactly two Store'
     Remove-Item -LiteralPath (Join-Path $assetRoot 'stale.msix')
     & $verify -Directory $assetRoot -ChecksumPath $checksum
-    if (@(Get-Content -LiteralPath $checksum).Count -ne 4) { throw 'Direct-only checksum compatibility changed.' }
+    if (@(Get-Content -LiteralPath $checksum).Count -ne 6) { throw 'Direct-only checksum compatibility changed.' }
 } finally {
     Get-ChildItem -LiteralPath $assetRoot -File | Remove-Item -Force
     Remove-Item -LiteralPath $assetRoot -Force

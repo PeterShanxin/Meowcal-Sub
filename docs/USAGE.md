@@ -230,9 +230,18 @@ visible. Short gaps and successful retries do not show a notice.
 
 For update checks, open **Settings → Engine and updates → Check for updates**.
 Automatic checks occur at startup at most once per day. Checking does not
-itself download an application update; **Download and install** does.
+itself download an application update; **Download and install** does in the
+GitHub installer edition.
 
-Available updates show up to three formatted highlights
+Unreleased: The Microsoft Store edition uses the same automatic and manual
+checks. When the Store has an update for your installation, select **Open
+Microsoft Store** to install it there.
+
+The portable ZIP checks only for an official ZIP for the same architecture. Choose
+**Download portable ZIP**, extract it into a new folder, and open the new copy.
+It does not run an installer or replace the running copy.
+
+Available GitHub updates show up to three formatted highlights
 under **What's new**, without a separate scroll box. **Full release notes ↗**
 opens that version's complete GitHub release in your browser. The link remains
 available when the update has no summary.

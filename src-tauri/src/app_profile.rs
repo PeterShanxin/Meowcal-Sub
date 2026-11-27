@@ -7,6 +7,7 @@ pub enum AppProfile {
     Production,
     Development,
     Store,
+    Portable,
     StoreDevelopment,
 }
 
@@ -19,6 +20,8 @@ impl AppProfile {
             } else {
                 Self::Store
             }
+        } else if cfg!(feature = "portable") {
+            Self::Portable
         } else if cfg!(debug_assertions) {
             Self::Development
         } else {
@@ -32,6 +35,7 @@ impl AppProfile {
             Self::Production => "com.meowcal.sub",
             Self::Development => "com.meowcal.sub.dev",
             Self::Store => "com.meowcal.sub.store",
+            Self::Portable => "com.meowcal.sub.portable",
             Self::StoreDevelopment => "com.meowcal.sub.store.dev",
         }
     }
@@ -39,7 +43,7 @@ impl AppProfile {
     /// The compact name used on existing app surfaces.
     pub const fn display_name(self) -> &'static str {
         match self {
-            Self::Production | Self::Store => "Meowcal Sub",
+            Self::Production | Self::Store | Self::Portable => "Meowcal Sub",
             Self::Development | Self::StoreDevelopment => "Meowcal Sub - Dev",
         }
     }
@@ -125,6 +129,8 @@ mod tests {
             } else {
                 AppProfile::Store
             }
+        } else if cfg!(feature = "portable") {
+            AppProfile::Portable
         } else if cfg!(debug_assertions) {
             AppProfile::Development
         } else {

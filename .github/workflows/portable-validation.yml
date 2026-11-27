@@ -1,0 +1,49 @@
+name: Portable ZIP Validation
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/portable-validation.yml'
+      - '.github/actions/verify-portable/**'
+      - 'scripts/*portable*.ps1'
+      - 'scripts/portable-runtime.psm1'
+      - 'src-tauri/**'
+      - 'src/ui/update-*.ts'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  x64:
+    name: Extract and start x64
+    if: >-
+      (github.event_name == 'workflow_dispatch' || github.event.pull_request.head.repo.full_name == github.repository) &&
+      (github.actor == 'PeterShanxin' || github.actor == 'ianmeowmeow')
+    runs-on: windows-2025
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/verify-portable
+        with:
+          target: x86_64-pc-windows-msvc
+          architecture: x64
+
+  arm64:
+    name: Extract and start arm64
+    if: >-
+      (github.event_name == 'workflow_dispatch' || github.event.pull_request.head.repo.full_name == github.repository) &&
+      (github.actor == 'PeterShanxin' || github.actor == 'ianmeowmeow')
+    runs-on: windows-11-arm
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/verify-portable
+        with:
+          target: aarch64-pc-windows-msvc
+          architecture: arm64

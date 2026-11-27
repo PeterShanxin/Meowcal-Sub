@@ -124,6 +124,40 @@ test("Settings formats inline emphasis in the shipped update and expands actual 
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 });
 
+test("the Store update row checks the Store and opens its listing instead of installing", async ({
+  page,
+}, testInfo) => {
+  await page.goto("/");
+  await page.getByRole("button", { name: "Settings", exact: true }).click();
+  await page.evaluate(async () => {
+    const bridge = window.TauriBridge;
+    const originalInvoke = bridge.invoke;
+    window.storeUpdateCalls = [];
+    bridge.appIdentifier = async () => "com.meowcal.sub.store";
+    bridge.invoke = async (command, args) => {
+      if (command === "check_store_update" || command === "open_store_listing") {
+        window.storeUpdateCalls.push(command);
+        return true;
+      }
+      return originalInvoke(command, args);
+    };
+    const controller = document.querySelector("meowcal-app").controller;
+    controller.publish({ ...(await controller.updates.initialState()), settingsRead: "ready" });
+  });
+
+  await expect(page.getByLabel("Automatically check for updates")).toBeChecked();
+  await page.getByRole("button", { name: "Check for updates", exact: true }).click();
+  await expect(page.getByText("An update is available")).toBeVisible();
+  await expect(page.locator(".nav-indicator")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Download and install" })).toHaveCount(0);
+  await page.screenshot({ path: testInfo.outputPath("store-update-available.png") });
+  await page.getByRole("button", { name: "Open Microsoft Store", exact: true }).click();
+  expect(await page.evaluate(() => window.storeUpdateCalls)).toEqual([
+    "check_store_update",
+    "open_store_listing",
+  ]);
+});
+
 test("the updater limits metadata checks while downloads keep their own lifetime", async ({
   page,
 }) => {

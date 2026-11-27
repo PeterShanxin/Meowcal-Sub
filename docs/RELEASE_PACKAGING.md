@@ -90,13 +90,20 @@ the application tag. No application version is inferred or changed.
 `.github/workflows/release.yml` reserves the tag, calls `package.yml` once per
 architecture, then merges the artifacts and validates them. Each architecture
 must contribute exactly one MSI, one NSIS setup executable, and one updater
-signature, plus one Release MSIX with the requested Store version.
+signature, one official portable ZIP, plus one Release MSIX with the requested Store version.
+The portable ZIP has its own update channel and includes the executable and pinned Core.
+Packaging also includes the architecture-matched app-local Visual C++ runtime
+from the [Visual Studio redistributable directory](https://learn.microsoft.com/cpp/windows/redistributing-visual-cpp-files).
+You do not run a separate VC++ installer before launching the ZIP.
+Packaging extracts and starts the assembled ZIP before uploading it. Its SHA256 is listed
+with the Windows artifacts; the ZIP is never listed as a signed installer in `latest.json`.
 `scripts/verify-release-assets.ps1` enforces that and writes
 `SHA256SUMS.txt`; `scripts/build-updater-manifest.mjs` writes `latest.json`,
 which is where the updater reads the per-architecture installer URL and its
 minisign signature. The draft release attaches both unsigned MSIX packages and
 `SHA256SUMS.txt` covers the four direct installers and both MSIX packages.
-Store packages never enter `latest.json`. The opt-in release sync workflow
+Store packages never enter `latest.json`. The Store edition checks availability
+through Windows rather than reading this manifest. The opt-in release sync workflow
 submits them for Store certification after GitHub publication and requests
 immediate publication if certified; it does not bypass certification. The artifact-only Store workflow
 can still be dispatched independently. See [Store distribution](STORE_DISTRIBUTION.md).

@@ -39,6 +39,11 @@
         'stop_translation',
         'exit_translation',
         'record_update_check',
+        'record_automatic_update_check',
+        'check_store_update',
+        'check_portable_update',
+        'open_portable_update',
+        'open_store_listing',
     ];
 
     // =============================================================================

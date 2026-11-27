@@ -17,11 +17,24 @@ pub fn register<R: Runtime>(app: &tauri::AppHandle<R>) -> Result<(), String> {
         .resource_dir()
         .map_err(|error| format!("CORE_RESOURCE_DIR: {error}"))?;
     let store_root = crate::app_profile::store_core_storage_base()?;
+    let child_path = if cfg!(feature = "portable") {
+        // Bundled Core finds CRT beside its executable. Downloaded runtime
+        // subprocesses inherit PATH and can also load the same app-local CRT.
+        let portable_runtime = resource_dir.join("resources/core");
+        let inherited = std::env::var_os("PATH").unwrap_or_default();
+        let paths = std::iter::once(portable_runtime).chain(std::env::split_paths(&inherited));
+        Some(
+            std::env::join_paths(paths)
+                .map_err(|error| format!("CORE_PORTABLE_RUNTIME_PATH: {error}"))?,
+        )
+    } else {
+        crate::app_profile::store_child_path()?
+    };
     set_launch(
         resolve_executable(profile, &resource_dir)?,
         profile,
         store_root,
-        crate::app_profile::store_child_path()?,
+        child_path,
     )
 }
 

@@ -373,7 +373,9 @@ Shared contracts have one owner before parallel decomposition begins:
   Download and installation do not use the metadata deadline.
   `update_diagnostics.rs` records source, timing, result, and error category in
   the session log without raw errors or request URLs. Browser mode has no updater;
-  Store builds keep Microsoft Store as their update owner.
+  `store_updates.rs` checks the installed MSIX through Windows StoreContext
+  and opens this app’s Store listing. The same automatic-check preference and
+  24-hour gate apply to both channels; Store builds never use the GitHub feed.
   `ui/update-notes.ts` owns the Highlights and Fixes sections in the updater
   feed and the three-item Settings preview. `ui/update-notes-view.ts` renders
   emphasis and code through Lit text bindings, never release-supplied HTML.
