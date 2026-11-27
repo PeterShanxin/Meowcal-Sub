@@ -142,7 +142,7 @@ test("the Store update row checks the Store and opens its listing instead of ins
       return originalInvoke(command, args);
     };
     const controller = document.querySelector("meowcal-app").controller;
-    controller.publish(await controller.updates.initialState());
+    controller.publish({ ...(await controller.updates.initialState()), settingsRead: "ready" });
   });
 
   await expect(page.getByLabel("Automatically check for updates")).toBeChecked();

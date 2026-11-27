@@ -68,8 +68,18 @@ $global:LASTEXITCODE = 0
     Copy-Item "$repositoryRoot/scripts/package-build.psm1" "$fixture/scripts/"
     Copy-Item "$repositoryRoot/scripts/build-portable.ps1" "$fixture/scripts/"
     @'
+function Copy-PortableCrt($Architecture, $Directory) {
+    foreach ($name in @('msvcp140.dll', 'vcruntime140.dll')) {
+        Set-Content -LiteralPath (Join-Path $Directory $name) -Value $Architecture
+        Set-Content -LiteralPath (Join-Path $Directory "resources/core/$name") -Value $Architecture
+    }
+}
+Export-ModuleMember -Function Copy-PortableCrt
+'@ | Set-Content "$fixture/scripts/portable-runtime.psm1"
+    @'
 param($Directory)
-foreach ($name in @('Meowcal Sub.exe', 'resources/core/meowcal-core.exe', 'README.txt', 'LICENSE')) {
+foreach ($name in @('Meowcal Sub.exe', 'vcruntime140.dll', 'resources/core/vcruntime140.dll',
+    'resources/core/meowcal-core.exe', 'README.txt', 'LICENSE')) {
     if (!(Test-Path -LiteralPath (Join-Path $Directory $name) -PathType Leaf)) { throw "Fixture ZIP lacks $name." }
 }
 if ($global:meowcalPackageTestState.Failure -eq 'portable-startup') { throw 'Fixture portable startup failed.' }

@@ -2,7 +2,9 @@
 param([Parameter(Mandatory)][string]$Directory)
 
 $ErrorActionPreference = 'Stop'
-foreach ($entry in @('Meowcal Sub.exe', 'resources\core\meowcal-core.exe', 'resources\core\meowcal-core.json', 'resources\core\LICENSE', 'README.txt', 'LICENSE')) {
+foreach ($entry in @('Meowcal Sub.exe', 'vcruntime140.dll', 'msvcp140.dll', 'resources\core\meowcal-core.exe',
+    'resources\core\meowcal-core.json', 'resources\core\LICENSE', 'resources\core\vcruntime140.dll',
+    'resources\core\msvcp140.dll', 'README.txt', 'LICENSE')) {
     if (!(Test-Path -LiteralPath (Join-Path $Directory $entry) -PathType Leaf)) {
         throw "Incomplete portable ZIP: missing $entry."
     }

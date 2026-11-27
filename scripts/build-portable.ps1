@@ -6,6 +6,7 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+Import-Module (Join-Path $PSScriptRoot 'portable-runtime.psm1') -Force
 $repo = Split-Path -Parent $PSScriptRoot
 $tauri = Join-Path $repo 'src-tauri'
 $version = (Get-Content -LiteralPath (Join-Path $tauri 'tauri.conf.json') -Raw | ConvertFrom-Json).version
@@ -24,6 +25,7 @@ try {
     Copy-Item -LiteralPath (Join-Path $tauri 'resources') -Destination $stage -Recurse
     Copy-Item -LiteralPath (Join-Path $repo 'licenses') -Destination $stage -Recurse
     Copy-Item -LiteralPath (Join-Path $repo 'LICENSE') -Destination $stage
+    Copy-PortableCrt -Architecture $Architecture -Directory $stage
     @'
 Meowcal Sub portable
 
@@ -31,6 +33,7 @@ Extract this ZIP to a normal folder and open Meowcal Sub.exe.
 Requires Windows 11 with Microsoft Edge WebView2 Runtime.
 To update, close the app, extract the new ZIP to a fresh folder, and open it.
 Settings and engine data stay in a dedicated Windows profile, not the ZIP folder.
+The included Microsoft Visual C++ runtime is distributed under Microsoft's license terms.
 '@ | Set-Content -LiteralPath (Join-Path $stage 'README.txt') -Encoding utf8NoBOM
     Compress-Archive -Path (Join-Path $stage '*') -DestinationPath $zip -Force
     Expand-Archive -LiteralPath $zip -DestinationPath $smoke

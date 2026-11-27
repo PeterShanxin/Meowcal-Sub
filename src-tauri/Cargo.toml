@@ -27,7 +27,7 @@ test-windows = []
 core-source-candidate = []
 # Microsoft Store owns application updates and has an isolated data namespace.
 portable = []
-store = ["windows/Storage_Search", "windows/ApplicationModel", "windows/Services_Store", "dep:windows-future"]
+store = ["windows/Storage_Search", "windows/ApplicationModel", "windows/Services_Store", "windows/Win32_UI_Shell", "dep:windows-future"]
 
 # =============================================================================
 # DEPENDENCIES

@@ -7,6 +7,7 @@ on:
       - '.github/workflows/portable-validation.yml'
       - '.github/actions/verify-portable/**'
       - 'scripts/*portable*.ps1'
+      - 'scripts/portable-runtime.psm1'
       - 'src-tauri/**'
       - 'src/ui/update-*.ts'
   workflow_dispatch:
