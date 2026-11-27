@@ -284,6 +284,7 @@ jobs:
             Where-Object {
               $_.Extension -eq ".msix" -or
               $_.Extension -eq ".msi" -or
+              $_.Name -like "*-portable.zip" -or
               $_.Name -like "*-setup.exe" -or
               $_.Name -eq "SHA256SUMS.txt" -or
               $_.Name -eq "latest.json"

@@ -1,4 +1,4 @@
-import type { PendingUpdate, UiSnapshot, UpdatesApi } from "./contracts";
+import type { PendingUpdate, UiSnapshot } from "./contracts";
 import {
   advanceDownload,
   downloadPercent,
@@ -15,6 +15,10 @@ export type { UpdateCheckIntent } from "./update-state";
 
 class UpdateCheckTimeout extends Error {}
 class UpdateCheckCancelled extends Error {}
+
+const STORE_UPDATE = "store";
+interface PortableUpdate { portableVersion: string }
+type CheckedUpdate = PendingUpdate | typeof STORE_UPDATE | PortableUpdate;
 
 interface ActiveCheck {
   requestId: number;
@@ -36,8 +40,9 @@ interface ActiveCheck {
  * which is unlike every other action in the app and is worth reading on its own.
  */
 export class UpdateController {
-  private pending: PendingUpdate | null = null;
+  private pending: CheckedUpdate | null = null;
   private storeManaged = false;
+  private portable = false;
   private inFlightCheck: ActiveCheck | null = null;
   private nextCheckId = 0;
   private disposed = false;
@@ -54,9 +59,10 @@ export class UpdateController {
     const identifier = await window.TauriBridge.appIdentifier?.().catch(() => null);
     this.storeManaged =
       identifier === "com.meowcal.sub.store" || identifier === "com.meowcal.sub.store.dev";
-    if (this.storeManaged) {
+    this.portable = identifier === "com.meowcal.sub.portable";
+    if (this.storeManaged || this.portable) {
       const appVersion = (await window.TauriBridge.appVersion?.().catch(() => null)) ?? null;
-      return { update: { kind: "store" }, appVersion };
+      return { update: { kind: this.storeManaged ? "store" : "idle" }, appVersion };
     }
     const updates = window.TauriBridge.updates;
     if (!updates) return { update: { kind: "unsupported" }, appVersion: null };
@@ -70,7 +76,20 @@ export class UpdateController {
 
   async check(intent: UpdateCheckIntent = "manual"): Promise<void> {
     const updates = window.TauriBridge.updates;
-    if (this.disposed || this.applying || this.storeManaged || !updates) return;
+    const lookup: (() => Promise<CheckedUpdate | null>) | null = this.storeManaged
+      ? async () =>
+          (await window.TauriBridge.invoke<boolean>("check_store_update")) === true
+            ? STORE_UPDATE
+            : null
+      : this.portable
+        ? async () => {
+            const portableVersion = await window.TauriBridge.invoke<string | null>("check_portable_update");
+            return portableVersion ? { portableVersion } : null;
+          }
+        : updates
+        ? () => updates.check({ timeout: UPDATE_CHECK_TIMEOUT_MS })
+        : null;
+    if (this.disposed || this.applying || !lookup) return;
 
     if (this.inFlightCheck) {
       if (intent === "manual" && this.inFlightCheck.intent === "automatic") {
@@ -98,7 +117,7 @@ export class UpdateController {
       this.publish({ update: { kind: "checking" }, error: null, notice: null });
     }
     let timer!: ReturnType<typeof setTimeout>;
-    const deadline = new Promise<PendingUpdate | null>((_, reject) => {
+    const deadline = new Promise<CheckedUpdate | null>((_, reject) => {
       attempt.cancel = () => {
         attempt.cancelled = true;
         reject(new UpdateCheckCancelled());
@@ -110,18 +129,18 @@ export class UpdateController {
     });
     this.inFlightCheck = attempt;
     this.record(attempt, "started");
-    attempt.promise = this.runCheck(attempt, updates, deadline, timer);
+    attempt.promise = this.runCheck(attempt, lookup, deadline, timer);
     return attempt.promise;
   }
 
   private async runCheck(
     attempt: ActiveCheck,
-    updates: UpdatesApi,
-    deadline: Promise<PendingUpdate | null>,
+    lookup: () => Promise<CheckedUpdate | null>,
+    deadline: Promise<CheckedUpdate | null>,
     timer: ReturnType<typeof setTimeout>,
   ): Promise<void> {
     const request = Promise.resolve()
-      .then(() => updates.check({ timeout: UPDATE_CHECK_TIMEOUT_MS }))
+      .then(lookup)
       .then((update) => {
         // The native IPC can finish after our deadline or after the page closes.
         if (attempt.expired || attempt.cancelled) {
@@ -138,9 +157,14 @@ export class UpdateController {
       }
       this.replacePending(update);
       this.publish({
-        update: update
-          ? { kind: "available", version: update.version, notes: update.notes }
-          : { kind: "upToDate" },
+        update:
+          update === STORE_UPDATE
+            ? { kind: "storeAvailable" }
+            : update && "portableVersion" in update
+              ? { kind: "portableAvailable", version: update.portableVersion }
+              : update
+              ? { kind: "available", version: update.version, notes: update.notes }
+              : { kind: "upToDate" },
       });
       this.record(attempt, "finished", { result: update ? "available" : "upToDate" });
     } catch (error) {
@@ -197,12 +221,12 @@ export class UpdateController {
     });
   }
 
-  private close(update: PendingUpdate | null): void {
-    if (update)
+  private close(update: CheckedUpdate | null): void {
+    if (update && update !== STORE_UPDATE && !("portableVersion" in update))
       void update.close().catch(() => console.warn("[Meowcal] update resource close failed"));
   }
 
-  private replacePending(update: PendingUpdate | null): void {
+  private replacePending(update: CheckedUpdate | null): void {
     if (this.pending !== update) this.close(this.pending);
     this.pending = update;
   }
@@ -221,9 +245,8 @@ export class UpdateController {
     if (
       this.disposed ||
       this.applying ||
-      this.storeManaged ||
       window.TauriBridge.isBrowserMode() ||
-      !updates
+      (!this.storeManaged && !this.portable && !updates)
     )
       return null;
     if (!shouldCheckForUpdatesAutomatically(settings, clock())) return null;
@@ -247,13 +270,46 @@ export class UpdateController {
     const updates = window.TauriBridge.updates;
     const update = this.pending;
     const checking = this.inFlightCheck;
+    if (this.storeManaged) {
+      if (this.disposed || this.applying || update !== STORE_UPDATE) return;
+      this.applying = true;
+      try {
+        await window.TauriBridge.invoke("open_store_listing");
+      } catch {
+        this.replacePending(null);
+        if (!this.disposed)
+          this.publish({
+            update: {
+              kind: "error",
+              message: "Could not open Microsoft Store. Try opening it from Start.",
+            },
+          });
+      } finally {
+        this.applying = false;
+      }
+      return;
+    }
+    if (this.portable) {
+      if (this.disposed || this.applying || !update || update === STORE_UPDATE || !("portableVersion" in update)) return;
+      this.applying = true;
+      try {
+        await window.TauriBridge.invoke("open_portable_update", { version: update.portableVersion });
+      } catch (error) {
+        if (!this.disposed)
+          this.publish({ update: { kind: "error", message: UpdateController.message(error) } });
+      } finally {
+        this.applying = false;
+      }
+      return;
+    }
     if (
       this.disposed ||
       this.applying ||
       (checking && checking.intent !== "automatic") ||
-      this.storeManaged ||
       !updates ||
-      !update
+      !update ||
+      update === STORE_UPDATE ||
+      "portableVersion" in update
     )
       return;
 

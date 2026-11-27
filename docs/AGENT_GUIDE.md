@@ -179,8 +179,9 @@ treats a missing or unexplained answer like a missing validation result.
   Existing drafts are protected and never deleted automatically. A trusted
   manual dispatch on `main` reads published Store package versions and any
   pending submission before release preparation.
-  They exclude the Tauri updater and experimental WinUI helper, and isolate
-  default config/engine storage from direct installations. Follow
+  They exclude the Tauri updater and experimental WinUI helper, query only
+  native Store package availability, and isolate default config/engine storage
+  from direct installations. Follow
   [Store distribution](STORE_DISTRIBUTION.md); never publish debug/local
   identities or treat loose registration as signed install/upgrade evidence.
 

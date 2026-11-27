@@ -56,7 +56,7 @@ fn main() {
     let args: Vec<String> = std::env::args().collect();
     let http_only_mode = args.iter().any(|arg| arg == "--http-only");
     let mut context = tauri::generate_context!();
-    if cfg!(feature = "store") {
+    if cfg!(any(feature = "store", feature = "portable")) {
         context.config_mut().identifier = meowcal_sub::app_profile::AppProfile::current()
             .identifier()
             .into();
@@ -80,7 +80,7 @@ fn main() {
 
     // --- Step 2: Build and run the Tauri app ---
     let builder = tauri::Builder::default();
-    #[cfg(not(feature = "store"))]
+    #[cfg(not(any(feature = "store", feature = "portable")))]
     let builder = builder
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init());
@@ -137,6 +137,10 @@ fn main() {
             // In-app update
             meowcal_sub::update_handoff::prepare_for_update,
             meowcal_sub::update_diagnostics::record_update_check,
+            meowcal_sub::store_updates::check_store_update,
+            meowcal_sub::store_updates::open_store_listing,
+            meowcal_sub::portable_updates::check_portable_update,
+            meowcal_sub::portable_updates::open_portable_update,
         ])
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
@@ -220,6 +224,9 @@ fn main() {
                 &app.state::<AppState>(),
             );
 
+            if cfg!(feature = "portable") {
+                info!("Portable workspace ready");
+            }
             Ok(())
         })
         // Keep long-lived windows available from the tray.

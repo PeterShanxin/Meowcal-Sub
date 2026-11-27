@@ -51,7 +51,7 @@ describe("initial state", () => {
       appVersion: null,
     });
   });
-  it("leaves Store updates to Microsoft Store, even if an updater API is present", async () => {
+  it("checks only the Store and opens its listing, even if a GitHub updater is present", async () => {
     const check = vi.fn();
     const { controller, invoke } = harness({ currentVersion: vi.fn(), check, restart: vi.fn() });
     window.TauriBridge.appIdentifier = async () => "com.meowcal.sub.store";
@@ -60,11 +60,12 @@ describe("initial state", () => {
       update: { kind: "store" },
       appVersion: "0.8.6",
     });
+    invoke.mockResolvedValue(true);
     await controller.check();
-    expect(await controller.checkAutomatic({ autoCheckUpdates: true })).toBeNull();
+    expect(invoke).toHaveBeenCalledWith("check_store_update", undefined);
     await controller.install();
+    expect(invoke).toHaveBeenCalledWith("open_store_listing", undefined);
     expect(check).not.toHaveBeenCalled();
-    expect(invoke).not.toHaveBeenCalled();
   });
 
   it("recognizes the isolated Store development build without an updater", async () => {
@@ -109,6 +110,59 @@ describe("initial state", () => {
       update: { kind: "unsupported" },
       appVersion: null,
     });
+  });
+});
+
+describe("Store checks", () => {
+  async function storeHarness() {
+    const githubCheck = vi.fn().mockResolvedValue(pending());
+    const result = harness({ currentVersion: vi.fn(), check: githubCheck, restart: vi.fn() });
+    window.TauriBridge.appIdentifier = async () => "com.meowcal.sub.store";
+    await result.controller.initialState();
+    return { ...result, githubCheck };
+  }
+
+  it("does not offer a GitHub release before it is available through Microsoft Store", async () => {
+    const { controller, githubCheck, invoke, patches } = await storeHarness();
+    invoke.mockResolvedValue(false);
+
+    await controller.check();
+    await controller.install();
+
+    expect(patches.at(-1)?.update).toEqual({ kind: "upToDate" });
+    expect(githubCheck).not.toHaveBeenCalled();
+    expect(invoke.mock.calls).toEqual([["check_store_update", undefined]]);
+  });
+
+  it("uses the existing once-per-day startup gate and keeps manual checks available", async () => {
+    const { controller, invoke, patches } = await storeHarness();
+    invoke.mockResolvedValue(true);
+    const day = 86_400_000;
+    const last = await controller.checkAutomatic({}, () => day);
+    expect(last).toBe(day);
+    expect(patches.at(-1)?.update).toEqual({ kind: "storeAvailable" });
+    expect(
+      await controller.checkAutomatic({ lastUpdateCheckTimeMs: last }, () => day + 1),
+    ).toBeNull();
+    await controller.check();
+    expect(invoke.mock.calls).toEqual([
+      ["check_store_update", undefined],
+      ["check_store_update", undefined],
+    ]);
+  });
+
+  it("stays quiet if the startup check fails and reports failure for a manual retry", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const { controller, githubCheck, invoke, patches } = await storeHarness();
+    const message = "Cannot check Microsoft Store for updates right now. Try again.";
+    invoke.mockRejectedValue(message);
+
+    await controller.check("automatic");
+    expect(patches).toEqual([]);
+    await controller.check();
+
+    expect(patches.at(-1)?.update).toEqual({ kind: "error", message });
+    expect(githubCheck).not.toHaveBeenCalled();
   });
 });
 

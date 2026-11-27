@@ -13,9 +13,14 @@ describe("download progress", () => {
   it("explains Store ownership without offering an installer action", () => {
     const result = deriveUpdatePresentation({ kind: "store" }, "0.8.6");
     expect(result.detail).toContain("0.8.6");
-    expect(result.detail).toContain("Microsoft Store Library");
-    expect(result.action).toBe("none");
-    expect(result.actionDisabled).toBe(true);
+    expect(result.action).toBe("check");
+    expect(result.actionDisabled).toBe(false);
+  });
+
+  it("offers the Store listing without showing GitHub version notes", () => {
+    const result = deriveUpdatePresentation({ kind: "storeAvailable" }, "0.8.6");
+    expect(result.actionLabel).toBe("Open Microsoft Store");
+    expect(result.notes).toBeNull();
   });
   // `Progress` carries one chunk's length, not a running total. Treating it as
   // a position pins the bar near zero for the whole download.

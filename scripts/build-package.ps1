@@ -86,6 +86,10 @@ try {
         if ($LASTEXITCODE -ne 0) { throw "Tauri package build failed for $Architecture." }
     }
 
+    Invoke-PackageBuildStep -Name 'Build and verify portable ZIP' -Steps $steps -Action {
+        & (Join-Path $PSScriptRoot 'build-portable.ps1') -TargetTriple $targetTriple -Architecture $Architecture -CargoTargetDir $CargoTargetDir
+    }
+
     $bundleDirectory = Join-Path $CargoTargetDir "$targetTriple\release\bundle"
     Write-Host "Package output: $bundleDirectory" -ForegroundColor Green
     Get-ChildItem -LiteralPath $bundleDirectory -Recurse -File |

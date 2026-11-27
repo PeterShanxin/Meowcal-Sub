@@ -96,7 +96,8 @@ signature, plus one Release MSIX with the requested Store version.
 which is where the updater reads the per-architecture installer URL and its
 minisign signature. The draft release attaches both unsigned MSIX packages and
 `SHA256SUMS.txt` covers the four direct installers and both MSIX packages.
-Store packages never enter `latest.json`. The opt-in release sync workflow
+Store packages never enter `latest.json`. The Store edition checks availability
+through Windows rather than reading this manifest. The opt-in release sync workflow
 submits them for Store certification after GitHub publication and requests
 immediate publication if certified; it does not bypass certification. The artifact-only Store workflow
 can still be dispatched independently. See [Store distribution](STORE_DISTRIBUTION.md).

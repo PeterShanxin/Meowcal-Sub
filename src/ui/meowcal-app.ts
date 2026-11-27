@@ -289,7 +289,7 @@ export class MeowcalApp extends LitElement {
         <nav class="app-nav" aria-label=${t("Main navigation")}>
           ${this.navButton("home", t("Home"), "home")}
           ${this.navButton("appearance", t("Subtitle style"), "subtitles")}
-          ${this.navButton("settings", t("Settings"), "gear", this.snapshot.update.kind === "available")}
+          ${this.navButton("settings", t("Settings"), "gear", this.snapshot.update.kind === "available" || this.snapshot.update.kind === "storeAvailable" || this.snapshot.update.kind === "portableAvailable")}
         </nav>
 
         ${this.renderMessage()}

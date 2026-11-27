@@ -1,0 +1,17 @@
+{
+  "identifier": "com.meowcal.sub.portable",
+  "app": {
+    "security": {
+      "capabilities": ["default", "overlay-selector"]
+    }
+  },
+  "bundle": {
+    "active": false,
+    "createUpdaterArtifacts": false
+  },
+  "plugins": {
+    "updater": {
+      "endpoints": []
+    }
+  }
+}

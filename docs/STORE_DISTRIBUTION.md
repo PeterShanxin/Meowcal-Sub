@@ -69,9 +69,11 @@ signature does not guarantee that Defender will accept every runtime sample.
 ## Updates and data
 
 The `store` Cargo feature removes the updater and restart plugins. The Store
-Tauri configuration excludes their capabilities and updater endpoints. Settings
-explains that updates come from the Microsoft Store Library; it does not offer
-GitHub update checks, downloads, or an automatic-check preference.
+Tauri configuration excludes their capabilities and updater endpoints.
+The unreleased Settings flow checks Microsoft Store for updates to the
+installed MSIX package. It uses the same startup limit and manual check as
+the GitHub build. A Store result can open the product page; it cannot launch
+the GitHub installer. GitHub releases do not determine Store availability.
 
 Store builds use `com.meowcal.sub.store`; debug Store builds use
 `com.meowcal.sub.store.dev`. Configuration, logs and WebView data are separate
