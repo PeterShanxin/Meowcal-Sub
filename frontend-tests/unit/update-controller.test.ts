@@ -68,6 +68,31 @@ describe("initial state", () => {
     expect(check).not.toHaveBeenCalled();
   });
 
+  it("offers only the matching portable ZIP, without closing the app or installing", async () => {
+    const check = vi.fn().mockResolvedValue(pending());
+    const restart = vi.fn();
+    const { controller, invoke, patches } = harness({ currentVersion: vi.fn(), check, restart });
+    window.TauriBridge.appIdentifier = async () => "com.meowcal.sub.portable";
+    await controller.initialState();
+    await controller.check();
+    expect(patches.at(-1)?.update).toEqual({ kind: "upToDate" });
+
+    invoke.mockResolvedValue("0.12.0");
+    const day = 86_400_000;
+    expect(await controller.checkAutomatic({}, () => day)).toBe(day);
+    expect(await controller.checkAutomatic({ lastUpdateCheckTimeMs: day }, () => day + 1)).toBeNull();
+    expect(patches.at(-1)?.update).toEqual({ kind: "portableAvailable", version: "0.12.0" });
+    await controller.install();
+
+    expect(invoke.mock.calls).toEqual([
+      ["check_portable_update", undefined],
+      ["check_portable_update", undefined],
+      ["open_portable_update", { version: "0.12.0" }],
+    ]);
+    expect(check).not.toHaveBeenCalled();
+    expect(restart).not.toHaveBeenCalled();
+  });
+
   it("recognizes the isolated Store development build without an updater", async () => {
     const { controller } = harness();
     window.TauriBridge.appIdentifier = async () => "com.meowcal.sub.store.dev";

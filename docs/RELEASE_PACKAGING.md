@@ -90,7 +90,10 @@ the application tag. No application version is inferred or changed.
 `.github/workflows/release.yml` reserves the tag, calls `package.yml` once per
 architecture, then merges the artifacts and validates them. Each architecture
 must contribute exactly one MSI, one NSIS setup executable, and one updater
-signature, plus one Release MSIX with the requested Store version.
+signature, one official portable ZIP, plus one Release MSIX with the requested Store version.
+The portable ZIP has its own update channel and includes the executable and pinned Core.
+Packaging extracts and starts the assembled ZIP before uploading it. Its SHA256 is listed
+with the Windows artifacts; the ZIP is never listed as a signed installer in `latest.json`.
 `scripts/verify-release-assets.ps1` enforces that and writes
 `SHA256SUMS.txt`; `scripts/build-updater-manifest.mjs` writes `latest.json`,
 which is where the updater reads the per-architecture installer URL and its
