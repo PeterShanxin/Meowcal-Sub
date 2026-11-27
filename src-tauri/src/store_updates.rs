@@ -21,8 +21,10 @@ async fn check_native(app: &tauri::AppHandle) -> Result<bool, String> {
     use std::time::Duration;
     use tauri::Manager;
     use windows::{
-        core::Interface, ApplicationModel::Package, Services::Store::StoreContext,
-        Win32::UI::Shell::IInitializeWithWindow,
+        core::Interface,
+        ApplicationModel::Package,
+        Services::Store::StoreContext,
+        Win32::{Foundation::HWND, UI::Shell::IInitializeWithWindow},
     };
 
     // Initiate StoreContext on the desktop UI thread and associate the main
@@ -37,7 +39,8 @@ async fn check_native(app: &tauri::AppHandle) -> Result<bool, String> {
             let window = ui_app
                 .get_webview_window("main")
                 .ok_or("Main window is unavailable")?;
-            let hwnd = window.hwnd().map_err(|error| error.to_string())?;
+            // Tauri and StoreContext use different windows crate versions.
+            let hwnd = HWND(window.hwnd().map_err(|error| error.to_string())?.0);
             let start_for_window = || -> windows::core::Result<_> {
                 let family = Package::Current()?.Id()?.FamilyName()?;
                 let context = StoreContext::GetDefault()?;
