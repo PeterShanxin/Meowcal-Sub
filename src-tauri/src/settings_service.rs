@@ -13,6 +13,8 @@ use crate::capture_target::CaptureSelection;
 use crate::config::{save_config, AppConfig, WindowPreferences};
 use crate::sync_utils::lock_or_recover;
 
+const LAST_UPDATE_CHECK: &str = "lastUpdateCheckTimeMs";
+
 /// The settings currently in effect, once startup has finished loading them.
 pub async fn current(state: &AppState) -> Result<AppConfig, String> {
     state.startup_gate.wait_until_ready().await?;
@@ -91,6 +93,34 @@ pub async fn save_language(
     Ok(())
 }
 
+/// Persist only the update clock. A completed background check must not reapply
+/// a stale webview settings snapshot or reconfigure a live translation engine.
+pub async fn save_update_check_time(
+    app: AppHandle,
+    state: &AppState,
+    completed_at_ms: u64,
+) -> Result<(), String> {
+    state.startup_gate.wait_until_ready().await?;
+    let _save = state.settings_save.lock().await;
+    async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+        crate::config_save::update_live(
+            &state.config,
+            |config| set_last_update_check(config, completed_at_ms),
+            |config| save_config(&app, config),
+        )
+        .map(|_| ())
+    })
+    .await
+    .map_err(|error| format!("Failed to save the update clock: {error}"))?
+}
+
+fn set_last_update_check(config: &mut AppConfig, completed_at_ms: u64) {
+    config
+        .unmodelled
+        .insert(LAST_UPDATE_CHECK.into(), completed_at_ms.into());
+}
+
 /// Fold app-owned state back into the settings the UI submitted.
 ///
 /// `window_preferences` is `None` when there is no main window to measure, in
@@ -103,6 +133,13 @@ fn merge_app_owned_state(
 ) -> AppConfig {
     let mut updated = submitted;
     updated.ui_language = live.ui_language;
+    if let Some(value) = live.unmodelled.get(LAST_UPDATE_CHECK) {
+        updated
+            .unmodelled
+            .insert(LAST_UPDATE_CHECK.into(), value.clone());
+    } else {
+        updated.unmodelled.remove(LAST_UPDATE_CHECK);
+    }
 
     updated.last_capture_region = selection.map(|s| s.region);
     updated.last_capture_scale_factor = selection.map(|s| s.monitor.scale_factor);

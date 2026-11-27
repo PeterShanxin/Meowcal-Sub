@@ -166,6 +166,15 @@ pub async fn save_settings(
     crate::settings_service::save(app, &state, settings).await
 }
 
+#[tauri::command]
+pub async fn record_automatic_update_check(
+    completed_at_ms: u64,
+    state: State<'_, AppState>,
+    app: AppHandle,
+) -> Result<(), String> {
+    crate::settings_service::save_update_check_time(app, &state, completed_at_ms).await
+}
+
 // =============================================================================
 // CAPTURE REGION COMMANDS
 // =============================================================================

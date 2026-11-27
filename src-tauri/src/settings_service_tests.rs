@@ -2,6 +2,23 @@ use super::*;
 use crate::capture_target::CaptureMonitor;
 use crate::config::CaptureRegion;
 
+#[test]
+fn background_update_clock_leaves_engine_preferences_and_newer_settings_intact() {
+    let mut live = AppConfig::default();
+    live.translation.foundry_local.cpu_only = true;
+    set_last_update_check(&mut live, 12345);
+
+    assert!(live.translation.foundry_local.cpu_only);
+    assert_eq!(live.unmodelled[LAST_UPDATE_CHECK], 12345);
+
+    // A settings save from a webview that started before the check must not
+    // clear the app-owned clock.
+    let mut stale = AppConfig::default();
+    set_last_update_check(&mut stale, 100);
+    let merged = merge_app_owned_state(stale, None, None, &live);
+    assert_eq!(merged.unmodelled[LAST_UPDATE_CHECK], 12345);
+}
+
 fn selected(region: CaptureRegion) -> CaptureSelection {
     CaptureSelection::new(
         region,
