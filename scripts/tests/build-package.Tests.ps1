@@ -35,7 +35,9 @@ function npx {
         Lto = $env:CARGO_PROFILE_RELEASE_LTO
         Core = $env:MEOWCAL_CORE_EXECUTABLE
     })
-    $global:LASTEXITCODE = if ($global:meowcalPackageTestState.Failure -eq 'tauri') { 29 } else { 0 }
+    $isPortable = $args -contains 'portable'
+    $global:LASTEXITCODE = if ($global:meowcalPackageTestState.Failure -eq 'tauri' -or
+        ($isPortable -and $global:meowcalPackageTestState.Failure -eq 'portable-build')) { 29 } else { 0 }
     $target = $args[[array]::IndexOf($args, '--target') + 1]
     $bundle = Join-Path $env:CARGO_TARGET_DIR "$target/release/bundle/nsis"
     New-Item -ItemType Directory -Path $bundle -Force | Out-Null
@@ -64,6 +66,14 @@ param($Architecture)
 $global:LASTEXITCODE = 0
 '@ | Set-Content "$fixture/scripts/build-overlayhost.ps1"
     Copy-Item "$repositoryRoot/scripts/package-build.psm1" "$fixture/scripts/"
+    Copy-Item "$repositoryRoot/scripts/build-portable.ps1" "$fixture/scripts/"
+    @'
+param($Directory)
+foreach ($name in @('Meowcal Sub.exe', 'resources/core/meowcal-core.exe', 'README.txt', 'LICENSE')) {
+    if (!(Test-Path -LiteralPath (Join-Path $Directory $name) -PathType Leaf)) { throw "Fixture ZIP lacks $name." }
+}
+if ($global:meowcalPackageTestState.Failure -eq 'portable-startup') { throw 'Fixture portable startup failed.' }
+'@ | Set-Content "$fixture/scripts/test-portable-startup.ps1"
     @'
 function Assert-StoreIdentity { }
 function Get-StoreMakeAppx { 'Write-FixtureMsix' }
@@ -81,6 +91,8 @@ Export-ModuleMember -Function *
         Set-Content "$fixture/src-tauri/icons/$file" 'fixture'
     }
     Set-Content "$fixture/src-tauri/tauri.store.conf.json" '{}'
+    Set-Content "$fixture/src-tauri/tauri.portable.conf.json" '{}'
+    Set-Content "$fixture/src-tauri/tauri.conf.json" '{"version":"1.2.3"}'
     Set-Content "$fixture/LICENSE" 'fixture'
     Set-Content "$fixture/LICENSE-NOTICE.md" 'fixture'
     foreach ($variant in @('package', 'store')) {
@@ -105,6 +117,7 @@ Export-ModuleMember -Function *
                 Set-Content "$fixture/scripts/build-$variant.ps1"
             $failureModes = @('', 'fetch', 'handshake', 'empty-handshake', 'tauri', 'report')
             if ($variant -eq 'store') { $failureModes += @('store-tests', 'makeappx') }
+            else { $failureModes += @('portable-build', 'portable-startup') }
             foreach ($failureMode in $failureModes) {
                 $global:meowcalPackageTestState.Failure = $failureMode
                 foreach ($name in $environmentNames) { [Environment]::SetEnvironmentVariable($name, 'caller-value') }
@@ -163,13 +176,19 @@ Export-ModuleMember -Function *
                         'store-tests' { 'Store application tests' }
                         'makeappx' { 'Validate and pack MSIX' }
                         'tauri' { if ($variant -eq 'store') { 'Build Store application' } else { 'Build and sign Tauri bundles' } }
+                        { $_ -in @('portable-build', 'portable-startup') } { 'Build and verify portable ZIP' }
                     }
                     Assert-Equal $expectedStage $report.steps[-1].name 'Failure must stop at the expected stage.'
                 } elseif (@($report.steps | Where-Object { -not $_.succeeded }).Count) { throw 'Successful build reported a failed stage.' }
                 if (-not $global:meowcalPackageTestState.Failure) {
-                    $expectedCommands = if ($variant -eq 'store') { 3 } else { 2 }
+                    $expectedCommands = 3
                     Assert-Equal $expectedCommands $global:meowcalPackageTestState.Commands.Count 'Packaging must execute its tests and Tauri build.'
                     if ($global:meowcalPackageTestState.Commands[-1].Arguments -notcontains '--locked') { throw 'The product build must use its Cargo lockfile.' }
+                    if ($variant -eq 'package' -and
+                        ($global:meowcalPackageTestState.Commands[-1].Arguments -notcontains 'portable' -or
+                        @(Get-ChildItem -LiteralPath $targetDirectory -Recurse -Filter 'Meowcal.Sub_1.2.3_*-portable.zip').Count -ne 1)) {
+                        throw 'Direct packaging must produce exactly one portable ZIP from the portable build.'
+                    }
                 }
             }
         }

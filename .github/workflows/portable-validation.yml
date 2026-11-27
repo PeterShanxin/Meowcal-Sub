@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - '.github/workflows/portable-validation.yml'
+      - '.github/actions/verify-portable/**'
       - 'scripts/*portable*.ps1'
       - 'src-tauri/**'
       - 'src/ui/update-*.ts'
@@ -14,58 +15,34 @@ permissions:
   contents: read
 
 jobs:
-  portable:
-    name: Extract and start ${{ matrix.arch }}
+  x64:
+    name: Extract and start x64
     if: >-
       (github.event_name == 'workflow_dispatch' || github.event.pull_request.head.repo.full_name == github.repository) &&
       (github.actor == 'PeterShanxin' || github.actor == 'ianmeowmeow')
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - arch: x64
-            target: x86_64-pc-windows-msvc
-            runner: windows-2025
-          - arch: arm64
-            target: aarch64-pc-windows-msvc
-            runner: windows-11-arm
-    runs-on: ${{ matrix.runner }}
+    runs-on: windows-2025
     timeout-minutes: 180
     steps:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
-      - uses: actions/setup-node@v7
+      - uses: ./.github/actions/verify-portable
         with:
-          node-version: 24
-          cache: npm
-      - uses: actions/setup-dotnet@v5
+          target: x86_64-pc-windows-msvc
+          architecture: x64
+
+  arm64:
+    name: Extract and start arm64
+    if: >-
+      (github.event_name == 'workflow_dispatch' || github.event.pull_request.head.repo.full_name == github.repository) &&
+      (github.actor == 'PeterShanxin' || github.actor == 'ianmeowmeow')
+    runs-on: windows-11-arm
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v7
         with:
-          dotnet-version: 9.0.x
-      - uses: ./.github/actions/windows-package-build
+          persist-credentials: false
+      - uses: ./.github/actions/verify-portable
         with:
-          target: ${{ matrix.target }}
-          target-directory: portable-output
-          variant: portable
-      - uses: ./.github/actions/prepare-reviewed-core
-      - name: Package and start native portable ZIP
-        shell: pwsh
-        env:
-          TARGET: ${{ matrix.target }}
-          ARCHITECTURE: ${{ matrix.arch }}
-        run: |
-          $env:CARGO_TARGET_DIR = "$env:GITHUB_WORKSPACE/portable-output"
-          if ($env:ARCHITECTURE -eq 'arm64') {
-            $env:CARGO_PROFILE_RELEASE_CODEGEN_UNITS = '1'
-            $env:CARGO_PROFILE_RELEASE_LTO = 'false'
-          }
-          npm ci --ignore-scripts
-          if ($LASTEXITCODE) { exit $LASTEXITCODE }
-          ./scripts/fetch-meowcal-core.ps1 -Architecture $env:ARCHITECTURE
-          ./scripts/build-overlayhost.ps1 -Architecture $env:ARCHITECTURE
-          ./scripts/build-portable.ps1 -TargetTriple $env:TARGET -Architecture $env:ARCHITECTURE -CargoTargetDir $env:CARGO_TARGET_DIR
-      - uses: actions/upload-artifact@v7
-        with:
-          name: portable-${{ matrix.arch }}-validation
-          path: portable-output/${{ matrix.target }}/release/bundle/portable/*-portable.zip
-          if-no-files-found: error
+          target: aarch64-pc-windows-msvc
+          architecture: arm64
