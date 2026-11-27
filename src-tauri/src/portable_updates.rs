@@ -74,6 +74,7 @@ pub async fn check_portable_update(app: tauri::AppHandle) -> Result<Option<Strin
     if !cfg!(feature = "portable") {
         return Err(error_message.into());
     }
+    tracing::info!("Checking the official portable ZIP channel");
     let check = async {
         let response = reqwest::Client::builder()
             .redirect(reqwest::redirect::Policy::none())

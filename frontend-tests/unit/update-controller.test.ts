@@ -80,7 +80,9 @@ describe("initial state", () => {
     invoke.mockResolvedValue("0.12.0");
     const day = 86_400_000;
     expect(await controller.checkAutomatic({}, () => day)).toBe(day);
-    expect(await controller.checkAutomatic({ lastUpdateCheckTimeMs: day }, () => day + 1)).toBeNull();
+    expect(
+      await controller.checkAutomatic({ lastUpdateCheckTimeMs: day }, () => day + 1),
+    ).toBeNull();
     expect(patches.at(-1)?.update).toEqual({ kind: "portableAvailable", version: "0.12.0" });
     await controller.install();
 

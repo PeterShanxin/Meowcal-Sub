@@ -17,7 +17,9 @@ class UpdateCheckTimeout extends Error {}
 class UpdateCheckCancelled extends Error {}
 
 const STORE_UPDATE = "store";
-interface PortableUpdate { portableVersion: string }
+interface PortableUpdate {
+  portableVersion: string;
+}
 type CheckedUpdate = PendingUpdate | typeof STORE_UPDATE | PortableUpdate;
 
 interface ActiveCheck {
@@ -83,12 +85,14 @@ export class UpdateController {
             : null
       : this.portable
         ? async () => {
-            const portableVersion = await window.TauriBridge.invoke<string | null>("check_portable_update");
+            const portableVersion = await window.TauriBridge.invoke<string | null>(
+              "check_portable_update",
+            );
             return portableVersion ? { portableVersion } : null;
           }
         : updates
-        ? () => updates.check({ timeout: UPDATE_CHECK_TIMEOUT_MS })
-        : null;
+          ? () => updates.check({ timeout: UPDATE_CHECK_TIMEOUT_MS })
+          : null;
     if (this.disposed || this.applying || !lookup) return;
 
     if (this.inFlightCheck) {
@@ -163,8 +167,8 @@ export class UpdateController {
             : update && "portableVersion" in update
               ? { kind: "portableAvailable", version: update.portableVersion }
               : update
-              ? { kind: "available", version: update.version, notes: update.notes }
-              : { kind: "upToDate" },
+                ? { kind: "available", version: update.version, notes: update.notes }
+                : { kind: "upToDate" },
       });
       this.record(attempt, "finished", { result: update ? "available" : "upToDate" });
     } catch (error) {
@@ -290,10 +294,19 @@ export class UpdateController {
       return;
     }
     if (this.portable) {
-      if (this.disposed || this.applying || !update || update === STORE_UPDATE || !("portableVersion" in update)) return;
+      if (
+        this.disposed ||
+        this.applying ||
+        !update ||
+        update === STORE_UPDATE ||
+        !("portableVersion" in update)
+      )
+        return;
       this.applying = true;
       try {
-        await window.TauriBridge.invoke("open_portable_update", { version: update.portableVersion });
+        await window.TauriBridge.invoke("open_portable_update", {
+          version: update.portableVersion,
+        });
       } catch (error) {
         if (!this.disposed)
           this.publish({ update: { kind: "error", message: UpdateController.message(error) } });

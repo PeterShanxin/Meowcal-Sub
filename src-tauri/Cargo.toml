@@ -27,7 +27,7 @@ test-windows = []
 core-source-candidate = []
 # Microsoft Store owns application updates and has an isolated data namespace.
 portable = []
-store = ["windows/Storage_Search", "windows/ApplicationModel", "windows/Services_Store"]
+store = ["windows/Storage_Search", "windows/ApplicationModel", "windows/Services_Store", "dep:windows-future"]
 
 # =============================================================================
 # DEPENDENCIES
@@ -145,6 +145,8 @@ windows = { version = "0.61", features = [
     "Win32_Security",           # SECURITY_ATTRIBUTES, required by CreateJobObjectW
 ] }
 windows-version = "0.1"
+# Enable the std-backed IntoFuture adapter for StoreContext's WinRT call.
+windows-future = { version = "0.2.1", optional = true }
 
 # --- Image Processing ---
 # For OCR image preprocessing (grayscale, contrast enhancement)

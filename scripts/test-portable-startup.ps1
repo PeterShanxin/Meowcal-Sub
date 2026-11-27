@@ -19,13 +19,15 @@ try {
     while ([DateTime]::UtcNow -lt $limit) {
         if ($process.HasExited) { throw "Extracted portable app exited during startup: $($process.ExitCode)." }
         $logs = @(Get-ChildItem -LiteralPath $psi.Environment['MEOWCAL_LOG_DIR'] -File -ErrorAction SilentlyContinue)
-        if ($logs.Count -gt 0 -and (Select-String -LiteralPath $logs.FullName -SimpleMatch 'Portable workspace ready' -Quiet)) {
-            Write-Host 'Extracted ZIP started the native workspace with the portable profile.' -ForegroundColor Green
+        if ($logs.Count -gt 0 -and
+            (Select-String -LiteralPath $logs.FullName -SimpleMatch 'Portable workspace ready' -Quiet) -and
+            (Select-String -LiteralPath $logs.FullName -SimpleMatch 'Checking the official portable ZIP channel' -Quiet)) {
+            Write-Host 'Extracted ZIP started the native workspace and selected its portable update channel.' -ForegroundColor Green
             return
         }
         Start-Sleep -Milliseconds 250
     }
-    throw 'The extracted portable app did not reach native workspace readiness.'
+    throw 'The extracted portable app did not reach workspace readiness and the portable update check.'
 } finally {
     if (!$process.HasExited) {
         $null = $process.CloseMainWindow()
