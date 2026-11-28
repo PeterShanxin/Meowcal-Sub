@@ -6,27 +6,32 @@ import { requireCondition, SubmissionError } from "./store-submission.mjs";
 const REPO = "PeterShanxin/Meowcal-Sub";
 const API = `https://api.github.com/repos/${REPO}`;
 export const STORE_RELEASE_NOTES_LIMIT = 1500;
-const REQUIRED = (version) => [
-  "latest.json",
-  "SHA256SUMS.txt",
-  ...["x64", "arm64"].flatMap((arch) => [
-    `Meowcal.Sub_${version}_${arch}-setup.exe`,
-    `Meowcal.Sub_${version}_${arch}_en-US.msi`,
-  ]),
-];
+function requiredAssets(version) {
+  const [major, minor] = version.split(".").map(Number);
+  const hasPortable = major > 0 || minor >= 12;
+  return [
+    "latest.json",
+    "SHA256SUMS.txt",
+    ...["x64", "arm64"].flatMap((arch) => [
+      `Meowcal.Sub_${version}_${arch}-setup.exe`,
+      `Meowcal.Sub_${version}_${arch}_en-US.msi`,
+      ...(hasPortable ? [`Meowcal.Sub_${version}_${arch}-portable.zip`] : []),
+    ]),
+  ];
+}
 
 export function sha256(bytes) {
   return createHash("sha256").update(bytes).digest("hex");
 }
 
-export function parseChecksums(contents) {
+export function parseChecksums(contents, expectedCount) {
   const found = new Map();
   for (const line of contents.trim().split(/\r?\n/)) {
     const match = /^([a-f\d]{64})\s+\*?([A-Za-z\d._-]+)$/i.exec(line);
     requireCondition(match && !found.has(match[2]), "release_checksums_invalid");
     found.set(match[2], match[1].toLowerCase());
   }
-  requireCondition(found.size === 6, "release_checksums_invalid");
+  requireCondition(found.size === expectedCount, "release_checksums_invalid");
   return found;
 }
 
@@ -45,7 +50,7 @@ export function validateRelease(release, tag, commit) {
     "release_identity_invalid",
   );
   const version = tag.slice(1);
-  const names = REQUIRED(version);
+  const names = requiredAssets(version);
   const store = release.assets.filter((asset) =>
     /^MeowcalSub-.*-(x64|arm64)-Release\.msix$/.test(asset.name),
   );
@@ -123,15 +128,14 @@ export function storeReleaseNotes(notes, tag) {
 }
 
 export function assertPackageChecksums(release, files) {
-  const sums = parseChecksums(files.get("SHA256SUMS.txt").toString("utf8"));
   const expectedNames = [...release.assets.keys()].filter(
-    (name) => name.endsWith(".msix") || name.endsWith(".msi") || name.endsWith("-setup.exe"),
+    (name) => name !== "latest.json" && name !== "SHA256SUMS.txt",
   );
+  const sums = parseChecksums(files.get("SHA256SUMS.txt").toString("utf8"), expectedNames.length);
   requireCondition(
-    expectedNames.length === sums.size &&
-      expectedNames.every(
-        (name) => sums.get(name) === release.assets.get(name).digest.slice(7).toLowerCase(),
-      ),
+    expectedNames.every(
+      (name) => sums.get(name) === release.assets.get(name).digest.slice(7).toLowerCase(),
+    ),
     "release_checksums_mismatch",
   );
   for (const [name, bytes] of files) {

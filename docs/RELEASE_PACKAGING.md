@@ -101,8 +101,8 @@ with the Windows artifacts; the ZIP is never listed as a signed installer in `la
 `scripts/verify-release-assets.ps1` enforces that and writes
 `SHA256SUMS.txt`; `scripts/build-updater-manifest.mjs` writes `latest.json`,
 which is where the updater reads the per-architecture installer URL and its
-minisign signature. The draft release attaches both unsigned MSIX packages and
-`SHA256SUMS.txt` covers the four direct installers and both MSIX packages.
+minisign signature. The draft release attaches both unsigned MSIX packages. From v0.12.0,
+`SHA256SUMS.txt` covers the four direct installers, both portable ZIPs and both MSIX packages.
 Store packages never enter `latest.json`. The Store edition checks availability
 through Windows rather than reading this manifest. The opt-in release sync workflow
 submits them for Store certification after GitHub publication and requests

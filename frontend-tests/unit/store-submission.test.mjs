@@ -501,7 +501,7 @@ describe("release and transport boundaries", () => {
     );
   });
   it("rejects missing and mismatched release checksums", () => {
-    expect(() => parseChecksums("")).toThrow("release_checksums_invalid");
+    expect(() => parseChecksums("", 6)).toThrow("release_checksums_invalid");
     const records = assets.filter((asset) => /\.(msix|msi)$|-setup\.exe$/.test(asset.name));
     const files = new Map([
       [
@@ -556,86 +556,132 @@ describe("release and transport boundaries", () => {
     expect(safeFailure(error)).toBe("partial_upload_draft_retained");
     expect(safeFailure(error)).not.toContain("private-sas");
   });
-  it("prepares only checksum-bound GitHub assets and tagged source for offline inspection", async () => {
-    const fileBytes = new Map();
-    const installerNames = names.filter((name) => /\.(msix|msi)$|-setup\.exe$/.test(name));
-    for (const name of installerNames) fileBytes.set(name, Buffer.from(`asset:${name}`));
-    fileBytes.set(
-      "SHA256SUMS.txt",
-      Buffer.from(
-        installerNames
-          .map(
-            (name) => `${createHash("sha256").update(fileBytes.get(name)).digest("hex")}  ${name}`,
-          )
-          .join("\n"),
-      ),
-    );
-    fileBytes.set(
-      "latest.json",
-      Buffer.from(
-        JSON.stringify({
-          version: "0.8.7",
-          platforms: {
-            "windows-x86_64": {
-              url: "https://github.com/PeterShanxin/Meowcal-Sub/releases/download/v0.8.7/Meowcal.Sub_0.8.7_x64-setup.exe",
-              signature: "sig",
+  it.each(["0.8.7", "0.11.9", "0.12.1"])(
+    "prepares only checksum-bound GitHub assets and tagged source for v%s",
+    async (version) => {
+      const tag = `v${version}`;
+      const portable = version === "0.12.1";
+      const names = [
+        ...fixture.assets.map(({ name }) => name.replace("0.8.7", version)),
+        ...(portable
+          ? ["x64", "arm64"].map((arch) => `Meowcal.Sub_${version}_${arch}-portable.zip`)
+          : []),
+      ];
+      const fileBytes = new Map();
+      const payloadNames = names.filter(
+        (name) => name !== "SHA256SUMS.txt" && name !== "latest.json",
+      );
+      for (const name of payloadNames) fileBytes.set(name, Buffer.from(`asset:${name}`));
+      fileBytes.set(
+        "SHA256SUMS.txt",
+        Buffer.from(
+          payloadNames
+            .map(
+              (name) =>
+                `${createHash("sha256").update(fileBytes.get(name)).digest("hex")}  ${name}`,
+            )
+            .join("\n"),
+        ),
+      );
+      fileBytes.set(
+        "latest.json",
+        Buffer.from(
+          JSON.stringify({
+            version,
+            platforms: {
+              "windows-x86_64": {
+                url: `https://github.com/PeterShanxin/Meowcal-Sub/releases/download/${tag}/Meowcal.Sub_${version}_x64-setup.exe`,
+                signature: "sig",
+              },
+              "windows-aarch64": {
+                url: `https://github.com/PeterShanxin/Meowcal-Sub/releases/download/${tag}/Meowcal.Sub_${version}_arm64-setup.exe`,
+                signature: "sig",
+              },
             },
-            "windows-aarch64": {
-              url: "https://github.com/PeterShanxin/Meowcal-Sub/releases/download/v0.8.7/Meowcal.Sub_0.8.7_arm64-setup.exe",
-              signature: "sig",
-            },
-          },
-        }),
-      ),
-    );
-    const releaseAssets = names.map((name, index) => ({
-      name,
-      id: index + 1,
-      size: fileBytes.get(name).length,
-      digest: `sha256:${createHash("sha256").update(fileBytes.get(name)).digest("hex")}`,
-    }));
-    const logo = Buffer.alloc(32);
-    Buffer.from("89504e470d0a1a0a", "hex").copy(logo);
-    logo.writeUInt32BE(300, 16);
-    logo.writeUInt32BE(300, 20);
-    const sources = new Map([
-      ["src-tauri/tauri.conf.json", Buffer.from(JSON.stringify({ version: "0.8.7" }))],
-      [
-        "docs/releases/v0.8.7.md",
-        Buffer.from("# Meowcal Sub v0.8.7\n## Fixes and improvements\n- Fixes"),
-      ],
-      ["docs/assets/store-listing-logo-300.png", logo],
-      ...["Square150x150Logo.png", "Square44x44Logo.png", "StoreLogo.png"].map((name) => [
-        `src-tauri/icons/${name}`,
-        Buffer.from(name),
-      ]),
-    ]);
-    const requested = [];
-    const client = {
-      json: async (url) => {
-        requested.push(url);
-        if (url.startsWith("/git/ref/")) return { object: { type: "commit", sha } };
-        return {
+          }),
+        ),
+      );
+      const releaseAssets = names.map((name, index) => ({
+        name,
+        id: index + 1,
+        size: fileBytes.get(name).length,
+        digest: `sha256:${createHash("sha256").update(fileBytes.get(name)).digest("hex")}`,
+      }));
+      if (portable) {
+        const zip = names.at(-1);
+        const candidate = {
           ...fixture,
-          body: "# Meowcal Sub v0.8.7\n## Fixes and improvements\n- Fixes",
+          tag_name: tag,
+          html_url: fixture.html_url.replace("v0.8.7", tag),
           assets: releaseAssets,
         };
-      },
-      source: async (_commit, name) => sources.get(name),
-      asset: async (asset) => fileBytes.get(asset.name),
-    };
-    const { mkdtemp, readdir } = await import("node:fs/promises");
-    const { tmpdir } = await import("node:os");
-    const { join } = await import("node:path");
-    const directory = await mkdtemp(join(tmpdir(), "store-mock-"));
-    let inspected = false;
-    const result = await prepareRelease(client, tag, sha, directory, (_dir, version) => {
-      inspected = true;
-      expect(version).toBe("1.0.1.0");
-    });
-    expect(result.storeVersion).toBe("1.0.1.0");
-    expect(inspected).toBe(true);
-    expect(requested).toEqual([`/git/ref/tags/${tag}`, `/releases/tags/${tag}`]);
-    expect(await readdir(directory)).toContain("store-listing-logo-300.png");
-  });
+        expect(releaseAssets).toHaveLength(10);
+        const verified = validateRelease(candidate, tag, sha);
+        expect(() => assertPackageChecksums(verified, fileBytes)).not.toThrow();
+        for (const assets of [
+          releaseAssets.slice(0, -1),
+          [...releaseAssets.slice(0, -1), { ...releaseAssets.at(-1), name: "bad-portable.zip" }],
+          [...releaseAssets, { ...releaseAssets.at(-1), id: 99, name: "extra-portable.zip" }],
+        ]) {
+          expect(() => validateRelease({ ...candidate, assets }, tag, sha)).toThrow(
+            "release_assets_unexpected",
+          );
+        }
+        const wrongDigest = releaseAssets.map((asset) =>
+          asset.name === zip ? { ...asset, digest: `sha256:${"b".repeat(64)}` } : asset,
+        );
+        expect(() =>
+          assertPackageChecksums(
+            validateRelease({ ...candidate, assets: wrongDigest }, tag, sha),
+            fileBytes,
+          ),
+        ).toThrow("release_checksums_mismatch");
+      }
+      const logo = Buffer.alloc(32);
+      Buffer.from("89504e470d0a1a0a", "hex").copy(logo);
+      logo.writeUInt32BE(300, 16);
+      logo.writeUInt32BE(300, 20);
+      const sources = new Map([
+        ["src-tauri/tauri.conf.json", Buffer.from(JSON.stringify({ version }))],
+        [
+          `docs/releases/${tag}.md`,
+          Buffer.from(`# Meowcal Sub ${tag}\n## Fixes and improvements\n- Fixes`),
+        ],
+        ["docs/assets/store-listing-logo-300.png", logo],
+        ...["Square150x150Logo.png", "Square44x44Logo.png", "StoreLogo.png"].map((name) => [
+          `src-tauri/icons/${name}`,
+          Buffer.from(name),
+        ]),
+      ]);
+      const requested = [];
+      const client = {
+        json: async (url) => {
+          requested.push(url);
+          if (url.startsWith("/git/ref/")) return { object: { type: "commit", sha } };
+          return {
+            ...fixture,
+            tag_name: tag,
+            html_url: fixture.html_url.replace("v0.8.7", tag),
+            body: sources.get(`docs/releases/${tag}.md`).toString("utf8"),
+            assets: releaseAssets,
+          };
+        },
+        source: async (_commit, name) => sources.get(name),
+        asset: async (asset) => fileBytes.get(asset.name),
+      };
+      const { mkdtemp, readdir } = await import("node:fs/promises");
+      const { tmpdir } = await import("node:os");
+      const { join } = await import("node:path");
+      const directory = await mkdtemp(join(tmpdir(), "store-mock-"));
+      let inspected = false;
+      const result = await prepareRelease(client, tag, sha, directory, (_dir, version) => {
+        inspected = true;
+        expect(version).toBe("1.0.1.0");
+      });
+      expect(result.storeVersion).toBe("1.0.1.0");
+      expect(inspected).toBe(true);
+      expect(requested).toEqual([`/git/ref/tags/${tag}`, `/releases/tags/${tag}`]);
+      expect(await readdir(directory)).toContain("store-listing-logo-300.png");
+    },
+  );
 });
