@@ -1,4 +1,4 @@
-use super::{OcrError, OcrResult, PreprocessingConfig, preprocess_image};
+use super::{preprocess_image, OcrError, OcrResult, PreprocessingConfig};
 use crate::core_client::{self, OcrRecognizeParams};
 use meowcal_core::ocr::Engine;
 use tracing::{debug, info, warn};
