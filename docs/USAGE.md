@@ -6,7 +6,7 @@ Meowcal Sub translates **visible text in a selected screen region**, not audio.
 Start with a video that already displays subtitles in Chinese, Japanese,
 Korean, English, Spanish, French, or German.
 
-This guide covers Meowcal Sub v0.11.0. For each version, see its notes under
+This guide covers Meowcal Sub v0.12.0. For each version, see its notes under
 [`releases/`](releases/).
 
 ## Installation
@@ -33,7 +33,7 @@ Download the installer and `SHA256SUMS.txt` from the **same application release*
 In PowerShell, compute the hash of the file you downloaded, for example:
 
 ```powershell
-Get-FileHash -Algorithm SHA256 -LiteralPath ".\Meowcal.Sub_0.11.0_x64-setup.exe"
+Get-FileHash -Algorithm SHA256 -LiteralPath ".\Meowcal.Sub_0.12.0_x64-setup.exe"
 ```
 
 Use your actual filename for another version or architecture. Compare the full
@@ -89,7 +89,7 @@ and other actionable messages remain visible when needed.
 To choose or adjust the area without starting, choose **Select subtitle area**,
 then **Save and exit**. To reuse it directly, choose **Start with saved area**.
 
-In the unreleased development build, short, zoomed windows place each language
+Short, zoomed windows place each language
 label beside its selector so the first area selection stays within reach.
 Session notices appear above the navigation and leave room for the running
 status and **Stop translation**.
@@ -131,7 +131,7 @@ provider, project link, and model license and usage terms. The first-time setup
 still presents the provider disclosure and requires agreement to the model terms.
 Settings changes save automatically, with a four-second success notice.
 
-In the unreleased development build, settings can be edited once the saved
+Settings can be edited once the saved
 profile loads. If reading fails, choose **Try again** to recover the saved
 languages, subtitle style, and other preferences before editing.
 
@@ -233,7 +233,7 @@ Automatic checks occur at startup at most once per day. Checking does not
 itself download an application update; **Download and install** does in the
 GitHub installer edition.
 
-Unreleased: The Microsoft Store edition uses the same automatic and manual
+The Microsoft Store edition uses the same automatic and manual
 checks. When the Store has an update for your installation, select **Open
 Microsoft Store** to install it there.
 
@@ -246,7 +246,7 @@ under **What's new**, without a separate scroll box. **Full release notes ↗**
 opens that version's complete GitHub release in your browser. The link remains
 available when the update has no summary.
 
-Unreleased: **More about this update** opens additional highlights or fixes
+**More about this update** opens additional highlights or fixes
 when the update includes them. Inline emphasis and code are formatted in the
 app. The Download and install action is unchanged.
 
@@ -296,7 +296,7 @@ investigation:
 Open **Feedback** in the main title bar or **Report error** beside
 an error. Choose a type and enter a description. The error entry includes the
 available diagnostics for the fault. A suggestion only needs a description.
-In the unreleased development build, you can leave the description empty when
+You can leave the description empty when
 using **Report error**, even if a previous draft had an invalid description.
 Review the basic diagnostics and select any additional evidence you want the
 maintainers to see. A selected screenshot or subtitle can reveal what you watched.
