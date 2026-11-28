@@ -105,19 +105,21 @@ fn capture_png_is_opaque_and_preserves_rgb() {
 }
 
 #[tokio::test]
-async fn cancellation_does_not_release_an_active_writer_slot() {
+async fn stalled_writer_does_not_wait_or_prepare_more_evidence() {
     let slots = Arc::new(Semaphore::new(1));
     let (started_tx, started_rx) = tokio::sync::oneshot::channel();
     let (release_tx, release_rx) = std::sync::mpsc::channel();
-    let task = tokio::spawn(offload(Arc::clone(&slots), move || {
+    assert!(try_offload(Arc::clone(&slots), || move || {
         let _ = started_tx.send(());
         release_rx.recv().map_err(io::Error::other)?;
         Ok(())
     }));
     started_rx.await.unwrap();
-    task.abort();
-    let _ = task.await;
     assert_eq!(slots.available_permits(), 0);
+    assert!(!try_offload(
+        Arc::clone(&slots),
+        || -> fn() -> io::Result<()> { panic!("full slot must not build the payload") }
+    ));
     release_tx.send(()).unwrap();
     let permit = tokio::time::timeout(std::time::Duration::from_secs(2), slots.acquire())
         .await
@@ -125,6 +127,16 @@ async fn cancellation_does_not_release_an_active_writer_slot() {
         .unwrap();
     drop(permit);
     assert_eq!(slots.available_permits(), 1);
+
+    let (recovered_tx, recovered_rx) = tokio::sync::oneshot::channel();
+    assert!(try_offload(Arc::clone(&slots), || move || {
+        let _ = recovered_tx.send(());
+        Ok(())
+    }));
+    tokio::time::timeout(std::time::Duration::from_secs(2), recovered_rx)
+        .await
+        .unwrap()
+        .unwrap();
 }
 
 #[test]
@@ -135,6 +147,48 @@ fn disabling_before_write_preserves_existing_evidence() -> io::Result<()> {
     let existing = records(&root)?;
     assert_eq!(existing.len(), 1);
     assert_eq!(std::fs::read(existing[0].0.join("record.json"))?, b"kept");
+    std::fs::remove_dir_all(root)
+}
+
+#[test]
+fn writer_rechecks_evidence_permission_after_waiting_for_disk() -> io::Result<()> {
+    use std::sync::atomic::AtomicBool;
+
+    let root = directory();
+    write_record(&root, b"before", None, 32, || true)?;
+    let owner = std::fs::OpenOptions::new()
+        .write(true)
+        .open(root.join(".writer.lock"))?;
+    owner.lock()?;
+
+    let permitted = AtomicBool::new(true);
+    let allowed = || permitted.load(Ordering::SeqCst);
+    std::thread::scope(|scope| -> io::Result<()> {
+        let (started_tx, started_rx) = std::sync::mpsc::channel();
+        let (checked_tx, checked_rx) = std::sync::mpsc::channel();
+        let root = &root;
+        let pending = scope.spawn(move || {
+            started_tx.send(()).unwrap();
+            write_record(root, b"pending", None, 32, || {
+                checked_tx.send(()).unwrap();
+                allowed()
+            })
+        });
+        started_rx.recv().unwrap();
+        let checked_while_locked = checked_rx.try_recv().is_ok();
+        permitted.store(false, Ordering::SeqCst);
+        drop(owner);
+        pending.join().unwrap()?;
+        assert!(!checked_while_locked);
+        Ok(())
+    })?;
+    let existing = records(&root)?;
+    assert_eq!(existing.len(), 1);
+    assert_eq!(std::fs::read(existing[0].0.join("record.json"))?, b"before");
+
+    permitted.store(true, Ordering::SeqCst);
+    write_record(&root, b"resumed", None, 32, allowed)?;
+    assert_eq!(records(&root)?.len(), 2);
     std::fs::remove_dir_all(root)
 }
 

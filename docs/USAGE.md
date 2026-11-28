@@ -263,6 +263,8 @@ With logging enabled, the app writes one session log per launch and removes
 - **Verbose** also saves the original captured region, actual OCR input PNGs,
   raw OCR text and geometry, and source/translated text locally. Selecting it is
   explicit consent to retain screen content that can be private. No upload occurs.
+  In the next release, the app saves this evidence in the background. If the
+  writer is busy, it skips an evidence record rather than delaying subtitles.
 
 Session files use `meowcal-sub_<dev|prod>_<date>_<time>_<pid>.log` and mark each
 entry `[dev]` or `[prod]`. The installed direct app uses

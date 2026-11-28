@@ -331,9 +331,8 @@ impl Translator {
             warnings,
             display_state,
         } = outcome;
-        if crate::logging_settings::verbose() {
-            crate::diagnostic_artifacts::record(
-                "translation",
+        crate::diagnostic_artifacts::record("translation", || {
+            (
                 serde_json::json!({
                     "sessionId": self.session_id, "captureId": job.frame.token.capture_id,
                     "cueId": job.cue_id, "source": job.frame.text, "translated": translated,
@@ -341,8 +340,7 @@ impl Translator {
                 }),
                 None,
             )
-            .await;
-        }
+        });
         if engine_needs_restart(self.engine_is_managed(), &warnings) {
             crate::core_client::recover_transport();
         }

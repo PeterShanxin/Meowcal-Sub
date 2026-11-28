@@ -105,6 +105,21 @@ impl History {
         self.frames.back_mut()
     }
 
+    fn attach_image(&mut self, token: PipelineToken, png: &[u8]) {
+        let mut image = None;
+        // A frame can be pinned before the background write completes, even if
+        // its live entry has since been evicted. Never admit a new frame here.
+        for frame in self
+            .frames
+            .iter_mut()
+            .chain(self.fault.iter_mut())
+            .chain(self.completed.iter_mut())
+            .filter(|frame| frame.token == token)
+        {
+            frame.image = Some(Arc::clone(image.get_or_insert_with(|| Arc::from(png))));
+        }
+    }
+
     fn select(&self, fault: Option<&str>) -> Option<Frame> {
         if let Some(code) = fault {
             if let Some(frame) = self
@@ -283,9 +298,7 @@ pub(crate) fn overlay_received(token: PipelineToken) {
 pub(crate) fn screenshot(token: PipelineToken, png: &[u8]) {
     // 16 frames at most, plus pinned previews. Large captures stay local on disk.
     if png.len() <= 2 * 1024 * 1024 && crate::logging_settings::verbose() {
-        if let Some(frame) = lock_or_recover(&HISTORY).frame(token) {
-            frame.image = Some(Arc::from(png));
-        }
+        lock_or_recover(&HISTORY).attach_image(token, png);
     }
 }
 
@@ -311,6 +324,51 @@ pub(crate) fn translated_text(token: PipelineToken, source: &str, translated: &s
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn late_image_updates_pins_without_readmitting_evicted_frame() {
+        let mut history = History::default();
+        let token = PipelineToken {
+            session_id: 3,
+            capture_id: 1,
+        };
+        let frame = history.frame(token).unwrap().clone();
+        history.fault = Some(frame.clone());
+        history.completed = Some(frame);
+        history.attach_image(token, b"first");
+        let live = history.frames.front().unwrap().image.as_ref().unwrap();
+        assert!(Arc::ptr_eq(
+            live,
+            history.fault.as_ref().unwrap().image.as_ref().unwrap()
+        ));
+        for capture_id in 2..=20 {
+            history
+                .frame(PipelineToken {
+                    capture_id,
+                    ..token
+                })
+                .unwrap();
+        }
+        history.attach_image(token, b"late");
+        assert_eq!(history.frames.len(), 16);
+        assert!(history
+            .frames
+            .iter()
+            .all(|frame| frame.token != token && frame.image.is_none()));
+        let fault = history.fault.as_ref().unwrap().image.as_ref().unwrap();
+        let completed = history.completed.as_ref().unwrap().image.as_ref().unwrap();
+        assert_eq!(fault.as_ref(), b"late");
+        assert!(Arc::ptr_eq(fault, completed));
+        history
+            .frame(PipelineToken {
+                session_id: 4,
+                ..token
+            })
+            .unwrap();
+        history.attach_image(token, b"stale");
+        assert_eq!(history.frames.len(), 1);
+        assert!(history.frames.front().unwrap().image.is_none());
+    }
+
     #[test]
     fn frames_never_mix_across_sessions_and_errors_are_pinned() {
         let mut history = History::default();

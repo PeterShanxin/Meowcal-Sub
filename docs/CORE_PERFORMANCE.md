@@ -1,5 +1,7 @@
 # Core OCR performance verification
 
+See [Evaluation and benchmarks](../evals/README.md) for the full validation matrix.
+
 Core's process boundary is accepted only with comparable latency and recognition
 evidence. [ADR-0004](adr/0004-versioned-meowcal-core.md) defines the budgets.
 The benchmark excludes screen acquisition, translation and native presentation;

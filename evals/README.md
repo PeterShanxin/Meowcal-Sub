@@ -1,4 +1,8 @@
-# Evaluation and validation
+# Evaluation and benchmarks
+
+Start here for a feature comparison, a performance experiment, or a release
+check. Choose the layer that can reproduce the behavior. Use a scenario to
+combine layers when one test cannot explain the result.
 
 ## Choose a validation layer
 
@@ -11,7 +15,31 @@ for another.
 | Translation evaluation: this directory's `subtitle-eval-v1.json` | Prompt, validator, and engine changes | Validator decisions on authored cases; in live mode, warm-model latency and output shape on one machine | Capture, OCR, queueing, or display behavior |
 | Core OCR benchmark: [`docs/CORE_PERFORMANCE.md`](../docs/CORE_PERFORMANCE.md) | OCR process-boundary and recognition-parity changes | OCR latency and output parity on synthetic fixtures and one host | Screen capture, subtitle admission, translation, or full-session UX |
 | Native fixture gate: [`band-gate/`](band-gate/README.md) | Any visible subtitle-pipeline change | Real Windows capture, OCR, admission, translation, and overlay results per authored cue, including negative and blank intervals | Reliability for every film, font, or caption style |
-| Real-media acceptance | Releases and changes the maintainer asks to validate on real video | Behavior on the tested clips and hardware | Results for untested media or hardware |
+| [Native media playback](native-playback/README.md) | Releases and changes the maintainer asks to validate on real video | Behavior on the tested clips and hardware | Results for untested media or hardware |
+| Diagnostics storage | [Detailed logging microbenchmark](diagnostic-logging/README.md) | Time spent encoding and saving synthetic image pairs as records accumulate | Capture cadence, OCR or translation accuracy, or subtitles displayed during playback |
+
+## Choose a scenario
+
+| Scenario | First comparison | If it regresses |
+| --- | --- | --- |
+| Fast dialogue or missing subtitles | [Native band gate](band-gate/README.md) and a fixed real-media clip | Use [policy replay](realtime-subtitles/README.md) for skipped, duplicated, and stale cues. Use the [OCR benchmark](../docs/CORE_PERFORMANCE.md) to separate recognition from admission. |
+| New OCR model or preprocessing | Compare identical input frames with the [OCR benchmark](../docs/CORE_PERFORMANCE.md), then run the native gate | Separate OCR accuracy and per-frame latency from the number of valid cues that reach the translation queue. |
+| Translation or prompt change | Run the subtitle translation evaluation below with fixed text | Use real playback to verify delayed output, and report valid translations separately from source-only or unavailable states. |
+| Detailed logging slowdown | [Fresh versus populated log directory](diagnostic-logging/README.md); then compare Basic and Verbose on the same native clip | Measure time spent saving records and text-to-overlay recall separately. |
+
+For a [real-media comparison](native-playback/README.md), use an authored or redistributable clip with known
+cue times. Keep the Windows machine, signed Store build (or explicitly labeled
+development build), model, player, playback speed, capture region and logging
+history the same between runs unless one is the factor under test. Include short
+cues and blank intervals. Count cues displayed on time, displayed late, skipped,
+or incorrectly displayed during blank intervals. Record source appearance to
+overlay timing. Run Basic and Verbose with comparable starting conditions and
+alternate order to reduce warmup bias.
+
+Add reusable inputs and runners under `evals/<scenario>/` when they belong to a
+new scenario. Link to existing scripts rather than moving entry points used by CI
+or other documentation. Keep private video, screenshots and raw diagnostic
+records out of Git.
 
 For a visible subtitle change, run policy replay first, then the native fixture
 gate, then any required real-media acceptance. Report each layer separately.
