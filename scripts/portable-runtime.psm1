@@ -1,6 +1,6 @@
 $ErrorActionPreference = 'Stop'
 
-function Get-PortableCrt([ValidateSet('x64', 'arm64')][string]$Architecture) {
+function Get-AppLocalCrt([ValidateSet('x64', 'arm64')][string]$Architecture) {
     # Use licensed Visual Studio's supported app-local CRT, never the host System32 copy.
     # https://learn.microsoft.com/cpp/windows/redistributing-visual-cpp-files
     $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
@@ -35,7 +35,7 @@ function Copy-PortableCrt {
         [Parameter(Mandatory)][string]$Directory
     )
     $core = Join-Path $Directory 'resources\core'
-    $runtimeFiles = @(Get-PortableCrt -Architecture $Architecture)
+    $runtimeFiles = @(Get-AppLocalCrt -Architecture $Architecture)
     foreach ($runtime in $runtimeFiles) {
         # Windows first checks the executable's directory. The app and pinned
         # Core have separate directories, so both need a local copy.
@@ -44,4 +44,4 @@ function Copy-PortableCrt {
     }
 }
 
-Export-ModuleMember -Function Copy-PortableCrt
+Export-ModuleMember -Function Copy-PortableCrt, Get-AppLocalCrt

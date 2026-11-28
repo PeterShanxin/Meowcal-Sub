@@ -17,15 +17,18 @@ pub fn register<R: Runtime>(app: &tauri::AppHandle<R>) -> Result<(), String> {
         .resource_dir()
         .map_err(|error| format!("CORE_RESOURCE_DIR: {error}"))?;
     let store_root = crate::app_profile::store_core_storage_base()?;
-    let child_path = if cfg!(feature = "portable") {
-        // Bundled Core finds CRT beside its executable. Downloaded runtime
-        // subprocesses inherit PATH and can also load the same app-local CRT.
-        let portable_runtime = resource_dir.join("resources/core");
+    let bundled_core = resource_dir.join("resources/core");
+    let use_app_local_crt = cfg!(windows)
+        && !cfg!(feature = "store")
+        && bundled_core.join("vcruntime140.dll").is_file();
+    let child_path = if use_app_local_crt {
+        // The installed or portable Core loads its adjacent CRT; downloaded
+        // runtime subprocesses inherit PATH to use those same packaged DLLs.
         let inherited = std::env::var_os("PATH").unwrap_or_default();
-        let paths = std::iter::once(portable_runtime).chain(std::env::split_paths(&inherited));
+        let paths = std::iter::once(bundled_core).chain(std::env::split_paths(&inherited));
         Some(
             std::env::join_paths(paths)
-                .map_err(|error| format!("CORE_PORTABLE_RUNTIME_PATH: {error}"))?,
+                .map_err(|error| format!("CORE_APP_LOCAL_RUNTIME_PATH: {error}"))?,
         )
     } else {
         crate::app_profile::store_child_path()?

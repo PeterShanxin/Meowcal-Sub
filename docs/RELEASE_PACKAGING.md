@@ -92,9 +92,10 @@ architecture, then merges the artifacts and validates them. Each architecture
 must contribute exactly one MSI, one NSIS setup executable, and one updater
 signature, one official portable ZIP, plus one Release MSIX with the requested Store version.
 The portable ZIP has its own update channel and includes the executable and pinned Core.
-Packaging also includes the architecture-matched app-local Visual C++ runtime
+Direct installers and portable ZIPs include the architecture-matched app-local Visual C++ runtime
 from the [Visual Studio redistributable directory](https://learn.microsoft.com/cpp/windows/redistributing-visual-cpp-files).
-You do not run a separate VC++ installer before launching the ZIP.
+Core and its downloaded subprocesses use this packaged runtime without a
+separate installer. Store builds retain their Windows framework dependency.
 Packaging extracts and starts the assembled ZIP before uploading it. Its SHA256 is listed
 with the Windows artifacts; the ZIP is never listed as a signed installer in `latest.json`.
 `scripts/verify-release-assets.ps1` enforces that and writes

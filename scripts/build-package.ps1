@@ -10,6 +10,7 @@ param(
 $ErrorActionPreference = "Stop"
 $repositoryRoot = Split-Path -Parent $PSScriptRoot
 Import-Module (Join-Path $PSScriptRoot 'package-build.psm1') -Force
+Import-Module (Join-Path $PSScriptRoot 'portable-runtime.psm1') -Force
 $hostArchitecture = [System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture
 
 if ($Architecture -eq "auto") {
@@ -82,8 +83,23 @@ try {
     }
 
     Invoke-PackageBuildStep -Name 'Build and sign Tauri bundles' -Steps $steps -Action {
-        npx --no -- tauri build --target $targetTriple --bundles $bundleArgs -- --locked
-        if ($LASTEXITCODE -ne 0) { throw "Tauri package build failed for $Architecture." }
+        $coreDirectory = Join-Path $repositoryRoot 'src-tauri\resources\core'
+        $runtime = @(Get-AppLocalCrt -Architecture $Architecture)
+        $staged = [Collections.Generic.List[string]]::new()
+        try {
+            foreach ($dll in $runtime) {
+                $destination = Join-Path $coreDirectory $dll.Name
+                if (Test-Path -LiteralPath $destination) { throw "Refusing to overwrite an existing Core runtime file: $destination" }
+                $staged.Add($destination)
+                Copy-Item -LiteralPath $dll.FullName -Destination $destination
+            }
+            npx --no -- tauri build --target $targetTriple --bundles $bundleArgs -- --locked
+            if ($LASTEXITCODE -ne 0) { throw "Tauri package build failed for $Architecture." }
+        } finally {
+            foreach ($file in $staged) {
+                if (Test-Path -LiteralPath $file -PathType Leaf) { Remove-Item -LiteralPath $file }
+            }
+        }
     }
 
     Invoke-PackageBuildStep -Name 'Build and verify portable ZIP' -Steps $steps -Action {

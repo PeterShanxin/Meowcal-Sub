@@ -36,6 +36,15 @@ function npx {
         Core = $env:MEOWCAL_CORE_EXECUTABLE
     })
     $isPortable = $args -contains 'portable'
+    if ($args -contains '--bundles') {
+        $target = $args[[array]::IndexOf($args, '--target') + 1]
+        $expected = if ($target -like 'aarch64*') { 'arm64' } else { 'x64' }
+        foreach ($dll in @('vcruntime140.dll','msvcp140.dll')) {
+            Assert-Equal $expected (Get-Content -LiteralPath "src-tauri/resources/core/$dll") 'Direct packaging must stage architecture-matched CRT next to Core.'
+        }
+        $config = Get-Content -LiteralPath 'src-tauri/tauri.conf.json' -Raw | ConvertFrom-Json
+        Assert-Equal $true ($config.bundle.resources -contains 'resources/core/*') 'Tauri must include the staged Core runtime.'
+    }
     $global:LASTEXITCODE = if ($global:meowcalPackageTestState.Failure -eq 'tauri' -or
         ($isPortable -and $global:meowcalPackageTestState.Failure -eq 'portable-build')) { 29 } else { 0 }
     $target = $args[[array]::IndexOf($args, '--target') + 1]
@@ -68,13 +77,21 @@ $global:LASTEXITCODE = 0
     Copy-Item "$repositoryRoot/scripts/package-build.psm1" "$fixture/scripts/"
     Copy-Item "$repositoryRoot/scripts/build-portable.ps1" "$fixture/scripts/"
     @'
+function Get-AppLocalCrt($Architecture) {
+    $dir = Join-Path $PSScriptRoot '../fixture-crt'
+    New-Item -ItemType Directory -Path $dir -Force | Out-Null
+    foreach ($name in @('msvcp140.dll', 'vcruntime140.dll')) {
+        Set-Content -LiteralPath (Join-Path $dir $name) -Value $Architecture
+        Get-Item -LiteralPath (Join-Path $dir $name)
+    }
+}
 function Copy-PortableCrt($Architecture, $Directory) {
     foreach ($name in @('msvcp140.dll', 'vcruntime140.dll')) {
         Set-Content -LiteralPath (Join-Path $Directory $name) -Value $Architecture
         Set-Content -LiteralPath (Join-Path $Directory "resources/core/$name") -Value $Architecture
     }
 }
-Export-ModuleMember -Function Copy-PortableCrt
+Export-ModuleMember -Function Copy-PortableCrt, Get-AppLocalCrt
 '@ | Set-Content "$fixture/scripts/portable-runtime.psm1"
     @'
 param($Directory)
@@ -102,7 +119,8 @@ Export-ModuleMember -Function *
     }
     Set-Content "$fixture/src-tauri/tauri.store.conf.json" '{}'
     Set-Content "$fixture/src-tauri/tauri.portable.conf.json" '{}'
-    Set-Content "$fixture/src-tauri/tauri.conf.json" '{"version":"1.2.3"}'
+    $bundle = (Get-Content "$repositoryRoot/src-tauri/tauri.conf.json" -Raw | ConvertFrom-Json).bundle
+    @{ version = '1.2.3'; bundle = $bundle } | ConvertTo-Json -Depth 20 | Set-Content "$fixture/src-tauri/tauri.conf.json"
     Set-Content "$fixture/LICENSE" 'fixture'
     Set-Content "$fixture/LICENSE-NOTICE.md" 'fixture'
     foreach ($variant in @('package', 'store')) {
@@ -170,6 +188,7 @@ Export-ModuleMember -Function *
                         throw 'Packaging continued after a failed Core prerequisite.'
                     }
                 }
+                if (Get-ChildItem -LiteralPath "$fixture/src-tauri/resources/core" -Filter '*.dll') { throw 'Packaging left temporary CRT in the source tree.' }
                 foreach ($name in $environmentNames) {
                     Assert-Equal $before[$name] ([Environment]::GetEnvironmentVariable($name)) "Packaging leaked $name into the caller."
                 }
