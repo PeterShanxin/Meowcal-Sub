@@ -283,7 +283,9 @@ pub(crate) fn overlay_received(token: PipelineToken) {
 pub(crate) fn screenshot(token: PipelineToken, png: &[u8]) {
     // 16 frames at most, plus pinned previews. Large captures stay local on disk.
     if png.len() <= 2 * 1024 * 1024 && crate::logging_settings::verbose() {
-        if let Some(frame) = lock_or_recover(&HISTORY).frame(token) {
+        // Background evidence can finish after its frame has aged out.
+        let mut history = lock_or_recover(&HISTORY);
+        if let Some(frame) = history.frames.iter_mut().find(|frame| frame.token == token) {
             frame.image = Some(Arc::from(png));
         }
     }

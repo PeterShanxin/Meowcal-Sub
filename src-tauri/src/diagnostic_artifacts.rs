@@ -21,20 +21,18 @@ pub async fn capture<F: std::future::Future<Output = Recognition>>(
 ) -> F::Output {
     FRAME
         .scope((session_id, capture_id), async {
-            if logging_settings::verbose() {
-                record(
-                    "capture",
-                    serde_json::json!({}),
-                    Some((frame.data.clone(), frame.width, frame.height)),
-                )
-                .await;
-            }
             let token = crate::pipeline_session::PipelineToken {
                 session_id,
                 capture_id,
             };
             let started = std::time::Instant::now();
             crate::feedback::trace::observe(token, "ocr", "running", None, None);
+            record("capture", || {
+                (
+                    serde_json::json!({}),
+                    Some((frame.data.clone(), frame.width, frame.height)),
+                )
+            });
             let result = operation.await;
             let (status, code) = match &result {
                 Ok(result) => {
@@ -55,53 +53,50 @@ pub async fn capture<F: std::future::Future<Output = Recognition>>(
         .await
 }
 
-pub async fn record(
-    kind: &'static str,
-    detail: serde_json::Value,
-    frame: Option<(Vec<u8>, u32, u32)>,
-) {
+type Evidence = (serde_json::Value, Option<(Vec<u8>, u32, u32)>);
+
+pub fn record(kind: &'static str, evidence: impl FnOnce() -> Evidence) {
     if !logging_settings::verbose() {
         return;
     }
     let identity = FRAME.try_with(|identity| *identity).ok();
-    let success = offload(write_slots(), move || {
-        if !logging_settings::verbose() {
-            return Ok(());
+    let _ = try_offload(write_slots(), || {
+        let (detail, frame) = evidence();
+        let timestamp = chrono::Utc::now().to_rfc3339();
+        move || {
+            if !logging_settings::verbose() {
+                return Ok(());
+            }
+            let png = frame
+                .map(|(bgra, width, height)| encode_frame(bgra, width, height))
+                .transpose()?;
+            let json = serde_json::to_vec_pretty(&serde_json::json!({
+                "kind": kind, "profile": crate::app_logging::profile_label(),
+                "timestamp": timestamp, "frame": identity, "detail": detail,
+            }))
+            .map_err(io::Error::other)?;
+            if !logging_settings::verbose() {
+                return Ok(());
+            }
+            write_record(
+                &crate::app_logging::resolve_log_dir().join("verbose"),
+                &json,
+                png.as_deref(),
+                MAX_BYTES,
+                logging_settings::verbose,
+            )?;
+            if let ("capture", Some((session_id, capture_id)), Some(png)) = (kind, identity, png) {
+                crate::feedback::trace::screenshot(
+                    crate::pipeline_session::PipelineToken {
+                        session_id,
+                        capture_id,
+                    },
+                    &png,
+                );
+            }
+            Ok(())
         }
-        let png = frame
-            .map(|(bgra, width, height)| encode_frame(bgra, width, height))
-            .transpose()?;
-        let json = serde_json::to_vec_pretty(&serde_json::json!({
-            "kind": kind, "profile": crate::app_logging::profile_label(),
-            "timestamp": chrono::Utc::now().to_rfc3339(), "frame": identity, "detail": detail,
-        }))
-        .map_err(io::Error::other)?;
-        if !logging_settings::verbose() {
-            return Ok(());
-        }
-        write_record(
-            &crate::app_logging::resolve_log_dir().join("verbose"),
-            &json,
-            png.as_deref(),
-            MAX_BYTES,
-            logging_settings::verbose,
-        )?;
-        if let ("capture", Some((session_id, capture_id)), Some(png)) = (kind, identity, png) {
-            crate::feedback::trace::screenshot(
-                crate::pipeline_session::PipelineToken {
-                    session_id,
-                    capture_id,
-                },
-                &png,
-            );
-        }
-        Ok(())
-    })
-    .await;
-    if !success {
-        // Do not echo data or backend errors: they can contain captured text.
-        tracing::warn!("Local verbose evidence could not be saved");
-    }
+    });
 }
 
 fn write_slots() -> Arc<Semaphore> {
@@ -109,22 +104,21 @@ fn write_slots() -> Arc<Semaphore> {
     Arc::clone(SLOTS.get_or_init(|| Arc::new(Semaphore::new(2))))
 }
 
-async fn offload(
-    slots: Arc<Semaphore>,
-    write: impl FnOnce() -> io::Result<()> + Send + 'static,
-) -> bool {
-    let Ok(permit) = slots.acquire_owned().await else {
+fn try_offload<W>(slots: Arc<Semaphore>, prepare: impl FnOnce() -> W) -> bool
+where
+    W: FnOnce() -> io::Result<()> + Send + 'static,
+{
+    let Ok(permit) = slots.try_acquire_owned() else {
         return false;
     };
-    matches!(
-        tokio::task::spawn_blocking(move || {
-            // A cancelled waiter must not release capacity while disk I/O continues.
-            let _permit = permit;
-            write()
-        })
-        .await,
-        Ok(Ok(()))
-    )
+    let write = prepare();
+    tokio::task::spawn_blocking(move || {
+        let _permit = permit;
+        if write().is_err() {
+            tracing::warn!("Local verbose evidence could not be saved");
+        }
+    });
+    true
 }
 
 fn encode_frame(mut bgra: Vec<u8>, width: u32, height: u32) -> io::Result<Vec<u8>> {
@@ -193,14 +187,14 @@ fn records(root: &Path) -> io::Result<Vec<(PathBuf, u64)>> {
         if !owned_name(&entry.file_name().to_string_lossy()) {
             continue;
         }
-        let meta = std::fs::symlink_metadata(entry.path())?;
+        let meta = entry.metadata()?;
         if !meta.is_dir() || is_link(&meta) {
             continue;
         }
         let mut size = 0;
         for file in std::fs::read_dir(entry.path())? {
             let file = file?;
-            let kind = std::fs::symlink_metadata(file.path())?;
+            let kind = file.metadata()?;
             if !kind.is_file()
                 || is_link(&kind)
                 || !matches!(file.file_name().to_str(), Some("record.json" | "input.png"))
@@ -209,7 +203,7 @@ fn records(root: &Path) -> io::Result<Vec<(PathBuf, u64)>> {
                     "Unexpected file in diagnostics record; preserved",
                 ));
             }
-            size += file.metadata()?.len();
+            size += kind.len();
         }
         records.push((entry.path(), size));
     }
