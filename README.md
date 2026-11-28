@@ -39,14 +39,14 @@ https://github.com/user-attachments/assets/58fbac67-9032-42e2-8d4d-8e4df6c01e59
 
 **[Install from Microsoft Store](https://apps.microsoft.com/detail/9NNK2X23VLWT)** for x64 or ARM64 and get updates through the Store. For standalone GitHub installers, choose your PC below.
 
-**Windows 11 public beta · v0.12.0** — [release notes and all files](https://github.com/PeterShanxin/Meowcal-Sub/releases/tag/v0.12.0).
+**Windows 11 public beta · v0.12.1** — [release notes and all files](https://github.com/PeterShanxin/Meowcal-Sub/releases/tag/v0.12.1).
 
 | Your PC | Installer |
 | --- | --- |
-| Intel or AMD Windows PC | **[Download x64 (.exe)](https://github.com/PeterShanxin/Meowcal-Sub/releases/download/v0.12.0/Meowcal.Sub_0.12.0_x64-setup.exe)** |
-| Snapdragon or other Windows on ARM PC | **[Download ARM64 (.exe)](https://github.com/PeterShanxin/Meowcal-Sub/releases/download/v0.12.0/Meowcal.Sub_0.12.0_arm64-setup.exe)** |
+| Intel or AMD Windows PC | **[Download x64 (.exe)](https://github.com/PeterShanxin/Meowcal-Sub/releases/download/v0.12.1/Meowcal.Sub_0.12.1_x64-setup.exe)** |
+| Snapdragon or other Windows on ARM PC | **[Download ARM64 (.exe)](https://github.com/PeterShanxin/Meowcal-Sub/releases/download/v0.12.1/Meowcal.Sub_0.12.1_arm64-setup.exe)** |
 
-Portable ZIP (extract and run): [x64](https://github.com/PeterShanxin/Meowcal-Sub/releases/download/v0.12.0/Meowcal.Sub_0.12.0_x64-portable.zip) · [ARM64](https://github.com/PeterShanxin/Meowcal-Sub/releases/download/v0.12.0/Meowcal.Sub_0.12.0_arm64-portable.zip).
+Portable ZIP (extract and run): [x64](https://github.com/PeterShanxin/Meowcal-Sub/releases/download/v0.12.1/Meowcal.Sub_0.12.1_x64-portable.zip) · [ARM64](https://github.com/PeterShanxin/Meowcal-Sub/releases/download/v0.12.1/Meowcal.Sub_0.12.1_arm64-portable.zip).
 
 MSI installers and `SHA256SUMS.txt` are on the release page. For newer versions,
 use [the latest application release](https://github.com/PeterShanxin/Meowcal-Sub/releases/latest).
@@ -179,7 +179,7 @@ specific test conditions, not a universal end-to-end subtitle latency guarantee.
 | [Evaluation](evals/README.md) | Validation layers and measurement method |
 | [Meowcal Core](core/README.md) | Core's API and storage contract |
 
-This README and the user guide cover v0.12.0. Architecture, contributor, and
+This README and the user guide cover v0.12.1. Architecture, contributor, and
 evaluation documents follow the `main` branch.
 
 ## Help and contribute

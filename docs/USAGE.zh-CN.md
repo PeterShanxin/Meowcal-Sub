@@ -5,7 +5,7 @@
 Meowcal Sub · 妙影翻译的是**选定屏幕区域中的可见文字**，不是语音。
 视频需要已经显示中文、日文、韩文、英文、西班牙文、法文或德文字幕。
 
-本指南适用于 Meowcal Sub · 妙影 v0.12.0。
+本指南适用于 Meowcal Sub · 妙影 v0.12.1。
 各版本变化见[版本说明](releases/)。
 
 ## 安装
@@ -30,7 +30,7 @@ GitHub 的 **Source code** 压缩包面向开发者，不能直接安装应用�
 在 PowerShell 中计算已下载文件的哈希，例如：
 
 ```powershell
-Get-FileHash -Algorithm SHA256 -LiteralPath ".\Meowcal.Sub_0.12.0_x64-setup.exe"
+Get-FileHash -Algorithm SHA256 -LiteralPath ".\Meowcal.Sub_0.12.1_x64-setup.exe"
 ```
 
 下载其他版本或架构时，请使用实际文件名。将完整哈希与 `SHA256SUMS.txt` 中
