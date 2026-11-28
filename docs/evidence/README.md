@@ -182,12 +182,11 @@ translation runtime. Full `scripts/verify.ps1` passed on the updated source:
 538 app unit tests, 456 frontend tests, and six browser/Rust bridge smoke tests,
 plus Core, IPC, command, lint, build, and audit checks.
 
-The [overlay toolbar preview](2026-10-04-overlay-toolbar-browser.png) shows
-the style and exit controls in Chromium at 200% device scale with keyboard
-focus. Browser tests also cover 100% and 125% scale, exit retries, clip payloads,
-and small-region placement. This is browser presentation evidence; Windows
-session teardown, window restoration, WebView2 rendering and native DPI
-validation remain outstanding.
+The [October overlay toolbar preview](2026-10-04-overlay-toolbar-browser.png)
+shows the earlier style and exit controls in Chromium at 200% device scale.
+Browser tests for the pill toolbar check the round ends and native clip payload
+at 100%, 125%, 150%, and 200%. The small-region test also checks the exit error
+and retry. Native WebView2 appearance and DPI still require Windows validation.
 
 The [subtitle FIFO screenshot](2026-11-09-subtitle-fifo-native.png) and the
 [v0.9.1 screenshot](2026-11-10-v0.9.1-native.png) show the authored band-gate
