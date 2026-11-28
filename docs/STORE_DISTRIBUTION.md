@@ -45,7 +45,9 @@ Draft release and release preflight automatically prepare both native
 architectures using the same `store_package_*`/`store_publisher*` dispatch
 inputs. Enter the real Partner Center identity and an explicit Store version;
 do not derive the version from the pre-1.0 application version. The draft
-attaches both unsigned MSIX files and their hashes in `SHA256SUMS.txt`.
+attaches both unsigned MSIX files and their hashes in `SHA256SUMS.txt`. For v0.12.0
+and later, release sync also checks both portable ZIP names and checksum entries
+against the GitHub asset metadata. Only the MSIX packages are submitted to the Store.
 The standalone `store-package.yml` workflow remains available for independent
 Store deliveries; its artifact checksum files are architecture-specific.
 
