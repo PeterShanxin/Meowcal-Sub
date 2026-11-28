@@ -80,6 +80,14 @@ language would produce another artifact per architecture and requires a change
 to the release asset contract below. Installer language does not set the app's
 interface or subtitle languages.
 
+With **Delete the application data** selected, the NSIS uninstaller retries
+removal of remaining roaming and local app data up to four times per folder,
+with a 250 ms pause before each retry.
+In-place updates and uninstalls with the checkbox clear keep app data.
+After Tauri downloads NSIS, run `scripts/tests/nsis-data-cleanup.ps1` on
+Windows to check transient and persistent file locks, the checkbox, and update
+mode using temporary data.
+
 Release and preflight also call `store-package.yml` for native x64 and ARM64
 unsigned MSIX packages. Supply `store_package_name`, `store_publisher`,
 `store_publisher_display_name` and `store_package_version` at dispatch. The
