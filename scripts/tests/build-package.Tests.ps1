@@ -42,8 +42,11 @@ function npx {
         foreach ($dll in @('vcruntime140.dll','msvcp140.dll')) {
             Assert-Equal $expected (Get-Content -LiteralPath "src-tauri/resources/core/$dll") 'Direct packaging must stage architecture-matched CRT next to Core.'
         }
-        $config = Get-Content -LiteralPath 'src-tauri/tauri.conf.json' -Raw | ConvertFrom-Json
-        Assert-Equal $true ($config.bundle.resources -contains 'resources/core/*') 'Tauri must include the staged Core runtime.'
+        $configPath = $args[[array]::IndexOf($args, '--config') + 1]
+        $config = Get-Content -LiteralPath $configPath -Raw | ConvertFrom-Json
+        foreach ($file in @('vcruntime140.dll', 'msvcp140.dll','meowcal-core.exe','meowcal-core.json','LICENSE')) {
+            Assert-Equal $true ($config.bundle.resources -contains "resources/core/$file") 'Direct Tauri resource override must retain the Core payload and add CRT.'
+        }
     }
     $global:LASTEXITCODE = if ($global:meowcalPackageTestState.Failure -eq 'tauri' -or
         ($isPortable -and $global:meowcalPackageTestState.Failure -eq 'portable-build')) { 29 } else { 0 }
@@ -189,6 +192,7 @@ Export-ModuleMember -Function *
                     }
                 }
                 if (Get-ChildItem -LiteralPath "$fixture/src-tauri/resources/core" -Filter '*.dll') { throw 'Packaging left temporary CRT in the source tree.' }
+                if ((Test-Path -LiteralPath $targetDirectory) -and (Get-ChildItem -LiteralPath $targetDirectory -Filter 'installer-crt-*.json')) { throw 'Packaging left a temporary Tauri config.' }
                 foreach ($name in $environmentNames) {
                     Assert-Equal $before[$name] ([Environment]::GetEnvironmentVariable($name)) "Packaging leaked $name into the caller."
                 }

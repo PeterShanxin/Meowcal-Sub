@@ -85,6 +85,7 @@ try {
     Invoke-PackageBuildStep -Name 'Build and sign Tauri bundles' -Steps $steps -Action {
         $coreDirectory = Join-Path $repositoryRoot 'src-tauri\resources\core'
         $runtime = @(Get-AppLocalCrt -Architecture $Architecture)
+        $overridePath = Join-Path $CargoTargetDir ('installer-crt-' + [guid]::NewGuid() + '.json')
         $staged = [Collections.Generic.List[string]]::new()
         try {
             foreach ($dll in $runtime) {
@@ -93,9 +94,17 @@ try {
                 $staged.Add($destination)
                 Copy-Item -LiteralPath $dll.FullName -Destination $destination
             }
-            npx --no -- tauri build --target $targetTriple --bundles $bundleArgs -- --locked
+            # Merge only the resource array for direct installers; other
+            # channels and source/dev builds do not require these temporary DLLs.
+            $tauri = Get-Content -LiteralPath (Join-Path $repositoryRoot 'src-tauri/tauri.conf.json') -Raw | ConvertFrom-Json
+            $resources = @($tauri.bundle.resources) + @($runtime | ForEach-Object { 'resources/core/' + $_.Name })
+            New-Item -ItemType Directory -Path $CargoTargetDir -Force | Out-Null
+            @{ bundle = @{ resources = $resources } } | ConvertTo-Json -Depth 6 |
+                Set-Content -LiteralPath $overridePath -Encoding utf8NoBOM
+            npx --no -- tauri build --target $targetTriple --config $overridePath --bundles $bundleArgs -- --locked
             if ($LASTEXITCODE -ne 0) { throw "Tauri package build failed for $Architecture." }
         } finally {
+            if (Test-Path -LiteralPath $overridePath -PathType Leaf) { Remove-Item -LiteralPath $overridePath }
             foreach ($file in $staged) {
                 if (Test-Path -LiteralPath $file -PathType Leaf) { Remove-Item -LiteralPath $file }
             }
