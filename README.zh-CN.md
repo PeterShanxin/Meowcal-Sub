@@ -38,14 +38,14 @@ https://github.com/user-attachments/assets/58fbac67-9032-42e2-8d4d-8e4df6c01e59
 
 **[从 Microsoft Store 安装](https://apps.microsoft.com/detail/9NNK2X23VLWT)**，支持 x64 和 ARM64，由商店提供更新。也可选择下方的 GitHub 安装包。
 
-**Windows 11 公开测试版 · v0.12.0** — [更新说明与全部安装文件](https://github.com/PeterShanxin/Meowcal-Sub/releases/tag/v0.12.0)。
+**Windows 11 公开测试版 · v0.12.1** — [更新说明与全部安装文件](https://github.com/PeterShanxin/Meowcal-Sub/releases/tag/v0.12.1)。
 
 | 你的电脑 | 安装包 |
 | --- | --- |
-| Intel / AMD Windows 电脑 | **[下载 x64（.exe）](https://github.com/PeterShanxin/Meowcal-Sub/releases/download/v0.12.0/Meowcal.Sub_0.12.0_x64-setup.exe)** |
-| 骁龙或其他 Windows on ARM 电脑 | **[下载 ARM64（.exe）](https://github.com/PeterShanxin/Meowcal-Sub/releases/download/v0.12.0/Meowcal.Sub_0.12.0_arm64-setup.exe)** |
+| Intel / AMD Windows 电脑 | **[下载 x64（.exe）](https://github.com/PeterShanxin/Meowcal-Sub/releases/download/v0.12.1/Meowcal.Sub_0.12.1_x64-setup.exe)** |
+| 骁龙或其他 Windows on ARM 电脑 | **[下载 ARM64（.exe）](https://github.com/PeterShanxin/Meowcal-Sub/releases/download/v0.12.1/Meowcal.Sub_0.12.1_arm64-setup.exe)** |
 
-便携 ZIP（解压即用）：[x64](https://github.com/PeterShanxin/Meowcal-Sub/releases/download/v0.12.0/Meowcal.Sub_0.12.0_x64-portable.zip) · [ARM64](https://github.com/PeterShanxin/Meowcal-Sub/releases/download/v0.12.0/Meowcal.Sub_0.12.0_arm64-portable.zip).
+便携 ZIP（解压即用）：[x64](https://github.com/PeterShanxin/Meowcal-Sub/releases/download/v0.12.1/Meowcal.Sub_0.12.1_x64-portable.zip) · [ARM64](https://github.com/PeterShanxin/Meowcal-Sub/releases/download/v0.12.1/Meowcal.Sub_0.12.1_arm64-portable.zip).
 
 MSI 安装包和 `SHA256SUMS.txt` 校验文件也在该发布页。
 更新版本请看[最新应用发布页](https://github.com/PeterShanxin/Meowcal-Sub/releases/latest)。
@@ -164,7 +164,7 @@ Core 是底层运行环境，不是用户需要额外手动安装的应用。
 | [评估说明](evals/README.md) | 各层验证方法与测量方法 |
 | [Meowcal Core](core/README.md) | Core 的 API 与存储约定 |
 
-本页和使用指南适用于 v0.12.0。
+本页和使用指南适用于 v0.12.1。
 架构、贡献和评估文档跟随 `main` 分支。
 
 ## 反馈与参与
